@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, Mail, Phone } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const mockClients = [
   { id: "1", name: "John Smith", email: "john.smith@email.com", phone: "(555) 123-4567", activeClaims: 1 },
@@ -43,7 +44,11 @@ const Clients = () => {
                   {client.activeClaims} Active {client.activeClaims === 1 ? "Claim" : "Claims"}
                 </span>
               </div>
-              <Button variant="outline" className="w-full mt-2">View Profile</Button>
+              <Button variant="outline" className="w-full mt-2">
+                <Link to={`/clients/${client.id}`} className="w-full">
+                  View Profile
+                </Link>
+              </Button>
             </CardContent>
           </Card>
         ))}
