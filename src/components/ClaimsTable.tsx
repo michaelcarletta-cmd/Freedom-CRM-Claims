@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Eye } from "lucide-react";
+import { Link } from "react-router-dom";
 
 type ClaimStatus = "new" | "in_progress" | "under_review" | "approved" | "rejected";
 
@@ -132,10 +133,12 @@ export const ClaimsTable = () => {
               </TableCell>
               <TableCell>{new Date(claim.dateSubmitted).toLocaleDateString()}</TableCell>
               <TableCell className="text-right">
-                <Button variant="ghost" size="sm">
-                  <Eye className="h-4 w-4 mr-1" />
-                  View
-                </Button>
+                <Link to={`/claims/${claim.id}`}>
+                  <Button variant="ghost" size="sm">
+                    <Eye className="h-4 w-4 mr-1" />
+                    View
+                  </Button>
+                </Link>
               </TableCell>
             </TableRow>
           ))}
