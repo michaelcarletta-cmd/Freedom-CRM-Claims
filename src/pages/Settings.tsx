@@ -7,6 +7,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Trash2, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { InsuranceCompaniesSettings } from "@/components/settings/InsuranceCompaniesSettings";
 import { LossTypesSettings } from "@/components/settings/LossTypesSettings";
 import { ReferrersSettings } from "@/components/settings/ReferrersSettings";
@@ -25,11 +42,80 @@ interface ClaimStatus {
   is_active: boolean;
 }
 
+interface SortableStatusRowProps {
+  status: ClaimStatus;
+  onUpdateName: (id: string, name: string) => void;
+  onDelete: (id: string) => void;
+  onRefresh: () => void;
+}
+
+function SortableStatusRow({ status, onUpdateName, onDelete, onRefresh }: SortableStatusRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: status.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <TableRow ref={setNodeRef} style={style}>
+      <TableCell>
+        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+          <GripVertical className="h-5 w-5 text-muted-foreground" />
+        </div>
+      </TableCell>
+      <TableCell>
+        <Input
+          value={status.name}
+          onChange={(e) => onUpdateName(status.id, e.target.value)}
+          onBlur={onRefresh}
+          className="h-11 text-base"
+        />
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-2">
+          <div
+            className="w-6 h-6 rounded-full border-2"
+            style={{ backgroundColor: status.color }}
+          />
+          <span className="text-sm text-muted-foreground">
+            {status.color}
+          </span>
+        </div>
+      </TableCell>
+      <TableCell>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onDelete(status.id)}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export default function Settings() {
   const [statuses, setStatuses] = useState<ClaimStatus[]>([]);
   const [newStatusName, setNewStatusName] = useState("");
   const [newStatusColor, setNewStatusColor] = useState("#3B82F6");
   const { toast } = useToast();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     fetchStatuses();
@@ -134,6 +220,47 @@ export default function Settings() {
     }
   };
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = statuses.findIndex((s) => s.id === active.id);
+    const newIndex = statuses.findIndex((s) => s.id === over.id);
+
+    const newStatuses = arrayMove(statuses, oldIndex, newIndex);
+    setStatuses(newStatuses);
+
+    // Update display_order in database
+    try {
+      const updates = newStatuses.map((status, index) => ({
+        id: status.id,
+        display_order: index,
+      }));
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from("claim_statuses")
+          .update({ display_order: update.display_order })
+          .eq("id", update.id);
+
+        if (error) throw error;
+      }
+
+      toast({
+        title: "Success",
+        description: "Status order updated",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      fetchStatuses(); // Revert on error
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -170,65 +297,52 @@ export default function Settings() {
                   value={newStatusName}
                   onChange={(e) => setNewStatusName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addStatus()}
+                  className="h-11 text-base"
                 />
                 <Input
                   type="color"
                   value={newStatusColor}
                   onChange={(e) => setNewStatusColor(e.target.value)}
-                  className="w-20"
+                  className="w-24 h-11"
                 />
-                <Button onClick={addStatus}>
+                <Button onClick={addStatus} className="h-11">
                   <Plus className="h-4 w-4 mr-2" />
                   Add Status
                 </Button>
               </div>
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12"></TableHead>
-                    <TableHead>Status Name</TableHead>
-                    <TableHead>Color</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {statuses.map((status) => (
-                    <TableRow key={status.id}>
-                      <TableCell>
-                        <GripVertical className="h-4 w-4 text-muted-foreground" />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={status.name}
-                          onChange={(e) => updateStatusName(status.id, e.target.value)}
-                          onBlur={() => fetchStatuses()}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-4 h-4 rounded-full border"
-                            style={{ backgroundColor: status.color }}
-                          />
-                          <span className="text-sm text-muted-foreground">
-                            {status.color}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deleteStatus(status.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12"></TableHead>
+                      <TableHead>Status Name</TableHead>
+                      <TableHead>Color</TableHead>
+                      <TableHead className="w-12"></TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    <SortableContext
+                      items={statuses.map(s => s.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {statuses.map((status) => (
+                        <SortableStatusRow
+                          key={status.id}
+                          status={status}
+                          onUpdateName={updateStatusName}
+                          onDelete={deleteStatus}
+                          onRefresh={fetchStatuses}
+                        />
+                      ))}
+                    </SortableContext>
+                  </TableBody>
+                </Table>
+              </DndContext>
             </CardContent>
           </Card>
         </TabsContent>
