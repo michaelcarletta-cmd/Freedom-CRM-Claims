@@ -204,10 +204,12 @@ function SettlementSection({ claimId, settlement }: any) {
     },
   });
 
-  const totalSettlement = 
+  const actualCashValue = 
     Number(formData.replacement_cost_value) - 
     Number(formData.non_recoverable_depreciation) - 
     Number(formData.deductible);
+  
+  const totalSettlement = actualCashValue + Number(formData.recoverable_depreciation);
 
   return (
     <Card>
@@ -297,18 +299,37 @@ function SettlementSection({ claimId, settlement }: any) {
                     rows={3}
                   />
                 </div>
-                <div className="p-4 bg-muted rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">Total Settlement Amount:</span>
-                    <span className="text-xl font-bold text-primary">
-                      ${totalSettlement.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
+                <div className="space-y-3 p-4 bg-muted rounded-lg">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Replacement Cost Value (RCV):</span>
+                      <span className="font-semibold">${Number(formData.replacement_cost_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-destructive">
+                      <span>- Non-Recoverable Depreciation:</span>
+                      <span className="font-semibold">-${Number(formData.non_recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-destructive">
+                      <span>- Deductible:</span>
+                      <span className="font-semibold">-${Number(formData.deductible).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="border-t pt-2 flex justify-between">
+                      <span className="font-medium">Actual Cash Value (ACV):</span>
+                      <span className="text-lg font-bold text-primary">
+                        ${actualCashValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="border-t pt-2 flex justify-between text-success">
+                      <span>+ Recoverable Depreciation (owed at completion):</span>
+                      <span className="font-semibold">+${Number(formData.recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="border-t pt-2 flex justify-between">
+                      <span className="font-bold">Total Settlement Value:</span>
+                      <span className="text-xl font-bold text-primary">
+                        ${totalSettlement.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    RCV (${Number(formData.replacement_cost_value).toLocaleString()}) - 
-                    NRD (${Number(formData.non_recoverable_depreciation).toLocaleString()}) - 
-                    Deductible (${Number(formData.deductible).toLocaleString()})
-                  </p>
                 </div>
                 <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full">
                   Save Settlement
@@ -320,33 +341,61 @@ function SettlementSection({ claimId, settlement }: any) {
       </CardHeader>
       <CardContent>
         {settlement ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Replacement Cost Value</p>
+                <p className="text-sm text-muted-foreground">Replacement Cost Value (RCV)</p>
                 <p className="text-lg font-semibold">${Number(settlement.replacement_cost_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Estimate Amount</p>
                 <p className="text-lg font-semibold">${Number(settlement.estimate_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Non-Recoverable Depreciation</p>
-                <p className="text-lg font-semibold text-destructive">-${Number(settlement.non_recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+            </div>
+            
+            <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Replacement Cost Value (RCV):</span>
+                <span className="font-semibold">${Number(settlement.replacement_cost_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Recoverable Depreciation</p>
-                <p className="text-lg font-semibold">${Number(settlement.recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+              <div className="flex justify-between text-sm text-destructive">
+                <span>- Non-Recoverable Depreciation:</span>
+                <span className="font-semibold">-${Number(settlement.non_recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Deductible</p>
-                <p className="text-lg font-semibold text-destructive">-${Number(settlement.deductible).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+              <div className="flex justify-between text-sm text-destructive">
+                <span>- Deductible:</span>
+                <span className="font-semibold">-${Number(settlement.deductible).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="col-span-2 p-4 bg-primary/10 rounded-lg">
-                <p className="text-sm text-muted-foreground">Total Settlement Amount</p>
-                <p className="text-2xl font-bold text-primary">${Number(settlement.total_settlement).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+              <div className="border-t border-border pt-2 flex justify-between">
+                <span className="font-medium">Actual Cash Value (ACV):</span>
+                <span className="text-xl font-bold text-primary">
+                  ${Number(settlement.total_settlement).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
+
+            <div className="p-4 bg-success/10 rounded-lg border border-success/20">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-medium text-success">Recoverable Depreciation</p>
+                  <p className="text-xs text-muted-foreground">Owed at completion of work</p>
+                </div>
+                <p className="text-xl font-bold text-success">
+                  ${Number(settlement.recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-primary/10 rounded-lg border-2 border-primary">
+              <div className="flex justify-between items-center">
+                <span className="font-semibold">Total Settlement Value</span>
+                <span className="text-2xl font-bold text-primary">
+                  ${(Number(settlement.total_settlement) + Number(settlement.recoverable_depreciation)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">ACV + Recoverable Depreciation</p>
+            </div>
+
             {settlement.notes && (
               <div>
                 <p className="text-sm text-muted-foreground">Notes</p>
