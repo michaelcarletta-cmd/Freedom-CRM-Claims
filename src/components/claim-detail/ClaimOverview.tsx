@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, Calendar, MapPin, DollarSign } from "lucide-react";
 import { format } from "date-fns";
 import { ClaimAssignments } from "./ClaimAssignments";
+import { ClaimCustomFields } from "./ClaimCustomFields";
 
 interface ClaimOverviewProps {
   claim: any;
@@ -160,6 +161,9 @@ export function ClaimOverview({ claim }: ClaimOverviewProps) {
         currentReferrerId={claim.referrer_id}
         currentMortgageCompanyId={claim.mortgage_company_id}
       />
+
+      {/* Custom Fields */}
+      <ClaimCustomFields claimId={claim.id} />
     </div>
   );
 }
