@@ -16,7 +16,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
           <header className="h-14 border-b border-border bg-card flex items-center px-4 sticky top-0 z-10">
             <SidebarTrigger />
             <div className="ml-4 flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">Property Claims CRM</span>
+              <span className="text-sm text-muted-foreground">Freedom Claims CRM</span>
             </div>
           </header>
           <main className="flex-1 p-6">

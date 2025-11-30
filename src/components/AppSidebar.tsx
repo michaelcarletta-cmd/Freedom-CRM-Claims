@@ -1,5 +1,6 @@
 import { Home, FileText, CheckSquare, Inbox, Users, Network, DollarSign, FileStack, Settings } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import logo from "@/assets/freedom-claims-logo.svg";
 
 import {
   Sidebar,
@@ -33,10 +34,13 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <SidebarContent>
-        <div className="px-4 py-6">
-          <h2 className={`font-bold text-xl text-sidebar-primary transition-opacity ${open ? "opacity-100" : "opacity-0"}`}>
-            CLAIM TITAN
-          </h2>
+        <div className="px-4 py-4 flex items-center gap-3">
+          <img src={logo} alt="Freedom Claims" className="h-10 w-auto" />
+          {open && (
+            <h2 className="font-bold text-lg text-sidebar-primary">
+              Freedom Claims
+            </h2>
+          )}
         </div>
 
         <SidebarGroup>
