@@ -12,6 +12,7 @@ import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
 import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
 import { ClaimTemplates } from "@/components/claim-detail/ClaimTemplates";
+import { ClaimAccessManagement } from "@/components/claim-detail/ClaimAccessManagement";
 import { ArrowLeft, Edit } from "lucide-react";
 
 const ClaimDetail = () => {
@@ -91,6 +92,7 @@ const ClaimDetail = () => {
           <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="accounting">Accounting</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="access">Portal Access</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
@@ -123,6 +125,10 @@ const ClaimDetail = () => {
 
         <TabsContent value="templates" className="mt-6">
           <ClaimTemplates claimId={id!} claim={claim} />
+        </TabsContent>
+
+        <TabsContent value="access" className="mt-6">
+          <ClaimAccessManagement claimId={id!} />
         </TabsContent>
       </Tabs>
     </div>
