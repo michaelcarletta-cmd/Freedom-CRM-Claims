@@ -1,4 +1,6 @@
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,43 +11,51 @@ import { ClaimEmails } from "@/components/claim-detail/ClaimEmails";
 import { ClaimCommunications } from "@/components/claim-detail/ClaimCommunications";
 import { ClaimFiles } from "@/components/claim-detail/ClaimFiles";
 import { ClaimTimeline } from "@/components/claim-detail/ClaimTimeline";
+import { ClaimStatusSelect } from "@/components/ClaimStatusSelect";
 import { ArrowLeft, Edit, MapPin, DollarSign, Calendar, User } from "lucide-react";
-import { Link } from "react-router-dom";
-
-// Mock data - replace with actual API call
-const mockClaim = {
-  id: "1",
-  claimNumber: "CLM-2024-001",
-  status: "approved" as const,
-  claimAmount: "$45,000",
-  dateSubmitted: "2024-01-15",
-  
-  // Policyholder Information
-  policyholderName: "John Smith",
-  policyholderEmail: "john.smith@email.com",
-  policyholderPhone: "(555) 987-6543",
-  policyholderAddress: "123 Main St, Springfield, IL 62701",
-  
-  // Loss Information
-  dateOfLoss: "2024-01-10",
-  typeOfLoss: "Water Damage",
-  lossDescription: "Pipe burst in master bathroom causing water damage to ceiling and walls",
-  
-  // Insurance Company Information
-  insuranceCompany: "ABC Insurance Company",
-  insurancePhone: "(555) 111-2222",
-  insuranceEmail: "claims@abcinsurance.com",
-  policyNumber: "POL-12345-67890",
-  
-  // Adjuster Information
-  adjusterName: "Sarah Mitchell",
-  adjusterPhone: "(555) 123-4567",
-  adjusterEmail: "sarah.mitchell@abcinsurance.com",
-  adjusterCompany: "ABC Insurance Company",
-};
+import { format } from "date-fns";
 
 const ClaimDetail = () => {
   const { id } = useParams();
+  const [claim, setClaim] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (id) {
+      fetchClaim();
+    }
+  }, [id]);
+
+  const fetchClaim = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("claims")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error) throw error;
+      setClaim(data);
+    } catch (error) {
+      console.error("Error fetching claim:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStatusChange = (newStatus: string) => {
+    if (claim) {
+      setClaim({ ...claim, status: newStatus });
+    }
+  };
+
+  if (loading) {
+    return <div className="p-8">Loading...</div>;
+  }
+
+  if (!claim) {
+    return <div className="p-8">Claim not found</div>;
+  }
 
   const getStatusClassName = (status: string) => {
     const classes: Record<string, string> = {
@@ -68,12 +78,14 @@ const ClaimDetail = () => {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-foreground">{mockClaim.claimNumber}</h1>
-            <Badge className={getStatusClassName(mockClaim.status)}>
-              {mockClaim.status.replace("_", " ").toUpperCase()}
-            </Badge>
+            <h1 className="text-3xl font-bold text-foreground">{claim.claim_number}</h1>
+            <ClaimStatusSelect 
+              claimId={claim.id} 
+              currentStatus={claim.status}
+              onStatusChange={handleStatusChange}
+            />
           </div>
-          <p className="text-muted-foreground mt-1">{mockClaim.policyholderName}</p>
+          <p className="text-muted-foreground mt-1">{claim.policyholder_name}</p>
         </div>
         <Button className="bg-primary hover:bg-primary/90">
           <Edit className="h-4 w-4 mr-2" />
@@ -96,19 +108,19 @@ const ClaimDetail = () => {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Name</p>
-                  <p className="text-sm font-medium">{mockClaim.policyholderName}</p>
+                  <p className="text-sm font-medium">{claim.policyholder_name}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="text-sm font-medium">{mockClaim.policyholderEmail}</p>
+                  <p className="text-sm font-medium">{claim.policyholder_email || "N/A"}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Phone</p>
-                  <p className="text-sm font-medium">{mockClaim.policyholderPhone}</p>
+                  <p className="text-sm font-medium">{claim.policyholder_phone || "N/A"}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Address</p>
-                  <p className="text-sm font-medium">{mockClaim.policyholderAddress}</p>
+                  <p className="text-sm font-medium">{claim.policyholder_address || "N/A"}</p>
                 </div>
               </div>
             </CardContent>
@@ -126,15 +138,15 @@ const ClaimDetail = () => {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Date of Loss</p>
-                  <p className="text-sm font-medium">{new Date(mockClaim.dateOfLoss).toLocaleDateString()}</p>
+                  <p className="text-sm font-medium">{claim.loss_date ? format(new Date(claim.loss_date), "MMM dd, yyyy") : "N/A"}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Type of Loss</p>
-                  <p className="text-sm font-medium">{mockClaim.typeOfLoss}</p>
+                  <p className="text-sm font-medium">{claim.loss_type || "N/A"}</p>
                 </div>
                 <div className="space-y-1 md:col-span-2">
                   <p className="text-sm text-muted-foreground">Loss Description</p>
-                  <p className="text-sm font-medium">{mockClaim.lossDescription}</p>
+                  <p className="text-sm font-medium">{claim.loss_description || "N/A"}</p>
                 </div>
               </div>
             </CardContent>
@@ -152,19 +164,19 @@ const ClaimDetail = () => {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Company Name</p>
-                  <p className="text-sm font-medium">{mockClaim.insuranceCompany}</p>
+                  <p className="text-sm font-medium">{claim.insurance_company || "N/A"}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Policy Number</p>
-                  <p className="text-sm font-medium">{mockClaim.policyNumber}</p>
+                  <p className="text-sm font-medium">N/A</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Phone</p>
-                  <p className="text-sm font-medium">{mockClaim.insurancePhone}</p>
+                  <p className="text-sm font-medium">{claim.insurance_phone || "N/A"}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="text-sm font-medium">{mockClaim.insuranceEmail}</p>
+                  <p className="text-sm font-medium">{claim.insurance_email || "N/A"}</p>
                 </div>
               </div>
             </CardContent>
@@ -182,19 +194,19 @@ const ClaimDetail = () => {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Adjuster Name</p>
-                  <p className="text-sm font-medium">{mockClaim.adjusterName}</p>
+                  <p className="text-sm font-medium">{claim.adjuster_name || "N/A"}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Company</p>
-                  <p className="text-sm font-medium">{mockClaim.adjusterCompany}</p>
+                  <p className="text-sm font-medium">{claim.insurance_company || "N/A"}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Phone</p>
-                  <p className="text-sm font-medium">{mockClaim.adjusterPhone}</p>
+                  <p className="text-sm font-medium">{claim.adjuster_phone || "N/A"}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="text-sm font-medium">{mockClaim.adjusterEmail}</p>
+                  <p className="text-sm font-medium">{claim.adjuster_email || "N/A"}</p>
                 </div>
               </div>
             </CardContent>
@@ -212,11 +224,15 @@ const ClaimDetail = () => {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Claim Amount</p>
-                  <p className="text-2xl font-bold text-primary">{mockClaim.claimAmount}</p>
+                  <p className="text-2xl font-bold text-primary">
+                    {claim.claim_amount ? `$${claim.claim_amount.toLocaleString()}` : "N/A"}
+                  </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Date Submitted</p>
-                  <p className="text-sm font-medium">{new Date(mockClaim.dateSubmitted).toLocaleDateString()}</p>
+                  <p className="text-sm font-medium">
+                    {claim.created_at ? format(new Date(claim.created_at), "MMM dd, yyyy") : "N/A"}
+                  </p>
                 </div>
               </div>
             </CardContent>

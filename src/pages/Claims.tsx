@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ClaimsTable } from "@/components/ClaimsTable";
+import { ClaimsTableConnected } from "@/components/ClaimsTableConnected";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 
@@ -22,7 +22,7 @@ const Claims = () => {
           <CardTitle>All Claims</CardTitle>
         </CardHeader>
         <CardContent>
-          <ClaimsTable />
+          <ClaimsTableConnected />
         </CardContent>
       </Card>
     </div>
