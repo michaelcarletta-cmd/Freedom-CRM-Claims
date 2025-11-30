@@ -14,16 +14,199 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      claim_contractors: {
+        Row: {
+          assigned_at: string | null
+          claim_id: string
+          contractor_id: string
+          id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          claim_id: string
+          contractor_id: string
+          id?: string
+        }
+        Update: {
+          assigned_at?: string | null
+          claim_id?: string
+          contractor_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_contractors_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_updates: {
+        Row: {
+          claim_id: string
+          content: string
+          created_at: string | null
+          id: string
+          update_type: string | null
+          user_id: string | null
+        }
+        Insert: {
+          claim_id: string
+          content: string
+          created_at?: string | null
+          id?: string
+          update_type?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          claim_id?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          update_type?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_updates_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claims: {
+        Row: {
+          adjuster_email: string | null
+          adjuster_name: string | null
+          adjuster_phone: string | null
+          claim_amount: number | null
+          claim_number: string
+          client_id: string | null
+          created_at: string | null
+          id: string
+          insurance_company: string | null
+          insurance_email: string | null
+          insurance_phone: string | null
+          loss_date: string | null
+          loss_description: string | null
+          loss_type: string | null
+          policyholder_address: string | null
+          policyholder_email: string | null
+          policyholder_name: string
+          policyholder_phone: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          adjuster_email?: string | null
+          adjuster_name?: string | null
+          adjuster_phone?: string | null
+          claim_amount?: number | null
+          claim_number: string
+          client_id?: string | null
+          created_at?: string | null
+          id?: string
+          insurance_company?: string | null
+          insurance_email?: string | null
+          insurance_phone?: string | null
+          loss_date?: string | null
+          loss_description?: string | null
+          loss_type?: string | null
+          policyholder_address?: string | null
+          policyholder_email?: string | null
+          policyholder_name: string
+          policyholder_phone?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          adjuster_email?: string | null
+          adjuster_name?: string | null
+          adjuster_phone?: string | null
+          claim_amount?: number | null
+          claim_number?: string
+          client_id?: string | null
+          created_at?: string | null
+          id?: string
+          insurance_company?: string | null
+          insurance_email?: string | null
+          insurance_phone?: string | null
+          loss_date?: string | null
+          loss_description?: string | null
+          loss_type?: string | null
+          policyholder_address?: string | null
+          policyholder_email?: string | null
+          policyholder_name?: string
+          policyholder_phone?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          email: string
+          full_name: string | null
+          id: string
+          phone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          full_name?: string | null
+          id: string
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          full_name?: string | null
+          id?: string
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "staff" | "client" | "contractor"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +333,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "staff", "client", "contractor"],
+    },
   },
 } as const
