@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, Calendar, MapPin, DollarSign } from "lucide-react";
 import { format } from "date-fns";
+import { ClaimAssignments } from "./ClaimAssignments";
 
 interface ClaimOverviewProps {
   claim: any;
@@ -152,6 +153,13 @@ export function ClaimOverview({ claim }: ClaimOverviewProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Claim Assignments */}
+      <ClaimAssignments 
+        claimId={claim.id}
+        currentReferrerId={claim.referrer_id}
+        currentMortgageCompanyId={claim.mortgage_company_id}
+      />
     </div>
   );
 }
