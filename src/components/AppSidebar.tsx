@@ -19,7 +19,7 @@ const mainItems = [
   { title: "Tasks", url: "/tasks", icon: CheckSquare },
   { title: "Inbox", url: "/inbox", icon: Inbox },
   { title: "Clients", url: "/clients", icon: Users },
-  { title: "Network", url: "/network", icon: Network },
+  { title: "Networking", url: "/networking", icon: Network },
   { title: "Sales", url: "/sales", icon: DollarSign },
   { title: "Templates", url: "/templates", icon: FileStack },
   { title: "Settings", url: "/settings", icon: Settings },
