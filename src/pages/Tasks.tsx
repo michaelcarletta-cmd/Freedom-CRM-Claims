@@ -59,7 +59,7 @@ const Tasks = () => {
         .select(`
           *,
           claims!inner(claim_number),
-          profiles:assigned_to(full_name)
+          profiles!tasks_assigned_to_fkey(full_name)
         `)
         .order("due_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false });
