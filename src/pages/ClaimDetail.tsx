@@ -16,17 +16,32 @@ import { Link } from "react-router-dom";
 const mockClaim = {
   id: "1",
   claimNumber: "CLM-2024-001",
-  clientName: "John Smith",
-  propertyAddress: "123 Main St, Springfield, IL 62701",
-  claimAmount: "$45,000",
   status: "approved" as const,
+  claimAmount: "$45,000",
   dateSubmitted: "2024-01-15",
+  
+  // Policyholder Information
+  policyholderName: "John Smith",
+  policyholderEmail: "john.smith@email.com",
+  policyholderPhone: "(555) 987-6543",
+  policyholderAddress: "123 Main St, Springfield, IL 62701",
+  
+  // Loss Information
+  dateOfLoss: "2024-01-10",
+  typeOfLoss: "Water Damage",
+  lossDescription: "Pipe burst in master bathroom causing water damage to ceiling and walls",
+  
+  // Insurance Company Information
   insuranceCompany: "ABC Insurance Company",
+  insurancePhone: "(555) 111-2222",
+  insuranceEmail: "claims@abcinsurance.com",
   policyNumber: "POL-12345-67890",
-  claimType: "Water Damage",
+  
+  // Adjuster Information
   adjusterName: "Sarah Mitchell",
   adjusterPhone: "(555) 123-4567",
   adjusterEmail: "sarah.mitchell@abcinsurance.com",
+  adjusterCompany: "ABC Insurance Company",
 };
 
 const ClaimDetail = () => {
@@ -58,7 +73,7 @@ const ClaimDetail = () => {
               {mockClaim.status.replace("_", " ").toUpperCase()}
             </Badge>
           </div>
-          <p className="text-muted-foreground mt-1">{mockClaim.clientName}</p>
+          <p className="text-muted-foreground mt-1">{mockClaim.policyholderName}</p>
         </div>
         <Button className="bg-primary hover:bg-primary/90">
           <Edit className="h-4 w-4 mr-2" />
@@ -69,59 +84,139 @@ const ClaimDetail = () => {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content - Left 2/3 */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Claim Overview Card */}
+          {/* Policyholder Information */}
           <Card>
             <CardHeader>
-              <CardTitle>Claim Details</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5 text-primary" />
+                Policyholder Information
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MapPin className="h-4 w-4" />
-                    <span className="font-medium">Property Address</span>
-                  </div>
-                  <p className="text-sm pl-6">{mockClaim.propertyAddress}</p>
+                  <p className="text-sm text-muted-foreground">Name</p>
+                  <p className="text-sm font-medium">{mockClaim.policyholderName}</p>
                 </div>
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <DollarSign className="h-4 w-4" />
-                    <span className="font-medium">Claim Amount</span>
-                  </div>
-                  <p className="text-sm pl-6 font-semibold text-foreground">{mockClaim.claimAmount}</p>
+                  <p className="text-sm text-muted-foreground">Email</p>
+                  <p className="text-sm font-medium">{mockClaim.policyholderEmail}</p>
                 </div>
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Calendar className="h-4 w-4" />
-                    <span className="font-medium">Date Submitted</span>
-                  </div>
-                  <p className="text-sm pl-6">{new Date(mockClaim.dateSubmitted).toLocaleDateString()}</p>
+                  <p className="text-sm text-muted-foreground">Phone</p>
+                  <p className="text-sm font-medium">{mockClaim.policyholderPhone}</p>
                 </div>
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <User className="h-4 w-4" />
-                    <span className="font-medium">Insurance Company</span>
-                  </div>
-                  <p className="text-sm pl-6">{mockClaim.insuranceCompany}</p>
+                  <p className="text-sm text-muted-foreground">Address</p>
+                  <p className="text-sm font-medium">{mockClaim.policyholderAddress}</p>
                 </div>
               </div>
-              <Separator />
+            </CardContent>
+          </Card>
+
+          {/* Loss Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-primary" />
+                Loss Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Date of Loss</p>
+                  <p className="text-sm font-medium">{new Date(mockClaim.dateOfLoss).toLocaleDateString()}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Type of Loss</p>
+                  <p className="text-sm font-medium">{mockClaim.typeOfLoss}</p>
+                </div>
+                <div className="space-y-1 md:col-span-2">
+                  <p className="text-sm text-muted-foreground">Loss Description</p>
+                  <p className="text-sm font-medium">{mockClaim.lossDescription}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Insurance Company Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-primary" />
+                Insurance Company
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Company Name</p>
+                  <p className="text-sm font-medium">{mockClaim.insuranceCompany}</p>
+                </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Policy Number</p>
                   <p className="text-sm font-medium">{mockClaim.policyNumber}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Claim Type</p>
-                  <p className="text-sm font-medium">{mockClaim.claimType}</p>
+                  <p className="text-sm text-muted-foreground">Phone</p>
+                  <p className="text-sm font-medium">{mockClaim.insurancePhone}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Adjuster</p>
+                  <p className="text-sm text-muted-foreground">Email</p>
+                  <p className="text-sm font-medium">{mockClaim.insuranceEmail}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Adjuster Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5 text-primary" />
+                Adjuster Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Adjuster Name</p>
                   <p className="text-sm font-medium">{mockClaim.adjusterName}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Adjuster Contact</p>
+                  <p className="text-sm text-muted-foreground">Company</p>
+                  <p className="text-sm font-medium">{mockClaim.adjusterCompany}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Phone</p>
                   <p className="text-sm font-medium">{mockClaim.adjusterPhone}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Email</p>
+                  <p className="text-sm font-medium">{mockClaim.adjusterEmail}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Claim Financial Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-primary" />
+                Claim Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Claim Amount</p>
+                  <p className="text-2xl font-bold text-primary">{mockClaim.claimAmount}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Date Submitted</p>
+                  <p className="text-sm font-medium">{new Date(mockClaim.dateSubmitted).toLocaleDateString()}</p>
                 </div>
               </div>
             </CardContent>
