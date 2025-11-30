@@ -418,6 +418,7 @@ export type Database = {
           loss_description: string | null
           loss_type: string | null
           loss_type_id: string | null
+          mortgage_company_id: string | null
           policy_number: string | null
           policyholder_address: string | null
           policyholder_email: string | null
@@ -444,6 +445,7 @@ export type Database = {
           loss_description?: string | null
           loss_type?: string | null
           loss_type_id?: string | null
+          mortgage_company_id?: string | null
           policy_number?: string | null
           policyholder_address?: string | null
           policyholder_email?: string | null
@@ -470,6 +472,7 @@ export type Database = {
           loss_description?: string | null
           loss_type?: string | null
           loss_type_id?: string | null
+          mortgage_company_id?: string | null
           policy_number?: string | null
           policyholder_address?: string | null
           policyholder_email?: string | null
@@ -492,6 +495,13 @@ export type Database = {
             columns: ["loss_type_id"]
             isOneToOne: false
             referencedRelation: "loss_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_mortgage_company_id_fkey"
+            columns: ["mortgage_company_id"]
+            isOneToOne: false
+            referencedRelation: "mortgage_companies"
             referencedColumns: ["id"]
           },
           {
@@ -594,6 +604,39 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      mortgage_companies: {
+        Row: {
+          contact_name: string | null
+          created_at: string
+          email: string | null
+          id: string
+          is_active: boolean
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          contact_name?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          contact_name?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          phone?: string | null
           updated_at?: string
         }
         Relationships: []
