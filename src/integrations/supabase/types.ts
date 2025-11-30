@@ -211,6 +211,53 @@ export type Database = {
           },
         ]
       }
+      inspections: {
+        Row: {
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          inspection_date: string
+          inspection_type: string | null
+          inspector_name: string | null
+          notes: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inspection_date: string
+          inspection_type?: string | null
+          inspector_name?: string | null
+          notes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inspection_date?: string
+          inspection_type?: string | null
+          inspector_name?: string | null
+          notes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspections_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       insurance_companies: {
         Row: {
           created_at: string
