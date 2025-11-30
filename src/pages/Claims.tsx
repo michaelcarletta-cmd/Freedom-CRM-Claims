@@ -1,7 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ClaimsTableConnected } from "@/components/ClaimsTableConnected";
-import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { NewClaimDialog } from "@/components/NewClaimDialog";
 
 const Claims = () => {
   return (
@@ -11,10 +10,7 @@ const Claims = () => {
           <h1 className="text-3xl font-bold text-foreground">Claims</h1>
           <p className="text-muted-foreground mt-1">Manage all property insurance claims</p>
         </div>
-        <Button className="bg-primary hover:bg-primary/90">
-          <Plus className="h-4 w-4 mr-2" />
-          New Claim
-        </Button>
+        <NewClaimDialog />
       </div>
 
       <Card>
