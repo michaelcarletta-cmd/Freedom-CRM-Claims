@@ -15,6 +15,7 @@ import { TemplatesSettings } from "@/components/settings/TemplatesSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
 import { TaskAutomationsSettings } from "@/components/settings/TaskAutomationsSettings";
 import { ImportSettings } from "@/components/settings/ImportSettings";
+import { UserManagementSettings } from "@/components/settings/UserManagementSettings";
 
 interface ClaimStatus {
   id: string;
@@ -146,6 +147,7 @@ export default function Settings() {
           <TabsTrigger value="insurance" className="w-full justify-start">Insurance Companies</TabsTrigger>
           <TabsTrigger value="loss-types" className="w-full justify-start">Loss Types</TabsTrigger>
           <TabsTrigger value="referrers" className="w-full justify-start">Referrers</TabsTrigger>
+          <TabsTrigger value="users" className="w-full justify-start">User Management</TabsTrigger>
           <TabsTrigger value="templates" className="w-full justify-start">Templates</TabsTrigger>
           <TabsTrigger value="custom-fields" className="w-full justify-start">Custom Fields</TabsTrigger>
           <TabsTrigger value="task-automations" className="w-full justify-start">Task Automations</TabsTrigger>
@@ -241,6 +243,10 @@ export default function Settings() {
 
         <TabsContent value="referrers" className="flex-1">
           <ReferrersSettings />
+        </TabsContent>
+
+        <TabsContent value="users" className="flex-1">
+          <UserManagementSettings />
         </TabsContent>
 
         <TabsContent value="templates" className="flex-1">
