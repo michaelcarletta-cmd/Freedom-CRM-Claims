@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { ClaimPayments } from "./ClaimPayments";
 
 interface ClaimAccountingProps {
   claim: any;
@@ -155,6 +156,9 @@ export function ClaimAccounting({ claim }: ClaimAccountingProps) {
         grossProfit={grossProfit}
         totalChecksReceived={totalChecksReceived}
       />
+
+      {/* Payments Released */}
+      <ClaimPayments claimId={claim.id} />
     </div>
   );
 }

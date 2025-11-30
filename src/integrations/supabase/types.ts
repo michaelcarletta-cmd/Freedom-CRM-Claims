@@ -282,6 +282,59 @@ export type Database = {
           },
         ]
       }
+      claim_payments: {
+        Row: {
+          amount: number
+          check_number: string | null
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          payment_date: string
+          payment_method: string
+          recipient_id: string | null
+          recipient_type: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          check_number?: string | null
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          payment_date: string
+          payment_method: string
+          recipient_id?: string | null
+          recipient_type: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          check_number?: string | null
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          payment_date?: string
+          payment_method?: string
+          recipient_id?: string | null
+          recipient_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_payments_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_settlements: {
         Row: {
           claim_id: string
