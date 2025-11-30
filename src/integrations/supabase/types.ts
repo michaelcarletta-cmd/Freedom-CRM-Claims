@@ -1117,6 +1117,45 @@ export type Database = {
           },
         ]
       }
+      task_automations: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          due_date_offset: number | null
+          id: string
+          is_active: boolean | null
+          priority: string | null
+          title: string
+          trigger_status: string | null
+          trigger_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          due_date_offset?: number | null
+          id?: string
+          is_active?: boolean | null
+          priority?: string | null
+          title: string
+          trigger_status?: string | null
+          trigger_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          due_date_offset?: number | null
+          id?: string
+          is_active?: boolean | null
+          priority?: string | null
+          title?: string
+          trigger_status?: string | null
+          trigger_type?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           assigned_to: string | null

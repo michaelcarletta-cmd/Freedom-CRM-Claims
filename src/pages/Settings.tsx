@@ -13,6 +13,7 @@ import { ReferrersSettings } from "@/components/settings/ReferrersSettings";
 import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
 import { TemplatesSettings } from "@/components/settings/TemplatesSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
+import { TaskAutomationsSettings } from "@/components/settings/TaskAutomationsSettings";
 
 interface ClaimStatus {
   id: string;
@@ -146,6 +147,7 @@ export default function Settings() {
           <TabsTrigger value="referrers">Referrers</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="custom-fields">Custom Fields</TabsTrigger>
+          <TabsTrigger value="task-automations">Task Automations</TabsTrigger>
           <TabsTrigger value="automations">Automations</TabsTrigger>
         </TabsList>
 
@@ -245,6 +247,10 @@ export default function Settings() {
 
         <TabsContent value="custom-fields" className="mt-6">
           <CustomFieldsSettings />
+        </TabsContent>
+
+        <TabsContent value="task-automations" className="mt-6">
+          <TaskAutomationsSettings />
         </TabsContent>
 
         <TabsContent value="automations" className="mt-6">
