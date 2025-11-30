@@ -204,6 +204,56 @@ export type Database = {
         }
         Relationships: []
       }
+      sms_messages: {
+        Row: {
+          claim_id: string
+          created_at: string
+          direction: string
+          from_number: string
+          id: string
+          message_body: string
+          status: string
+          to_number: string
+          twilio_sid: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          direction?: string
+          from_number: string
+          id?: string
+          message_body: string
+          status?: string
+          to_number: string
+          twilio_sid?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          direction?: string
+          from_number?: string
+          id?: string
+          message_body?: string
+          status?: string
+          to_number?: string
+          twilio_sid?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_messages_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string

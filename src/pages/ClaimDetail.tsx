@@ -92,7 +92,7 @@ const ClaimDetail = () => {
         </TabsContent>
 
         <TabsContent value="communication" className="mt-6">
-          <ClaimCommunicationTab claimId={id || ""} />
+          <ClaimCommunicationTab claimId={id || ""} policyholderPhone={claim.policyholder_phone} />
         </TabsContent>
 
         <TabsContent value="activity" className="mt-6">
