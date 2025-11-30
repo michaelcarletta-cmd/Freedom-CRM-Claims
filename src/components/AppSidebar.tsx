@@ -43,6 +43,8 @@ export function AppSidebar() {
           )}
         </div>
 
+        <div className="h-20" />
+
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
