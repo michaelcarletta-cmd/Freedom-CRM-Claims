@@ -14,6 +14,7 @@ import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
 import { TemplatesSettings } from "@/components/settings/TemplatesSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
 import { TaskAutomationsSettings } from "@/components/settings/TaskAutomationsSettings";
+import { ImportSettings } from "@/components/settings/ImportSettings";
 
 interface ClaimStatus {
   id: string;
@@ -149,6 +150,7 @@ export default function Settings() {
           <TabsTrigger value="custom-fields">Custom Fields</TabsTrigger>
           <TabsTrigger value="task-automations">Task Automations</TabsTrigger>
           <TabsTrigger value="automations">Automations</TabsTrigger>
+          <TabsTrigger value="import">Import Data</TabsTrigger>
         </TabsList>
 
         <TabsContent value="statuses" className="mt-6">
@@ -255,6 +257,10 @@ export default function Settings() {
 
         <TabsContent value="automations" className="mt-6">
           <AutomationsSettings />
+        </TabsContent>
+
+        <TabsContent value="import" className="mt-6">
+          <ImportSettings />
         </TabsContent>
       </Tabs>
     </div>
