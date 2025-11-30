@@ -11,6 +11,7 @@ import { ClaimFiles } from "@/components/claim-detail/ClaimFiles";
 import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
 import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
+import { ClaimTemplates } from "@/components/claim-detail/ClaimTemplates";
 import { ArrowLeft, Edit } from "lucide-react";
 
 const ClaimDetail = () => {
@@ -89,6 +90,7 @@ const ClaimDetail = () => {
           <TabsTrigger value="activity">Notes & Activity</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="accounting">Accounting</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
@@ -117,6 +119,10 @@ const ClaimDetail = () => {
 
         <TabsContent value="accounting" className="mt-6">
           <ClaimAccounting claim={claim} />
+        </TabsContent>
+
+        <TabsContent value="templates" className="mt-6">
+          <ClaimTemplates claimId={id!} claim={claim} />
         </TabsContent>
       </Tabs>
     </div>
