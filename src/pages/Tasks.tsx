@@ -19,27 +19,34 @@ interface Task {
   priority: string;
   claim_id: string;
   claim_number: string;
-  assignee_name: string | null;
+  assigned_to: string | null;
   created_at: string;
+}
+
+interface TaskUser {
+  id: string;
+  full_name: string | null;
+  email: string;
 }
 
 const Tasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<TaskUser[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchTasks();
+    fetchUsers();
 
-    // Subscribe to task changes
     const channel = supabase
-      .channel('all-tasks')
+      .channel("all-tasks")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'tasks',
+          event: "*",
+          schema: "public",
+          table: "tasks",
         },
         () => {
           fetchTasks();
@@ -58,19 +65,18 @@ const Tasks = () => {
         .from("tasks")
         .select(`
           *,
-          claims!inner(claim_number),
-          profiles!tasks_assigned_to_fkey(full_name)
+          claims!inner(claim_number)
         `)
         .order("due_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      const tasksWithDetails = data?.map((task: any) => ({
-        ...task,
-        claim_number: task.claims.claim_number,
-        assignee_name: task.profiles?.full_name || null,
-      })) || [];
+      const tasksWithDetails =
+        data?.map((task: any) => ({
+          ...task,
+          claim_number: task.claims.claim_number,
+        })) || [];
 
       setTasks(tasksWithDetails);
     } catch (error: any) {
@@ -82,6 +88,20 @@ const Tasks = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .order("full_name");
+
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error: any) {
+      console.error("Error fetching users:", error);
     }
   };
 
@@ -117,17 +137,18 @@ const Tasks = () => {
   const TaskList = ({ taskList }: { taskList: Task[] }) => (
     <div className="space-y-3">
       {taskList.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          No tasks found
-        </div>
+        <div className="text-center py-8 text-muted-foreground">No tasks found</div>
       ) : (
         taskList.map((task) => {
-          const isOverdue = task.due_date && isPast(new Date(task.due_date)) && task.status !== "completed";
+          const isOverdue =
+            task.due_date && isPast(new Date(task.due_date)) && task.status !== "completed";
           const priorityColors = {
             high: "destructive",
             medium: "default",
             low: "secondary",
-          };
+          } as const;
+
+          const assignee = users.find((user) => user.id === task.assigned_to);
 
           return (
             <Card
@@ -164,7 +185,15 @@ const Tasks = () => {
                   </div>
                   <div className="flex flex-wrap items-center gap-4 mt-3 text-sm">
                     <Badge variant="outline">{task.claim_number}</Badge>
-                    <Badge variant={priorityColors[task.priority as keyof typeof priorityColors] as "default" | "destructive" | "outline" | "secondary"}>
+                    <Badge
+                      variant={
+                        priorityColors[task.priority as keyof typeof priorityColors] as
+                          | "default"
+                          | "destructive"
+                          | "outline"
+                          | "secondary"
+                      }
+                    >
                       {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)} Priority
                     </Badge>
                     {task.due_date && (
@@ -180,10 +209,10 @@ const Tasks = () => {
                         </span>
                       </div>
                     )}
-                    {task.assignee_name && (
+                    {assignee && (
                       <div className="flex items-center gap-1 text-muted-foreground">
                         <User className="h-4 w-4" />
-                        <span>{task.assignee_name}</span>
+                        <span>{assignee.full_name || assignee.email}</span>
                       </div>
                     )}
                   </div>
@@ -216,12 +245,8 @@ const Tasks = () => {
 
       <Tabs defaultValue="pending" className="w-full">
         <TabsList>
-          <TabsTrigger value="pending">
-            Pending ({pendingTasks.length})
-          </TabsTrigger>
-          <TabsTrigger value="completed">
-            Completed ({completedTasks.length})
-          </TabsTrigger>
+          <TabsTrigger value="pending">Pending ({pendingTasks.length})</TabsTrigger>
+          <TabsTrigger value="completed">Completed ({completedTasks.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending" className="mt-6">

@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, CheckCircle2, Circle, Calendar, User, Trash2 } from "lucide-react";
+import { Plus, CheckCircle2, Calendar, User, Trash2 } from "lucide-react";
 import { format, isPast } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -20,13 +20,12 @@ interface Task {
   assigned_to: string | null;
   status: string;
   created_at: string;
-  assignee_name: string | null;
   priority: string;
 }
 
-interface User {
+interface UserProfile {
   id: string;
-  full_name: string;
+  full_name: string | null;
   email: string;
 }
 
@@ -36,7 +35,7 @@ interface ClaimTasksProps {
 
 export function ClaimTasks({ claimId }: ClaimTasksProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -53,15 +52,14 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
     fetchTasks();
     fetchUsers();
 
-    // Subscribe to task changes
     const channel = supabase
       .channel(`claim-tasks-${claimId}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'tasks',
+          event: "*",
+          schema: "public",
+          table: "tasks",
           filter: `claim_id=eq.${claimId}`,
         },
         () => {
@@ -79,22 +77,14 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
     try {
       const { data, error } = await supabase
         .from("tasks")
-        .select(`
-          *,
-          profiles!tasks_assigned_to_fkey(full_name)
-        `)
+        .select("*")
         .eq("claim_id", claimId)
         .order("due_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      const tasksWithNames = data?.map((task: any) => ({
-        ...task,
-        assignee_name: task.profiles?.full_name || null,
-      })) || [];
-
-      setTasks(tasksWithNames);
+      setTasks(data || []);
     } catch (error: any) {
       console.error("Error fetching tasks:", error);
       toast({
@@ -124,8 +114,10 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
     setLoading(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       const { error } = await supabase.from("tasks").insert({
         claim_id: claimId,
         title: formData.title,
@@ -316,12 +308,15 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
       ) : (
         <div className="space-y-3">
           {tasks.map((task) => {
-            const isOverdue = task.due_date && isPast(new Date(task.due_date)) && task.status !== "completed";
+            const isOverdue =
+              task.due_date && isPast(new Date(task.due_date)) && task.status !== "completed";
             const priorityColors = {
               high: "text-red-600 dark:text-red-400",
               medium: "text-amber-600 dark:text-amber-400",
               low: "text-blue-600 dark:text-blue-400",
-            };
+            } as const;
+
+            const assignee = users.find((user) => user.id === task.assigned_to);
 
             return (
               <Card
@@ -373,13 +368,17 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
                           </span>
                         </div>
                       )}
-                      {task.assignee_name && (
+                      {assignee && (
                         <div className="flex items-center gap-1">
                           <User className="h-4 w-4" />
-                          <span>{task.assignee_name}</span>
+                          <span>{assignee.full_name || assignee.email}</span>
                         </div>
                       )}
-                      <span className={`font-medium ${priorityColors[task.priority as keyof typeof priorityColors]}`}>
+                      <span
+                        className={`font-medium ${
+                          priorityColors[task.priority as keyof typeof priorityColors]
+                        }`}
+                      >
                         {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)} Priority
                       </span>
                     </div>
