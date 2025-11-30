@@ -13,6 +13,7 @@ import Clients from "./pages/Clients";
 import ClientDetail from "./pages/ClientDetail";
 import Settings from "./pages/Settings";
 import Networking from "./pages/Networking";
+import Templates from "./pages/Templates";
 import Auth from "./pages/Auth";
 import ClientPortal from "./pages/ClientPortal";
 import ContractorPortal from "./pages/ContractorPortal";
@@ -81,6 +82,7 @@ function AppRoutes() {
       <Route path="/clients" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Clients /></ProtectedRoute>} />
       <Route path="/clients/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><ClientDetail /></ProtectedRoute>} />
       <Route path="/networking" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Networking /></ProtectedRoute>} />
+      <Route path="/templates" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Templates /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Settings /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
