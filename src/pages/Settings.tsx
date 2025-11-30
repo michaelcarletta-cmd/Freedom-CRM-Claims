@@ -141,25 +141,21 @@ export default function Settings() {
 
   const addStatus = async () => {
     const trimmedName = newStatusName.trim();
-    
-    if (!trimmedName) {
-      toast({
-        title: "Validation Error",
-        description: "Please enter a status name",
-        variant: "destructive",
-      });
-      return;
-    }
+    const nameToUse = trimmedName || "New Status";
 
     try {
-      const maxOrder = Math.max(...statuses.map(s => s.display_order), 0);
-      
-      console.log("Adding status:", { name: trimmedName, color: newStatusColor, display_order: maxOrder + 1 });
-      
+      const maxOrder = Math.max(...statuses.map((s) => s.display_order), 0);
+
+      console.log("Adding status:", {
+        name: nameToUse,
+        color: newStatusColor,
+        display_order: maxOrder + 1,
+      });
+
       const { data, error } = await supabase
         .from("claim_statuses")
         .insert({
-          name: trimmedName,
+          name: nameToUse,
           color: newStatusColor,
           display_order: maxOrder + 1,
         })
@@ -189,7 +185,6 @@ export default function Settings() {
       });
     }
   };
-
   const deleteStatus = async (id: string) => {
     try {
       const { error } = await supabase
