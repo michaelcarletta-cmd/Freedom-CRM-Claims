@@ -14,6 +14,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      claim_checks: {
+        Row: {
+          amount: number
+          check_date: string
+          check_number: string | null
+          check_type: string
+          claim_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          notes: string | null
+          received_date: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          check_date: string
+          check_number?: string | null
+          check_type: string
+          claim_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          received_date?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          check_date?: string
+          check_number?: string | null
+          check_type?: string
+          claim_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          received_date?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_checks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_contractors: {
         Row: {
           assigned_at: string | null
@@ -38,6 +88,106 @@ export type Database = {
             foreignKeyName: "claim_contractors_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_expenses: {
+        Row: {
+          amount: number
+          category: string | null
+          claim_id: string
+          created_at: string | null
+          created_by: string | null
+          description: string
+          expense_date: string
+          id: string
+          notes: string | null
+          paid_to: string | null
+          payment_method: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          claim_id: string
+          created_at?: string | null
+          created_by?: string | null
+          description: string
+          expense_date: string
+          id?: string
+          notes?: string | null
+          paid_to?: string | null
+          payment_method?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          claim_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string
+          expense_date?: string
+          id?: string
+          notes?: string | null
+          paid_to?: string | null
+          payment_method?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_expenses_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_fees: {
+        Row: {
+          adjuster_fee_amount: number
+          adjuster_fee_percentage: number
+          claim_id: string
+          company_fee_amount: number
+          company_fee_percentage: number
+          created_at: string | null
+          created_by: string | null
+          id: string
+          notes: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          adjuster_fee_amount?: number
+          adjuster_fee_percentage?: number
+          claim_id: string
+          company_fee_amount?: number
+          company_fee_percentage?: number
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          adjuster_fee_amount?: number
+          adjuster_fee_percentage?: number
+          claim_id?: string
+          company_fee_amount?: number
+          company_fee_percentage?: number
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_fees_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
             referencedRelation: "claims"
             referencedColumns: ["id"]
           },
@@ -125,6 +275,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "claim_folders_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_settlements: {
+        Row: {
+          claim_id: string
+          created_at: string | null
+          created_by: string | null
+          deductible: number
+          estimate_amount: number | null
+          id: string
+          non_recoverable_depreciation: number
+          notes: string | null
+          recoverable_depreciation: number
+          replacement_cost_value: number
+          total_settlement: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string | null
+          created_by?: string | null
+          deductible?: number
+          estimate_amount?: number | null
+          id?: string
+          non_recoverable_depreciation?: number
+          notes?: string | null
+          recoverable_depreciation?: number
+          replacement_cost_value?: number
+          total_settlement?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deductible?: number
+          estimate_amount?: number | null
+          id?: string
+          non_recoverable_depreciation?: number
+          notes?: string | null
+          recoverable_depreciation?: number
+          replacement_cost_value?: number
+          total_settlement?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_settlements_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
