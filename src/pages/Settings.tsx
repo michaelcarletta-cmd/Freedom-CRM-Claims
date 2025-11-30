@@ -140,20 +140,37 @@ export default function Settings() {
   };
 
   const addStatus = async () => {
-    if (!newStatusName.trim()) return;
+    const trimmedName = newStatusName.trim();
+    
+    if (!trimmedName) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a status name",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       const maxOrder = Math.max(...statuses.map(s => s.display_order), 0);
       
-      const { error } = await supabase
+      console.log("Adding status:", { name: trimmedName, color: newStatusColor, display_order: maxOrder + 1 });
+      
+      const { data, error } = await supabase
         .from("claim_statuses")
         .insert({
-          name: newStatusName,
+          name: trimmedName,
           color: newStatusColor,
           display_order: maxOrder + 1,
-        });
+        })
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error adding status:", error);
+        throw error;
+      }
+
+      console.log("Status added successfully:", data);
 
       toast({
         title: "Success",
@@ -164,9 +181,10 @@ export default function Settings() {
       setNewStatusColor("#3B82F6");
       fetchStatuses();
     } catch (error: any) {
+      console.error("Caught error:", error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "Failed to add status",
         variant: "destructive",
       });
     }
