@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 interface Contractor {
@@ -12,6 +16,12 @@ interface Contractor {
 
 export const ContractorsTab = () => {
   const [contractors, setContractors] = useState<Contractor[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    email: "",
+    full_name: "",
+    phone: "",
+  });
 
   useEffect(() => {
     fetchContractors();
@@ -50,8 +60,105 @@ export const ContractorsTab = () => {
     setContractors(profileData || []);
   };
 
+  const handleAddContractor = async () => {
+    if (!formData.email.trim() || !formData.full_name.trim()) {
+      toast.error("Email and name are required");
+      return;
+    }
+
+    // Create a temporary password for the contractor
+    const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+
+    // Sign up the user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: formData.email,
+      password: tempPassword,
+      options: {
+        data: {
+          full_name: formData.full_name,
+        },
+      },
+    });
+
+    if (authError) {
+      toast.error("Failed to create contractor: " + authError.message);
+      return;
+    }
+
+    if (!authData.user) {
+      toast.error("Failed to create contractor");
+      return;
+    }
+
+    // Update profile with phone
+    if (formData.phone) {
+      await supabase
+        .from("profiles")
+        .update({ phone: formData.phone })
+        .eq("id", authData.user.id);
+    }
+
+    // Assign contractor role
+    const { error: roleError } = await supabase
+      .from("user_roles")
+      .insert([{ user_id: authData.user.id, role: "contractor" }]);
+
+    if (roleError) {
+      toast.error("Failed to assign contractor role");
+      return;
+    }
+
+    toast.success("Contractor added successfully");
+    setDialogOpen(false);
+    setFormData({ email: "", full_name: "", phone: "" });
+    fetchContractors();
+  };
+
   return (
     <div className="space-y-4">
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogTrigger asChild>
+          <Button onClick={() => setFormData({ email: "", full_name: "", phone: "" })}>
+            Add Contractor
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Contractor</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Email *</Label>
+              <Input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="Enter email"
+              />
+            </div>
+            <div>
+              <Label>Full Name *</Label>
+              <Input
+                value={formData.full_name}
+                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                placeholder="Enter full name"
+              />
+            </div>
+            <div>
+              <Label>Phone</Label>
+              <Input
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="Enter phone number"
+              />
+            </div>
+            <Button onClick={handleAddContractor} className="w-full">
+              Add Contractor
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Card className="p-4">
         <div className="space-y-2">
           {contractors.length === 0 ? (
