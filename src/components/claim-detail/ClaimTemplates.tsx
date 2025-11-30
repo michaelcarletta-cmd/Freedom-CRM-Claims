@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Upload, Download, Loader2, Eye } from "lucide-react";
+import { FileText, Upload, Download, Loader2, Eye, Info } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface ClaimTemplatesProps {
   claimId: string;
@@ -164,6 +165,40 @@ export function ClaimTemplates({ claimId, claim }: ClaimTemplatesProps) {
 
   return (
     <div className="space-y-6">
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertTitle>Available Merge Fields</AlertTitle>
+        <AlertDescription>
+          <p className="mb-2">Use these fields in your Word templates with double curly braces:</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
+            <div>{`{{claim_number}}`}</div>
+            <div>{`{{policyholder_name}}`}</div>
+            <div>{`{{policyholder_email}}`}</div>
+            <div>{`{{policyholder_phone}}`}</div>
+            <div>{`{{policyholder_address}}`}</div>
+            <div>{`{{policy_number}}`}</div>
+            <div>{`{{loss_date}}`}</div>
+            <div>{`{{loss_type}}`}</div>
+            <div>{`{{loss_description}}`}</div>
+            <div>{`{{claim_amount}}`}</div>
+            <div>{`{{insurance_company}}`}</div>
+            <div>{`{{insurance_phone}}`}</div>
+            <div>{`{{insurance_email}}`}</div>
+            <div>{`{{adjuster_name}}`}</div>
+            <div>{`{{adjuster_phone}}`}</div>
+            <div>{`{{adjuster_email}}`}</div>
+            <div>{`{{referrer_name}}`}</div>
+            <div>{`{{referrer_company}}`}</div>
+            <div>{`{{mortgage_company}}`}</div>
+            <div>{`{{mortgage_contact}}`}</div>
+            <div>{`{{mortgage_phone}}`}</div>
+            <div>{`{{mortgage_email}}`}</div>
+            <div>{`{{status}}`}</div>
+            <div>{`{{date}}`}</div>
+          </div>
+        </AlertDescription>
+      </Alert>
+
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-lg font-semibold">Document Templates</h3>
