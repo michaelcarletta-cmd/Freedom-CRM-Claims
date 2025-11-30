@@ -203,7 +203,7 @@ export function UserManagementSettings() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 ml-4">
+              <div className="ml-4">
                 <Select
                   onValueChange={(role) => addRole(user.id, role)}
                 >
@@ -211,26 +211,38 @@ export function UserManagementSettings() {
                     <SelectValue placeholder="Add role..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="staff">Staff</SelectItem>
-                    <SelectItem value="client">Client</SelectItem>
-                    <SelectItem value="contractor">Contractor</SelectItem>
-                    <SelectItem value="referrer">Referrer</SelectItem>
+                    <SelectItem value="admin">
+                      <div className="flex items-center gap-2">
+                        <UserPlus className="h-4 w-4" />
+                        Admin
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="staff">
+                      <div className="flex items-center gap-2">
+                        <UserPlus className="h-4 w-4" />
+                        Staff
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="client">
+                      <div className="flex items-center gap-2">
+                        <UserPlus className="h-4 w-4" />
+                        Client
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="contractor">
+                      <div className="flex items-center gap-2">
+                        <UserPlus className="h-4 w-4" />
+                        Contractor
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="referrer">
+                      <div className="flex items-center gap-2">
+                        <UserPlus className="h-4 w-4" />
+                        Referrer
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => {
-                    const select = document.querySelector(`[data-user-id="${user.id}"]`) as HTMLSelectElement;
-                    if (select?.value) {
-                      addRole(user.id, select.value);
-                    }
-                  }}
-                  title="Add role"
-                >
-                  <UserPlus className="h-4 w-4" />
-                </Button>
               </div>
             </div>
           ))}
