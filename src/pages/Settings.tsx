@@ -141,7 +141,7 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="statuses" className="w-full">
-        <TabsList>
+        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap h-auto">
           <TabsTrigger value="statuses">Claim Statuses</TabsTrigger>
           <TabsTrigger value="insurance">Insurance Companies</TabsTrigger>
           <TabsTrigger value="loss-types">Loss Types</TabsTrigger>
