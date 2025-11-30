@@ -140,8 +140,8 @@ export default function Settings() {
         <p className="text-muted-foreground">Manage your claim workflow and dropdown options</p>
       </div>
 
-      <Tabs defaultValue="statuses" className="flex gap-6">
-        <TabsList className="flex flex-col h-fit w-56">
+      <Tabs defaultValue="statuses" className="flex flex-col md:flex-row gap-6">
+        <TabsList className="flex flex-col h-fit w-full md:w-56 overflow-x-auto md:overflow-x-visible">
           <TabsTrigger value="statuses" className="w-full justify-start">Claim Statuses</TabsTrigger>
           <TabsTrigger value="insurance" className="w-full justify-start">Insurance Companies</TabsTrigger>
           <TabsTrigger value="loss-types" className="w-full justify-start">Loss Types</TabsTrigger>
