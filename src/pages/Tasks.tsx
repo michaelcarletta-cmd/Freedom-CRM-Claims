@@ -1,45 +1,237 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Calendar, User, ExternalLink } from "lucide-react";
+import { format, isPast } from "date-fns";
+import { Link } from "react-router-dom";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const mockTasks = [
-  { id: "1", title: "Follow up with John Smith", claim: "CLM-2024-001", priority: "high", completed: false },
-  { id: "2", title: "Review inspection report", claim: "CLM-2024-002", priority: "medium", completed: false },
-  { id: "3", title: "Schedule property visit", claim: "CLM-2024-003", priority: "high", completed: false },
-  { id: "4", title: "Submit documentation", claim: "CLM-2024-004", priority: "low", completed: true },
-];
+interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  status: string;
+  priority: string;
+  claim_id: string;
+  claim_number: string;
+  assignee_name: string | null;
+  created_at: string;
+}
 
 const Tasks = () => {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchTasks();
+
+    // Subscribe to task changes
+    const channel = supabase
+      .channel('all-tasks')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+        },
+        () => {
+          fetchTasks();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const fetchTasks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select(`
+          *,
+          claims!inner(claim_number),
+          profiles!tasks_assigned_to_fkey(full_name)
+        `)
+        .order("due_date", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const tasksWithDetails = data?.map((task: any) => ({
+        ...task,
+        claim_number: task.claims.claim_number,
+        assignee_name: task.profiles?.full_name || null,
+      })) || [];
+
+      setTasks(tasksWithDetails);
+    } catch (error: any) {
+      console.error("Error fetching tasks:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load tasks",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleComplete = async (taskId: string, currentStatus: string) => {
+    try {
+      const newStatus = currentStatus === "completed" ? "pending" : "completed";
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          status: newStatus,
+          completed_at: newStatus === "completed" ? new Date().toISOString() : null,
+        })
+        .eq("id", taskId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `Task marked as ${newStatus}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to update task",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const pendingTasks = tasks.filter((task) => task.status !== "completed");
+  const completedTasks = tasks.filter((task) => task.status === "completed");
+
+  const TaskList = ({ taskList }: { taskList: Task[] }) => (
+    <div className="space-y-3">
+      {taskList.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          No tasks found
+        </div>
+      ) : (
+        taskList.map((task) => {
+          const isOverdue = task.due_date && isPast(new Date(task.due_date)) && task.status !== "completed";
+          const priorityColors = {
+            high: "destructive",
+            medium: "default",
+            low: "secondary",
+          };
+
+          return (
+            <Card
+              key={task.id}
+              className={`p-4 ${task.status === "completed" ? "opacity-60" : ""} ${
+                isOverdue ? "border-red-500" : ""
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  checked={task.status === "completed"}
+                  onCheckedChange={() => handleToggleComplete(task.id, task.status)}
+                  className="mt-1"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h3
+                        className={`font-medium text-foreground ${
+                          task.status === "completed" ? "line-through" : ""
+                        }`}
+                      >
+                        {task.title}
+                      </h3>
+                      {task.description && (
+                        <p className="text-sm text-muted-foreground mt-1">{task.description}</p>
+                      )}
+                    </div>
+                    <Link to={`/claims/${task.claim_id}`}>
+                      <Button variant="ghost" size="sm">
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 mt-3 text-sm">
+                    <Badge variant="outline">{task.claim_number}</Badge>
+                    <Badge variant={priorityColors[task.priority as keyof typeof priorityColors] as "default" | "destructive" | "outline" | "secondary"}>
+                      {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)} Priority
+                    </Badge>
+                    {task.due_date && (
+                      <div
+                        className={`flex items-center gap-1 text-muted-foreground ${
+                          isOverdue ? "text-red-600 dark:text-red-400 font-semibold" : ""
+                        }`}
+                      >
+                        <Calendar className="h-4 w-4" />
+                        <span>
+                          {isOverdue && "Overdue: "}
+                          {format(new Date(task.due_date), "MMM d, yyyy")}
+                        </span>
+                      </div>
+                    )}
+                    {task.assignee_name && (
+                      <div className="flex items-center gap-1 text-muted-foreground">
+                        <User className="h-4 w-4" />
+                        <span>{task.assignee_name}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          );
+        })
+      )}
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Tasks</h1>
+          <p className="text-muted-foreground mt-1">Loading tasks...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground">Tasks</h1>
-        <p className="text-muted-foreground mt-1">Your pending tasks and follow-ups</p>
+        <p className="text-muted-foreground mt-1">Manage all your tasks across claims</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Active Tasks</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {mockTasks.map((task) => (
-              <div key={task.id} className="flex items-center gap-4 p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors">
-                <Checkbox checked={task.completed} />
-                <div className="flex-1">
-                  <h3 className={`font-medium ${task.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                    {task.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground mt-1">Claim: {task.claim}</p>
-                </div>
-                <Badge variant={task.priority === "high" ? "destructive" : task.priority === "medium" ? "default" : "secondary"}>
-                  {task.priority}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="pending" className="w-full">
+        <TabsList>
+          <TabsTrigger value="pending">
+            Pending ({pendingTasks.length})
+          </TabsTrigger>
+          <TabsTrigger value="completed">
+            Completed ({completedTasks.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="pending" className="mt-6">
+          <TaskList taskList={pendingTasks} />
+        </TabsContent>
+
+        <TabsContent value="completed" className="mt-6">
+          <TaskList taskList={completedTasks} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

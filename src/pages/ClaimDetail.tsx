@@ -9,6 +9,7 @@ import { ClaimCommunicationTab } from "@/components/claim-detail/ClaimCommunicat
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
 import { ClaimFiles } from "@/components/claim-detail/ClaimFiles";
 import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
+import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ArrowLeft, Edit } from "lucide-react";
 
 const ClaimDetail = () => {
@@ -82,6 +83,7 @@ const ClaimDetail = () => {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="communication">Communication</TabsTrigger>
+          <TabsTrigger value="tasks">Tasks</TabsTrigger>
           <TabsTrigger value="activity">Notes & Activity</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="accounting">Accounting</TabsTrigger>
@@ -93,6 +95,10 @@ const ClaimDetail = () => {
 
         <TabsContent value="communication" className="mt-6">
           <ClaimCommunicationTab claimId={id || ""} policyholderPhone={claim.policyholder_phone} />
+        </TabsContent>
+
+        <TabsContent value="tasks" className="mt-6">
+          <ClaimTasks claimId={id || ""} />
         </TabsContent>
 
         <TabsContent value="activity" className="mt-6">

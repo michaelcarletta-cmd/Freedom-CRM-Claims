@@ -1,5 +1,6 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
+import { NotificationsBar } from "./NotificationsBar";
 import { ReactNode } from "react";
 
 interface AppLayoutProps {
@@ -19,6 +20,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
             </div>
           </header>
           <main className="flex-1 p-6">
+            <NotificationsBar />
             {children}
           </main>
         </div>
