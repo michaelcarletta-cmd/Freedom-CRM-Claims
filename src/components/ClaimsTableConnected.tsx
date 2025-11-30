@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Eye } from "lucide-react";
 import { ClaimStatusSelect } from "./ClaimStatusSelect";
 import { format } from "date-fns";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Claim {
   id: string;
@@ -18,21 +19,52 @@ interface Claim {
   loss_type: string;
 }
 
-export const ClaimsTableConnected = () => {
+interface ClaimsTableConnectedProps {
+  portalType?: "client" | "contractor" | "referrer";
+}
+
+export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) => {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchClaims();
-  }, []);
+  }, [portalType, user]);
 
   const fetchClaims = async () => {
+    if (!user && portalType) {
+      setLoading(false);
+      return;
+    }
+
     try {
-      const { data, error } = await supabase
-        .from("claims")
-        .select("*")
-        .order("created_at", { ascending: false });
+      let query = supabase.from("claims").select("*");
+
+      // Filter based on portal type
+      if (portalType === "client") {
+        query = query.eq("client_id", user?.id);
+      } else if (portalType === "contractor") {
+        // Get claim IDs assigned to this contractor
+        const { data: assignments } = await supabase
+          .from("claim_contractors")
+          .select("claim_id")
+          .eq("contractor_id", user?.id);
+        
+        if (assignments && assignments.length > 0) {
+          const claimIds = assignments.map(a => a.claim_id);
+          query = query.in("id", claimIds);
+        } else {
+          setClaims([]);
+          setLoading(false);
+          return;
+        }
+      } else if (portalType === "referrer") {
+        query = query.eq("referrer_id", user?.id);
+      }
+
+      const { data, error } = await query.order("created_at", { ascending: false });
 
       if (error) throw error;
       setClaims(data || []);

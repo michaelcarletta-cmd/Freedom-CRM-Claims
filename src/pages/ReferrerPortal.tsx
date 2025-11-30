@@ -3,29 +3,29 @@ import { ClaimsTableConnected } from "@/components/ClaimsTableConnected";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 
-const ClientPortal = () => {
+const ReferrerPortal = () => {
   const { signOut } = useAuth();
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">My Claims</h1>
-          <p className="text-muted-foreground mt-1">View and manage your property insurance claims</p>
+          <h1 className="text-3xl font-bold text-foreground">Referred Claims</h1>
+          <p className="text-muted-foreground mt-1">Track claims you've referred</p>
         </div>
         <Button onClick={signOut} variant="outline">Sign Out</Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Your Claims</CardTitle>
+          <CardTitle>Your Referred Claims</CardTitle>
         </CardHeader>
         <CardContent>
-          <ClaimsTableConnected portalType="client" />
+          <ClaimsTableConnected portalType="referrer" />
         </CardContent>
       </Card>
     </div>
   );
 };
 
-export default ClientPortal;
+export default ReferrerPortal;
