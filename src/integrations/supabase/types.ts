@@ -119,15 +119,19 @@ export type Database = {
           created_at: string | null
           id: string
           insurance_company: string | null
+          insurance_company_id: string | null
           insurance_email: string | null
           insurance_phone: string | null
           loss_date: string | null
           loss_description: string | null
           loss_type: string | null
+          loss_type_id: string | null
+          policy_number: string | null
           policyholder_address: string | null
           policyholder_email: string | null
           policyholder_name: string
           policyholder_phone: string | null
+          referrer_id: string | null
           status: string | null
           updated_at: string | null
         }
@@ -141,15 +145,19 @@ export type Database = {
           created_at?: string | null
           id?: string
           insurance_company?: string | null
+          insurance_company_id?: string | null
           insurance_email?: string | null
           insurance_phone?: string | null
           loss_date?: string | null
           loss_description?: string | null
           loss_type?: string | null
+          loss_type_id?: string | null
+          policy_number?: string | null
           policyholder_address?: string | null
           policyholder_email?: string | null
           policyholder_name: string
           policyholder_phone?: string | null
+          referrer_id?: string | null
           status?: string | null
           updated_at?: string | null
         }
@@ -163,17 +171,91 @@ export type Database = {
           created_at?: string | null
           id?: string
           insurance_company?: string | null
+          insurance_company_id?: string | null
           insurance_email?: string | null
           insurance_phone?: string | null
           loss_date?: string | null
           loss_description?: string | null
           loss_type?: string | null
+          loss_type_id?: string | null
+          policy_number?: string | null
           policyholder_address?: string | null
           policyholder_email?: string | null
           policyholder_name?: string
           policyholder_phone?: string | null
+          referrer_id?: string | null
           status?: string | null
           updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claims_insurance_company_id_fkey"
+            columns: ["insurance_company_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_loss_type_id_fkey"
+            columns: ["loss_type_id"]
+            isOneToOne: false
+            referencedRelation: "loss_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_referrer_id_fkey"
+            columns: ["referrer_id"]
+            isOneToOne: false
+            referencedRelation: "referrers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insurance_companies: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      loss_types: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -201,6 +283,39 @@ export type Database = {
           id?: string
           phone?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      referrers: {
+        Row: {
+          company: string | null
+          created_at: string
+          email: string | null
+          id: string
+          is_active: boolean
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          phone?: string | null
+          updated_at?: string
         }
         Relationships: []
       }

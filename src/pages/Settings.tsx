@@ -5,7 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Trash2, GripVertical } from "lucide-react";
+import { InsuranceCompaniesSettings } from "@/components/settings/InsuranceCompaniesSettings";
+import { LossTypesSettings } from "@/components/settings/LossTypesSettings";
+import { ReferrersSettings } from "@/components/settings/ReferrersSettings";
 
 interface ClaimStatus {
   id: string;
@@ -128,84 +132,107 @@ export default function Settings() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Manage your claim workflow statuses</p>
+        <p className="text-muted-foreground">Manage your claim workflow and dropdown options</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Claim Statuses</CardTitle>
-          <CardDescription>
-            Customize the status options available for claims
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Status name"
-              value={newStatusName}
-              onChange={(e) => setNewStatusName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addStatus()}
-            />
-            <Input
-              type="color"
-              value={newStatusColor}
-              onChange={(e) => setNewStatusColor(e.target.value)}
-              className="w-20"
-            />
-            <Button onClick={addStatus}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Status
-            </Button>
-          </div>
+      <Tabs defaultValue="statuses" className="w-full">
+        <TabsList>
+          <TabsTrigger value="statuses">Claim Statuses</TabsTrigger>
+          <TabsTrigger value="insurance">Insurance Companies</TabsTrigger>
+          <TabsTrigger value="loss-types">Loss Types</TabsTrigger>
+          <TabsTrigger value="referrers">Referrers</TabsTrigger>
+        </TabsList>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12"></TableHead>
-                <TableHead>Status Name</TableHead>
-                <TableHead>Color</TableHead>
-                <TableHead className="w-12"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {statuses.map((status) => (
-                <TableRow key={status.id}>
-                  <TableCell>
-                    <GripVertical className="h-4 w-4 text-muted-foreground" />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      value={status.name}
-                      onChange={(e) => updateStatusName(status.id, e.target.value)}
-                      onBlur={() => fetchStatuses()}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-4 h-4 rounded-full border"
-                        style={{ backgroundColor: status.color }}
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        {status.color}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteStatus(status.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        <TabsContent value="statuses" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Claim Statuses</CardTitle>
+              <CardDescription>
+                Customize the status options available for claims
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Status name"
+                  value={newStatusName}
+                  onChange={(e) => setNewStatusName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addStatus()}
+                />
+                <Input
+                  type="color"
+                  value={newStatusColor}
+                  onChange={(e) => setNewStatusColor(e.target.value)}
+                  className="w-20"
+                />
+                <Button onClick={addStatus}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Status
+                </Button>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12"></TableHead>
+                    <TableHead>Status Name</TableHead>
+                    <TableHead>Color</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {statuses.map((status) => (
+                    <TableRow key={status.id}>
+                      <TableCell>
+                        <GripVertical className="h-4 w-4 text-muted-foreground" />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={status.name}
+                          onChange={(e) => updateStatusName(status.id, e.target.value)}
+                          onBlur={() => fetchStatuses()}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-4 h-4 rounded-full border"
+                            style={{ backgroundColor: status.color }}
+                          />
+                          <span className="text-sm text-muted-foreground">
+                            {status.color}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteStatus(status.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="insurance" className="mt-6">
+          <InsuranceCompaniesSettings />
+        </TabsContent>
+
+        <TabsContent value="loss-types" className="mt-6">
+          <LossTypesSettings />
+        </TabsContent>
+
+        <TabsContent value="referrers" className="mt-6">
+          <ReferrersSettings />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
