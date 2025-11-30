@@ -1,19 +1,15 @@
 import { useParams, Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-import { ClaimNotes } from "@/components/claim-detail/ClaimNotes";
-import { ClaimEmails } from "@/components/claim-detail/ClaimEmails";
-import { ClaimCommunications } from "@/components/claim-detail/ClaimCommunications";
-import { ClaimFiles } from "@/components/claim-detail/ClaimFiles";
-import { ClaimTimeline } from "@/components/claim-detail/ClaimTimeline";
 import { ClaimStatusSelect } from "@/components/ClaimStatusSelect";
-import { ArrowLeft, Edit, MapPin, DollarSign, Calendar, User } from "lucide-react";
-import { format } from "date-fns";
+import { ClaimOverview } from "@/components/claim-detail/ClaimOverview";
+import { ClaimCommunicationTab } from "@/components/claim-detail/ClaimCommunicationTab";
+import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
+import { ClaimFiles } from "@/components/claim-detail/ClaimFiles";
+import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
+import { ArrowLeft, Edit } from "lucide-react";
 
 const ClaimDetail = () => {
   const { id } = useParams();
@@ -57,17 +53,6 @@ const ClaimDetail = () => {
     return <div className="p-8">Claim not found</div>;
   }
 
-  const getStatusClassName = (status: string) => {
-    const classes: Record<string, string> = {
-      new: "bg-accent text-accent-foreground",
-      in_progress: "bg-primary text-primary-foreground",
-      under_review: "bg-warning text-warning-foreground",
-      approved: "bg-success text-success-foreground",
-      rejected: "bg-destructive text-destructive-foreground",
-    };
-    return classes[status] || "bg-secondary";
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -93,190 +78,35 @@ const ClaimDetail = () => {
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main Content - Left 2/3 */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Policyholder Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5 text-primary" />
-                Policyholder Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Name</p>
-                  <p className="text-sm font-medium">{claim.policyholder_name}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="text-sm font-medium">{claim.policyholder_email || "N/A"}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Phone</p>
-                  <p className="text-sm font-medium">{claim.policyholder_phone || "N/A"}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Address</p>
-                  <p className="text-sm font-medium">{claim.policyholder_address || "N/A"}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="communication">Communication</TabsTrigger>
+          <TabsTrigger value="activity">Notes & Activity</TabsTrigger>
+          <TabsTrigger value="files">Files</TabsTrigger>
+          <TabsTrigger value="accounting">Accounting</TabsTrigger>
+        </TabsList>
 
-          {/* Loss Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-primary" />
-                Loss Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Date of Loss</p>
-                  <p className="text-sm font-medium">{claim.loss_date ? format(new Date(claim.loss_date), "MMM dd, yyyy") : "N/A"}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Type of Loss</p>
-                  <p className="text-sm font-medium">{claim.loss_type || "N/A"}</p>
-                </div>
-                <div className="space-y-1 md:col-span-2">
-                  <p className="text-sm text-muted-foreground">Loss Description</p>
-                  <p className="text-sm font-medium">{claim.loss_description || "N/A"}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="overview" className="mt-6">
+          <ClaimOverview claim={claim} />
+        </TabsContent>
 
-          {/* Insurance Company Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5 text-primary" />
-                Insurance Company
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Company Name</p>
-                  <p className="text-sm font-medium">{claim.insurance_company || "N/A"}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Policy Number</p>
-                  <p className="text-sm font-medium">N/A</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Phone</p>
-                  <p className="text-sm font-medium">{claim.insurance_phone || "N/A"}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="text-sm font-medium">{claim.insurance_email || "N/A"}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="communication" className="mt-6">
+          <ClaimCommunicationTab claimId={id || ""} />
+        </TabsContent>
 
-          {/* Adjuster Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5 text-primary" />
-                Adjuster Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Adjuster Name</p>
-                  <p className="text-sm font-medium">{claim.adjuster_name || "N/A"}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Company</p>
-                  <p className="text-sm font-medium">{claim.insurance_company || "N/A"}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Phone</p>
-                  <p className="text-sm font-medium">{claim.adjuster_phone || "N/A"}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="text-sm font-medium">{claim.adjuster_email || "N/A"}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="activity" className="mt-6">
+          <ClaimActivity claimId={id || ""} />
+        </TabsContent>
 
-          {/* Claim Financial Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-primary" />
-                Claim Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Claim Amount</p>
-                  <p className="text-2xl font-bold text-primary">
-                    {claim.claim_amount ? `$${claim.claim_amount.toLocaleString()}` : "N/A"}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Date Submitted</p>
-                  <p className="text-sm font-medium">
-                    {claim.created_at ? format(new Date(claim.created_at), "MMM dd, yyyy") : "N/A"}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="files" className="mt-6">
+          <ClaimFiles claimId={id || ""} />
+        </TabsContent>
 
-          {/* Tabbed Sections */}
-          <Card>
-            <CardContent className="pt-6">
-              <Tabs defaultValue="notes" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="notes">Notes</TabsTrigger>
-                  <TabsTrigger value="emails">Emails</TabsTrigger>
-                  <TabsTrigger value="communications">Phone/Text</TabsTrigger>
-                  <TabsTrigger value="files">Files</TabsTrigger>
-                </TabsList>
-                <TabsContent value="notes" className="mt-6">
-                  <ClaimNotes claimId={id || ""} />
-                </TabsContent>
-                <TabsContent value="emails" className="mt-6">
-                  <ClaimEmails claimId={id || ""} />
-                </TabsContent>
-                <TabsContent value="communications" className="mt-6">
-                  <ClaimCommunications claimId={id || ""} />
-                </TabsContent>
-                <TabsContent value="files" className="mt-6">
-                  <ClaimFiles claimId={id || ""} />
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Timeline Sidebar - Right 1/3 */}
-        <div className="lg:col-span-1">
-          <Card className="sticky top-20">
-            <CardHeader>
-              <CardTitle>Activity Timeline</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ClaimTimeline claimId={id || ""} />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+        <TabsContent value="accounting" className="mt-6">
+          <ClaimAccounting claim={claim} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
