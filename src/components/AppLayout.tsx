@@ -9,16 +9,15 @@ interface AppLayoutProps {
 }
 
 const AppLayoutContent = ({ children }: AppLayoutProps) => {
-  const { setOpen, isMobile } = useSidebar();
+  const { setOpenMobile, isMobile } = useSidebar();
   const location = useLocation();
 
-  // Close sidebar on navigation
+  // Close mobile sidebar sheet on navigation
   useEffect(() => {
-    // Always close on mobile, optionally close on desktop
     if (isMobile) {
-      setOpen(false);
+      setOpenMobile(false);
     }
-  }, [location.pathname, isMobile, setOpen]);
+  }, [location.pathname, isMobile, setOpenMobile]);
 
   return (
     <div className="flex min-h-screen w-full bg-background">
