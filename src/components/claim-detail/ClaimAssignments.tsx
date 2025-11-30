@@ -42,8 +42,8 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [mortgageCompanies, setMortgageCompanies] = useState<MortgageCompany[]>([]);
   const [selectedContractor, setSelectedContractor] = useState<string>("");
-  const [selectedReferrer, setSelectedReferrer] = useState<string>(currentReferrerId || "");
-  const [selectedMortgageCompany, setSelectedMortgageCompany] = useState<string>(currentMortgageCompanyId || "");
+  const [selectedReferrer, setSelectedReferrer] = useState<string>(currentReferrerId || "none");
+  const [selectedMortgageCompany, setSelectedMortgageCompany] = useState<string>(currentMortgageCompanyId || "none");
 
   useEffect(() => {
     fetchData();
@@ -157,9 +157,11 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
   };
 
   const handleUpdateReferrer = async (referrerId: string) => {
+    const actualReferrerId = referrerId === "none" ? null : referrerId;
+    
     const { error } = await supabase
       .from("claims")
-      .update({ referrer_id: referrerId || null })
+      .update({ referrer_id: actualReferrerId })
       .eq("id", claimId);
 
     if (error) {
@@ -172,9 +174,11 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
   };
 
   const handleUpdateMortgageCompany = async (mortgageCompanyId: string) => {
+    const actualMortgageCompanyId = mortgageCompanyId === "none" ? null : mortgageCompanyId;
+    
     const { error } = await supabase
       .from("claims")
-      .update({ mortgage_company_id: mortgageCompanyId || null })
+      .update({ mortgage_company_id: actualMortgageCompanyId })
       .eq("id", claimId);
 
     if (error) {
@@ -250,7 +254,7 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
               <SelectValue placeholder="Select a referrer" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">None</SelectItem>
+              <SelectItem value="none">None</SelectItem>
               {referrers.map((referrer) => (
                 <SelectItem key={referrer.id} value={referrer.id}>
                   {referrer.name} {referrer.company && `(${referrer.company})`}
@@ -275,7 +279,7 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
               <SelectValue placeholder="Select a mortgage company" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">None</SelectItem>
+              <SelectItem value="none">None</SelectItem>
               {mortgageCompanies.map((company) => (
                 <SelectItem key={company.id} value={company.id}>
                   {company.name} {company.contact_name && `(${company.contact_name})`}
