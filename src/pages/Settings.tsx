@@ -141,127 +141,132 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="statuses" className="w-full">
-        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap h-auto">
-          <TabsTrigger value="statuses">Claim Statuses</TabsTrigger>
-          <TabsTrigger value="insurance">Insurance Companies</TabsTrigger>
-          <TabsTrigger value="loss-types">Loss Types</TabsTrigger>
-          <TabsTrigger value="referrers">Referrers</TabsTrigger>
-          <TabsTrigger value="templates">Templates</TabsTrigger>
-          <TabsTrigger value="custom-fields">Custom Fields</TabsTrigger>
-          <TabsTrigger value="task-automations">Task Automations</TabsTrigger>
-          <TabsTrigger value="automations">Automations</TabsTrigger>
-          <TabsTrigger value="import">Import Data</TabsTrigger>
-        </TabsList>
+        <div className="flex gap-6">
+          <TabsList className="flex flex-col h-fit w-56 justify-start">
+            <TabsTrigger value="statuses" className="w-full justify-start">Claim Statuses</TabsTrigger>
+            <TabsTrigger value="insurance" className="w-full justify-start">Insurance Companies</TabsTrigger>
+            <TabsTrigger value="loss-types" className="w-full justify-start">Loss Types</TabsTrigger>
+            <TabsTrigger value="referrers" className="w-full justify-start">Referrers</TabsTrigger>
+            <TabsTrigger value="templates" className="w-full justify-start">Templates</TabsTrigger>
+            <TabsTrigger value="custom-fields" className="w-full justify-start">Custom Fields</TabsTrigger>
+            <TabsTrigger value="task-automations" className="w-full justify-start">Task Automations</TabsTrigger>
+            <TabsTrigger value="automations" className="w-full justify-start">Automations</TabsTrigger>
+            <TabsTrigger value="import" className="w-full justify-start">Import Data</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="statuses" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Claim Statuses</CardTitle>
-              <CardDescription>
-                Customize the status options available for claims
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Status name"
-                  value={newStatusName}
-                  onChange={(e) => setNewStatusName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addStatus()}
-                />
-                <Input
-                  type="color"
-                  value={newStatusColor}
-                  onChange={(e) => setNewStatusColor(e.target.value)}
-                  className="w-20"
-                />
-                <Button onClick={addStatus}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Status
-                </Button>
-              </div>
+          <div className="flex-1">
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12"></TableHead>
-                    <TableHead>Status Name</TableHead>
-                    <TableHead>Color</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {statuses.map((status) => (
-                    <TableRow key={status.id}>
-                      <TableCell>
-                        <GripVertical className="h-4 w-4 text-muted-foreground" />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={status.name}
-                          onChange={(e) => updateStatusName(status.id, e.target.value)}
-                          onBlur={() => fetchStatuses()}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-4 h-4 rounded-full border"
-                            style={{ backgroundColor: status.color }}
-                          />
-                          <span className="text-sm text-muted-foreground">
-                            {status.color}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deleteStatus(status.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            <TabsContent value="statuses" className="mt-0">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Claim Statuses</CardTitle>
+                  <CardDescription>
+                    Customize the status options available for claims
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Status name"
+                      value={newStatusName}
+                      onChange={(e) => setNewStatusName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addStatus()}
+                    />
+                    <Input
+                      type="color"
+                      value={newStatusColor}
+                      onChange={(e) => setNewStatusColor(e.target.value)}
+                      className="w-20"
+                    />
+                    <Button onClick={addStatus}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Status
+                    </Button>
+                  </div>
 
-        <TabsContent value="insurance" className="mt-6">
-          <InsuranceCompaniesSettings />
-        </TabsContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12"></TableHead>
+                        <TableHead>Status Name</TableHead>
+                        <TableHead>Color</TableHead>
+                        <TableHead className="w-12"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {statuses.map((status) => (
+                        <TableRow key={status.id}>
+                          <TableCell>
+                            <GripVertical className="h-4 w-4 text-muted-foreground" />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={status.name}
+                              onChange={(e) => updateStatusName(status.id, e.target.value)}
+                              onBlur={() => fetchStatuses()}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-4 h-4 rounded-full border"
+                                style={{ backgroundColor: status.color }}
+                              />
+                              <span className="text-sm text-muted-foreground">
+                                {status.color}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => deleteStatus(status.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-        <TabsContent value="loss-types" className="mt-6">
-          <LossTypesSettings />
-        </TabsContent>
+            <TabsContent value="insurance" className="mt-0">
+              <InsuranceCompaniesSettings />
+            </TabsContent>
 
-        <TabsContent value="referrers" className="mt-6">
-          <ReferrersSettings />
-        </TabsContent>
+            <TabsContent value="loss-types" className="mt-0">
+              <LossTypesSettings />
+            </TabsContent>
 
-        <TabsContent value="templates" className="mt-6">
-          <TemplatesSettings />
-        </TabsContent>
+            <TabsContent value="referrers" className="mt-0">
+              <ReferrersSettings />
+            </TabsContent>
 
-        <TabsContent value="custom-fields" className="mt-6">
-          <CustomFieldsSettings />
-        </TabsContent>
+            <TabsContent value="templates" className="mt-0">
+              <TemplatesSettings />
+            </TabsContent>
 
-        <TabsContent value="task-automations" className="mt-6">
-          <TaskAutomationsSettings />
-        </TabsContent>
+            <TabsContent value="custom-fields" className="mt-0">
+              <CustomFieldsSettings />
+            </TabsContent>
 
-        <TabsContent value="automations" className="mt-6">
-          <AutomationsSettings />
-        </TabsContent>
+            <TabsContent value="task-automations" className="mt-0">
+              <TaskAutomationsSettings />
+            </TabsContent>
 
-        <TabsContent value="import" className="mt-6">
-          <ImportSettings />
-        </TabsContent>
+            <TabsContent value="automations" className="mt-0">
+              <AutomationsSettings />
+            </TabsContent>
+
+            <TabsContent value="import" className="mt-0">
+              <ImportSettings />
+            </TabsContent>
+          </div>
+        </div>
       </Tabs>
     </div>
   );
