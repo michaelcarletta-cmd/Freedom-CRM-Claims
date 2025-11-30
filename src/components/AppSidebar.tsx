@@ -32,7 +32,7 @@ export function AppSidebar() {
   const { open } = useSidebar();
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
+    <Sidebar className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <SidebarContent>
         <div className="px-4 py-6">
           <h2 className={`font-bold text-xl text-sidebar-primary transition-opacity ${open ? "opacity-100" : "opacity-0"}`}>
