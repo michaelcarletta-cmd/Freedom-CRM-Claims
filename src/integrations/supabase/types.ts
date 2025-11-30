@@ -189,6 +189,48 @@ export type Database = {
           },
         ]
       }
+      claim_custom_field_values: {
+        Row: {
+          claim_id: string
+          created_at: string
+          custom_field_id: string
+          id: string
+          updated_at: string
+          value: string | null
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          custom_field_id: string
+          id?: string
+          updated_at?: string
+          value?: string | null
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          custom_field_id?: string
+          id?: string
+          updated_at?: string
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_custom_field_values_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_custom_field_values_custom_field_id_fkey"
+            columns: ["custom_field_id"]
+            isOneToOne: false
+            referencedRelation: "custom_fields"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_expenses: {
         Row: {
           amount: number
@@ -661,6 +703,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      custom_fields: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          display_order: number | null
+          field_type: string
+          id: string
+          is_active: boolean | null
+          is_required: boolean | null
+          label: string
+          name: string
+          options: Json | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          display_order?: number | null
+          field_type: string
+          id?: string
+          is_active?: boolean | null
+          is_required?: boolean | null
+          label: string
+          name: string
+          options?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          display_order?: number | null
+          field_type?: string
+          id?: string
+          is_active?: boolean | null
+          is_required?: boolean | null
+          label?: string
+          name?: string
+          options?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       document_templates: {
         Row: {
