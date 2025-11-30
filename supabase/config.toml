@@ -8,3 +8,9 @@ verify_jwt = true
 
 [functions.send-signature-request]
 verify_jwt = true
+
+[functions.execute-automations]
+verify_jwt = false
+
+[functions.automation-webhook]
+verify_jwt = false

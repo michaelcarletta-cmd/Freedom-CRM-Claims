@@ -10,6 +10,7 @@ import { Plus, Trash2, GripVertical } from "lucide-react";
 import { InsuranceCompaniesSettings } from "@/components/settings/InsuranceCompaniesSettings";
 import { LossTypesSettings } from "@/components/settings/LossTypesSettings";
 import { ReferrersSettings } from "@/components/settings/ReferrersSettings";
+import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
 
 interface ClaimStatus {
   id: string;
@@ -141,6 +142,7 @@ export default function Settings() {
           <TabsTrigger value="insurance">Insurance Companies</TabsTrigger>
           <TabsTrigger value="loss-types">Loss Types</TabsTrigger>
           <TabsTrigger value="referrers">Referrers</TabsTrigger>
+          <TabsTrigger value="automations">Automations</TabsTrigger>
         </TabsList>
 
         <TabsContent value="statuses" className="mt-6">
@@ -231,6 +233,10 @@ export default function Settings() {
 
         <TabsContent value="referrers" className="mt-6">
           <ReferrersSettings />
+        </TabsContent>
+
+        <TabsContent value="automations" className="mt-6">
+          <AutomationsSettings />
         </TabsContent>
       </Tabs>
     </div>
