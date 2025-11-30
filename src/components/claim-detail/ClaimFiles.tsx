@@ -255,7 +255,7 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
               <AccordionTrigger className="px-4 hover:no-underline hover:bg-muted/30">
                 <div className="flex items-center gap-2">
                   <Folder className="h-4 w-4 text-primary" />
-                  <span className="font-medium">{folder.name}</span>
+                  <span className="font-medium text-foreground">{folder.name}</span>
                   <Badge variant="secondary" className="ml-2">
                     {folderFiles.length}
                   </Badge>
