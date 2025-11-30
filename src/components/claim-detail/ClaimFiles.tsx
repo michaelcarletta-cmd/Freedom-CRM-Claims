@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon } from "lucide-react";
+import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -30,6 +32,13 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [saveAsTemplateDialogOpen, setSaveAsTemplateDialogOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<any>(null);
+  const [templateForm, setTemplateForm] = useState({
+    name: "",
+    description: "",
+    category: "Other",
+  });
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -203,6 +212,66 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
     window.open(data.signedUrl, "_blank");
   };
 
+  const handleSaveAsTemplate = (file: any) => {
+    setSelectedFile(file);
+    setTemplateForm({
+      name: file.file_name.replace(/\.[^/.]+$/, ""), // Remove extension
+      description: "",
+      category: "Other",
+    });
+    setSaveAsTemplateDialogOpen(true);
+  };
+
+  const saveAsTemplateMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedFile) throw new Error("No file selected");
+
+      // Download the file from claim-files
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from("claim-files")
+        .download(selectedFile.file_path);
+
+      if (downloadError) throw downloadError;
+
+      // Upload to document-templates bucket
+      const fileName = `${Date.now()}-${selectedFile.file_name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("document-templates")
+        .upload(fileName, fileData);
+
+      if (uploadError) throw uploadError;
+
+      // Create template record
+      const { error: dbError } = await supabase
+        .from("document_templates")
+        .insert({
+          name: templateForm.name,
+          description: templateForm.description,
+          category: templateForm.category,
+          file_path: fileName,
+          file_name: selectedFile.file_name,
+        });
+
+      if (dbError) throw dbError;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Template created",
+        description: "File has been saved as a template.",
+      });
+      setSaveAsTemplateDialogOpen(false);
+      setSelectedFile(null);
+      setTemplateForm({ name: "", description: "", category: "Other" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -321,7 +390,6 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="flex-1"
                                     onClick={() => handleView(file)}
                                   >
                                     <Eye className="h-3 w-3 mr-1" />
@@ -330,12 +398,21 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="flex-1"
                                     onClick={() => handleDownload(file)}
                                   >
                                     <Download className="h-3 w-3 mr-1" />
                                     Download
                                   </Button>
+                                  {file.file_name.endsWith('.docx') && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleSaveAsTemplate(file)}
+                                    >
+                                      <FileUp className="h-3 w-3 mr-1" />
+                                      Save as Template
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -356,6 +433,73 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
           No folders yet. Create your first folder to start uploading files.
         </p>
       )}
+
+      <Dialog open={saveAsTemplateDialogOpen} onOpenChange={setSaveAsTemplateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save as Template</DialogTitle>
+            <DialogDescription>
+              Save this document as a reusable template for future claims
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Template Name</Label>
+              <Input
+                value={templateForm.name}
+                onChange={(e) =>
+                  setTemplateForm({ ...templateForm, name: e.target.value })
+                }
+                placeholder="e.g., Standard Contract"
+              />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                value={templateForm.description}
+                onChange={(e) =>
+                  setTemplateForm({ ...templateForm, description: e.target.value })
+                }
+                placeholder="Optional description"
+              />
+            </div>
+            <div>
+              <Label>Category</Label>
+              <Select
+                value={templateForm.category}
+                onValueChange={(value) =>
+                  setTemplateForm({ ...templateForm, category: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Contract">Contract</SelectItem>
+                  <SelectItem value="Invoice">Invoice</SelectItem>
+                  <SelectItem value="Letter">Letter</SelectItem>
+                  <SelectItem value="Form">Form</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSaveAsTemplateDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => saveAsTemplateMutation.mutate()}
+              disabled={!templateForm.name || saveAsTemplateMutation.isPending}
+            >
+              {saveAsTemplateMutation.isPending ? "Saving..." : "Save as Template"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

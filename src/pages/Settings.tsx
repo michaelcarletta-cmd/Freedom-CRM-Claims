@@ -11,6 +11,7 @@ import { InsuranceCompaniesSettings } from "@/components/settings/InsuranceCompa
 import { LossTypesSettings } from "@/components/settings/LossTypesSettings";
 import { ReferrersSettings } from "@/components/settings/ReferrersSettings";
 import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
+import { TemplatesSettings } from "@/components/settings/TemplatesSettings";
 
 interface ClaimStatus {
   id: string;
@@ -142,6 +143,7 @@ export default function Settings() {
           <TabsTrigger value="insurance">Insurance Companies</TabsTrigger>
           <TabsTrigger value="loss-types">Loss Types</TabsTrigger>
           <TabsTrigger value="referrers">Referrers</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="automations">Automations</TabsTrigger>
         </TabsList>
 
@@ -233,6 +235,10 @@ export default function Settings() {
 
         <TabsContent value="referrers" className="mt-6">
           <ReferrersSettings />
+        </TabsContent>
+
+        <TabsContent value="templates" className="mt-6">
+          <TemplatesSettings />
         </TabsContent>
 
         <TabsContent value="automations" className="mt-6">
