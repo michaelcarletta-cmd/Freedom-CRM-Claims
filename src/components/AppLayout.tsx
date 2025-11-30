@@ -12,8 +12,9 @@ const AppLayoutContent = ({ children }: AppLayoutProps) => {
   const { setOpen, isMobile } = useSidebar();
   const location = useLocation();
 
-  // Close sidebar on navigation for mobile devices
+  // Close sidebar on navigation
   useEffect(() => {
+    // Always close on mobile, optionally close on desktop
     if (isMobile) {
       setOpen(false);
     }
