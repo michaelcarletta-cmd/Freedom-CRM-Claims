@@ -43,6 +43,95 @@ export type Database = {
           },
         ]
       }
+      claim_files: {
+        Row: {
+          claim_id: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          folder_id: string | null
+          id: string
+          uploaded_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          claim_id: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          folder_id?: string | null
+          id?: string
+          uploaded_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          claim_id?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          folder_id?: string | null
+          id?: string
+          uploaded_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_files_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_files_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "claim_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_folders: {
+        Row: {
+          claim_id: string
+          created_at: string | null
+          created_by: string | null
+          display_order: number | null
+          id: string
+          is_predefined: boolean | null
+          name: string
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string | null
+          created_by?: string | null
+          display_order?: number | null
+          id?: string
+          is_predefined?: boolean | null
+          name: string
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          display_order?: number | null
+          id?: string
+          is_predefined?: boolean | null
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_folders_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_statuses: {
         Row: {
           color: string | null
