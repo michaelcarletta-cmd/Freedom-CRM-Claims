@@ -16,6 +16,7 @@ import Networking from "./pages/Networking";
 import Auth from "./pages/Auth";
 import ClientPortal from "./pages/ClientPortal";
 import ContractorPortal from "./pages/ContractorPortal";
+import Sign from "./pages/Sign";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,6 +52,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/auth" element={<Navigate to="/client-portal" replace />} />
         <Route path="/client-portal" element={<ClientPortal />} />
+        <Route path="/sign" element={<Sign />} />
         <Route path="*" element={<Navigate to="/client-portal" replace />} />
       </Routes>
     );
@@ -61,6 +63,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/auth" element={<Navigate to="/contractor-portal" replace />} />
         <Route path="/contractor-portal" element={<ContractorPortal />} />
+        <Route path="/sign" element={<Sign />} />
         <Route path="*" element={<Navigate to="/contractor-portal" replace />} />
       </Routes>
     );
@@ -70,6 +73,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
+      <Route path="/sign" element={<Sign />} />
       <Route path="/" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Index /></ProtectedRoute>} />
       <Route path="/claims" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Claims /></ProtectedRoute>} />
       <Route path="/claims/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><ClaimDetail /></ProtectedRoute>} />

@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { FileText, Upload, Download, Loader2, Eye, Info } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SignatureRequests } from "./SignatureRequests";
 
 interface ClaimTemplatesProps {
   claimId: string;
@@ -164,7 +166,13 @@ export function ClaimTemplates({ claimId, claim }: ClaimTemplatesProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <Tabs defaultValue="templates" className="w-full">
+      <TabsList>
+        <TabsTrigger value="templates">Templates</TabsTrigger>
+        <TabsTrigger value="signatures">Signature Requests</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="templates" className="space-y-6">
       <Alert>
         <Info className="h-4 w-4" />
         <AlertTitle>Available Merge Fields</AlertTitle>
@@ -364,6 +372,11 @@ export function ClaimTemplates({ claimId, claim }: ClaimTemplatesProps) {
           </DialogContent>
         </Dialog>
       )}
-    </div>
+      </TabsContent>
+
+      <TabsContent value="signatures">
+        <SignatureRequests claimId={claimId} claim={claim} />
+      </TabsContent>
+    </Tabs>
   );
 }

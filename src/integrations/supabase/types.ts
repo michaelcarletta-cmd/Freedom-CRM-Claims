@@ -793,6 +793,100 @@ export type Database = {
         }
         Relationships: []
       }
+      signature_requests: {
+        Row: {
+          claim_id: string
+          completed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          document_name: string
+          document_path: string
+          id: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          claim_id: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          document_name: string
+          document_path: string
+          id?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          claim_id?: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          document_name?: string
+          document_path?: string
+          id?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signature_requests_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signature_signers: {
+        Row: {
+          access_token: string
+          created_at: string | null
+          id: string
+          signature_data: string | null
+          signature_request_id: string
+          signed_at: string | null
+          signer_email: string
+          signer_name: string
+          signer_type: string
+          signing_order: number
+          status: string
+        }
+        Insert: {
+          access_token?: string
+          created_at?: string | null
+          id?: string
+          signature_data?: string | null
+          signature_request_id: string
+          signed_at?: string | null
+          signer_email: string
+          signer_name: string
+          signer_type: string
+          signing_order?: number
+          status?: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string | null
+          id?: string
+          signature_data?: string | null
+          signature_request_id?: string
+          signed_at?: string | null
+          signer_email?: string
+          signer_name?: string
+          signer_type?: string
+          signing_order?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signature_signers_signature_request_id_fkey"
+            columns: ["signature_request_id"]
+            isOneToOne: false
+            referencedRelation: "signature_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sms_messages: {
         Row: {
           claim_id: string
