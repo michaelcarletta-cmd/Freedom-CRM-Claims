@@ -35,7 +35,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
       <SidebarContent>
         <div className="px-4 py-6">
-          <h2 className={`font-bold text-xl text-primary transition-opacity ${open ? "opacity-100" : "opacity-0"}`}>
+          <h2 className={`font-bold text-xl text-sidebar-primary transition-opacity ${open ? "opacity-100" : "opacity-0"}`}>
             CLAIM TITAN
           </h2>
         </div>
@@ -49,7 +49,7 @@ export function AppSidebar() {
                     <NavLink 
                       to={item.url} 
                       end={item.url === "/"}
-                      className="hover:bg-sidebar-accent transition-colors"
+                      className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
                       activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
                     >
                       <item.icon className="h-5 w-5" />
@@ -63,7 +63,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup className="mt-auto">
-          <SidebarGroupLabel>Account</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-sidebar-foreground/70">Account</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {accountItems.map((item) => (
@@ -71,7 +71,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink 
                       to={item.url}
-                      className="hover:bg-sidebar-accent transition-colors"
+                      className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
                       activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
                     >
                       <item.icon className="h-5 w-5" />
