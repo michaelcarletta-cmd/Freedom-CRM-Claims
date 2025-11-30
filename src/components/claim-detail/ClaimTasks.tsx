@@ -81,7 +81,7 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
         .from("tasks")
         .select(`
           *,
-          profiles:assigned_to(full_name)
+          profiles!tasks_assigned_to_fkey(full_name)
         `)
         .eq("claim_id", claimId)
         .order("due_date", { ascending: true, nullsFirst: false })
