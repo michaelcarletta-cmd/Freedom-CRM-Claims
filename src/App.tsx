@@ -17,6 +17,7 @@ import Templates from "./pages/Templates";
 import Auth from "./pages/Auth";
 import ClientPortal from "./pages/ClientPortal";
 import ContractorPortal from "./pages/ContractorPortal";
+import ReferrerPortal from "./pages/ReferrerPortal";
 import Sign from "./pages/Sign";
 import NotFound from "./pages/NotFound";
 
@@ -66,6 +67,17 @@ function AppRoutes() {
         <Route path="/contractor-portal" element={<ContractorPortal />} />
         <Route path="/sign" element={<Sign />} />
         <Route path="*" element={<Navigate to="/contractor-portal" replace />} />
+      </Routes>
+    );
+  }
+
+  if (user && userRole === "referrer") {
+    return (
+      <Routes>
+        <Route path="/auth" element={<Navigate to="/referrer-portal" replace />} />
+        <Route path="/referrer-portal" element={<ReferrerPortal />} />
+        <Route path="/sign" element={<Sign />} />
+        <Route path="*" element={<Navigate to="/referrer-portal" replace />} />
       </Routes>
     );
   }
