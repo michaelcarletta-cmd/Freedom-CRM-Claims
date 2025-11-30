@@ -96,13 +96,13 @@ export default function ContractorPortal() {
     try {
       const { data, error } = await supabase
         .from("claim_updates")
-        .select("*, profiles(full_name)")
+        .select("*, profiles!user_id(full_name)")
         .eq("claim_id", claimId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      setUpdates(prev => ({ ...prev, [claimId]: data || [] }));
+      setUpdates(prev => ({ ...prev, [claimId]: (data as any) || [] }));
     } catch (error: any) {
       console.error("Error fetching updates:", error);
     }
