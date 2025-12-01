@@ -115,9 +115,10 @@ export function UserManagementSettings() {
 
       fetchUsers();
     } catch (error: any) {
+      console.error("Failed to add role", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to add role",
+        description: error?.message || error?.details || "Failed to add role",
         variant: "destructive",
       });
     }
@@ -141,9 +142,10 @@ export function UserManagementSettings() {
 
       fetchUsers();
     } catch (error: any) {
+      console.error("Failed to remove role", error);
       toast({
         title: "Error",
-        description: "Failed to remove role",
+        description: error?.message || error?.details || "Failed to remove role",
         variant: "destructive",
       });
     }
@@ -167,9 +169,10 @@ export function UserManagementSettings() {
 
       fetchUsers();
     } catch (error: any) {
+      console.error("Failed to remove all roles", error);
       toast({
         title: "Error",
-        description: "Failed to remove roles",
+        description: error?.message || error?.details || "Failed to remove roles",
         variant: "destructive",
       });
     }
