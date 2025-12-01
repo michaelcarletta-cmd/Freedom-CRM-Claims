@@ -1,10 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useEffect } from "react";
-import { Plus, Send } from "lucide-react";
+import { Plus, Send, Bot, MessageSquare, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -30,6 +32,12 @@ interface Claim {
   policyholder_name: string;
 }
 
+interface AiMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+}
+
 export const ClaimNotes = ({ claimId }: { claimId: string }) => {
   const [updates, setUpdates] = useState<Update[]>([]);
   const [newUpdate, setNewUpdate] = useState("");
@@ -38,6 +46,9 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
   const [notifyReferrer, setNotifyReferrer] = useState(false);
   const [notifyContractors, setNotifyContractors] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [aiQuestion, setAiQuestion] = useState("");
+  const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
   const { user, userRole } = useAuth();
   const isStaff = userRole === "admin" || userRole === "staff";
 
@@ -168,107 +179,246 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
     fetchUpdates();
   };
 
+  const handleAskAI = async () => {
+    if (!aiQuestion.trim()) return;
+    
+    const userMessage: AiMessage = {
+      role: "user",
+      content: aiQuestion,
+      timestamp: new Date()
+    };
+    
+    setAiMessages(prev => [...prev, userMessage]);
+    setAiQuestion("");
+    setAiLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
+        body: { 
+          claimId,
+          question: userMessage.content
+        }
+      });
+
+      if (error) throw error;
+
+      const assistantMessage: AiMessage = {
+        role: "assistant",
+        content: data.answer,
+        timestamp: new Date()
+      };
+      
+      setAiMessages(prev => [...prev, assistantMessage]);
+    } catch (error: any) {
+      console.error("Error asking AI:", error);
+      toast.error(error.message || "Failed to get AI response");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="space-y-3">
-        <Textarea
-          placeholder="Add a note or update..."
-          value={newUpdate}
-          onChange={(e) => setNewUpdate(e.target.value)}
-          className="min-h-[100px]"
-        />
-        
-        {isStaff && claim && (
-          <div className="space-y-2 p-3 rounded-lg bg-muted/30">
-            <Label className="text-sm font-medium">Notify:</Label>
-            <div className="flex flex-wrap gap-4">
-              {(claim.client_id || claim.policyholder_email) && (
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="notify-client" 
-                    checked={notifyClient}
-                    onCheckedChange={(checked) => setNotifyClient(checked as boolean)}
-                  />
-                  <Label htmlFor="notify-client" className="text-sm cursor-pointer">
-                    Client/Policyholder
-                  </Label>
+    <Tabs defaultValue="notes" className="w-full">
+      <TabsList className="grid w-full grid-cols-2 mb-6">
+        <TabsTrigger value="notes" className="flex items-center gap-2">
+          <MessageSquare className="h-4 w-4" />
+          Notes & Updates
+        </TabsTrigger>
+        <TabsTrigger value="ai" className="flex items-center gap-2">
+          <Bot className="h-4 w-4" />
+          AI Assistant
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="notes" className="space-y-6">
+        <div className="space-y-3">
+          <Textarea
+            placeholder="Add a note or update..."
+            value={newUpdate}
+            onChange={(e) => setNewUpdate(e.target.value)}
+            className="min-h-[100px]"
+          />
+          
+          {isStaff && claim && (
+            <div className="space-y-2 p-3 rounded-lg bg-muted/30">
+              <Label className="text-sm font-medium">Notify:</Label>
+              <div className="flex flex-wrap gap-4">
+                {(claim.client_id || claim.policyholder_email) && (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="notify-client" 
+                      checked={notifyClient}
+                      onCheckedChange={(checked) => setNotifyClient(checked as boolean)}
+                    />
+                    <Label htmlFor="notify-client" className="text-sm cursor-pointer">
+                      Client/Policyholder
+                    </Label>
+                  </div>
+                )}
+                {claim.referrer_id && (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="notify-referrer" 
+                      checked={notifyReferrer}
+                      onCheckedChange={(checked) => setNotifyReferrer(checked as boolean)}
+                    />
+                    <Label htmlFor="notify-referrer" className="text-sm cursor-pointer">
+                      Referrer
+                    </Label>
+                  </div>
+                )}
+                {claim.claim_contractors.length > 0 && (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="notify-contractors" 
+                      checked={notifyContractors}
+                      onCheckedChange={(checked) => setNotifyContractors(checked as boolean)}
+                    />
+                    <Label htmlFor="notify-contractors" className="text-sm cursor-pointer">
+                      Contractors
+                    </Label>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <Button 
+            onClick={handleAddUpdate} 
+            disabled={loading || !newUpdate.trim()}
+            className="w-full bg-primary hover:bg-primary/90"
+          >
+            <Send className="h-4 w-4 mr-2" />
+            {loading ? "Sending..." : "Add Update"}
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          {updates.map((update) => {
+            const isCurrentUser = user?.id === update.user_id;
+            const authorName = isCurrentUser 
+              ? "You" 
+              : update.profiles?.full_name || update.profiles?.email || "Unknown";
+            
+            return (
+              <div key={update.id} className="flex gap-3 p-4 rounded-lg bg-muted/50">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                    {authorName.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{authorName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {format(new Date(update.created_at), "MMM d, yyyy h:mm a")}
+                    </span>
+                  </div>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{update.content}</p>
+                  {update.recipients && update.recipients.length > 0 && isStaff && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Notified {update.recipients.length} {update.recipients.length === 1 ? 'person' : 'people'}
+                    </p>
+                  )}
                 </div>
-              )}
-              {claim.referrer_id && (
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="notify-referrer" 
-                    checked={notifyReferrer}
-                    onCheckedChange={(checked) => setNotifyReferrer(checked as boolean)}
-                  />
-                  <Label htmlFor="notify-referrer" className="text-sm cursor-pointer">
-                    Referrer
-                  </Label>
-                </div>
-              )}
-              {claim.claim_contractors.length > 0 && (
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="notify-contractors" 
-                    checked={notifyContractors}
-                    onCheckedChange={(checked) => setNotifyContractors(checked as boolean)}
-                  />
-                  <Label htmlFor="notify-contractors" className="text-sm cursor-pointer">
-                    Contractors
-                  </Label>
-                </div>
-              )}
+              </div>
+            );
+          })}
+          {updates.length === 0 && (
+            <div className="text-center text-sm text-muted-foreground py-8">
+              No updates yet. Add the first update to this claim.
+            </div>
+          )}
+        </div>
+      </TabsContent>
+
+      <TabsContent value="ai" className="space-y-6">
+        <Card className="p-4 bg-primary/5 border-primary/20">
+          <div className="flex gap-3">
+            <Bot className="h-5 w-5 text-primary mt-1" />
+            <div className="flex-1 text-sm space-y-2">
+              <p className="font-medium text-foreground">AI Claims Expert</p>
+              <p className="text-muted-foreground">
+                Ask questions about claim strategy, adjuster negotiations, coverage maximization, 
+                or next steps. I have full context of this claim and can provide expert guidance.
+              </p>
             </div>
           </div>
-        )}
+        </Card>
 
-        <Button 
-          onClick={handleAddUpdate} 
-          disabled={loading || !newUpdate.trim()}
-          className="w-full bg-primary hover:bg-primary/90"
-        >
-          <Send className="h-4 w-4 mr-2" />
-          {loading ? "Sending..." : "Add Update"}
-        </Button>
-      </div>
-
-      <div className="space-y-4">
-        {updates.map((update) => {
-          const isCurrentUser = user?.id === update.user_id;
-          const authorName = isCurrentUser 
-            ? "You" 
-            : update.profiles?.full_name || update.profiles?.email || "Unknown";
-          
-          return (
-            <div key={update.id} className="flex gap-3 p-4 rounded-lg bg-muted/50">
+        <div className="space-y-4 max-h-[400px] overflow-y-auto">
+          {aiMessages.map((message, index) => (
+            <div 
+              key={index} 
+              className={`flex gap-3 p-4 rounded-lg ${
+                message.role === "user" 
+                  ? "bg-primary/10 ml-8" 
+                  : "bg-muted/50 mr-8"
+              }`}
+            >
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                  {authorName.charAt(0).toUpperCase()}
+                <AvatarFallback className={`text-xs ${
+                  message.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-secondary-foreground"
+                }`}>
+                  {message.role === "user" ? "U" : "AI"}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{authorName}</span>
+                  <span className="text-sm font-medium">
+                    {message.role === "user" ? "You" : "AI Assistant"}
+                  </span>
                   <span className="text-xs text-muted-foreground">
-                    {format(new Date(update.created_at), "MMM d, yyyy h:mm a")}
+                    {format(message.timestamp, "h:mm a")}
                   </span>
                 </div>
-                <p className="text-sm text-foreground whitespace-pre-wrap">{update.content}</p>
-                {update.recipients && update.recipients.length > 0 && isStaff && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Notified {update.recipients.length} {update.recipients.length === 1 ? 'person' : 'people'}
-                  </p>
-                )}
+                <p className="text-sm text-foreground whitespace-pre-wrap">{message.content}</p>
               </div>
             </div>
-          );
-        })}
-        {updates.length === 0 && (
-          <div className="text-center text-sm text-muted-foreground py-8">
-            No updates yet. Add the first update to this claim.
-          </div>
-        )}
-      </div>
-    </div>
+          ))}
+          {aiMessages.length === 0 && (
+            <div className="text-center text-sm text-muted-foreground py-8">
+              Start a conversation by asking a question about this claim.
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <Textarea
+            placeholder="Ask a question about this claim... (e.g., 'How should I respond to the adjuster's depreciation estimate?' or 'What's my best strategy to maximize this settlement?')"
+            value={aiQuestion}
+            onChange={(e) => setAiQuestion(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleAskAI();
+              }
+            }}
+            className="min-h-[100px]"
+            disabled={aiLoading}
+          />
+          
+          <Button 
+            onClick={handleAskAI} 
+            disabled={aiLoading || !aiQuestion.trim()}
+            className="w-full bg-primary hover:bg-primary/90"
+          >
+            {aiLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Getting advice...
+              </>
+            ) : (
+              <>
+                <Bot className="h-4 w-4 mr-2" />
+                Ask AI Assistant
+              </>
+            )}
+          </Button>
+        </div>
+      </TabsContent>
+    </Tabs>
   );
 };
