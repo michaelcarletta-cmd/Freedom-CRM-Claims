@@ -1155,6 +1155,39 @@ export type Database = {
         }
         Relationships: []
       }
+      signature_field_templates: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          field_data: Json
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          field_data?: Json
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          field_data?: Json
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       signature_requests: {
         Row: {
           claim_id: string
