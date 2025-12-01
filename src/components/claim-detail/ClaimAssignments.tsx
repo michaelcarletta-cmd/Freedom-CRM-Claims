@@ -99,6 +99,12 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
         .in("id", staffIds);
 
       setStaff(staffProfileData || []);
+      
+      console.log("Staff dropdown data:", {
+        totalUsers: allRoles?.length,
+        staffCount: staffIds.length,
+        staffEmails: staffProfileData?.map(s => s.email)
+      });
     }
 
     // Fetch assigned staff for this claim
