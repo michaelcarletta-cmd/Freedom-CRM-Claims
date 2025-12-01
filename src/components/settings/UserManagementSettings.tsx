@@ -149,6 +149,32 @@ export function UserManagementSettings() {
     }
   };
 
+  const removeAllRoles = async (userId: string, userName: string) => {
+    if (!confirm(`Are you sure you want to remove all roles from ${userName}? This will remove their access to the system.`)) return;
+
+    try {
+      const { error } = await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "All roles removed successfully",
+      });
+
+      fetchUsers();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to remove roles",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-8 text-muted-foreground">Loading users...</div>;
   }
@@ -203,7 +229,7 @@ export function UserManagementSettings() {
                 </div>
               </div>
 
-              <div className="ml-4">
+              <div className="ml-4 flex items-center gap-2">
                 <Select
                   onValueChange={(role) => addRole(user.id, role)}
                 >
@@ -243,6 +269,17 @@ export function UserManagementSettings() {
                     </SelectItem>
                   </SelectContent>
                 </Select>
+                
+                {user.roles.length > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    onClick={() => removeAllRoles(user.id, user.full_name || user.email)}
+                    title="Remove all roles from this user"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
