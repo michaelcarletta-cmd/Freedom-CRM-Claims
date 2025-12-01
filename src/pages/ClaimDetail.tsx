@@ -109,16 +109,16 @@ const ClaimDetail = () => {
       />
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="communication">Communication</TabsTrigger>
-          <TabsTrigger value="tasks">Tasks</TabsTrigger>
-          <TabsTrigger value="inspections">Inspections</TabsTrigger>
-          <TabsTrigger value="activity">Notes & Activity</TabsTrigger>
-          <TabsTrigger value="files">Files</TabsTrigger>
-          <TabsTrigger value="accounting">Accounting</TabsTrigger>
-          <TabsTrigger value="templates">Templates</TabsTrigger>
-          <TabsTrigger value="access">Portal Access</TabsTrigger>
+        <TabsList className="w-full justify-start h-12 bg-muted/50 rounded-none border-b">
+          <TabsTrigger value="overview" className="data-[state=active]:bg-background">Overview</TabsTrigger>
+          <TabsTrigger value="communication" className="data-[state=active]:bg-background">Communication</TabsTrigger>
+          <TabsTrigger value="tasks" className="data-[state=active]:bg-background">Tasks</TabsTrigger>
+          <TabsTrigger value="inspections" className="data-[state=active]:bg-background">Inspections</TabsTrigger>
+          <TabsTrigger value="activity" className="data-[state=active]:bg-background">Notes & Activity</TabsTrigger>
+          <TabsTrigger value="files" className="data-[state=active]:bg-background">Files</TabsTrigger>
+          <TabsTrigger value="accounting" className="data-[state=active]:bg-background">Accounting</TabsTrigger>
+          <TabsTrigger value="templates" className="data-[state=active]:bg-background">Templates</TabsTrigger>
+          <TabsTrigger value="access" className="data-[state=active]:bg-background">Portal Access</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
