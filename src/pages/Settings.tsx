@@ -281,21 +281,21 @@ export default function Settings() {
         <p className="text-muted-foreground">Manage your claim workflow and dropdown options</p>
       </div>
 
-      <Tabs defaultValue="statuses" className="flex flex-col md:flex-row gap-6">
-        <TabsList className="flex flex-col h-fit w-full md:w-56 overflow-x-auto md:overflow-x-visible">
-          <TabsTrigger value="statuses" className="w-full justify-start">Claim Statuses</TabsTrigger>
-          <TabsTrigger value="insurance" className="w-full justify-start">Insurance Companies</TabsTrigger>
-          <TabsTrigger value="loss-types" className="w-full justify-start">Loss Types</TabsTrigger>
-          <TabsTrigger value="referrers" className="w-full justify-start">Referrers</TabsTrigger>
-          <TabsTrigger value="users" className="w-full justify-start">User Management</TabsTrigger>
-          <TabsTrigger value="templates" className="w-full justify-start">Templates</TabsTrigger>
-          <TabsTrigger value="custom-fields" className="w-full justify-start">Custom Fields</TabsTrigger>
-          <TabsTrigger value="task-automations" className="w-full justify-start">Task Automations</TabsTrigger>
-          <TabsTrigger value="automations" className="w-full justify-start">Automations</TabsTrigger>
-          <TabsTrigger value="import" className="w-full justify-start">Import Data</TabsTrigger>
+      <Tabs defaultValue="statuses" className="space-y-6">
+        <TabsList className="flex flex-col md:flex-row h-fit w-full md:w-auto overflow-x-auto md:flex-wrap bg-muted/40 p-2 gap-1">
+          <TabsTrigger value="statuses" className="w-full md:w-auto justify-start text-base font-medium">Claim Statuses</TabsTrigger>
+          <TabsTrigger value="insurance" className="w-full md:w-auto justify-start text-base font-medium">Insurance Companies</TabsTrigger>
+          <TabsTrigger value="loss-types" className="w-full md:w-auto justify-start text-base font-medium">Loss Types</TabsTrigger>
+          <TabsTrigger value="referrers" className="w-full md:w-auto justify-start text-base font-medium">Referrers</TabsTrigger>
+          <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium">User Management</TabsTrigger>
+          <TabsTrigger value="templates" className="w-full md:w-auto justify-start text-base font-medium">Templates</TabsTrigger>
+          <TabsTrigger value="custom-fields" className="w-full md:w-auto justify-start text-base font-medium">Custom Fields</TabsTrigger>
+          <TabsTrigger value="task-automations" className="w-full md:w-auto justify-start text-base font-medium">Task Automations</TabsTrigger>
+          <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium">Automations</TabsTrigger>
+          <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium">Import Data</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="statuses" className="flex-1">
+        <TabsContent value="statuses" className="w-full">
           <Card>
             <CardHeader>
               <CardTitle>Claim Statuses</CardTitle>
@@ -360,39 +360,39 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="insurance" className="flex-1">
+        <TabsContent value="insurance" className="w-full">
           <InsuranceCompaniesSettings />
         </TabsContent>
 
-        <TabsContent value="loss-types" className="flex-1">
+        <TabsContent value="loss-types" className="w-full">
           <LossTypesSettings />
         </TabsContent>
 
-        <TabsContent value="referrers" className="flex-1">
+        <TabsContent value="referrers" className="w-full">
           <ReferrersSettings />
         </TabsContent>
 
-        <TabsContent value="users" className="flex-1">
+        <TabsContent value="users" className="w-full">
           <UserManagementSettings />
         </TabsContent>
 
-        <TabsContent value="templates" className="flex-1">
+        <TabsContent value="templates" className="w-full">
           <TemplatesSettings />
         </TabsContent>
 
-        <TabsContent value="custom-fields" className="flex-1">
+        <TabsContent value="custom-fields" className="w-full">
           <CustomFieldsSettings />
         </TabsContent>
 
-        <TabsContent value="task-automations" className="flex-1">
+        <TabsContent value="task-automations" className="w-full">
           <TaskAutomationsSettings />
         </TabsContent>
 
-        <TabsContent value="automations" className="flex-1">
+        <TabsContent value="automations" className="w-full">
           <AutomationsSettings />
         </TabsContent>
 
-        <TabsContent value="import" className="flex-1">
+        <TabsContent value="import" className="w-full">
           <ImportSettings />
         </TabsContent>
       </Tabs>
