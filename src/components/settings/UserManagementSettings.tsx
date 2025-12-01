@@ -43,11 +43,18 @@ const ROLE_COLORS = {
 export function UserManagementSettings() {
   const [users, setUsers] = useState<UserWithRoles[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
+    fetchCurrentUser();
     fetchUsers();
   }, []);
+
+  const fetchCurrentUser = async () => {
+    const { data } = await supabase.auth.getUser();
+    setCurrentUserId(data.user?.id || null);
+  };
 
   const fetchUsers = async () => {
     try {
@@ -124,7 +131,17 @@ export function UserManagementSettings() {
     }
   };
 
-  const removeRole = async (roleId: string) => {
+  const removeRole = async (roleId: string, userId: string, role: string) => {
+    // Prevent removing your own admin role
+    if (userId === currentUserId && role === "admin") {
+      toast({
+        title: "Cannot Remove Your Own Admin Role",
+        description: "You cannot remove your own admin role. Ask another admin to remove it if needed.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!confirm("Are you sure you want to remove this role?")) return;
 
     try {
@@ -152,6 +169,16 @@ export function UserManagementSettings() {
   };
 
   const removeAllRoles = async (userId: string, userName: string) => {
+    // Prevent removing your own roles
+    if (userId === currentUserId) {
+      toast({
+        title: "Cannot Remove Your Own Roles",
+        description: "You cannot remove your own roles. Ask another admin to manage your access if needed.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!confirm(`Are you sure you want to remove all roles from ${userName}? This will remove their access to the system.`)) return;
 
     try {
@@ -221,7 +248,7 @@ export function UserManagementSettings() {
                       >
                         {ROLE_LABELS[userRole.role]}
                         <button
-                          onClick={() => removeRole(userRole.id)}
+                          onClick={() => removeRole(userRole.id, user.id, userRole.role)}
                           className="ml-1 hover:text-destructive transition-colors"
                         >
                           <Trash2 className="h-3 w-3" />
