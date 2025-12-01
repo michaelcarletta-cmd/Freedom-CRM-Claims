@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,7 @@ export function InsuranceCompaniesSettings() {
   const [editingCompany, setEditingCompany] = useState<InsuranceCompany | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const formRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchCompanies();
@@ -107,6 +108,11 @@ export function InsuranceCompaniesSettings() {
     setNewCompanyName(company.name);
     setNewCompanyPhone(company.phone || "");
     setNewCompanyEmail(company.email || "");
+    
+    // Scroll to the form
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
   };
 
   const handleCancel = () => {
@@ -168,7 +174,7 @@ export function InsuranceCompaniesSettings() {
 
   return (
     <div className="space-y-6">
-      <Card className="p-6">
+      <Card ref={formRef} className="p-6">
         <h3 className="text-lg font-semibold mb-4">
           {editingCompany ? "Edit Insurance Company" : "Add New Insurance Company"}
         </h3>
