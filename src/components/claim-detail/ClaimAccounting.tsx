@@ -844,7 +844,15 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, isAdmin 
                         type="number"
                         step="0.01"
                         value={formData.company_fee_percentage}
-                        onChange={(e) => setFormData({ ...formData, company_fee_percentage: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => {
+                          const percentage = parseFloat(e.target.value) || 0;
+                          const amount = (grossProfit * percentage) / 100;
+                          setFormData({ 
+                            ...formData, 
+                            company_fee_percentage: percentage,
+                            company_fee_amount: amount
+                          });
+                        }}
                       />
                     </div>
                     <div>
@@ -853,7 +861,15 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, isAdmin 
                         type="number"
                         step="0.01"
                         value={formData.company_fee_amount}
-                        onChange={(e) => setFormData({ ...formData, company_fee_amount: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => {
+                          const amount = parseFloat(e.target.value) || 0;
+                          const percentage = grossProfit > 0 ? (amount / grossProfit) * 100 : 0;
+                          setFormData({ 
+                            ...formData, 
+                            company_fee_amount: amount,
+                            company_fee_percentage: percentage
+                          });
+                        }}
                       />
                     </div>
                   </div>
@@ -867,7 +883,15 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, isAdmin 
                         type="number"
                         step="0.01"
                         value={formData.adjuster_fee_percentage}
-                        onChange={(e) => setFormData({ ...formData, adjuster_fee_percentage: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => {
+                          const percentage = parseFloat(e.target.value) || 0;
+                          const amount = (grossProfit * percentage) / 100;
+                          setFormData({ 
+                            ...formData, 
+                            adjuster_fee_percentage: percentage,
+                            adjuster_fee_amount: amount
+                          });
+                        }}
                       />
                     </div>
                     <div>
@@ -876,7 +900,15 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, isAdmin 
                         type="number"
                         step="0.01"
                         value={formData.adjuster_fee_amount}
-                        onChange={(e) => setFormData({ ...formData, adjuster_fee_amount: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => {
+                          const amount = parseFloat(e.target.value) || 0;
+                          const percentage = grossProfit > 0 ? (amount / grossProfit) * 100 : 0;
+                          setFormData({ 
+                            ...formData, 
+                            adjuster_fee_amount: amount,
+                            adjuster_fee_percentage: percentage
+                          });
+                        }}
                       />
                     </div>
                   </div>
