@@ -81,7 +81,7 @@ export const NewClientDialog = ({
         if (roleError) throw roleError;
       }
 
-      // Create client record
+      // Create client record, linking to user account if created
       const { error } = await supabase.from("clients").insert({
         name: formData.name,
         email: formData.email || null,
@@ -90,6 +90,7 @@ export const NewClientDialog = ({
         city: formData.city || null,
         state: formData.state || null,
         zip_code: formData.zipCode || null,
+        user_id: userId, // Link client to auth user
       });
 
       if (error) throw error;

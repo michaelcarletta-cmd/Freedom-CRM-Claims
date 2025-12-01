@@ -278,6 +278,9 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
   };
 
   const currentClient = allClients.find(c => c.id === currentClientId);
+  
+  // Get client name from claim's policyholder_name if no client assigned
+  const displayClientName = currentClient?.name;
   const currentReferrer = referrers.find(r => r.id === currentReferrerId);
 
   return (
@@ -295,7 +298,8 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
             <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
               <div>
                 <p className="font-medium">{currentClient.name}</p>
-                <p className="text-sm text-muted-foreground">{currentClient.email}</p>
+                <p className="text-sm text-muted-foreground">{currentClient.email || "No email"}</p>
+                <Badge variant="secondary" className="mt-1">Policyholder</Badge>
               </div>
               <Button variant="ghost" size="sm" onClick={removeClient}>
                 <X className="h-4 w-4" />
@@ -305,12 +309,12 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
             <div className="flex gap-2">
               <Select value={selectedClient} onValueChange={setSelectedClient}>
                 <SelectTrigger className="bg-background">
-                  <SelectValue placeholder="Select client" />
+                  <SelectValue placeholder="Select policyholder for client access" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover z-50">
                   {allClients.map((client) => (
                     <SelectItem key={client.id} value={client.id}>
-                      {client.name}
+                      {client.name} {client.email ? `(${client.email})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -321,6 +325,9 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
               </Button>
             </div>
           )}
+          <p className="text-xs text-muted-foreground">
+            The policyholder will have access to view this claim in the Client Portal
+          </p>
         </CardContent>
       </Card>
 
