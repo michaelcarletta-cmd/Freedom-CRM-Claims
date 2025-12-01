@@ -872,6 +872,53 @@ export type Database = {
         }
         Relationships: []
       }
+      emails: {
+        Row: {
+          body: string
+          claim_id: string
+          created_at: string | null
+          id: string
+          recipient_email: string
+          recipient_name: string | null
+          recipient_type: string | null
+          sent_at: string | null
+          sent_by: string | null
+          subject: string
+        }
+        Insert: {
+          body: string
+          claim_id: string
+          created_at?: string | null
+          id?: string
+          recipient_email: string
+          recipient_name?: string | null
+          recipient_type?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          subject: string
+        }
+        Update: {
+          body?: string
+          claim_id?: string
+          created_at?: string | null
+          id?: string
+          recipient_email?: string
+          recipient_name?: string | null
+          recipient_type?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emails_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inspections: {
         Row: {
           claim_id: string

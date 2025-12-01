@@ -5,19 +5,13 @@ import { ClaimSMS } from "./ClaimSMS";
 
 interface ClaimCommunicationTabProps {
   claimId: string;
-  policyholderPhone?: string;
-  policyholderEmail?: string;
-  policyholderName?: string;
-  claimNumber?: string;
+  claim: any;
 }
 
 export function ClaimCommunicationTab({ 
   claimId, 
-  policyholderPhone,
-  policyholderEmail,
-  policyholderName,
-  claimNumber 
-}: ClaimCommunicationTabProps) {
+  claim
+}: { claimId: string; claim: any }) {
   return (
     <Tabs defaultValue="emails" className="w-full">
       <TabsList>
@@ -26,15 +20,10 @@ export function ClaimCommunicationTab({
         <TabsTrigger value="phone">Phone Calls</TabsTrigger>
       </TabsList>
       <TabsContent value="emails" className="mt-6">
-        <ClaimEmails 
-          claimId={claimId} 
-          policyholderEmail={policyholderEmail}
-          policyholderName={policyholderName}
-          claimNumber={claimNumber}
-        />
+        <ClaimEmails claimId={claimId} claim={claim} />
       </TabsContent>
       <TabsContent value="sms" className="mt-6">
-        <ClaimSMS claimId={claimId} policyholderPhone={policyholderPhone} />
+        <ClaimSMS claimId={claimId} policyholderPhone={claim.policyholder_phone} />
       </TabsContent>
       <TabsContent value="phone" className="mt-6">
         <ClaimCommunications claimId={claimId} />
