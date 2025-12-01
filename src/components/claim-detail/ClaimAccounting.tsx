@@ -157,6 +157,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
         fees={fees} 
         grossProfit={grossProfit}
         totalChecksReceived={totalChecksReceived}
+        checks={checks || []}
         isAdmin={isAdmin}
       />
 
@@ -760,8 +761,21 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
 }
 
 // Fees Section Component
-function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, isAdmin }: any) {
+function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, isAdmin }: any) {
   const [open, setOpen] = useState(false);
+  
+  // Calculate company fee based on percentage of each check
+  const calculateCompanyFee = (percentage: number) => {
+    return checks.reduce((sum: number, check: any) => {
+      return sum + (Number(check.amount) * percentage / 100);
+    }, 0);
+  };
+  
+  // Calculate adjuster fee as percentage of company fee
+  const calculateAdjusterFee = (companyFeeAmount: number, adjusterPercentage: number) => {
+    return companyFeeAmount * adjusterPercentage / 100;
+  };
+  
   const [formData, setFormData] = useState({
     company_fee_percentage: fees?.company_fee_percentage || 0,
     company_fee_amount: fees?.company_fee_amount || 0,
@@ -836,7 +850,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, isAdmin 
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Company Fee</Label>
+                  <Label>Company Fee (% of each check)</Label>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Label className="text-xs text-muted-foreground">Percentage</Label>
@@ -846,36 +860,31 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, isAdmin 
                         value={formData.company_fee_percentage}
                         onChange={(e) => {
                           const percentage = parseFloat(e.target.value) || 0;
-                          const amount = (grossProfit * percentage) / 100;
+                          const companyAmount = calculateCompanyFee(percentage);
+                          const adjusterAmount = calculateAdjusterFee(companyAmount, formData.adjuster_fee_percentage);
                           setFormData({ 
                             ...formData, 
                             company_fee_percentage: percentage,
-                            company_fee_amount: amount
+                            company_fee_amount: companyAmount,
+                            adjuster_fee_amount: adjusterAmount
                           });
                         }}
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Amount ($)</Label>
+                      <Label className="text-xs text-muted-foreground">Amount ($) - Calculated</Label>
                       <Input
                         type="number"
                         step="0.01"
                         value={formData.company_fee_amount}
-                        onChange={(e) => {
-                          const amount = parseFloat(e.target.value) || 0;
-                          const percentage = grossProfit > 0 ? (amount / grossProfit) * 100 : 0;
-                          setFormData({ 
-                            ...formData, 
-                            company_fee_amount: amount,
-                            company_fee_percentage: percentage
-                          });
-                        }}
+                        disabled
+                        className="bg-muted"
                       />
                     </div>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Adjuster Fee</Label>
+                  <Label>Adjuster Fee (% of company fee)</Label>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Label className="text-xs text-muted-foreground">Percentage</Label>
@@ -885,7 +894,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, isAdmin 
                         value={formData.adjuster_fee_percentage}
                         onChange={(e) => {
                           const percentage = parseFloat(e.target.value) || 0;
-                          const amount = (grossProfit * percentage) / 100;
+                          const amount = calculateAdjusterFee(formData.company_fee_amount, percentage);
                           setFormData({ 
                             ...formData, 
                             adjuster_fee_percentage: percentage,
@@ -895,20 +904,13 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, isAdmin 
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Amount ($)</Label>
+                      <Label className="text-xs text-muted-foreground">Amount ($) - Calculated</Label>
                       <Input
                         type="number"
                         step="0.01"
                         value={formData.adjuster_fee_amount}
-                        onChange={(e) => {
-                          const amount = parseFloat(e.target.value) || 0;
-                          const percentage = grossProfit > 0 ? (amount / grossProfit) * 100 : 0;
-                          setFormData({ 
-                            ...formData, 
-                            adjuster_fee_amount: amount,
-                            adjuster_fee_percentage: percentage
-                          });
-                        }}
+                        disabled
+                        className="bg-muted"
                       />
                     </div>
                   </div>
