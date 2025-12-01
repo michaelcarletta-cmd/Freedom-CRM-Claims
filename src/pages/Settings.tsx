@@ -33,6 +33,7 @@ import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings
 import { TaskAutomationsSettings } from "@/components/settings/TaskAutomationsSettings";
 import { ImportSettings } from "@/components/settings/ImportSettings";
 import { UserManagementSettings } from "@/components/settings/UserManagementSettings";
+import { FieldTemplatesSettings } from "@/components/settings/FieldTemplatesSettings";
 
 interface ClaimStatus {
   id: string;
@@ -289,6 +290,7 @@ export default function Settings() {
           <TabsTrigger value="referrers" className="w-full md:w-auto justify-start text-base font-medium px-4">Referrers</TabsTrigger>
           <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium px-4">User Management</TabsTrigger>
           <TabsTrigger value="templates" className="w-full md:w-auto justify-start text-base font-medium px-4">Templates</TabsTrigger>
+          <TabsTrigger value="field-templates" className="w-full md:w-auto justify-start text-base font-medium px-4">Field Layout Templates</TabsTrigger>
           <TabsTrigger value="custom-fields" className="w-full md:w-auto justify-start text-base font-medium px-4">Custom Fields</TabsTrigger>
           <TabsTrigger value="task-automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Task Automations</TabsTrigger>
           <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
@@ -378,6 +380,10 @@ export default function Settings() {
 
         <TabsContent value="templates" className="w-full">
           <TemplatesSettings />
+        </TabsContent>
+
+        <TabsContent value="field-templates" className="w-full">
+          <FieldTemplatesSettings />
         </TabsContent>
 
         <TabsContent value="custom-fields" className="w-full">

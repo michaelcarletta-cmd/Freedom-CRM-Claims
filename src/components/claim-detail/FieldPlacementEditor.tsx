@@ -3,9 +3,15 @@ import { Canvas as FabricCanvas, Rect, Textbox, FabricImage } from "fabric";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Pencil, Calendar, Type, Trash2, Download } from "lucide-react";
+import { Pencil, Calendar, Type, Trash2, Save, FolderOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Field {
   id: string;
@@ -33,6 +39,53 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
   const [activeTool, setActiveTool] = useState<"signature" | "date" | "text" | null>(null);
   const [currentSignerIndex, setCurrentSignerIndex] = useState(0);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  // Save template dialog state
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDescription, setTemplateDescription] = useState("");
+
+  // Load template state
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+
+  // Fetch available templates
+  const { data: templates } = useQuery({
+    queryKey: ["signature-field-templates"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("signature_field_templates")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Save template mutation
+  const saveTemplateMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("signature_field_templates")
+        .insert([{
+          name: templateName,
+          description: templateDescription,
+          field_data: fields as any,
+        }]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Field layout template saved successfully" });
+      setIsSaveDialogOpen(false);
+      setTemplateName("");
+      setTemplateDescription("");
+      queryClient.invalidateQueries({ queryKey: ["signature-field-templates"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to save template", description: error.message, variant: "destructive" });
+    },
+  });
 
   useEffect(() => {
     if (!canvasRef.current || !containerRef.current) return;
@@ -210,11 +263,123 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
     toast({ title: "All fields cleared" });
   };
 
+  const loadTemplate = (templateId: string) => {
+    const template = templates?.find(t => t.id === templateId);
+    if (!template || !fabricCanvas) return;
+
+    // Clear existing fields
+    clearAllFields();
+
+    // Load template fields with proper type casting
+    const templateFields = (Array.isArray(template.field_data) ? template.field_data : []) as unknown as Field[];
+    
+    templateFields.forEach((field) => {
+      const colors: Record<string, string> = {
+        signature: "#3b82f6",
+        date: "#10b981",
+        text: "#8b5cf6",
+      };
+
+      const rect = new Rect({
+        left: field.x,
+        top: field.y,
+        width: field.width,
+        height: field.height,
+        fill: colors[field.type] + "33",
+        stroke: colors[field.type],
+        strokeWidth: 2,
+        strokeDashArray: [5, 5],
+        cornerColor: colors[field.type],
+        cornerSize: 8,
+        transparentCorners: false,
+        data: { fieldId: field.id, type: field.type, signerIndex: field.signerIndex },
+      });
+
+      const label = new Textbox(field.label, {
+        left: field.x + 5,
+        top: field.y + (field.height / 2) - 10,
+        fontSize: 14,
+        fill: colors[field.type],
+        selectable: false,
+        evented: false,
+        fontWeight: "bold",
+      });
+
+      fabricCanvas.add(rect);
+      fabricCanvas.add(label);
+    });
+
+    setFields(templateFields);
+    onFieldsChange(templateFields);
+    toast({ title: `Template "${template.name}" loaded` });
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <Label>Place Fields on Document</Label>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {/* Load Template */}
+          <div className="flex items-center gap-2">
+            <Select value={selectedTemplateId} onValueChange={(id) => { setSelectedTemplateId(id); loadTemplate(id); }}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Load template..." />
+              </SelectTrigger>
+              <SelectContent>
+                {templates?.map((template) => (
+                  <SelectItem key={template.id} value={template.id}>
+                    {template.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Save Template */}
+          <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" disabled={fields.length === 0}>
+                <Save className="w-4 h-4 mr-2" />
+                Save as Template
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Save Field Layout Template</DialogTitle>
+                <DialogDescription>
+                  Save this field layout to reuse on other documents
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Template Name</Label>
+                  <Input
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    placeholder="e.g., Standard Contract Layout"
+                  />
+                </div>
+                <div>
+                  <Label>Description (optional)</Label>
+                  <Textarea
+                    value={templateDescription}
+                    onChange={(e) => setTemplateDescription(e.target.value)}
+                    placeholder="Describe when to use this template..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={() => saveTemplateMutation.mutate()}
+                  disabled={!templateName || saveTemplateMutation.isPending}
+                >
+                  {saveTemplateMutation.isPending ? "Saving..." : "Save Template"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           {signerCount > 1 && (
             <div className="flex items-center gap-2">
               <Label className="text-sm">For Signer:</Label>
