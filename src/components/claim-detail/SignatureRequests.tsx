@@ -177,6 +177,30 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     return <Badge variant={variants[status] || "outline"}>{status.replace("_", " ")}</Badge>;
   };
 
+  const handleOpenDocument = async (request: any) => {
+    try {
+      if (!request.document_path) {
+        throw new Error("No document path found for this request");
+      }
+
+      const { data, error } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(request.document_path, 3600);
+
+      if (error || !data?.signedUrl) {
+        throw new Error(error?.message || "Unable to generate document link");
+      }
+
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (error: any) {
+      toast({
+        title: "Unable to open document",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -315,6 +339,13 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenDocument(request)}
+                    >
+                      Open Document
+                    </Button>
                     {getStatusBadge(request.status)}
                     <Button
                       variant="ghost"
