@@ -85,7 +85,7 @@ export function ClaimOverview({ claim }: ClaimOverviewProps) {
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Policy Number</p>
-              <p className="text-sm font-medium">N/A</p>
+              <p className="text-sm font-medium">{claim.policy_number || "N/A"}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Phone</p>

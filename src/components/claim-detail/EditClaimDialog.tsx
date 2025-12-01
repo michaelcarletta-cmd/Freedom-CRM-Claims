@@ -70,8 +70,10 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
   }, [claim]);
 
   useEffect(() => {
-    fetchDropdownData();
-  }, []);
+    if (open) {
+      fetchDropdownData();
+    }
+  }, [open]);
 
   const fetchDropdownData = async () => {
     const { data: lossTypesData } = await supabase
