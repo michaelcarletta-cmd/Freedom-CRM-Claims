@@ -127,18 +127,18 @@ export const TemplatesSettings = () => {
         <Info className="h-4 w-4" />
         <AlertTitle>Template Merge Fields</AlertTitle>
         <AlertDescription>
-          <p className="mb-2">Use these fields in your Word templates with double curly braces:</p>
+          <p className="mb-2">Use these fields in your Word templates with dollar sign and curly braces:</p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
-            <div>{`{{claim_number}}`}</div>
-            <div>{`{{policyholder_name}}`}</div>
-            <div>{`{{policyholder_email}}`}</div>
-            <div>{`{{policyholder_phone}}`}</div>
-            <div>{`{{policyholder_address}}`}</div>
-            <div>{`{{policy_number}}`}</div>
-            <div>{`{{loss_date}}`}</div>
-            <div>{`{{loss_type}}`}</div>
-            <div>{`{{insurance_company}}`}</div>
-            <div>{`{{adjuster_name}}`}</div>
+            <div>{`\${policyholder}`}</div>
+            <div>{`\${policy}`}</div>
+            <div>{`\${insurance_company}`}</div>
+            <div>{`\${address.street}`}</div>
+            <div>{`\${address.city}`}</div>
+            <div>{`\${claim.loss_date}`}</div>
+            <div>{`\${claim.loss_type}`}</div>
+            <div>{`\${mortgage_company}`}</div>
+            <div>{`\${loan_number}`}</div>
+            <div>{`\${ssn_last_four}`}</div>
             <div>...and more</div>
           </div>
         </AlertDescription>

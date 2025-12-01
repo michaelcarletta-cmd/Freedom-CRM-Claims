@@ -63,34 +63,76 @@ serve(async (req) => {
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
+      delimiters: {
+        start: "${",
+        end: "}"
+      }
     });
 
-    // Prepare data for template
+    // Parse address from policyholder_address field
+    const addressParts = (claim.policyholder_address || "").split(",").map((s: string) => s.trim());
+    const street = addressParts[0] || "";
+    const city = addressParts[1] || "";
+    const stateZip = (addressParts[2] || "").split(" ");
+    const state = stateZip[0] || "";
+    const zipCode = stateZip[1] || "";
+
+    // Prepare data for template matching the ${field} format
     const templateData = {
-      claim_number: claim.claim_number || "",
-      policyholder_name: claim.policyholder_name || "",
+      // Main claim info
+      claim: {
+        claim_number: claim.claim_number || "",
+        loss_type: claim.loss_types?.name || claim.loss_type || "",
+        loss_date: claim.loss_date ? new Date(claim.loss_date).toLocaleDateString() : "",
+        loss_description: claim.loss_description || "",
+        amount: claim.claim_amount ? `$${claim.claim_amount.toLocaleString()}` : "",
+        status: claim.status || "",
+      },
+      // Policyholder info
+      policyholder: claim.policyholder_name || "",
       policyholder_email: claim.policyholder_email || "",
       policyholder_phone: claim.policyholder_phone || "",
-      policyholder_address: claim.policyholder_address || "",
-      policy_number: claim.policy_number || "",
-      loss_date: claim.loss_date || "",
-      loss_type: claim.loss_types?.name || claim.loss_type || "",
-      loss_description: claim.loss_description || "",
-      claim_amount: claim.claim_amount ? `$${claim.claim_amount.toLocaleString()}` : "",
+      // Address (nested object and full string)
+      address: {
+        street: street,
+        city: city,
+        state: state,
+        zip: zipCode,
+        full: claim.policyholder_address || ""
+      },
+      // Insurance info
       insurance_company: claim.insurance_companies?.name || claim.insurance_company || "",
       insurance_phone: claim.insurance_phone || "",
       insurance_email: claim.insurance_email || "",
+      policy: claim.policy_number || "",
+      policy_number: claim.policy_number || "",
+      // Adjuster info
+      adjuster: {
+        name: claim.adjuster_name || "",
+        phone: claim.adjuster_phone || "",
+        email: claim.adjuster_email || "",
+      },
       adjuster_name: claim.adjuster_name || "",
       adjuster_phone: claim.adjuster_phone || "",
       adjuster_email: claim.adjuster_email || "",
-      referrer_name: claim.referrers?.name || "",
-      referrer_company: claim.referrers?.company || "",
+      // Referrer info
+      referrer: {
+        name: claim.referrers?.name || "",
+        company: claim.referrers?.company || "",
+      },
+      // Mortgage info
+      mortgage: {
+        company: claim.mortgage_companies?.name || "",
+        contact: claim.mortgage_companies?.contact_name || "",
+        phone: claim.mortgage_companies?.phone || "",
+        email: claim.mortgage_companies?.email || "",
+      },
       mortgage_company: claim.mortgage_companies?.name || "",
-      mortgage_contact: claim.mortgage_companies?.contact_name || "",
-      mortgage_phone: claim.mortgage_companies?.phone || "",
-      mortgage_email: claim.mortgage_companies?.email || "",
-      status: claim.status || "",
+      loan_number: claim.loan_number || "",
+      ssn_last_four: claim.ssn_last_four || "",
+      // Current date
       date: new Date().toLocaleDateString(),
+      today: new Date().toLocaleDateString(),
     };
 
     // Render the document

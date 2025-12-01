@@ -182,32 +182,37 @@ export function ClaimTemplates({ claimId, claim }: ClaimTemplatesProps) {
         <Info className="h-4 w-4" />
         <AlertTitle>Available Merge Fields</AlertTitle>
         <AlertDescription>
-          <p className="mb-2">Use these fields in your Word templates with double curly braces:</p>
+          <p className="mb-2">Use these fields in your Word templates with dollar sign and curly braces:</p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
-            <div>{`{{claim_number}}`}</div>
-            <div>{`{{policyholder_name}}`}</div>
-            <div>{`{{policyholder_email}}`}</div>
-            <div>{`{{policyholder_phone}}`}</div>
-            <div>{`{{policyholder_address}}`}</div>
-            <div>{`{{policy_number}}`}</div>
-            <div>{`{{loss_date}}`}</div>
-            <div>{`{{loss_type}}`}</div>
-            <div>{`{{loss_description}}`}</div>
-            <div>{`{{claim_amount}}`}</div>
-            <div>{`{{insurance_company}}`}</div>
-            <div>{`{{insurance_phone}}`}</div>
-            <div>{`{{insurance_email}}`}</div>
-            <div>{`{{adjuster_name}}`}</div>
-            <div>{`{{adjuster_phone}}`}</div>
-            <div>{`{{adjuster_email}}`}</div>
-            <div>{`{{referrer_name}}`}</div>
-            <div>{`{{referrer_company}}`}</div>
-            <div>{`{{mortgage_company}}`}</div>
-            <div>{`{{mortgage_contact}}`}</div>
-            <div>{`{{mortgage_phone}}`}</div>
-            <div>{`{{mortgage_email}}`}</div>
-            <div>{`{{status}}`}</div>
-            <div>{`{{date}}`}</div>
+            <div>{`\${policyholder}`}</div>
+            <div>{`\${policyholder_email}`}</div>
+            <div>{`\${policyholder_phone}`}</div>
+            <div>{`\${address.street}`}</div>
+            <div>{`\${address.city}`}</div>
+            <div>{`\${address.state}`}</div>
+            <div>{`\${address.zip}`}</div>
+            <div>{`\${policy}`}</div>
+            <div>{`\${policy_number}`}</div>
+            <div>{`\${claim.claim_number}`}</div>
+            <div>{`\${claim.loss_date}`}</div>
+            <div>{`\${claim.loss_type}`}</div>
+            <div>{`\${claim.loss_description}`}</div>
+            <div>{`\${claim.amount}`}</div>
+            <div>{`\${claim.status}`}</div>
+            <div>{`\${insurance_company}`}</div>
+            <div>{`\${insurance_phone}`}</div>
+            <div>{`\${insurance_email}`}</div>
+            <div>{`\${adjuster.name}`}</div>
+            <div>{`\${adjuster.phone}`}</div>
+            <div>{`\${adjuster.email}`}</div>
+            <div>{`\${mortgage.company}`}</div>
+            <div>{`\${mortgage_company}`}</div>
+            <div>{`\${loan_number}`}</div>
+            <div>{`\${ssn_last_four}`}</div>
+            <div>{`\${referrer.name}`}</div>
+            <div>{`\${referrer.company}`}</div>
+            <div>{`\${date}`}</div>
+            <div>{`\${today}`}</div>
           </div>
         </AlertDescription>
       </Alert>
@@ -230,7 +235,7 @@ export function ClaimTemplates({ claimId, claim }: ClaimTemplatesProps) {
             <DialogHeader>
               <DialogTitle>Upload Document Template</DialogTitle>
               <DialogDescription>
-                Upload a Word document with merge fields like {`{{policyholder_name}}`}
+                Upload a Word document with merge fields like {`\${policyholder}`} or {`\${address.street}`}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
