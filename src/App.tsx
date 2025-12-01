@@ -48,13 +48,20 @@ function AppRoutes() {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
+  // Public routes that don't require authentication
+  const publicRoutes = (
+    <>
+      <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
+      <Route path="/sign" element={<Sign />} />
+    </>
+  );
+
   // Redirect based on role
   if (user && userRole === "client") {
     return (
       <Routes>
-        <Route path="/auth" element={<Navigate to="/client-portal" replace />} />
+        {publicRoutes}
         <Route path="/client-portal" element={<ClientPortal />} />
-        <Route path="/sign" element={<Sign />} />
         <Route path="*" element={<Navigate to="/client-portal" replace />} />
       </Routes>
     );
@@ -63,9 +70,8 @@ function AppRoutes() {
   if (user && userRole === "contractor") {
     return (
       <Routes>
-        <Route path="/auth" element={<Navigate to="/contractor-portal" replace />} />
+        {publicRoutes}
         <Route path="/contractor-portal" element={<ContractorPortal />} />
-        <Route path="/sign" element={<Sign />} />
         <Route path="*" element={<Navigate to="/contractor-portal" replace />} />
       </Routes>
     );
@@ -74,9 +80,8 @@ function AppRoutes() {
   if (user && userRole === "referrer") {
     return (
       <Routes>
-        <Route path="/auth" element={<Navigate to="/referrer-portal" replace />} />
+        {publicRoutes}
         <Route path="/referrer-portal" element={<ReferrerPortal />} />
-        <Route path="/sign" element={<Sign />} />
         <Route path="*" element={<Navigate to="/referrer-portal" replace />} />
       </Routes>
     );
@@ -85,8 +90,7 @@ function AppRoutes() {
   // Admin and staff routes
   return (
     <Routes>
-      <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
-      <Route path="/sign" element={<Sign />} />
+      {publicRoutes}
       <Route path="/" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Index /></AppLayout></ProtectedRoute>} />
       <Route path="/claims" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Claims /></AppLayout></ProtectedRoute>} />
       <Route path="/claims/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><ClaimDetail /></AppLayout></ProtectedRoute>} />
