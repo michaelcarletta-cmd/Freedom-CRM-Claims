@@ -526,6 +526,35 @@ export type Database = {
           },
         ]
       }
+      claim_staff: {
+        Row: {
+          assigned_at: string | null
+          claim_id: string
+          id: string
+          staff_id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          claim_id: string
+          id?: string
+          staff_id: string
+        }
+        Update: {
+          assigned_at?: string | null
+          claim_id?: string
+          id?: string
+          staff_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_staff_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_statuses: {
         Row: {
           color: string | null

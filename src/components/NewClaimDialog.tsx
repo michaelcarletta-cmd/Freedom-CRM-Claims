@@ -125,6 +125,26 @@ export function NewClaimDialog() {
 
       if (error) throw error;
 
+      // Auto-assign staff member who created the claim
+      if (data?.id) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: roles } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user.id);
+          
+          const isStaff = roles?.some(r => r.role === "staff");
+          
+          // Assign the staff member to the claim they just created
+          if (isStaff) {
+            await supabase
+              .from("claim_staff")
+              .insert({ claim_id: data.id, staff_id: user.id });
+          }
+        }
+      }
+
       toast({
         title: "Success",
         description: "Claim created successfully",

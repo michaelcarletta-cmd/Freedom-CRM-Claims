@@ -36,11 +36,25 @@ interface AssignedContractor {
   profiles: Contractor;
 }
 
+interface Staff {
+  id: string;
+  full_name: string | null;
+  email: string;
+}
+
+interface AssignedStaff {
+  staff_id: string;
+  profiles: Staff;
+}
+
 export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCompanyId }: ClaimAssignmentsProps) {
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [assignedStaff, setAssignedStaff] = useState<AssignedStaff[]>([]);
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [assignedContractors, setAssignedContractors] = useState<AssignedContractor[]>([]);
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [mortgageCompanies, setMortgageCompanies] = useState<MortgageCompany[]>([]);
+  const [selectedStaff, setSelectedStaff] = useState<string>("");
   const [selectedContractor, setSelectedContractor] = useState<string>("");
   const [selectedReferrer, setSelectedReferrer] = useState<string>(currentReferrerId || "none");
   const [selectedMortgageCompany, setSelectedMortgageCompany] = useState<string>(currentMortgageCompanyId || "none");
@@ -50,6 +64,47 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
   }, [claimId]);
 
   const fetchData = async () => {
+    // Fetch all staff (users with staff role)
+    const { data: staffRoleData } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "staff");
+
+    if (staffRoleData) {
+      const staffIds = staffRoleData.map((r) => r.user_id);
+      const { data: staffProfileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .in("id", staffIds);
+      
+      setStaff(staffProfileData || []);
+    }
+
+    // Fetch assigned staff for this claim
+    const { data: assignedStaffData } = await supabase
+      .from("claim_staff")
+      .select("staff_id")
+      .eq("claim_id", claimId);
+
+    if (assignedStaffData && assignedStaffData.length > 0) {
+      const staffIds = assignedStaffData.map((as) => as.staff_id);
+      const { data: staffProfiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", staffIds);
+
+      const formattedAssignedStaff = assignedStaffData
+        .map((as) => {
+          const profile = staffProfiles?.find((p) => p.id === as.staff_id);
+          return profile ? { staff_id: as.staff_id, profiles: profile } : null;
+        })
+        .filter((as): as is AssignedStaff => as !== null);
+
+      setAssignedStaff(formattedAssignedStaff);
+    } else {
+      setAssignedStaff([]);
+    }
+
     // Fetch all contractors (users with contractor role)
     const { data: roleData } = await supabase
       .from("user_roles")
@@ -156,6 +211,52 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
     fetchData();
   };
 
+  const handleAssignStaff = async () => {
+    if (!selectedStaff) {
+      toast.error("Please select a staff member");
+      return;
+    }
+
+    // Check if already assigned
+    const alreadyAssigned = assignedStaff.some(
+      (as) => as.staff_id === selectedStaff
+    );
+
+    if (alreadyAssigned) {
+      toast.error("Staff member already assigned to this claim");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("claim_staff")
+      .insert([{ claim_id: claimId, staff_id: selectedStaff }]);
+
+    if (error) {
+      toast.error("Failed to assign staff member");
+      return;
+    }
+
+    toast.success("Staff member assigned");
+    setSelectedStaff("");
+    fetchData();
+  };
+
+  const handleRemoveStaff = async (staffId: string) => {
+    const { error } = await supabase
+      .from("claim_staff")
+      .delete()
+      .eq("claim_id", claimId)
+      .eq("staff_id", staffId);
+
+    if (error) {
+      toast.error("Failed to remove staff member");
+      return;
+    }
+
+    toast.success("Staff member removed");
+    fetchData();
+  };
+
   const handleUpdateReferrer = async (referrerId: string) => {
     const actualReferrerId = referrerId === "none" ? null : referrerId;
     
@@ -192,6 +293,54 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
 
   return (
     <div className="grid gap-6">
+      {/* Staff Assignments */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-primary" />
+            Assigned Staff
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Select value={selectedStaff} onValueChange={setSelectedStaff}>
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="Select a staff member" />
+              </SelectTrigger>
+              <SelectContent>
+                {staff.map((staffMember) => (
+                  <SelectItem key={staffMember.id} value={staffMember.id}>
+                    {staffMember.full_name || staffMember.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button onClick={handleAssignStaff}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Assign
+            </Button>
+          </div>
+          
+          <div className="flex flex-wrap gap-2">
+            {assignedStaff.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No staff assigned</p>
+            ) : (
+              assignedStaff.map((as) => (
+                <Badge key={as.staff_id} variant="secondary" className="flex items-center gap-1">
+                  {as.profiles.full_name || as.profiles.email}
+                  <button
+                    onClick={() => handleRemoveStaff(as.staff_id)}
+                    className="ml-1 hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Contractors */}
       <Card>
         <CardHeader>
