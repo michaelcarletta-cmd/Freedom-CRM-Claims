@@ -84,13 +84,12 @@ export function UserManagementSettings() {
       console.log("Fetched profiles:", profiles);
       console.log("Fetched roles:", roles);
 
-      // Combine profiles with their roles, only show users who have at least one role
+      // Combine profiles with their roles (including users with no roles so you always see yourself)
       const usersWithRoles: UserWithRoles[] = (profiles || [])
         .map((profile) => ({
           ...profile,
           roles: (roles || []).filter((role) => role.user_id === profile.id),
-        }))
-        .filter((user) => user.roles.length > 0);
+        }));
 
       console.log("Users with roles:", usersWithRoles);
       setUsers(usersWithRoles);
