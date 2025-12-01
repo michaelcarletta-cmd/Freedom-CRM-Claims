@@ -6,6 +6,61 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Helper function to search web using Perplexity
+async function searchWeb(query: string): Promise<string> {
+  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
+  if (!PERPLEXITY_API_KEY) {
+    return "Web search unavailable: API key not configured";
+  }
+
+  try {
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-sonar-large-128k-online',
+        messages: [
+          {
+            role: 'system',
+            content: 'Be precise and concise. Focus on insurance claim regulations, best practices, and current guidelines.'
+          },
+          {
+            role: 'user',
+            content: query
+          }
+        ],
+        temperature: 0.2,
+        max_tokens: 1000,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Perplexity API error:", response.status);
+      return "Web search temporarily unavailable";
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content;
+  } catch (error) {
+    console.error("Error in web search:", error);
+    return "Web search failed";
+  }
+}
+
+// Helper function to analyze document content
+async function analyzeDocument(fileUrl: string, fileName: string): Promise<string> {
+  try {
+    // For now, return file metadata. In future, could integrate OCR/PDF parsing
+    return `Document: ${fileName} (${fileUrl})`;
+  } catch (error) {
+    console.error("Error analyzing document:", error);
+    return `Document: ${fileName} (unable to analyze content)`;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -35,7 +90,8 @@ serve(async (req) => {
         claim_checks(*),
         claim_expenses(*),
         claim_fees(*),
-        tasks(*)
+        tasks(*),
+        claim_files(*)
       `)
       .eq("id", claimId)
       .single();
@@ -45,6 +101,25 @@ serve(async (req) => {
         JSON.stringify({ error: "Claim not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Analyze uploaded files/estimates
+    let filesContext = "";
+    if (claim.claim_files && claim.claim_files.length > 0) {
+      filesContext = "\n\nUploaded Files:\n";
+      for (const file of claim.claim_files) {
+        const { data: signedUrl } = await supabase
+          .storage
+          .from('claim-files')
+          .createSignedUrl(file.file_path, 60);
+        
+        if (signedUrl?.signedUrl) {
+          const analysis = await analyzeDocument(signedUrl.signedUrl, file.file_name);
+          filesContext += `- ${analysis}\n`;
+        } else {
+          filesContext += `- ${file.file_name} (${file.file_type || 'unknown type'})\n`;
+        }
+      }
     }
 
     // Build context from claim data
@@ -76,8 +151,21 @@ Checks Received: ${claim.claim_checks.length} check(s) totaling $${claim.claim_c
 
 ${claim.tasks && claim.tasks.length > 0 ? `
 Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} pending, ${claim.tasks.filter((t: any) => t.status === "completed").length} completed
-` : ""}
+` : ""}${filesContext}
     `.trim();
+
+    // Determine if web search is needed based on question content
+    let webSearchResults = "";
+    const needsWebSearch = /regulation|law|legal|code|requirement|guideline|best practice|industry standard/i.test(question);
+    
+    if (needsWebSearch) {
+      console.log("Performing web search for:", question);
+      const searchQuery = `${claim.loss_type || "property damage"} insurance claim ${question}`;
+      webSearchResults = await searchWeb(searchQuery);
+      if (webSearchResults && webSearchResults !== "Web search unavailable: API key not configured") {
+        webSearchResults = `\n\nRelevant Industry Information:\n${webSearchResults}`;
+      }
+    }
 
     // Call Lovable AI
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -96,10 +184,15 @@ You have deep knowledge of:
 - Proper claim valuation methodologies
 - When and how to escalate claims or file complaints
 
+You also have access to:
+- Current claim files and estimates uploaded by the user
+- Real-time web search results for regulations and best practices
+
 Always provide:
 - Clear, actionable advice
 - Specific strategies tailored to the claim situation
 - References to policy language or industry standards when relevant
+- Analysis of uploaded documents and estimates when applicable
 - Warning about potential pitfalls or common mistakes
 - Next steps the user should take
 
@@ -115,10 +208,10 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Claim Context:\n${claimContext}\n\nQuestion: ${question}` }
+          { role: "user", content: `Claim Context:\n${claimContext}${webSearchResults}\n\nQuestion: ${question}` }
         ],
         temperature: 0.7,
-        max_tokens: 1000,
+        max_tokens: 1500,
       }),
     });
 
