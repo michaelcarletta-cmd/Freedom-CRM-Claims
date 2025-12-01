@@ -282,7 +282,7 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="statuses" className="space-y-6">
-        <TabsList className="flex flex-col md:flex-row h-fit w-full md:w-auto overflow-x-auto md:flex-wrap bg-muted/40 p-2 gap-1">
+        <TabsList className="flex flex-col md:flex-row md:flex-wrap h-fit w-full bg-muted/40 p-2 gap-1">
           <TabsTrigger value="statuses" className="w-full md:w-auto justify-start text-base font-medium">Claim Statuses</TabsTrigger>
           <TabsTrigger value="insurance" className="w-full md:w-auto justify-start text-base font-medium">Insurance Companies</TabsTrigger>
           <TabsTrigger value="loss-types" className="w-full md:w-auto justify-start text-base font-medium">Loss Types</TabsTrigger>
