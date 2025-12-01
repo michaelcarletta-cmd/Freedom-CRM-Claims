@@ -66,14 +66,23 @@ export function UserManagementSettings() {
         .select("*")
         .order("email");
 
-      if (profilesError) throw profilesError;
+      if (profilesError) {
+        console.error("Profiles error:", profilesError);
+        throw profilesError;
+      }
 
       // Fetch all user roles
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
         .select("*");
 
-      if (rolesError) throw rolesError;
+      if (rolesError) {
+        console.error("Roles error:", rolesError);
+        throw rolesError;
+      }
+
+      console.log("Fetched profiles:", profiles);
+      console.log("Fetched roles:", roles);
 
       // Combine profiles with their roles, only show users who have at least one role
       const usersWithRoles: UserWithRoles[] = (profiles || [])
@@ -83,12 +92,13 @@ export function UserManagementSettings() {
         }))
         .filter((user) => user.roles.length > 0);
 
+      console.log("Users with roles:", usersWithRoles);
       setUsers(usersWithRoles);
     } catch (error: any) {
       console.error("Error fetching users:", error);
       toast({
         title: "Error",
-        description: "Failed to load users",
+        description: `Failed to load users: ${error.message}`,
         variant: "destructive",
       });
     } finally {
