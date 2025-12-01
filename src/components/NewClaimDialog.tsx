@@ -13,6 +13,8 @@ import { useNavigate } from "react-router-dom";
 interface InsuranceCompany {
   id: string;
   name: string;
+  phone: string | null;
+  email: string | null;
 }
 
 interface LossType {
@@ -46,6 +48,8 @@ export function NewClaimDialog() {
     claimNumber: "",
     policyNumber: "",
     insuranceCompanyId: "",
+    insurancePhone: "",
+    insuranceEmail: "",
     lossTypeId: "",
     lossDate: "",
     lossDescription: "",
@@ -61,7 +65,7 @@ export function NewClaimDialog() {
   const fetchDropdownData = async () => {
     try {
       const [insuranceRes, lossTypesRes, referrersRes] = await Promise.all([
-        supabase.from("insurance_companies").select("id, name").eq("is_active", true).order("name"),
+        supabase.from("insurance_companies").select("id, name, phone, email").eq("is_active", true).order("name"),
         supabase.from("loss_types").select("id, name").eq("is_active", true).order("name"),
         supabase.from("referrers").select("id, name, company").eq("is_active", true).order("name"),
       ]);
@@ -83,6 +87,16 @@ export function NewClaimDialog() {
     }
   };
 
+  const handleInsuranceCompanyChange = (companyId: string) => {
+    const selectedCompany = insuranceCompanies.find((c) => c.id === companyId);
+    setFormData({
+      ...formData,
+      insuranceCompanyId: companyId,
+      insurancePhone: selectedCompany?.phone || "",
+      insuranceEmail: selectedCompany?.email || "",
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -98,6 +112,8 @@ export function NewClaimDialog() {
           policyholder_email: formData.policyholderEmail,
           policyholder_address: formData.policyholderAddress,
           insurance_company_id: formData.insuranceCompanyId || null,
+          insurance_phone: formData.insurancePhone || null,
+          insurance_email: formData.insuranceEmail || null,
           loss_type_id: formData.lossTypeId || null,
           loss_date: formData.lossDate || null,
           loss_description: formData.lossDescription || null,
@@ -123,6 +139,8 @@ export function NewClaimDialog() {
         claimNumber: "",
         policyNumber: "",
         insuranceCompanyId: "",
+        insurancePhone: "",
+        insuranceEmail: "",
         lossTypeId: "",
         lossDate: "",
         lossDescription: "",
@@ -235,7 +253,7 @@ export function NewClaimDialog() {
                 <Label htmlFor="insuranceCompany">Insurance Company</Label>
                 <Select
                   value={formData.insuranceCompanyId}
-                  onValueChange={(value) => setFormData({ ...formData, insuranceCompanyId: value })}
+                  onValueChange={handleInsuranceCompanyChange}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select insurance company" />

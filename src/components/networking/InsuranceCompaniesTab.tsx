@@ -12,13 +12,18 @@ import { Trash2 } from "lucide-react";
 interface InsuranceCompany {
   id: string;
   name: string;
+  phone: string | null;
+  email: string | null;
   is_active: boolean;
 }
 
 export const InsuranceCompaniesTab = () => {
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<InsuranceCompany | null>(null);
   const [newCompanyName, setNewCompanyName] = useState("");
+  const [newCompanyPhone, setNewCompanyPhone] = useState("");
+  const [newCompanyEmail, setNewCompanyEmail] = useState("");
 
   useEffect(() => {
     fetchCompanies();
@@ -44,19 +49,53 @@ export const InsuranceCompaniesTab = () => {
       return;
     }
 
-    const { error } = await supabase
-      .from("insurance_companies")
-      .insert([{ name: newCompanyName }]);
+    if (editingCompany) {
+      const { error } = await supabase
+        .from("insurance_companies")
+        .update({
+          name: newCompanyName,
+          phone: newCompanyPhone || null,
+          email: newCompanyEmail || null,
+        })
+        .eq("id", editingCompany.id);
 
-    if (error) {
-      toast.error("Failed to add company");
-      return;
+      if (error) {
+        toast.error("Failed to update company");
+        return;
+      }
+
+      toast.success("Company updated");
+    } else {
+      const { error } = await supabase
+        .from("insurance_companies")
+        .insert([{
+          name: newCompanyName,
+          phone: newCompanyPhone || null,
+          email: newCompanyEmail || null,
+        }]);
+
+      if (error) {
+        toast.error("Failed to add company");
+        return;
+      }
+
+      toast.success("Company added");
     }
 
-    toast.success("Company added");
     setNewCompanyName("");
+    setNewCompanyPhone("");
+    setNewCompanyEmail("");
+    setEditingCompany(null);
     setDialogOpen(false);
     fetchCompanies();
+  };
+
+  const handleEdit = (company: InsuranceCompany) => {
+    setEditingCompany(company);
+    setNewCompanyName(company.name);
+    setNewCompanyPhone(company.phone || "");
+    setNewCompanyEmail(company.email || "");
+    setDialogOpen(true);
   };
 
   const handleToggleActive = async (company: InsuranceCompany) => {
@@ -93,15 +132,23 @@ export const InsuranceCompaniesTab = () => {
 
   return (
     <div className="space-y-4">
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        setDialogOpen(open);
+        if (!open) {
+          setNewCompanyName("");
+          setNewCompanyPhone("");
+          setNewCompanyEmail("");
+          setEditingCompany(null);
+        }
+      }}>
         <DialogTrigger asChild>
-          <Button onClick={() => setNewCompanyName("")}>
+          <Button>
             Add Insurance Company
           </Button>
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Insurance Company</DialogTitle>
+            <DialogTitle>{editingCompany ? "Edit" : "Add"} Insurance Company</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -112,8 +159,25 @@ export const InsuranceCompaniesTab = () => {
                 placeholder="Enter company name"
               />
             </div>
+            <div>
+              <Label>Phone</Label>
+              <Input
+                value={newCompanyPhone}
+                onChange={(e) => setNewCompanyPhone(e.target.value)}
+                placeholder="Enter phone number"
+              />
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={newCompanyEmail}
+                onChange={(e) => setNewCompanyEmail(e.target.value)}
+                placeholder="Enter email address"
+              />
+            </div>
             <Button onClick={handleAdd} className="w-full">
-              Add Company
+              {editingCompany ? "Update" : "Add"} Company
             </Button>
           </div>
         </DialogContent>
@@ -128,8 +192,21 @@ export const InsuranceCompaniesTab = () => {
             >
               <div className="flex-1">
                 <div className="font-medium">{company.name}</div>
+                {(company.phone || company.email) && (
+                  <div className="text-sm text-muted-foreground mt-1 space-y-0.5">
+                    {company.phone && <div>Phone: {company.phone}</div>}
+                    {company.email && <div>Email: {company.email}</div>}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleEdit(company)}
+                >
+                  Edit
+                </Button>
                 <Switch
                   checked={company.is_active}
                   onCheckedChange={() => handleToggleActive(company)}

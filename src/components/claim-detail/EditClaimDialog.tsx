@@ -82,7 +82,7 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
 
     const { data: insuranceCompaniesData } = await supabase
       .from("insurance_companies")
-      .select("*")
+      .select("id, name, phone, email, is_active, created_at, updated_at")
       .eq("is_active", true)
       .order("name");
 
@@ -109,6 +109,8 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
       ...prev,
       insurance_company_id: insuranceCompanyId,
       insurance_company: selectedCompany?.name || "",
+      insurance_phone: selectedCompany?.phone || "",
+      insurance_email: selectedCompany?.email || "",
     }));
   };
 
