@@ -629,7 +629,7 @@ export type Database = {
           adjuster_name: string | null
           adjuster_phone: string | null
           claim_amount: number | null
-          claim_number: string
+          claim_number: string | null
           client_id: string | null
           created_at: string | null
           id: string
@@ -658,7 +658,7 @@ export type Database = {
           adjuster_name?: string | null
           adjuster_phone?: string | null
           claim_amount?: number | null
-          claim_number: string
+          claim_number?: string | null
           client_id?: string | null
           created_at?: string | null
           id?: string
@@ -687,7 +687,7 @@ export type Database = {
           adjuster_name?: string | null
           adjuster_phone?: string | null
           claim_amount?: number | null
-          claim_number?: string
+          claim_number?: string | null
           client_id?: string | null
           created_at?: string | null
           id?: string
