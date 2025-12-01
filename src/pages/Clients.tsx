@@ -12,7 +12,10 @@ interface Client {
   name: string;
   email: string | null;
   phone: string | null;
-  address: string | null;
+  street: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
 }
 
 const Clients = () => {
@@ -111,6 +114,13 @@ const Clients = () => {
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Phone className="h-4 w-4" />
                     <span>{client.phone}</span>
+                  </div>
+                )}
+                {(client.street || client.city || client.state || client.zip_code) && (
+                  <div className="text-sm text-muted-foreground">
+                    {[client.street, client.city, client.state, client.zip_code]
+                      .filter(Boolean)
+                      .join(", ")}
                   </div>
                 )}
                 <Button variant="outline" className="w-full mt-2" asChild>

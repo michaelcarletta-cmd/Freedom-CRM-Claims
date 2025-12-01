@@ -17,7 +17,10 @@ interface Client {
   name: string;
   email: string | null;
   phone: string | null;
-  address: string | null;
+  street: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
 }
 
 interface EditClientDialogProps {
@@ -37,7 +40,10 @@ export const EditClientDialog = ({
     name: "",
     email: "",
     phone: "",
-    address: "",
+    street: "",
+    city: "",
+    state: "",
+    zipCode: "",
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -47,7 +53,10 @@ export const EditClientDialog = ({
         name: client.name || "",
         email: client.email || "",
         phone: client.phone || "",
-        address: client.address || "",
+        street: client.street || "",
+        city: client.city || "",
+        state: client.state || "",
+        zipCode: client.zip_code || "",
       });
     }
   }, [client]);
@@ -68,7 +77,10 @@ export const EditClientDialog = ({
           name: formData.name,
           email: formData.email || null,
           phone: formData.phone || null,
-          address: formData.address || null,
+          street: formData.street || null,
+          city: formData.city || null,
+          state: formData.state || null,
+          zip_code: formData.zipCode || null,
         })
         .eq("id", client.id);
 
@@ -124,14 +136,42 @@ export const EditClientDialog = ({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="address">Address</Label>
-            <Textarea
-              id="address"
-              value={formData.address}
-              onChange={(e) => handleChange("address", e.target.value)}
-              rows={3}
-            />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="street">Street</Label>
+              <Input
+                id="street"
+                value={formData.street}
+                onChange={(e) => handleChange("street", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="city">City</Label>
+              <Input
+                id="city"
+                value={formData.city}
+                onChange={(e) => handleChange("city", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="state">State</Label>
+              <Input
+                id="state"
+                value={formData.state}
+                onChange={(e) => handleChange("state", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="zip">ZIP Code</Label>
+              <Input
+                id="zip"
+                value={formData.zipCode}
+                onChange={(e) => handleChange("zipCode", e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="flex gap-3 justify-end">
