@@ -15,7 +15,7 @@ interface Update {
   content: string;
   created_at: string;
   user_id: string;
-  recipients: string[];
+  recipients: any;
   profiles: {
     full_name: string | null;
     email: string;
@@ -81,21 +81,34 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
   };
 
   const fetchUpdates = async () => {
-    const { data } = await supabase
+    const { data: updatesData } = await supabase
       .from("claim_updates")
       .select(`
         id,
         content,
         created_at,
         user_id,
-        recipients,
-        profiles (full_name, email)
+        recipients
       `)
       .eq("claim_id", claimId)
       .order("created_at", { ascending: false });
 
-    if (data) {
-      setUpdates(data as Update[]);
+    if (updatesData) {
+      // Fetch profiles separately for each unique user_id
+      const userIds = [...new Set(updatesData.map(u => u.user_id).filter(Boolean))];
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", userIds);
+
+      const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+      
+      const updatesWithProfiles = updatesData.map(update => ({
+        ...update,
+        profiles: update.user_id ? profilesMap.get(update.user_id) || null : null
+      }));
+
+      setUpdates(updatesWithProfiles);
     }
   };
 
