@@ -116,8 +116,19 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
     setLoading(true);
     try {
       const updateData: any = { ...formData };
-      if (formData.claim_amount) {
+      
+      // Convert empty strings to null for optional fields
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === "") {
+          updateData[key] = null;
+        }
+      });
+      
+      // Parse claim amount if present
+      if (formData.claim_amount && formData.claim_amount !== "") {
         updateData.claim_amount = parseFloat(formData.claim_amount);
+      } else {
+        updateData.claim_amount = null;
       }
 
       const { data, error } = await supabase
