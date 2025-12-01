@@ -67,7 +67,7 @@ serve(async (req) => {
   }
 
   try {
-    const { claimId, question } = await req.json();
+    const { claimId, question, messages } = await req.json();
     
     if (!claimId || !question) {
       return new Response(
@@ -198,6 +198,26 @@ Always provide:
 
 Be professional, ethical, and focused on helping the user achieve a fair settlement. Never suggest fraudulent activities.`;
 
+    // Build conversation history with claim context
+    const conversationMessages = [];
+    
+    // Add system prompt with claim context
+    conversationMessages.push({ 
+      role: "system", 
+      content: `${systemPrompt}\n\nCurrent Claim Context:\n${claimContext}${webSearchResults}` 
+    });
+    
+    // Add previous conversation history if provided
+    if (messages && messages.length > 0) {
+      conversationMessages.push(...messages);
+    }
+    
+    // Add current question
+    conversationMessages.push({ 
+      role: "user", 
+      content: question 
+    });
+
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -206,10 +226,7 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Claim Context:\n${claimContext}${webSearchResults}\n\nQuestion: ${question}` }
-        ],
+        messages: conversationMessages,
         temperature: 0.7,
         max_tokens: 1500,
       }),
