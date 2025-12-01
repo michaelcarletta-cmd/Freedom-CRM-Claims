@@ -234,34 +234,34 @@ export function NewClaimDialog() {
       ].filter(Boolean);
       const fullAddress = addressParts.length > 0 ? addressParts.join(", ") : null;
 
-      // Now create the claim with the client_id
+      // Now create the claim via a backend helper function that enforces roles
       const { data, error } = await supabase
-        .from("claims")
-        .insert({
-          claim_number: formData.claimNumber || null,
-          policy_number: formData.policyNumber || null,
-          policyholder_name: formData.policyholderName || null,
-          policyholder_phone: formData.policyholderPhone || null,
-          policyholder_email: formData.policyholderEmail || null,
-          policyholder_address: fullAddress,
-          insurance_company_id: formData.insuranceCompanyId || null,
-          insurance_phone: formData.insurancePhone || null,
-          insurance_email: formData.insuranceEmail || null,
-          loss_type_id: formData.lossTypeId || null,
-          loss_date: formData.lossDate || null,
-          loss_description: formData.lossDescription || null,
-          referrer_id: formData.referrerId || null,
-          client_id: clientId,
-          status: "open",
+        .rpc("create_claim_for_staff", {
+          p_claim_number: formData.claimNumber || null,
+          p_policy_number: formData.policyNumber || null,
+          p_policyholder_name: formData.policyholderName || null,
+          p_policyholder_phone: formData.policyholderPhone || null,
+          p_policyholder_email: formData.policyholderEmail || null,
+          p_policyholder_address: fullAddress,
+          p_insurance_company_id: formData.insuranceCompanyId || null,
+          p_insurance_phone: formData.insurancePhone || null,
+          p_insurance_email: formData.insuranceEmail || null,
+          p_loss_type_id: formData.lossTypeId || null,
+          p_loss_date: formData.lossDate || null,
+          p_loss_description: formData.lossDescription || null,
+          p_referrer_id: formData.referrerId || null,
+          p_client_id: clientId,
         })
-        .select()
         .single();
 
       if (error) throw error;
 
+      const claim = data as { id: string } | null;
+
       // Auto-assign staff member who created the claim
-      if (data?.id) {
-        const { data: { user } } = await supabase.auth.getUser();
+      if (claim?.id) {
+        const { data: userData } = await supabase.auth.getUser();
+        const user = userData?.user;
         if (user) {
           const { data: roles } = await supabase
             .from("user_roles")
@@ -274,7 +274,7 @@ export function NewClaimDialog() {
           if (isStaff) {
             await supabase
               .from("claim_staff")
-              .insert({ claim_id: data.id, staff_id: user.id });
+              .insert({ claim_id: claim.id, staff_id: user.id });
           }
         }
       }
@@ -306,8 +306,8 @@ export function NewClaimDialog() {
       });
 
       // Navigate to the new claim
-      if (data?.id) {
-        navigate(`/claims/${data.id}`);
+      if (claim?.id) {
+        navigate(`/claims/${claim.id}`);
       }
     } catch (error: any) {
       console.error("Error creating claim:", error);

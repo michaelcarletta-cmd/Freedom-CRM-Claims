@@ -1367,6 +1367,59 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_claim_for_staff: {
+        Args: {
+          p_claim_number: string
+          p_client_id: string
+          p_insurance_company_id: string
+          p_insurance_email: string
+          p_insurance_phone: string
+          p_loss_date: string
+          p_loss_description: string
+          p_loss_type_id: string
+          p_policy_number: string
+          p_policyholder_address: string
+          p_policyholder_email: string
+          p_policyholder_name: string
+          p_policyholder_phone: string
+          p_referrer_id: string
+        }
+        Returns: {
+          adjuster_email: string | null
+          adjuster_name: string | null
+          adjuster_phone: string | null
+          claim_amount: number | null
+          claim_number: string | null
+          client_id: string | null
+          created_at: string | null
+          id: string
+          insurance_company: string | null
+          insurance_company_id: string | null
+          insurance_email: string | null
+          insurance_phone: string | null
+          loan_number: string | null
+          loss_date: string | null
+          loss_description: string | null
+          loss_type: string | null
+          loss_type_id: string | null
+          mortgage_company_id: string | null
+          policy_number: string | null
+          policyholder_address: string | null
+          policyholder_email: string | null
+          policyholder_name: string
+          policyholder_phone: string | null
+          referrer_id: string | null
+          ssn_last_four: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "claims"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
