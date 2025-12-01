@@ -87,15 +87,15 @@ function AppRoutes() {
     <Routes>
       <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
       <Route path="/sign" element={<Sign />} />
-      <Route path="/" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Index /></ProtectedRoute>} />
-      <Route path="/claims" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Claims /></ProtectedRoute>} />
-      <Route path="/claims/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><ClaimDetail /></ProtectedRoute>} />
-      <Route path="/tasks" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Tasks /></ProtectedRoute>} />
-      <Route path="/clients" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Clients /></ProtectedRoute>} />
-      <Route path="/clients/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><ClientDetail /></ProtectedRoute>} />
-      <Route path="/networking" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Networking /></ProtectedRoute>} />
-      <Route path="/templates" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Templates /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><Settings /></ProtectedRoute>} />
+      <Route path="/" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Index /></AppLayout></ProtectedRoute>} />
+      <Route path="/claims" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Claims /></AppLayout></ProtectedRoute>} />
+      <Route path="/claims/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><ClaimDetail /></AppLayout></ProtectedRoute>} />
+      <Route path="/tasks" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Tasks /></AppLayout></ProtectedRoute>} />
+      <Route path="/clients" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
+      <Route path="/clients/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><ClientDetail /></AppLayout></ProtectedRoute>} />
+      <Route path="/networking" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Networking /></AppLayout></ProtectedRoute>} />
+      <Route path="/templates" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Templates /></AppLayout></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Settings /></AppLayout></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
@@ -108,9 +108,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <div className="dark">
-          <AppLayout>
-            <AppRoutes />
-          </AppLayout>
+          <AppRoutes />
         </div>
       </BrowserRouter>
     </TooltipProvider>
