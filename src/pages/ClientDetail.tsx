@@ -26,7 +26,10 @@ interface Client {
   name: string;
   email: string | null;
   phone: string | null;
-  address: string | null;
+  street: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
   created_at: string;
 }
 
@@ -267,7 +270,11 @@ const ClientDetail = () => {
                 <MapPin className="h-5 w-5 text-primary" />
                 <div>
                   <p className="text-sm text-muted-foreground">Address</p>
-                  <p className="text-sm font-medium">{mockClient.address}</p>
+                  <p className="text-sm font-medium">
+                    {[mockClient.street, mockClient.city, mockClient.state, mockClient.zip_code]
+                      .filter(Boolean)
+                      .join(", ") || "—"}
+                  </p>
                 </div>
               </div>
             </CardContent>
