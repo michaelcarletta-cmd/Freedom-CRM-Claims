@@ -11,12 +11,17 @@ import { Switch } from "@/components/ui/switch";
 interface InsuranceCompany {
   id: string;
   name: string;
+  phone: string | null;
+  email: string | null;
   is_active: boolean;
 }
 
 export function InsuranceCompaniesSettings() {
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
   const [newCompanyName, setNewCompanyName] = useState("");
+  const [newCompanyPhone, setNewCompanyPhone] = useState("");
+  const [newCompanyEmail, setNewCompanyEmail] = useState("");
+  const [editingCompany, setEditingCompany] = useState<InsuranceCompany | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -48,28 +53,67 @@ export function InsuranceCompaniesSettings() {
 
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from("insurance_companies")
-        .insert({ name: newCompanyName.trim() });
+      if (editingCompany) {
+        const { error } = await supabase
+          .from("insurance_companies")
+          .update({
+            name: newCompanyName.trim(),
+            phone: newCompanyPhone.trim() || null,
+            email: newCompanyEmail.trim() || null,
+          })
+          .eq("id", editingCompany.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: "Success",
-        description: "Insurance company added",
-      });
+        toast({
+          title: "Success",
+          description: "Insurance company updated",
+        });
+      } else {
+        const { error } = await supabase
+          .from("insurance_companies")
+          .insert({
+            name: newCompanyName.trim(),
+            phone: newCompanyPhone.trim() || null,
+            email: newCompanyEmail.trim() || null,
+          });
+
+        if (error) throw error;
+
+        toast({
+          title: "Success",
+          description: "Insurance company added",
+        });
+      }
 
       setNewCompanyName("");
+      setNewCompanyPhone("");
+      setNewCompanyEmail("");
+      setEditingCompany(null);
       fetchCompanies();
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to add insurance company",
+        description: error.message || "Failed to save insurance company",
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEdit = (company: InsuranceCompany) => {
+    setEditingCompany(company);
+    setNewCompanyName(company.name);
+    setNewCompanyPhone(company.phone || "");
+    setNewCompanyEmail(company.email || "");
+  };
+
+  const handleCancel = () => {
+    setEditingCompany(null);
+    setNewCompanyName("");
+    setNewCompanyPhone("");
+    setNewCompanyEmail("");
   };
 
   const handleToggleActive = async (id: string, isActive: boolean) => {
@@ -125,22 +169,53 @@ export function InsuranceCompaniesSettings() {
   return (
     <div className="space-y-6">
       <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Add New Insurance Company</h3>
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <Label htmlFor="newCompany">Company Name</Label>
+        <h3 className="text-lg font-semibold mb-4">
+          {editingCompany ? "Edit Insurance Company" : "Add New Insurance Company"}
+        </h3>
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="newCompany">Company Name *</Label>
             <Input
               id="newCompany"
               value={newCompanyName}
               onChange={(e) => setNewCompanyName(e.target.value)}
               placeholder="Enter insurance company name"
-              onKeyPress={(e) => e.key === "Enter" && handleAdd()}
             />
           </div>
-          <Button onClick={handleAdd} disabled={loading || !newCompanyName.trim()} className="mt-auto">
-            <Plus className="h-4 w-4 mr-2" />
-            Add
-          </Button>
+          <div>
+            <Label htmlFor="companyPhone">Phone</Label>
+            <Input
+              id="companyPhone"
+              value={newCompanyPhone}
+              onChange={(e) => setNewCompanyPhone(e.target.value)}
+              placeholder="Enter phone number"
+            />
+          </div>
+          <div>
+            <Label htmlFor="companyEmail">Email</Label>
+            <Input
+              id="companyEmail"
+              type="email"
+              value={newCompanyEmail}
+              onChange={(e) => setNewCompanyEmail(e.target.value)}
+              placeholder="Enter email address"
+            />
+          </div>
+          <div className="flex gap-3">
+            {editingCompany && (
+              <Button onClick={handleCancel} variant="outline" className="flex-1">
+                Cancel
+              </Button>
+            )}
+            <Button 
+              onClick={handleAdd} 
+              disabled={loading || !newCompanyName.trim()} 
+              className="flex-1"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              {editingCompany ? "Update" : "Add"}
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -152,8 +227,23 @@ export function InsuranceCompaniesSettings() {
               key={company.id}
               className="flex items-center justify-between p-3 border border-border rounded-lg"
             >
-              <span className="text-foreground font-medium">{company.name}</span>
+              <div className="flex-1">
+                <div className="font-medium">{company.name}</div>
+                {(company.phone || company.email) && (
+                  <div className="text-sm text-muted-foreground mt-1 space-y-0.5">
+                    {company.phone && <div>Phone: {company.phone}</div>}
+                    {company.email && <div>Email: {company.email}</div>}
+                  </div>
+                )}
+              </div>
               <div className="flex items-center gap-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleEdit(company)}
+                >
+                  Edit
+                </Button>
                 <div className="flex items-center gap-2">
                   <Label htmlFor={`active-${company.id}`} className="text-sm">Active</Label>
                   <Switch
