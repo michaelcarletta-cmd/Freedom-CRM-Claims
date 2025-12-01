@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, Trash2, Shield } from "lucide-react";
+import { UserPlus, Trash2, Shield, UserX } from "lucide-react";
 
 interface Profile {
   id: string;
@@ -216,6 +216,52 @@ export function UserManagementSettings() {
     }
   };
 
+  const deleteUser = async (userId: string, userName: string) => {
+    // Prevent deleting yourself
+    if (userId === currentUserId) {
+      toast({
+        title: "Cannot Delete Your Own Account",
+        description: "You cannot delete your own account. Ask another admin if needed.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to PERMANENTLY DELETE ${userName}? This will remove their account, all roles, and cannot be undone.`)) return;
+
+    try {
+      // First delete all their roles
+      const { error: rolesError } = await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId);
+
+      if (rolesError) throw rolesError;
+
+      // Then delete their profile
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("id", userId);
+
+      if (profileError) throw profileError;
+
+      toast({
+        title: "Success",
+        description: "User deleted successfully",
+      });
+
+      fetchUsers();
+    } catch (error: any) {
+      console.error("Failed to delete user", error);
+      toast({
+        title: "Error",
+        description: error?.message || error?.details || "Failed to delete user",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-8 text-muted-foreground">Loading users...</div>;
   }
@@ -321,6 +367,15 @@ export function UserManagementSettings() {
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 )}
+                
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  onClick={() => deleteUser(user.id, user.full_name || user.email)}
+                  title="Permanently delete this user"
+                >
+                  <UserX className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           ))}
