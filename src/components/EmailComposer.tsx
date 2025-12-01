@@ -1,37 +1,113 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Send, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+
+interface Recipient {
+  email: string;
+  name: string;
+  type: string;
+}
 
 interface EmailComposerProps {
   isOpen: boolean;
   onClose: () => void;
-  toEmail?: string;
-  toName?: string;
-  subject?: string;
-  claimNumber?: string;
+  claimId: string;
+  claim: any;
 }
 
 export function EmailComposer({
   isOpen,
   onClose,
-  toEmail = "",
-  toName = "",
-  subject = "",
-  claimNumber = ""
+  claimId,
+  claim
 }: EmailComposerProps) {
-  const [to, setTo] = useState(toEmail);
-  const [emailSubject, setEmailSubject] = useState(subject);
+  const [selectedRecipient, setSelectedRecipient] = useState<Recipient | null>(null);
+  const [emailSubject, setEmailSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
 
+  // Build recipients list from claim data
+  const recipients: Recipient[] = [];
+  
+  if (claim.policyholder_email) {
+    recipients.push({
+      email: claim.policyholder_email,
+      name: claim.policyholder_name,
+      type: "policyholder"
+    });
+  }
+  
+  if (claim.adjuster_email) {
+    recipients.push({
+      email: claim.adjuster_email,
+      name: claim.adjuster_name || "Adjuster",
+      type: "adjuster"
+    });
+  }
+
+  // Fetch contractors
+  const { data: contractors } = useQuery({
+    queryKey: ["claim-contractors", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_contractors")
+        .select(`
+          contractor_id,
+          profiles!inner(email, full_name)
+        `)
+        .eq("claim_id", claimId);
+      if (error) throw error;
+      return data;
+    },
+    enabled: isOpen,
+  });
+
+  // Add contractors to recipients
+  contractors?.forEach((contractor: any) => {
+    if (contractor.profiles?.email) {
+      recipients.push({
+        email: contractor.profiles.email,
+        name: contractor.profiles.full_name || "Contractor",
+        type: "contractor"
+      });
+    }
+  });
+
+  // Fetch referrer
+  const { data: referrer } = useQuery({
+    queryKey: ["claim-referrer", claim.referrer_id],
+    queryFn: async () => {
+      if (!claim.referrer_id) return null;
+      const { data, error } = await supabase
+        .from("referrers")
+        .select("email, name")
+        .eq("id", claim.referrer_id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: isOpen && !!claim.referrer_id,
+  });
+
+  // Add referrer to recipients
+  if (referrer?.email) {
+    recipients.push({
+      email: referrer.email,
+      name: referrer.name,
+      type: "referrer"
+    });
+  }
+
   const handleSend = async () => {
-    if (!to || !emailSubject || !body) {
+    if (!selectedRecipient || !emailSubject || !body) {
       toast.error("Please fill in all fields");
       return;
     }
@@ -40,10 +116,12 @@ export function EmailComposer({
     try {
       const { error } = await supabase.functions.invoke("send-email", {
         body: {
-          to,
+          to: selectedRecipient.email,
           subject: emailSubject,
           body,
-          claimNumber
+          claimId,
+          recipientName: selectedRecipient.name,
+          recipientType: selectedRecipient.type,
         }
       });
 
@@ -51,7 +129,7 @@ export function EmailComposer({
 
       toast.success("Email sent successfully");
       onClose();
-      setTo("");
+      setSelectedRecipient(null);
       setEmailSubject("");
       setBody("");
     } catch (error: any) {
@@ -67,18 +145,30 @@ export function EmailComposer({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Compose Email</DialogTitle>
+          <DialogDescription>Send an email to claim contacts</DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="to">To</Label>
-            <Input
-              id="to"
-              type="email"
-              placeholder="recipient@example.com"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-            />
+            <Label htmlFor="recipient">To</Label>
+            <Select
+              value={selectedRecipient?.email}
+              onValueChange={(email) => {
+                const recipient = recipients.find(r => r.email === email);
+                setSelectedRecipient(recipient || null);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select recipient" />
+              </SelectTrigger>
+              <SelectContent>
+                {recipients.map((recipient) => (
+                  <SelectItem key={recipient.email} value={recipient.email}>
+                    {recipient.name} ({recipient.type}) - {recipient.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

@@ -1,37 +1,37 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Mail, Send, Reply } from "lucide-react";
+import { Mail, Send, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { EmailComposer } from "@/components/EmailComposer";
-
-interface Email {
-  id: string;
-  from: string;
-  to: string;
-  subject: string;
-  body: string;
-  timestamp: string;
-  read: boolean;
-}
-
-// No mock data - all emails will be managed by users
-const mockEmails: Email[] = [];
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { format } from "date-fns";
 
 interface ClaimEmailsProps {
   claimId: string;
-  policyholderEmail?: string;
-  policyholderName?: string;
-  claimNumber?: string;
+  claim: any;
 }
 
-export const ClaimEmails = ({ claimId, policyholderEmail, policyholderName, claimNumber }: ClaimEmailsProps) => {
+export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
   const [isComposerOpen, setIsComposerOpen] = useState(false);
+
+  const { data: emails, isLoading } = useQuery({
+    queryKey: ["emails", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("emails")
+        .select("*")
+        .eq("claim_id", claimId)
+        .order("sent_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Email Thread</h3>
+        <h3 className="text-lg font-semibold">Email Communications</h3>
         <Button 
           className="bg-primary hover:bg-primary/90"
           onClick={() => setIsComposerOpen(true)}
@@ -41,49 +41,52 @@ export const ClaimEmails = ({ claimId, policyholderEmail, policyholderName, clai
         </Button>
       </div>
 
-      {mockEmails.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          No emails logged yet. Click "Compose Email" to send one.
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-6 h-6 animate-spin" />
         </div>
-      ) : (
+      ) : emails && emails.length > 0 ? (
         <div className="space-y-3">
-          {mockEmails.map((email, index) => (
-            <div key={email.id}>
-              <div className="p-4 rounded-lg border border-border hover:bg-muted/30 transition-colors">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-primary" />
-                    <div>
-                      <p className="text-sm font-medium">{email.subject}</p>
-                      <p className="text-xs text-muted-foreground">
-                        From: {email.from}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{email.timestamp}</span>
-                    {!email.read && <Badge variant="default" className="h-5 text-xs">New</Badge>}
+          {emails.map((email) => (
+            <div key={email.id} className="p-4 rounded-lg border border-border hover:bg-muted/30 transition-colors">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-primary" />
+                  <div>
+                    <p className="text-sm font-medium">{email.subject}</p>
+                    <p className="text-xs text-muted-foreground">
+                      To: {email.recipient_name || email.recipient_email} ({email.recipient_email})
+                    </p>
                   </div>
                 </div>
-                <p className="text-sm text-foreground mb-3">{email.body}</p>
-                <Button variant="outline" size="sm">
-                  <Reply className="h-3 w-3 mr-1" />
-                  Reply
-                </Button>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {format(new Date(email.sent_at), "MMM d, yyyy 'at' h:mm a")}
+                  </span>
+                  {email.recipient_type && (
+                    <Badge variant="outline" className="text-xs">
+                      {email.recipient_type}
+                    </Badge>
+                  )}
+                </div>
               </div>
-              {index < mockEmails.length - 1 && <Separator className="my-3" />}
+              <div className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-3">
+                {email.body}
+              </div>
             </div>
           ))}
+        </div>
+      ) : (
+        <div className="text-center py-8 text-muted-foreground">
+          No emails logged yet. Click "Compose Email" to send one.
         </div>
       )}
 
       <EmailComposer
         isOpen={isComposerOpen}
         onClose={() => setIsComposerOpen(false)}
-        toEmail={policyholderEmail}
-        toName={policyholderName}
-        subject={claimNumber ? `Claim ${claimNumber}` : ""}
-        claimNumber={claimNumber}
+        claimId={claimId}
+        claim={claim}
       />
     </div>
   );

@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const corsHeaders = {
@@ -12,10 +13,33 @@ serve(async (req) => {
   }
 
   try {
-    const { to, subject, body, claimNumber } = await req.json();
+    const { to, subject, body, claimId, recipientName, recipientType } = await req.json();
 
     if (!to || !subject || !body) {
       throw new Error("Missing required fields");
+    }
+
+    // Get authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('No authorization header');
+    }
+
+    // Create Supabase client
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: { Authorization: authHeader },
+        },
+      }
+    );
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error('Unauthorized');
     }
 
     const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
@@ -26,7 +50,6 @@ serve(async (req) => {
       subject: subject,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          ${claimNumber ? `<p style="color: #666; font-size: 12px; margin-bottom: 20px;">Claim: ${claimNumber}</p>` : ''}
           <div style="white-space: pre-wrap;">${body}</div>
           <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
           <p style="color: #999; font-size: 11px;">
@@ -37,6 +60,26 @@ serve(async (req) => {
     });
 
     console.log(`Email sent to ${to}:`, emailResponse);
+
+    // Log email to database if claimId provided
+    if (claimId) {
+      const { error: dbError } = await supabase
+        .from('emails')
+        .insert({
+          claim_id: claimId,
+          sent_by: user.id,
+          recipient_email: to,
+          recipient_name: recipientName,
+          recipient_type: recipientType,
+          subject: subject,
+          body: body,
+        });
+
+      if (dbError) {
+        console.error('Failed to log email to database:', dbError);
+        // Don't throw error - email was sent successfully
+      }
+    }
 
     return new Response(
       JSON.stringify({ success: true }),

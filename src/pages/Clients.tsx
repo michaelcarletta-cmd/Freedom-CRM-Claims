@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Mail, Phone, Edit, Send } from "lucide-react";
+import { Plus, Mail, Phone, Edit } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { NewClientDialog } from "@/components/NewClientDialog";
 import { EditClientDialog } from "@/components/EditClientDialog";
-import { EmailComposer } from "@/components/EmailComposer";
 
 interface Client {
   id: string;
@@ -24,7 +23,6 @@ const Clients = () => {
   const [loading, setLoading] = useState(true);
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isEmailComposerOpen, setIsEmailComposerOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   const fetchClients = async () => {
@@ -52,13 +50,6 @@ const Clients = () => {
     e.stopPropagation();
     setSelectedClient(client);
     setIsEditDialogOpen(true);
-  };
-
-  const handleEmailClick = (client: Client, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setSelectedClient(client);
-    setIsEmailComposerOpen(true);
   };
 
   if (loading) {
@@ -133,17 +124,6 @@ const Clients = () => {
                   </div>
                 )}
                 <div className="flex gap-2 mt-2">
-                  {client.email && (
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="flex-1"
-                      onClick={(e) => handleEmailClick(client, e)}
-                    >
-                      <Send className="h-4 w-4 mr-1" />
-                      Email
-                    </Button>
-                  )}
                   <Button variant="outline" size="sm" className="flex-1" asChild>
                     <Link to={`/clients/${client.id}`}>View Profile</Link>
                   </Button>
@@ -168,16 +148,6 @@ const Clients = () => {
         }}
         client={selectedClient}
         onClientUpdated={fetchClients}
-      />
-
-      <EmailComposer
-        isOpen={isEmailComposerOpen}
-        onClose={() => {
-          setIsEmailComposerOpen(false);
-          setSelectedClient(null);
-        }}
-        toEmail={selectedClient?.email || ""}
-        toName={selectedClient?.name || ""}
       />
     </div>
   );
