@@ -13,10 +13,12 @@ import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
 import { ClaimTemplates } from "@/components/claim-detail/ClaimTemplates";
 import { ClaimAccessManagement } from "@/components/claim-detail/ClaimAccessManagement";
+import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Edit } from "lucide-react";
 
 const ClaimDetail = () => {
   const { id } = useParams();
+  const { userRole } = useAuth();
   const [claim, setClaim] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -120,7 +122,7 @@ const ClaimDetail = () => {
         </TabsContent>
 
         <TabsContent value="accounting" className="mt-6">
-          <ClaimAccounting claim={claim} />
+          <ClaimAccounting claim={claim} userRole={userRole} />
         </TabsContent>
 
         <TabsContent value="templates" className="mt-6">

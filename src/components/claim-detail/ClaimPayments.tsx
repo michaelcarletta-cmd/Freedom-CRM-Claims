@@ -13,6 +13,7 @@ import { DollarSign, Trash2 } from "lucide-react";
 
 interface ClaimPaymentsProps {
   claimId: string;
+  isAdmin: boolean;
 }
 
 interface Payment {
@@ -37,7 +38,7 @@ interface Referrer {
   name: string;
 }
 
-export function ClaimPayments({ claimId }: ClaimPaymentsProps) {
+export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [referrers, setReferrers] = useState<Referrer[]>([]);
@@ -200,10 +201,11 @@ export function ClaimPayments({ claimId }: ClaimPaymentsProps) {
             <p className="text-sm text-muted-foreground">Total Payments</p>
             <p className="text-2xl font-bold text-primary">${totalPayments.toLocaleString()}</p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>Record Payment</Button>
-            </DialogTrigger>
+          {isAdmin && (
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>Record Payment</Button>
+              </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Record Payment</DialogTitle>
@@ -333,6 +335,7 @@ export function ClaimPayments({ claimId }: ClaimPaymentsProps) {
               </div>
             </DialogContent>
           </Dialog>
+          )}
         </div>
 
         {payments.length === 0 ? (
@@ -363,13 +366,15 @@ export function ClaimPayments({ claimId }: ClaimPaymentsProps) {
                     <div className="text-xs text-muted-foreground mt-1">{payment.notes}</div>
                   )}
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDelete(payment.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDelete(payment.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             ))}
           </div>
