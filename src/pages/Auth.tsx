@@ -44,6 +44,7 @@ export default function Auth() {
         emailRedirectTo: `${window.location.origin}/`,
         data: {
           full_name: fullName,
+          role: 'staff',
         },
       },
     });

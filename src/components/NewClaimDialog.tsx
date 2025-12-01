@@ -187,6 +187,7 @@ export function NewClaimDialog() {
               options: {
                 data: {
                   full_name: formData.policyholderName,
+                  role: 'client',
                 },
               },
             });
@@ -201,11 +202,6 @@ export function NewClaimDialog() {
                   .update({ phone: formData.policyholderPhone })
                   .eq("id", authData.user.id);
               }
-
-              // Assign client role
-              await supabase
-                .from("user_roles")
-                .insert([{ user_id: authData.user.id, role: "client" }]);
             }
           }
 

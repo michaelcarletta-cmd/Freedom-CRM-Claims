@@ -76,6 +76,7 @@ export const ContractorsTab = () => {
       options: {
         data: {
           full_name: formData.full_name,
+          role: 'contractor',
         },
       },
     });
@@ -96,16 +97,6 @@ export const ContractorsTab = () => {
         .from("profiles")
         .update({ phone: formData.phone })
         .eq("id", authData.user.id);
-    }
-
-    // Assign contractor role
-    const { error: roleError } = await supabase
-      .from("user_roles")
-      .insert([{ user_id: authData.user.id, role: "contractor" }]);
-
-    if (roleError) {
-      toast.error("Failed to assign contractor role");
-      return;
     }
 
     toast.success(`Contractor added! Login: ${formData.email} | Password: ${tempPassword}`, {
