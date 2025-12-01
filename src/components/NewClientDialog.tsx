@@ -56,6 +56,7 @@ export const NewClientDialog = ({
           options: {
             data: {
               full_name: formData.name,
+              role: 'client',
             },
           },
         });
@@ -72,13 +73,6 @@ export const NewClientDialog = ({
             .update({ phone: formData.phone })
             .eq("id", authData.user.id);
         }
-
-        // Assign client role
-        const { error: roleError } = await supabase
-          .from("user_roles")
-          .insert([{ user_id: authData.user.id, role: "client" }]);
-
-        if (roleError) throw roleError;
       }
 
       // Create client record, linking to user account if created

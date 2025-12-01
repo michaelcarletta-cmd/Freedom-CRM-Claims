@@ -88,6 +88,7 @@ export function ReferrersSettings() {
             options: {
               data: {
                 full_name: formData.name.trim(),
+                role: 'referrer',
               },
             },
           });
@@ -102,13 +103,6 @@ export function ReferrersSettings() {
               .update({ phone: formData.phone.trim() })
               .eq("id", authData.user.id);
           }
-
-          // Assign referrer role
-          const { error: roleError } = await supabase
-            .from("user_roles")
-            .insert([{ user_id: authData.user.id, role: "referrer" }]);
-
-          if (roleError) throw roleError;
 
           toast({ 
             title: "Success", 
