@@ -26,6 +26,8 @@ interface Claim {
   client_id: string | null;
   referrer_id: string | null;
   claim_contractors: { contractor_id: string }[];
+  policyholder_email: string | null;
+  policyholder_name: string;
 }
 
 export const ClaimNotes = ({ claimId }: { claimId: string }) => {
@@ -70,6 +72,8 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
       .select(`
         client_id,
         referrer_id,
+        policyholder_email,
+        policyholder_name,
         claim_contractors (contractor_id)
       `)
       .eq("id", claimId)
@@ -178,7 +182,7 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
           <div className="space-y-2 p-3 rounded-lg bg-muted/30">
             <Label className="text-sm font-medium">Notify:</Label>
             <div className="flex flex-wrap gap-4">
-              {claim.client_id && (
+              {(claim.client_id || claim.policyholder_email) && (
                 <div className="flex items-center space-x-2">
                   <Checkbox 
                     id="notify-client" 
@@ -186,7 +190,7 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
                     onCheckedChange={(checked) => setNotifyClient(checked as boolean)}
                   />
                   <Label htmlFor="notify-client" className="text-sm cursor-pointer">
-                    Client
+                    Client/Policyholder
                   </Label>
                 </div>
               )}
