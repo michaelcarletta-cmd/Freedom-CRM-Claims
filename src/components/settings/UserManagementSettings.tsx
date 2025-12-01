@@ -44,6 +44,7 @@ export function UserManagementSettings() {
   const [users, setUsers] = useState<UserWithRoles[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [selectedRoles, setSelectedRoles] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -121,6 +122,8 @@ export function UserManagementSettings() {
             description: "User already has this role",
             variant: "default",
           });
+          // Reset the select
+          setSelectedRoles(prev => ({ ...prev, [userId]: "" }));
           return;
         }
         throw error;
@@ -131,6 +134,8 @@ export function UserManagementSettings() {
         description: "Role added successfully",
       });
 
+      // Reset the select after successful add
+      setSelectedRoles(prev => ({ ...prev, [userId]: "" }));
       fetchUsers();
     } catch (error: any) {
       console.error("Failed to add role", error);
@@ -318,7 +323,12 @@ export function UserManagementSettings() {
 
               <div className="ml-4 flex items-center gap-2">
                 <Select
-                  onValueChange={(role) => addRole(user.id, role)}
+                  value={selectedRoles[user.id] || ""}
+                  onValueChange={(role) => {
+                    if (role) {
+                      addRole(user.id, role);
+                    }
+                  }}
                 >
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Add role..." />
