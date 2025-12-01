@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,19 +18,17 @@ import {
   Eye,
   DollarSign
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { EditClientDialog } from "@/components/EditClientDialog";
 
-// Mock data
-const mockClient = {
-  id: "1",
-  name: "John Smith",
-  email: "john.smith@email.com",
-  phone: "(555) 123-4567",
-  address: "456 Oak Avenue, Springfield, IL 62704",
-  dateAdded: "2023-08-15",
-  totalClaims: 3,
-  activeClaims: 1,
-  totalClaimValue: "$78,500",
-};
+interface Client {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  created_at: string;
+}
 
 const mockClientClaims = [
   {
@@ -105,6 +104,42 @@ const mockDocuments = [
 
 const ClientDetail = () => {
   const { id } = useParams();
+  const [client, setClient] = useState<Client | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [claims, setClaims] = useState<any[]>([]);
+
+  const fetchClient = async () => {
+    if (!id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error) throw error;
+      setClient(data);
+
+      // Fetch claims for this client
+      const { data: claimsData } = await supabase
+        .from("claims")
+        .select("*")
+        .eq("client_id", id)
+        .order("created_at", { ascending: false });
+
+      setClaims(claimsData || []);
+    } catch (error) {
+      console.error("Error fetching client:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClient();
+  }, [id]);
 
   const getStatusClassName = (status: string) => {
     const classes: Record<string, string> = {
@@ -115,6 +150,33 @@ const ClientDetail = () => {
       rejected: "bg-destructive text-destructive-foreground",
     };
     return classes[status] || "bg-secondary";
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Loading client...</div>
+      </div>
+    );
+  }
+
+  if (!client) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64">
+        <p className="text-muted-foreground mb-4">Client not found</p>
+        <Link to="/clients">
+          <Button>Back to Clients</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  const mockClient = {
+    ...client,
+    dateAdded: client.created_at,
+    totalClaims: claims.length,
+    activeClaims: claims.filter(c => c.status !== "approved" && c.status !== "rejected").length,
+    totalClaimValue: "$0",
   };
 
   return (
@@ -134,7 +196,10 @@ const ClientDetail = () => {
           <h1 className="text-3xl font-bold text-foreground">{mockClient.name}</h1>
           <p className="text-muted-foreground mt-1">Client since {new Date(mockClient.dateAdded).toLocaleDateString()}</p>
         </div>
-        <Button className="bg-primary hover:bg-primary/90">
+        <Button
+          className="bg-primary hover:bg-primary/90"
+          onClick={() => setIsEditDialogOpen(true)}
+        >
           <Edit className="h-4 w-4 mr-2" />
           Edit Client
         </Button>
@@ -218,40 +283,46 @@ const ClientDetail = () => {
                 </TabsList>
 
                 <TabsContent value="claims" className="mt-6 space-y-4">
-                  {mockClientClaims.map((claim) => (
+                  {claims.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">No claims found for this client</p>
+                  ) : (
+                    claims.map((claim) => (
                     <div
                       key={claim.id}
                       className="p-4 rounded-lg border border-border hover:bg-muted/30 transition-colors"
                     >
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <p className="font-semibold text-foreground">{claim.claimNumber}</p>
-                          <p className="text-sm text-muted-foreground mt-1">{claim.propertyAddress}</p>
-                        </div>
-                        <Badge className={getStatusClassName(claim.status)}>
-                          {claim.status.replace("_", " ").toUpperCase()}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <DollarSign className="h-4 w-4" />
-                            <span className="font-semibold text-foreground">{claim.claimAmount}</span>
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <p className="font-semibold text-foreground">{claim.claim_number}</p>
+                            <p className="text-sm text-muted-foreground mt-1">{claim.policyholder_address || "No address"}</p>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-4 w-4" />
-                            <span>{new Date(claim.dateSubmitted).toLocaleDateString()}</span>
-                          </div>
+                          <Badge className={getStatusClassName(claim.status)}>
+                            {claim.status?.replace("_", " ").toUpperCase() || "UNKNOWN"}
+                          </Badge>
                         </div>
-                        <Link to={`/claims/${claim.id}`}>
-                          <Button variant="outline" size="sm">
-                            <Eye className="h-3 w-3 mr-1" />
-                            View
-                          </Button>
-                        </Link>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            {claim.claim_amount && (
+                              <div className="flex items-center gap-1">
+                                <DollarSign className="h-4 w-4" />
+                                <span className="font-semibold text-foreground">${claim.claim_amount.toLocaleString()}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-4 w-4" />
+                              <span>{new Date(claim.created_at).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                          <Link to={`/claims/${claim.id}`}>
+                            <Button variant="outline" size="sm">
+                              <Eye className="h-3 w-3 mr-1" />
+                              View
+                            </Button>
+                          </Link>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </TabsContent>
 
                 <TabsContent value="communications" className="mt-6 space-y-4">
@@ -353,6 +424,13 @@ const ClientDetail = () => {
           </Card>
         </div>
       </div>
+
+      <EditClientDialog
+        isOpen={isEditDialogOpen}
+        onClose={() => setIsEditDialogOpen(false)}
+        client={client}
+        onClientUpdated={fetchClient}
+      />
     </div>
   );
 };
