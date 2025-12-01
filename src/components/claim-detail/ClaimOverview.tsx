@@ -155,11 +155,37 @@ export function ClaimOverview({ claim }: ClaimOverviewProps) {
         </CardContent>
       </Card>
 
+      {/* Mortgage Company Information */}
+      {claim.mortgage_company_id && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-primary" />
+              Mortgage Company Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Loan Number</p>
+                <p className="text-sm font-medium">{claim.loan_number || "N/A"}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">SSN Last Four</p>
+                <p className="text-sm font-medium">{claim.ssn_last_four || "N/A"}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Claim Assignments */}
       <ClaimAssignments 
         claimId={claim.id}
         currentReferrerId={claim.referrer_id}
         currentMortgageCompanyId={claim.mortgage_company_id}
+        loanNumber={claim.loan_number}
+        ssnLastFour={claim.ssn_last_four}
       />
 
       {/* Custom Fields */}
