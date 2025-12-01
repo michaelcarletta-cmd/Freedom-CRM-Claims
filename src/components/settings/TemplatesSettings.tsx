@@ -40,7 +40,12 @@ export const TemplatesSettings = () => {
     mutationFn: async () => {
       if (!templateForm.file) throw new Error("No file selected");
 
-      const fileName = `${Date.now()}-${templateForm.file.name}`;
+      // Sanitize filename: remove special characters and replace spaces with underscores
+      const sanitizedName = templateForm.file.name
+        .replace(/[^a-zA-Z0-9.-]/g, '_')
+        .replace(/_+/g, '_');
+      const fileName = `${Date.now()}-${sanitizedName}`;
+      
       const { error: uploadError } = await supabase.storage
         .from("document-templates")
         .upload(fileName, templateForm.file);
