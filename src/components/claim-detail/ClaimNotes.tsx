@@ -193,10 +193,17 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
     setAiLoading(true);
 
     try {
+      // Convert aiMessages to format expected by API (without timestamps)
+      const conversationHistory = aiMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+
       const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
         body: { 
           claimId,
-          question: userMessage.content
+          question: userMessage.content,
+          messages: conversationHistory
         }
       });
 
