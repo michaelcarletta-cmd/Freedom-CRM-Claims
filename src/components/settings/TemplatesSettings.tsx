@@ -165,7 +165,7 @@ export const TemplatesSettings = () => {
             <DialogHeader>
               <DialogTitle>Upload Document Template</DialogTitle>
               <DialogDescription>
-                Upload a Word document (.docx) with merge fields
+                Upload a Word document (.docx) with merge fields or a PDF document
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -204,10 +204,10 @@ export const TemplatesSettings = () => {
                 </Select>
               </div>
               <div>
-                <Label>Template File (DOCX)</Label>
+                <Label>Template File (DOCX or PDF)</Label>
                 <Input
                   type="file"
-                  accept=".docx"
+                  accept=".docx,.pdf"
                   onChange={(e) =>
                     setTemplateForm({ ...templateForm, file: e.target.files?.[0] || null })
                   }
