@@ -1163,6 +1163,7 @@ export type Database = {
           created_by: string | null
           document_name: string
           document_path: string
+          field_data: Json | null
           id: string
           status: string
           updated_at: string | null
@@ -1174,6 +1175,7 @@ export type Database = {
           created_by?: string | null
           document_name: string
           document_path: string
+          field_data?: Json | null
           id?: string
           status?: string
           updated_at?: string | null
@@ -1185,6 +1187,7 @@ export type Database = {
           created_by?: string | null
           document_name?: string
           document_path?: string
+          field_data?: Json | null
           id?: string
           status?: string
           updated_at?: string | null
@@ -1203,6 +1206,7 @@ export type Database = {
         Row: {
           access_token: string
           created_at: string | null
+          field_values: Json | null
           id: string
           signature_data: string | null
           signature_request_id: string
@@ -1216,6 +1220,7 @@ export type Database = {
         Insert: {
           access_token?: string
           created_at?: string | null
+          field_values?: Json | null
           id?: string
           signature_data?: string | null
           signature_request_id: string
@@ -1229,6 +1234,7 @@ export type Database = {
         Update: {
           access_token?: string
           created_at?: string | null
+          field_values?: Json | null
           id?: string
           signature_data?: string | null
           signature_request_id?: string

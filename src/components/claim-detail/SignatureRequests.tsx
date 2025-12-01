@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { FileSignature, Plus, Loader2, Mail, Check, Clock, X } from "lucide-react";
+import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, ChevronLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { FieldPlacementEditor } from "./FieldPlacementEditor";
 
 interface SignatureRequestsProps {
   claimId: string;
@@ -20,10 +21,14 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1); // 1: template, 2: fields, 3: signers
   const [signers, setSigners] = useState([
     { name: claim.policyholder_name, email: claim.policyholder_email || "", type: "policyholder", order: 1 }
   ]);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [generatedDocUrl, setGeneratedDocUrl] = useState<string | null>(null);
+  const [generatedDocPath, setGeneratedDocPath] = useState<string | null>(null);
+  const [placedFields, setPlacedFields] = useState<any[]>([]);
 
   const { data: templates } = useQuery({
     queryKey: ["document-templates"],
@@ -53,7 +58,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     },
   });
 
-  const createRequestMutation = useMutation({
+  const generateDocumentMutation = useMutation({
     mutationFn: async () => {
       if (!selectedTemplate) throw new Error("No template selected");
 
@@ -75,13 +80,37 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .upload(fileName, blob);
       if (uploadError) throw uploadError;
 
-      // Create signature request
+      // Get signed URL for field placement
+      const { data: urlData } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(fileName, 3600);
+
+      setGeneratedDocPath(fileName);
+      setGeneratedDocUrl(urlData?.signedUrl || null);
+      
+      return { fileName, url: urlData?.signedUrl };
+    },
+    onSuccess: () => {
+      setCurrentStep(2);
+      toast({ title: "Document generated! Now place signature fields." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to generate document", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const createRequestMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedTemplate || !generatedDocPath) throw new Error("Missing required data");
+
+      // Create signature request with field data
       const { data: request, error: requestError } = await supabase
         .from("signature_requests")
         .insert({
           claim_id: claimId,
-          document_name: docData.fileName,
-          document_path: fileName,
+          document_name: selectedTemplate.name,
+          document_path: generatedDocPath,
+          field_data: placedFields,
         })
         .select()
         .single();
@@ -111,7 +140,11 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     onSuccess: () => {
       toast({ title: "Signature request created and emails sent" });
       setIsCreateOpen(false);
+      setCurrentStep(1);
       setSelectedTemplate(null);
+      setGeneratedDocUrl(null);
+      setGeneratedDocPath(null);
+      setPlacedFields([]);
       setSigners([{ name: claim.policyholder_name, email: claim.policyholder_email || "", type: "policyholder", order: 1 }]);
       queryClient.invalidateQueries({ queryKey: ["signature-requests"] });
     },
