@@ -52,15 +52,18 @@ export default function Sign() {
       setSigner(signerData);
       setRequest(signerData.signature_requests);
 
-      // Get document URL
-      if (signerData.signature_requests?.document_path) {
-        const { data: urlData } = await supabase.storage
-          .from("claim-files")
-          .createSignedUrl(signerData.signature_requests.document_path, 3600);
-        if (urlData?.signedUrl) {
-          setDocumentUrl(urlData.signedUrl);
-        }
+      // Get document URL via backend function (works for public signers)
+      const { data: urlData, error: urlError } = await supabase.functions.invoke(
+        "get-signature-document",
+        { body: { token } }
+      );
+
+      if (urlError || !urlData?.signedUrl) {
+        console.error("Error fetching signed URL from function", urlError);
+      } else {
+        setDocumentUrl(urlData.signedUrl);
       }
+
     } catch (error: any) {
       toast({
         title: "Invalid or expired link",
