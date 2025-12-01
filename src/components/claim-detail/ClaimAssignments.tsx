@@ -70,21 +70,34 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
   }, [claimId]);
 
   const fetchData = async () => {
-    // Fetch all staff (users with staff or admin role, excluding client-only users)
-    const { data: staffRoleData } = await supabase
+    // Fetch all internal staff (users with staff or admin role, excluding client/contractor/referrer-only users)
+    const { data: allRoles } = await supabase
       .from("user_roles")
-      .select("user_id, role")
-      .in("role", ["staff", "admin"]);
+      .select("user_id, role");
 
-    if (staffRoleData) {
-      // Get unique user IDs and filter out any that are client-only
-      const staffIds = [...new Set(staffRoleData.map((r) => r.user_id))];
-      
+    if (allRoles) {
+      const roleMap = new Map<string, Set<string>>();
+
+      allRoles.forEach((r) => {
+        if (!roleMap.has(r.user_id)) {
+          roleMap.set(r.user_id, new Set());
+        }
+        roleMap.get(r.user_id)!.add(r.role as string);
+      });
+
+      const staffIds = Array.from(roleMap.entries())
+        .filter(([_, roles]) => {
+          const hasStaffOrAdmin = roles.has("staff") || roles.has("admin");
+          const hasExternalRole = roles.has("client") || roles.has("contractor") || roles.has("referrer");
+          return hasStaffOrAdmin && !hasExternalRole;
+        })
+        .map(([userId]) => userId);
+
       const { data: staffProfileData } = await supabase
         .from("profiles")
         .select("*")
         .in("id", staffIds);
-      
+
       setStaff(staffProfileData || []);
     }
 
