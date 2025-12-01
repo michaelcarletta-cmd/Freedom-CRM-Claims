@@ -70,14 +70,16 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
   }, [claimId]);
 
   const fetchData = async () => {
-    // Fetch all staff (users with staff role)
+    // Fetch all staff (users with staff or admin role, excluding client-only users)
     const { data: staffRoleData } = await supabase
       .from("user_roles")
-      .select("user_id")
-      .eq("role", "staff");
+      .select("user_id, role")
+      .in("role", ["staff", "admin"]);
 
     if (staffRoleData) {
-      const staffIds = staffRoleData.map((r) => r.user_id);
+      // Get unique user IDs and filter out any that are client-only
+      const staffIds = [...new Set(staffRoleData.map((r) => r.user_id))];
+      
       const { data: staffProfileData } = await supabase
         .from("profiles")
         .select("*")
