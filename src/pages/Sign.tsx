@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, FileSignature, Check } from "lucide-react";
 
@@ -18,9 +19,10 @@ export default function Sign() {
   const [signing, setSigning] = useState(false);
   const [signed, setSigned] = useState(false);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
+  const [drawingFields, setDrawingFields] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (token) {
@@ -75,9 +77,9 @@ export default function Sign() {
     }
   };
 
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    setIsDrawing(true);
-    const canvas = canvasRef.current;
+  const startDrawing = (fieldId: string, e: React.MouseEvent<HTMLCanvasElement>) => {
+    setDrawingFields(prev => ({ ...prev, [fieldId]: true }));
+    const canvas = canvasRefs.current[fieldId];
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -86,9 +88,9 @@ export default function Sign() {
     ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
   };
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const canvas = canvasRef.current;
+  const draw = (fieldId: string, e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!drawingFields[fieldId]) return;
+    const canvas = canvasRefs.current[fieldId];
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -97,12 +99,12 @@ export default function Sign() {
     ctx.stroke();
   };
 
-  const stopDrawing = () => {
-    setIsDrawing(false);
+  const stopDrawing = (fieldId: string) => {
+    setDrawingFields(prev => ({ ...prev, [fieldId]: false }));
   };
 
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
+  const clearSignature = (fieldId: string) => {
+    const canvas = canvasRefs.current[fieldId];
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -110,10 +112,23 @@ export default function Sign() {
   };
 
   const handleSign = async () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    // Get placed fields for this signer
+    const fields = (request.field_data || []).filter(
+      (f: any) => f.signerIndex === signer.signing_order - 1
+    );
 
-    const signatureData = canvas.toDataURL();
+    // Collect signature data and field values
+    const collectedValues: Record<string, any> = {};
+    for (const field of fields) {
+      if (field.type === "signature") {
+        const canvas = canvasRefs.current[field.id];
+        if (canvas) {
+          collectedValues[field.id] = canvas.toDataURL();
+        }
+      } else {
+        collectedValues[field.id] = fieldValues[field.id] || "";
+      }
+    }
     
     setSigning(true);
     try {
@@ -122,7 +137,7 @@ export default function Sign() {
         .update({
           status: "signed",
           signed_at: new Date().toISOString(),
-          signature_data: signatureData,
+          field_values: collectedValues,
         })
         .eq("id", signer.id);
 
@@ -237,40 +252,73 @@ export default function Sign() {
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label>Your Signature</Label>
-            <p className="text-sm text-muted-foreground">
-              Please sign using your mouse or touchscreen
-            </p>
-            <div className="border-2 border-dashed rounded-lg p-4 bg-background">
-              <canvas
-                ref={canvasRef}
-                width={600}
-                height={200}
-                className="w-full border rounded cursor-crosshair bg-white"
-                onMouseDown={startDrawing}
-                onMouseMove={draw}
-                onMouseUp={stopDrawing}
-                onMouseLeave={stopDrawing}
-              />
-            </div>
+          <div className="space-y-4">
+            <Label>Complete Required Fields</Label>
+            {(request.field_data || [])
+              .filter((field: any) => field.signerIndex === signer.signing_order - 1)
+              .map((field: any) => (
+                <div key={field.id} className="space-y-2">
+                  <Label className="text-sm font-medium">{field.label}</Label>
+                  {field.type === "signature" ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Draw your signature using your mouse or touchscreen
+                      </p>
+                      <div className="border-2 border-dashed rounded-lg p-2 bg-background">
+                        <canvas
+                          ref={(el) => (canvasRefs.current[field.id] = el)}
+                          width={400}
+                          height={120}
+                          className="w-full border rounded cursor-crosshair bg-white"
+                          onMouseDown={(e) => startDrawing(field.id, e)}
+                          onMouseMove={(e) => draw(field.id, e)}
+                          onMouseUp={() => stopDrawing(field.id)}
+                          onMouseLeave={() => stopDrawing(field.id)}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => clearSignature(field.id)}
+                      >
+                        Clear Signature
+                      </Button>
+                    </div>
+                  ) : field.type === "date" ? (
+                    <Input
+                      type="date"
+                      value={fieldValues[field.id] || ""}
+                      onChange={(e) =>
+                        setFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))
+                      }
+                      className="bg-background"
+                    />
+                  ) : (
+                    <Input
+                      type="text"
+                      value={fieldValues[field.id] || ""}
+                      onChange={(e) =>
+                        setFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))
+                      }
+                      placeholder="Enter text"
+                      className="bg-background"
+                    />
+                  )}
+                </div>
+              ))}
           </div>
 
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={clearSignature} className="flex-1">
-              Clear
-            </Button>
-            <Button onClick={handleSign} disabled={signing} className="flex-1">
-              {signing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Signing...
-                </>
-              ) : (
-                "Sign Document"
-              )}
-            </Button>
-          </div>
+          <Button onClick={handleSign} disabled={signing} className="w-full">
+            {signing ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Signing...
+              </>
+            ) : (
+              "Complete Signature"
+            )}
+          </Button>
         </CardContent>
       </Card>
     </div>

@@ -250,35 +250,53 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
               Request Signature
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Create Signature Request</DialogTitle>
+              <DialogTitle>Create Signature Request - Step {currentStep} of 3</DialogTitle>
               <DialogDescription>
-                Select a template and add signers
+                {currentStep === 1 && "Select a document template"}
+                {currentStep === 2 && "Place signature and date fields on the document"}
+                {currentStep === 3 && "Configure signers"}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Document Template</Label>
-                <Select
-                  value={selectedTemplate?.id}
-                  onValueChange={(id) =>
-                    setSelectedTemplate(templates?.find((t) => t.id === id))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select template" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {templates?.map((template) => (
-                      <SelectItem key={template.id} value={template.id}>
-                        {template.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
 
+            {/* Step 1: Template Selection */}
+            {currentStep === 1 && (
+              <div className="space-y-4">
+                <div>
+                  <Label>Document Template</Label>
+                  <Select
+                    value={selectedTemplate?.id}
+                    onValueChange={(id) =>
+                      setSelectedTemplate(templates?.find((t) => t.id === id))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates?.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Field Placement */}
+            {currentStep === 2 && generatedDocUrl && (
+              <FieldPlacementEditor
+                documentUrl={generatedDocUrl}
+                onFieldsChange={setPlacedFields}
+                signerCount={signers.length}
+              />
+            )}
+
+            {/* Step 3: Signer Configuration */}
+            {currentStep === 3 && (
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <Label>Signers (in order)</Label>
@@ -329,46 +347,68 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                   </div>
                 ))}
               </div>
-            </div>
+            )}
+
             <DialogFooter>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (!selectedTemplate) return;
-                    // Create test request with user's own email from claim
-                    const testSigners = [{ 
-                      name: "Test Signer (You)", 
-                      email: claim.policyholder_email || "", 
-                      type: "policyholder", 
-                      order: 1 
-                    }];
-                    const originalSigners = signers;
-                    setSigners(testSigners);
-                    createRequestMutation.mutate(undefined, {
-                      onSettled: () => setSigners(originalSigners)
-                    });
-                  }}
-                  disabled={!selectedTemplate || !claim.policyholder_email || createRequestMutation.isPending}
-                >
-                  Send Test to Myself
-                </Button>
-                <Button
-                  onClick={() => createRequestMutation.mutate()}
-                  disabled={!selectedTemplate || signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
-                >
-                  {createRequestMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      <Mail className="w-4 h-4 mr-2" />
-                      Send for Signature
-                    </>
+              <div className="flex justify-between w-full">
+                <div>
+                  {currentStep > 1 && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentStep((currentStep - 1) as 1 | 2 | 3)}
+                    >
+                      <ChevronLeft className="w-4 h-4 mr-2" />
+                      Back
+                    </Button>
                   )}
-                </Button>
+                </div>
+                <div className="flex gap-2">
+                  {currentStep === 1 && (
+                    <Button
+                      onClick={() => generateDocumentMutation.mutate()}
+                      disabled={!selectedTemplate || generateDocumentMutation.isPending}
+                    >
+                      {generateDocumentMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          Next
+                          <ChevronRight className="w-4 h-4 ml-2" />
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  {currentStep === 2 && (
+                    <Button
+                      onClick={() => setCurrentStep(3)}
+                      disabled={placedFields.length === 0}
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  )}
+                  {currentStep === 3 && (
+                    <Button
+                      onClick={() => createRequestMutation.mutate()}
+                      disabled={signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
+                    >
+                      {createRequestMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <Mail className="w-4 h-4 mr-2" />
+                          Send for Signature
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
             </DialogFooter>
           </DialogContent>
