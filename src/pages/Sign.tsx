@@ -37,9 +37,13 @@ export default function Sign() {
           signature_requests(*)
         `)
         .eq("access_token", token)
-        .single();
+        .maybeSingle();
 
       if (signerError) throw signerError;
+      
+      if (!signerData) {
+        throw new Error("Signature request not found or link has expired");
+      }
       
       if (signerData.status === "signed") {
         setSigned(true);
