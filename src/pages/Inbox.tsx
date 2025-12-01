@@ -3,12 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { Loader2, Mail, FileSignature, ArrowRight, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 
 const Inbox = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   // Fetch all emails with claim information
   const { data: emails, isLoading: emailsLoading } = useQuery({
@@ -225,12 +228,34 @@ const Inbox = () => {
                       </div>
                     )}
                     {request.signature_signers && request.signature_signers.length > 0 && (
-                      <div className="space-y-1">
+                      <div className="space-y-2">
                         <p className="text-sm font-medium text-foreground">Signers:</p>
                         {request.signature_signers.map((signer: any) => (
-                          <div key={signer.id} className="flex items-center justify-between text-sm text-muted-foreground">
-                            <span>{signer.signer_name} ({signer.signer_email})</span>
-                            {getStatusBadge(signer.status)}
+                          <div key={signer.id} className="flex items-center justify-between text-sm">
+                            <div className="flex-1">
+                              <span className="text-foreground">{signer.signer_name}</span>
+                              <span className="text-muted-foreground"> ({signer.signer_email})</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {getStatusBadge(signer.status)}
+                              {signer.status === "pending" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const signUrl = `${window.location.origin}/sign?token=${signer.access_token}`;
+                                    navigator.clipboard.writeText(signUrl);
+                                    toast({
+                                      title: "Link copied",
+                                      description: "Signing link copied to clipboard",
+                                    });
+                                  }}
+                                >
+                                  Copy Link
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
