@@ -90,6 +90,18 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
 
     setLossTypes(lossTypesData || []);
     setInsuranceCompanies(insuranceCompaniesData || []);
+    
+    // Update insurance phone/email if company is already selected
+    if (formData.insurance_company_id && insuranceCompaniesData) {
+      const selectedCompany = insuranceCompaniesData.find((ic) => ic.id === formData.insurance_company_id);
+      if (selectedCompany) {
+        setFormData((prev) => ({
+          ...prev,
+          insurance_phone: selectedCompany.phone || "",
+          insurance_email: selectedCompany.email || "",
+        }));
+      }
+    }
   };
 
   const handleChange = (field: string, value: any) => {
