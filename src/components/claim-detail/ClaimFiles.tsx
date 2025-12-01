@@ -33,6 +33,9 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
   const [newFolderName, setNewFolderName] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
   const [saveAsTemplateDialogOpen, setSaveAsTemplateDialogOpen] = useState(false);
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewFileType, setPreviewFileType] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<any>(null);
   const [templateForm, setTemplateForm] = useState({
     name: "",
@@ -209,7 +212,9 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
       return;
     }
 
-    window.open(data.signedUrl, "_blank");
+    setPreviewUrl(data.signedUrl);
+    setPreviewFileType(file.file_type || "");
+    setPreviewDialogOpen(true);
   };
 
   const handleSaveAsTemplate = (file: any) => {
@@ -545,6 +550,44 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
               {saveAsTemplateMutation.isPending ? "Saving..." : "Save as Template"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* File Preview Dialog */}
+      <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>File Preview</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-auto max-h-[70vh]">
+            {previewUrl && (
+              <>
+                {previewFileType.includes("image") ? (
+                  <img 
+                    src={previewUrl} 
+                    alt="Preview" 
+                    className="w-full h-auto rounded-lg"
+                  />
+                ) : previewFileType.includes("pdf") ? (
+                  <iframe
+                    src={previewUrl}
+                    className="w-full h-[70vh] rounded-lg border"
+                    title="PDF Preview"
+                  />
+                ) : (
+                  <div className="text-center py-8">
+                    <FileText className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground mb-4">
+                      Preview not available for this file type
+                    </p>
+                    <Button onClick={() => window.open(previewUrl, "_blank")}>
+                      Open in New Tab
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
