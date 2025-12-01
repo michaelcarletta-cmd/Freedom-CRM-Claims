@@ -28,12 +28,22 @@ interface Referrer {
   company: string | null;
 }
 
+interface Client {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  street: string | null;
+}
+
 export function NewClaimDialog() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [insuranceCompanies, setInsuranceCompanies] = useState<InsuranceCompany[]>([]);
   const [lossTypes, setLossTypes] = useState<LossType[]>([]);
   const [referrers, setReferrers] = useState<Referrer[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -64,19 +74,22 @@ export function NewClaimDialog() {
 
   const fetchDropdownData = async () => {
     try {
-      const [insuranceRes, lossTypesRes, referrersRes] = await Promise.all([
+      const [insuranceRes, lossTypesRes, referrersRes, clientsRes] = await Promise.all([
         supabase.from("insurance_companies").select("id, name, phone, email").eq("is_active", true).order("name"),
         supabase.from("loss_types").select("id, name").eq("is_active", true).order("name"),
         supabase.from("referrers").select("id, name, company").eq("is_active", true).order("name"),
+        supabase.from("clients").select("id, name, email, phone, street").order("name"),
       ]);
 
       if (insuranceRes.error) throw insuranceRes.error;
       if (lossTypesRes.error) throw lossTypesRes.error;
       if (referrersRes.error) throw referrersRes.error;
+      if (clientsRes.error) throw clientsRes.error;
 
       setInsuranceCompanies(insuranceRes.data || []);
       setLossTypes(lossTypesRes.data || []);
       setReferrers(referrersRes.data || []);
+      setClients(clientsRes.data || []);
     } catch (error: any) {
       console.error("Error fetching dropdown data:", error);
       toast({
@@ -97,11 +110,76 @@ export function NewClaimDialog() {
     });
   };
 
+  const handleClientChange = (clientId: string) => {
+    setSelectedClientId(clientId);
+    if (clientId === "new") {
+      // Clear fields for new client
+      setFormData({
+        ...formData,
+        policyholderName: "",
+        policyholderPhone: "",
+        policyholderEmail: "",
+        policyholderAddress: "",
+      });
+    } else {
+      // Populate fields from selected client
+      const selectedClient = clients.find((c) => c.id === clientId);
+      if (selectedClient) {
+        setFormData({
+          ...formData,
+          policyholderName: selectedClient.name,
+          policyholderPhone: selectedClient.phone || "",
+          policyholderEmail: selectedClient.email || "",
+          policyholderAddress: selectedClient.street || "",
+        });
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
+      // Determine client_id
+      let clientId = null;
+      
+      if (selectedClientId && selectedClientId !== "new") {
+        // Use existing client
+        clientId = selectedClientId;
+      } else {
+        // Create new client or find by email
+        if (formData.policyholderEmail) {
+          const { data: existingClient } = await supabase
+            .from("clients")
+            .select("id")
+            .eq("email", formData.policyholderEmail)
+            .single();
+          
+          if (existingClient) {
+            clientId = existingClient.id;
+          }
+        }
+        
+        // If still no client, create a new one
+        if (!clientId) {
+          const { data: newClient, error: clientError } = await supabase
+            .from("clients")
+            .insert({
+              name: formData.policyholderName,
+              email: formData.policyholderEmail || null,
+              phone: formData.policyholderPhone || null,
+              street: formData.policyholderAddress || null,
+            })
+            .select()
+            .single();
+
+          if (clientError) throw clientError;
+          clientId = newClient.id;
+        }
+      }
+
+      // Now create the claim with the client_id
       const { data, error } = await supabase
         .from("claims")
         .insert({
@@ -118,6 +196,7 @@ export function NewClaimDialog() {
           loss_date: formData.lossDate || null,
           loss_description: formData.lossDescription || null,
           referrer_id: formData.referrerId || null,
+          client_id: clientId,
           status: "open",
         })
         .select()
@@ -151,6 +230,7 @@ export function NewClaimDialog() {
       });
 
       setOpen(false);
+      setSelectedClientId("");
       setFormData({
         policyholderName: "",
         policyholderPhone: "",
@@ -201,6 +281,24 @@ export function NewClaimDialog() {
             <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2">
               Client Information
             </h3>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="clientSelect">Select Existing Client (Optional)</Label>
+                <Select value={selectedClientId} onValueChange={handleClientChange}>
+                  <SelectTrigger id="clientSelect">
+                    <SelectValue placeholder="Select a client or create new" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">Create New Client</SelectItem>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.name} {client.email && `(${client.email})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="policyholderName">Full Name *</Label>
