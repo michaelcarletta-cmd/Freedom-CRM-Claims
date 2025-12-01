@@ -43,6 +43,45 @@ export const NewClientDialog = ({
     setIsSaving(true);
 
     try {
+      let userId: string | null = null;
+      let tempPassword: string | null = null;
+
+      // Create user account if email is provided
+      if (formData.email) {
+        tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+        
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: tempPassword,
+          options: {
+            data: {
+              full_name: formData.name,
+            },
+          },
+        });
+
+        if (authError) throw authError;
+        if (!authData.user) throw new Error("Failed to create user account");
+
+        userId = authData.user.id;
+
+        // Update profile with phone
+        if (formData.phone) {
+          await supabase
+            .from("profiles")
+            .update({ phone: formData.phone })
+            .eq("id", authData.user.id);
+        }
+
+        // Assign client role
+        const { error: roleError } = await supabase
+          .from("user_roles")
+          .insert([{ user_id: authData.user.id, role: "client" }]);
+
+        if (roleError) throw roleError;
+      }
+
+      // Create client record
       const { error } = await supabase.from("clients").insert({
         name: formData.name,
         email: formData.email || null,
@@ -55,7 +94,14 @@ export const NewClientDialog = ({
 
       if (error) throw error;
 
-      toast.success("Client created successfully");
+      if (tempPassword && formData.email) {
+        toast.success(`Client created! Login: ${formData.email} | Password: ${tempPassword}`, {
+          duration: 10000,
+        });
+      } else {
+        toast.success("Client created (no portal access - email required)");
+      }
+      
       onClientCreated();
       onClose();
       setFormData({ name: "", email: "", phone: "", street: "", city: "", state: "", zipCode: "" });

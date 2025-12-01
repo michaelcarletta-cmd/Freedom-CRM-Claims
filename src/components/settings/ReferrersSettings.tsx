@@ -78,6 +78,46 @@ export function ReferrersSettings() {
         if (error) throw error;
         toast({ title: "Success", description: "Referrer updated" });
       } else {
+        // Create user account if email is provided
+        if (formData.email.trim()) {
+          const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+          
+          const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: formData.email.trim(),
+            password: tempPassword,
+            options: {
+              data: {
+                full_name: formData.name.trim(),
+              },
+            },
+          });
+
+          if (authError) throw authError;
+          if (!authData.user) throw new Error("Failed to create user account");
+
+          // Update profile with phone
+          if (formData.phone.trim()) {
+            await supabase
+              .from("profiles")
+              .update({ phone: formData.phone.trim() })
+              .eq("id", authData.user.id);
+          }
+
+          // Assign referrer role
+          const { error: roleError } = await supabase
+            .from("user_roles")
+            .insert([{ user_id: authData.user.id, role: "referrer" }]);
+
+          if (roleError) throw roleError;
+
+          toast({ 
+            title: "Success", 
+            description: `Referrer added. Login: ${formData.email.trim()} | Password: ${tempPassword}`,
+            duration: 10000,
+          });
+        }
+
+        // Create referrer record
         const { error } = await supabase
           .from("referrers")
           .insert({
@@ -88,7 +128,10 @@ export function ReferrersSettings() {
           });
 
         if (error) throw error;
-        toast({ title: "Success", description: "Referrer added" });
+        
+        if (!formData.email.trim()) {
+          toast({ title: "Success", description: "Referrer added (no portal access - email required)" });
+        }
       }
 
       setDialogOpen(false);

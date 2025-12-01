@@ -108,7 +108,9 @@ export const ContractorsTab = () => {
       return;
     }
 
-    toast.success("Contractor added successfully");
+    toast.success(`Contractor added! Login: ${formData.email} | Password: ${tempPassword}`, {
+      duration: 10000,
+    });
     setDialogOpen(false);
     setFormData({ email: "", full_name: "", phone: "" });
     fetchContractors();
