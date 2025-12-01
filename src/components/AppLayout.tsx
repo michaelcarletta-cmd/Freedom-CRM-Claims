@@ -1,6 +1,6 @@
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
-import { NotificationsBar } from "./NotificationsBar";
+import { NotificationPopover } from "./NotificationPopover";
 import { ReactNode, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -25,12 +25,12 @@ const AppLayoutContent = ({ children }: AppLayoutProps) => {
       <div className="flex-1 flex flex-col">
         <header className="h-14 border-b border-border bg-card flex items-center px-4 sticky top-0 z-10">
           <SidebarTrigger />
-          <div className="ml-4 flex items-center gap-4">
+          <div className="ml-4 flex items-center gap-4 flex-1">
             <span className="text-sm text-muted-foreground">Freedom Claims CRM</span>
           </div>
+          <NotificationPopover />
         </header>
         <main className="flex-1 p-6 animate-fade-in">
-          <NotificationsBar />
           {children}
         </main>
       </div>
