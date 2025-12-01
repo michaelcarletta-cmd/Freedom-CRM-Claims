@@ -117,6 +117,22 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
     try {
       const updateData: any = { ...formData };
       
+      // Ensure insurance_company name is set if insurance_company_id is selected
+      if (formData.insurance_company_id && !formData.insurance_company) {
+        const selectedCompany = insuranceCompanies.find((ic) => ic.id === formData.insurance_company_id);
+        if (selectedCompany) {
+          updateData.insurance_company = selectedCompany.name;
+        }
+      }
+      
+      // Ensure loss_type name is set if loss_type_id is selected
+      if (formData.loss_type_id && !formData.loss_type) {
+        const selectedLossType = lossTypes.find((lt) => lt.id === formData.loss_type_id);
+        if (selectedLossType) {
+          updateData.loss_type = selectedLossType.name;
+        }
+      }
+      
       // Convert empty strings to null for optional fields
       Object.keys(updateData).forEach(key => {
         if (updateData[key] === "") {
