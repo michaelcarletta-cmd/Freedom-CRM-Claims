@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp } from "lucide-react";
+import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -272,6 +272,45 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
     },
   });
 
+  const deleteFileMutation = useMutation({
+    mutationFn: async (file: any) => {
+      // Delete from storage
+      const { error: storageError } = await supabase.storage
+        .from("claim-files")
+        .remove([file.file_path]);
+
+      if (storageError) throw storageError;
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from("claim_files")
+        .delete()
+        .eq("id", file.id);
+
+      if (dbError) throw dbError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["claim-files", claimId] });
+      toast({
+        title: "File deleted",
+        description: "The file has been deleted successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete file.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteFile = async (file: any) => {
+    if (confirm("Are you sure you want to delete this file?")) {
+      await deleteFileMutation.mutateAsync(file);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -413,6 +452,14 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
                                       Save as Template
                                     </Button>
                                   )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDeleteFile(file)}
+                                  >
+                                    <Trash2 className="h-3 w-3 mr-1" />
+                                    Delete
+                                  </Button>
                                 </div>
                               </div>
                             </div>
