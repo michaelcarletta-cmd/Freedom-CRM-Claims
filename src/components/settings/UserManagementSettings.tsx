@@ -75,11 +75,13 @@ export function UserManagementSettings() {
 
       if (rolesError) throw rolesError;
 
-      // Combine profiles with their roles
-      const usersWithRoles: UserWithRoles[] = (profiles || []).map((profile) => ({
-        ...profile,
-        roles: (roles || []).filter((role) => role.user_id === profile.id),
-      }));
+      // Combine profiles with their roles, only show users who have at least one role
+      const usersWithRoles: UserWithRoles[] = (profiles || [])
+        .map((profile) => ({
+          ...profile,
+          roles: (roles || []).filter((role) => role.user_id === profile.id),
+        }))
+        .filter((user) => user.roles.length > 0);
 
       setUsers(usersWithRoles);
     } catch (error: any) {
