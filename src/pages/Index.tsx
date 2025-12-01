@@ -1,34 +1,56 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, DollarSign, Clock, CheckCircle } from "lucide-react";
-
-const stats = [
-  {
-    title: "Total Claims",
-    value: "124",
-    icon: FileText,
-    trend: "+12% from last month",
-  },
-  {
-    title: "Active Claims",
-    value: "43",
-    icon: Clock,
-    trend: "18 need attention",
-  },
-  {
-    title: "Total Value",
-    value: "$2.4M",
-    icon: DollarSign,
-    trend: "+8% from last month",
-  },
-  {
-    title: "Approved",
-    value: "67",
-    icon: CheckCircle,
-    trend: "54% approval rate",
-  },
-];
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { formatDistanceToNow } from "date-fns";
+import { useNavigate } from "react-router-dom";
 
 const Index = () => {
+  const navigate = useNavigate();
+
+  const { data: claims } = useQuery({
+    queryKey: ["dashboard-claims"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claims")
+        .select("*")
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const totalClaims = claims?.length || 0;
+  const activeClaims = claims?.filter(c => c.status !== "closed" && c.status !== "settled")?.length || 0;
+  const totalValue = claims?.reduce((sum, c) => sum + (c.claim_amount || 0), 0) || 0;
+  const approvedClaims = claims?.filter(c => c.status === "approved" || c.status === "settled")?.length || 0;
+
+  const recentClaims = claims?.slice(0, 5) || [];
+
+  const stats = [
+    {
+      title: "Total Claims",
+      value: totalClaims.toString(),
+      icon: FileText,
+    },
+    {
+      title: "Active Claims",
+      value: activeClaims.toString(),
+      icon: Clock,
+    },
+    {
+      title: "Total Value",
+      value: `$${(totalValue / 1000000).toFixed(1)}M`,
+      icon: DollarSign,
+    },
+    {
+      title: "Approved",
+      value: approvedClaims.toString(),
+      icon: CheckCircle,
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
@@ -47,7 +69,6 @@ const Index = () => {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-foreground">{stat.value}</div>
-              <p className="text-xs text-muted-foreground mt-2">{stat.trend}</p>
             </CardContent>
           </Card>
         ))}
@@ -55,32 +76,35 @@ const Index = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
+          <CardTitle>Recent Claims</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="h-2 w-2 rounded-full bg-primary" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">New claim submitted</p>
-                <p className="text-xs text-muted-foreground">CLM-2024-005 • 2 hours ago</p>
-              </div>
+          {recentClaims.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No claims yet</p>
+          ) : (
+            <div className="space-y-4">
+              {recentClaims.map((claim) => (
+                <div 
+                  key={claim.id}
+                  className="flex items-center gap-4 cursor-pointer hover:bg-accent/50 p-2 rounded-lg transition-colors"
+                  onClick={() => navigate(`/claims/${claim.id}`)}
+                >
+                  <div className="h-2 w-2 rounded-full bg-primary" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{claim.policyholder_name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {claim.claim_number} • {claim.created_at ? formatDistanceToNow(new Date(claim.created_at), { addSuffix: true }) : 'Recently'}
+                    </p>
+                  </div>
+                  {claim.status && (
+                    <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary capitalize">
+                      {claim.status}
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
-            <div className="flex items-center gap-4">
-              <div className="h-2 w-2 rounded-full bg-success" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Claim approved</p>
-                <p className="text-xs text-muted-foreground">CLM-2024-001 • 5 hours ago</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="h-2 w-2 rounded-full bg-warning" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Document review pending</p>
-                <p className="text-xs text-muted-foreground">CLM-2024-002 • 1 day ago</p>
-              </div>
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>
