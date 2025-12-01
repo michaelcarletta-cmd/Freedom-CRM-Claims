@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, FileSignature, Check } from "lucide-react";
 
@@ -16,6 +17,7 @@ export default function Sign() {
   const [loading, setLoading] = useState(true);
   const [signing, setSigning] = useState(false);
   const [signed, setSigned] = useState(false);
+  const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -45,6 +47,16 @@ export default function Sign() {
       
       setSigner(signerData);
       setRequest(signerData.signature_requests);
+
+      // Get document URL
+      if (signerData.signature_requests?.document_path) {
+        const { data: urlData } = await supabase.storage
+          .from("claim-files")
+          .createSignedUrl(signerData.signature_requests.document_path, 3600);
+        if (urlData?.signedUrl) {
+          setDocumentUrl(urlData.signedUrl);
+        }
+      }
     } catch (error: any) {
       toast({
         title: "Invalid or expired link",
@@ -204,21 +216,37 @@ export default function Sign() {
               <span className="font-medium">Signer:</span> {signer.signer_name}
             </p>
             <p className="text-sm text-muted-foreground">
-              Please sign below using your mouse or touchscreen
+              Please review the document and sign below
             </p>
           </div>
 
-          <div className="border-2 border-dashed rounded-lg p-4 bg-background">
-            <canvas
-              ref={canvasRef}
-              width={600}
-              height={200}
-              className="w-full border rounded cursor-crosshair bg-white"
-              onMouseDown={startDrawing}
-              onMouseMove={draw}
-              onMouseUp={stopDrawing}
-              onMouseLeave={stopDrawing}
-            />
+          {documentUrl && (
+            <div className="border rounded-lg overflow-hidden bg-muted">
+              <iframe
+                src={documentUrl}
+                className="w-full h-96"
+                title="Document Preview"
+              />
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>Your Signature</Label>
+            <p className="text-sm text-muted-foreground">
+              Please sign using your mouse or touchscreen
+            </p>
+            <div className="border-2 border-dashed rounded-lg p-4 bg-background">
+              <canvas
+                ref={canvasRef}
+                width={600}
+                height={200}
+                className="w-full border rounded cursor-crosshair bg-white"
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
+              />
+            </div>
           </div>
 
           <div className="flex gap-2">

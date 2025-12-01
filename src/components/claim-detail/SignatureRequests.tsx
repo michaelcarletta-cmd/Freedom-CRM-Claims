@@ -134,6 +134,30 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     setSigners(signers.filter((_, i) => i !== index));
   };
 
+  const deleteRequestMutation = useMutation({
+    mutationFn: async (request: any) => {
+      // Delete document from storage
+      const { error: storageError } = await supabase.storage
+        .from("claim-files")
+        .remove([request.document_path]);
+      if (storageError) console.error("Storage deletion error:", storageError);
+
+      // Delete signature request (will cascade delete signers)
+      const { error } = await supabase
+        .from("signature_requests")
+        .delete()
+        .eq("id", request.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Signature request deleted" });
+      queryClient.invalidateQueries({ queryKey: ["signature-requests"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to delete", description: error.message, variant: "destructive" });
+    },
+  });
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "completed": return <Check className="w-4 h-4 text-green-600" />;
@@ -290,7 +314,17 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       </CardDescription>
                     </div>
                   </div>
-                  {getStatusBadge(request.status)}
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(request.status)}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteRequestMutation.mutate(request)}
+                      disabled={deleteRequestMutation.isPending}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
