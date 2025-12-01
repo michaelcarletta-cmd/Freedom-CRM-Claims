@@ -14,8 +14,9 @@ import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
 import { ClaimTemplates } from "@/components/claim-detail/ClaimTemplates";
 import { ClaimAccessManagement } from "@/components/claim-detail/ClaimAccessManagement";
 import { EditClaimDialog } from "@/components/claim-detail/EditClaimDialog";
+import { DeleteClaimDialog } from "@/components/claim-detail/DeleteClaimDialog";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Edit } from "lucide-react";
+import { ArrowLeft, Edit, Trash2 } from "lucide-react";
 
 const ClaimDetail = () => {
   const { id } = useParams();
@@ -23,6 +24,7 @@ const ClaimDetail = () => {
   const [claim, setClaim] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -80,10 +82,16 @@ const ClaimDetail = () => {
           </div>
           <p className="text-muted-foreground mt-1">{claim.policyholder_name}</p>
         </div>
-        <Button className="bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
-          <Edit className="h-4 w-4 mr-2" />
-          Edit Claim
-        </Button>
+        <div className="flex gap-2">
+          <Button className="bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
+            <Edit className="h-4 w-4 mr-2" />
+            Edit Claim
+          </Button>
+          <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete Claim
+          </Button>
+        </div>
       </div>
 
       <EditClaimDialog
@@ -91,6 +99,13 @@ const ClaimDetail = () => {
         onOpenChange={setEditDialogOpen}
         claim={claim}
         onClaimUpdated={(updatedClaim) => setClaim(updatedClaim)}
+      />
+
+      <DeleteClaimDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        claimId={claim.id}
+        claimNumber={claim.claim_number}
       />
 
       <Tabs defaultValue="overview" className="w-full">
