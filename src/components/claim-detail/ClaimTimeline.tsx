@@ -9,64 +9,8 @@ interface TimelineEvent {
   user: string;
 }
 
-const mockTimeline: TimelineEvent[] = [
-  {
-    id: "1",
-    type: "status",
-    title: "Claim Approved",
-    description: "Claim approved for $45,000",
-    timestamp: "2024-01-19 11:20 AM",
-    user: "Sarah Mitchell",
-  },
-  {
-    id: "2",
-    type: "communication",
-    title: "Phone Call Logged",
-    description: "Discussed repair timeline with client",
-    timestamp: "2024-01-20 10:15 AM",
-    user: "You",
-  },
-  {
-    id: "3",
-    type: "document",
-    title: "Document Uploaded",
-    description: "Repair_Estimate.pdf uploaded",
-    timestamp: "2024-01-18 2:00 PM",
-    user: "Contractor",
-  },
-  {
-    id: "4",
-    type: "note",
-    title: "Note Added",
-    description: "Adjuster visited property",
-    timestamp: "2024-01-18 2:15 PM",
-    user: "Sarah Mitchell",
-  },
-  {
-    id: "5",
-    type: "status",
-    title: "Status Changed",
-    description: "Changed to Under Review",
-    timestamp: "2024-01-17 9:30 AM",
-    user: "You",
-  },
-  {
-    id: "6",
-    type: "document",
-    title: "Photos Uploaded",
-    description: "2 damage photos added",
-    timestamp: "2024-01-15 3:45 PM",
-    user: "John Smith",
-  },
-  {
-    id: "7",
-    type: "status",
-    title: "Claim Created",
-    description: "New claim submitted",
-    timestamp: "2024-01-15 10:30 AM",
-    user: "You",
-  },
-];
+// No mock timeline data - activity will be tracked dynamically
+const mockTimeline: TimelineEvent[] = [];
 
 const getEventIcon = (type: string) => {
   switch (type) {
@@ -97,6 +41,14 @@ const getEventColor = (type: string) => {
 };
 
 export const ClaimTimeline = ({ claimId }: { claimId: string }) => {
+  if (mockTimeline.length === 0) {
+    return (
+      <div className="text-center text-sm text-muted-foreground py-8">
+        No activity recorded yet. Timeline will update as actions are taken on this claim.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="relative">

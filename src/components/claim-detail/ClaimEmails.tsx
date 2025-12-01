@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Mail, Send, Reply } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { EmailComposer } from "@/components/EmailComposer";
 
 interface Email {
   id: string;
@@ -16,12 +18,24 @@ interface Email {
 // No mock data - all emails will be managed by users
 const mockEmails: Email[] = [];
 
-export const ClaimEmails = ({ claimId }: { claimId: string }) => {
+interface ClaimEmailsProps {
+  claimId: string;
+  policyholderEmail?: string;
+  policyholderName?: string;
+  claimNumber?: string;
+}
+
+export const ClaimEmails = ({ claimId, policyholderEmail, policyholderName, claimNumber }: ClaimEmailsProps) => {
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold">Email Thread</h3>
-        <Button className="bg-primary hover:bg-primary/90">
+        <Button 
+          className="bg-primary hover:bg-primary/90"
+          onClick={() => setIsComposerOpen(true)}
+        >
           <Send className="h-4 w-4 mr-2" />
           Compose Email
         </Button>
@@ -62,6 +76,15 @@ export const ClaimEmails = ({ claimId }: { claimId: string }) => {
           ))}
         </div>
       )}
+
+      <EmailComposer
+        isOpen={isComposerOpen}
+        onClose={() => setIsComposerOpen(false)}
+        toEmail={policyholderEmail}
+        toName={policyholderName}
+        subject={claimNumber ? `Claim ${claimNumber}` : ""}
+        claimNumber={claimNumber}
+      />
     </div>
   );
 };
