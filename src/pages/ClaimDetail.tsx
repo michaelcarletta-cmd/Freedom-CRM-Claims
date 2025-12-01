@@ -13,6 +13,7 @@ import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
 import { ClaimTemplates } from "@/components/claim-detail/ClaimTemplates";
 import { ClaimAccessManagement } from "@/components/claim-detail/ClaimAccessManagement";
+import { EditClaimDialog } from "@/components/claim-detail/EditClaimDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Edit } from "lucide-react";
 
@@ -21,6 +22,7 @@ const ClaimDetail = () => {
   const { userRole } = useAuth();
   const [claim, setClaim] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -78,11 +80,18 @@ const ClaimDetail = () => {
           </div>
           <p className="text-muted-foreground mt-1">{claim.policyholder_name}</p>
         </div>
-        <Button className="bg-primary hover:bg-primary/90">
+        <Button className="bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
           <Edit className="h-4 w-4 mr-2" />
           Edit Claim
         </Button>
       </div>
+
+      <EditClaimDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        claim={claim}
+        onClaimUpdated={(updatedClaim) => setClaim(updatedClaim)}
+      />
 
       <Tabs defaultValue="overview" className="w-full">
         <TabsList>
