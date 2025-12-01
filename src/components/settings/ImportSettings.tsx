@@ -36,6 +36,8 @@ const FIELD_MAPPINGS = {
   policy_number: "Policy Number",
 };
 
+const SKIP_MAPPING_VALUE = "__skip__";
+
 export function ImportSettings() {
   const [file, setFile] = useState<File | null>(null);
   const [csvData, setCsvData] = useState<any[]>([]);
@@ -305,16 +307,19 @@ export function ImportSettings() {
                       )}
                     </Label>
                     <Select
-                      value={fieldMapping[dbField] || ""}
+                      value={fieldMapping[dbField] ?? SKIP_MAPPING_VALUE}
                       onValueChange={(value) =>
-                        setFieldMapping({ ...fieldMapping, [dbField]: value })
+                        setFieldMapping({
+                          ...fieldMapping,
+                          [dbField]: value === SKIP_MAPPING_VALUE ? "" : value,
+                        })
                       }
                     >
                       <SelectTrigger id={dbField}>
                         <SelectValue placeholder="Select column" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Skip this field</SelectItem>
+                        <SelectItem value={SKIP_MAPPING_VALUE}>Skip this field</SelectItem>
                         {headers.map((header) => (
                           <SelectItem key={header} value={header}>
                             {header}
