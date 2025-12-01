@@ -14,6 +14,7 @@ import ClientDetail from "./pages/ClientDetail";
 import Settings from "./pages/Settings";
 import Networking from "./pages/Networking";
 import Templates from "./pages/Templates";
+import Sales from "./pages/Sales";
 import Auth from "./pages/Auth";
 import ClientPortal from "./pages/ClientPortal";
 import ContractorPortal from "./pages/ContractorPortal";
@@ -98,6 +99,7 @@ function AppRoutes() {
       <Route path="/clients" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
       <Route path="/clients/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><ClientDetail /></AppLayout></ProtectedRoute>} />
       <Route path="/networking" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Networking /></AppLayout></ProtectedRoute>} />
+      <Route path="/sales" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
       <Route path="/templates" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Templates /></AppLayout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Settings /></AppLayout></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
