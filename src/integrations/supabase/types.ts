@@ -1367,6 +1367,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_manage_roles: { Args: { _user_id: string }; Returns: boolean }
       create_claim_for_staff: {
         Args: {
           p_claim_number: string
