@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { EditClientDialog } from "@/components/EditClientDialog";
+import { toast } from "sonner";
 
 interface Client {
   id: string;
@@ -107,6 +108,7 @@ const mockDocuments = [
 
 const ClientDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -153,6 +155,36 @@ const ClientDetail = () => {
       rejected: "bg-destructive text-destructive-foreground",
     };
     return classes[status] || "bg-secondary";
+  };
+
+  const handleSendEmail = () => {
+    if (!client?.email) {
+      toast.error("No email address available");
+      return;
+    }
+    window.location.href = `mailto:${client.email}`;
+  };
+
+  const handleCall = () => {
+    if (!client?.phone) {
+      toast.error("No phone number available");
+      return;
+    }
+    window.location.href = `tel:${client.phone}`;
+  };
+
+  const handleSendMessage = () => {
+    if (!client?.phone) {
+      toast.error("No phone number available");
+      return;
+    }
+    window.location.href = `sms:${client.phone}`;
+  };
+
+  const handleCreateClaim = () => {
+    // Navigate to claims page - the NewClaimDialog will open there
+    navigate("/claims");
+    toast.info("Create a new claim and assign it to this client");
   };
 
   if (loading) {
@@ -406,24 +438,38 @@ const ClientDetail = () => {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                className="w-full justify-start"
+                onClick={handleSendEmail}
+                disabled={!client?.email}
+              >
                 <Mail className="h-4 w-4 mr-2" />
                 Send Email
               </Button>
-              <Button variant="outline" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                className="w-full justify-start"
+                onClick={handleCall}
+                disabled={!client?.phone}
+              >
                 <Phone className="h-4 w-4 mr-2" />
-                Log Phone Call
+                Call Client
               </Button>
-              <Button variant="outline" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                className="w-full justify-start"
+                onClick={handleSendMessage}
+                disabled={!client?.phone}
+              >
                 <MessageSquare className="h-4 w-4 mr-2" />
-                Send Message
-              </Button>
-              <Button variant="outline" className="w-full justify-start">
-                <FileText className="h-4 w-4 mr-2" />
-                Add Document
+                Send Text Message
               </Button>
               <Separator className="my-4" />
-              <Button className="w-full bg-primary hover:bg-primary/90">
+              <Button 
+                className="w-full bg-primary hover:bg-primary/90"
+                onClick={handleCreateClaim}
+              >
                 <FileText className="h-4 w-4 mr-2" />
                 Create New Claim
               </Button>
@@ -436,7 +482,22 @@ const ClientDetail = () => {
         isOpen={isEditDialogOpen}
         onClose={() => setIsEditDialogOpen(false)}
         client={client}
-        onClientUpdated={fetchClient}
+        onClientUpdated={() => {
+          // If client was deleted, navigate back
+          supabase
+            .from("clients")
+            .select("id")
+            .eq("id", id!)
+            .single()
+            .then(({ data }) => {
+              if (!data) {
+                navigate("/clients");
+                toast.success("Client deleted successfully");
+              } else {
+                fetchClient();
+              }
+            });
+        }}
       />
     </div>
   );
