@@ -126,7 +126,13 @@ const ClaimDetail = () => {
         </TabsContent>
 
         <TabsContent value="communication" className="mt-6">
-          <ClaimCommunicationTab claimId={id || ""} policyholderPhone={claim.policyholder_phone} />
+          <ClaimCommunicationTab 
+            claimId={id || ""} 
+            policyholderPhone={claim.policyholder_phone}
+            policyholderEmail={claim.policyholder_email}
+            policyholderName={claim.policyholder_name}
+            claimNumber={claim.claim_number}
+          />
         </TabsContent>
 
         <TabsContent value="tasks" className="mt-6">
