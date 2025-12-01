@@ -53,7 +53,7 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
                 <div className="flex items-center gap-2">
                   <Mail className="h-4 w-4 text-primary" />
                   <div>
-                    <p className="text-sm font-medium">{email.subject}</p>
+                    <p className="text-sm font-medium text-foreground">{email.subject}</p>
                     <p className="text-xs text-muted-foreground">
                       To: {email.recipient_name || email.recipient_email} ({email.recipient_email})
                     </p>
@@ -70,7 +70,7 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
                   )}
                 </div>
               </div>
-              <div className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-3">
+              <div className="text-sm text-foreground whitespace-pre-wrap bg-muted/50 rounded p-3">
                 {email.body}
               </div>
             </div>
