@@ -163,6 +163,40 @@ export function NewClaimDialog() {
         
         // If still no client, create a new one
         if (!clientId) {
+          let userId: string | null = null;
+
+          // Create user account if email is provided
+          if (formData.policyholderEmail) {
+            const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+            
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+              email: formData.policyholderEmail,
+              password: tempPassword,
+              options: {
+                data: {
+                  full_name: formData.policyholderName,
+                },
+              },
+            });
+
+            if (!authError && authData.user) {
+              userId = authData.user.id;
+
+              // Update profile with phone
+              if (formData.policyholderPhone) {
+                await supabase
+                  .from("profiles")
+                  .update({ phone: formData.policyholderPhone })
+                  .eq("id", authData.user.id);
+              }
+
+              // Assign client role
+              await supabase
+                .from("user_roles")
+                .insert([{ user_id: authData.user.id, role: "client" }]);
+            }
+          }
+
           const { data: newClient, error: clientError } = await supabase
             .from("clients")
             .insert({
@@ -170,6 +204,7 @@ export function NewClaimDialog() {
               email: formData.policyholderEmail || null,
               phone: formData.policyholderPhone || null,
               street: formData.policyholderAddress || null,
+              user_id: userId, // Link client to auth user
             })
             .select()
             .single();
