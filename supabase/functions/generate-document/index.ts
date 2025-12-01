@@ -118,6 +118,36 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Error generating document:", error);
+    
+    // Handle docxtemplater-specific errors with better messages
+    if (error && typeof error === 'object' && 'properties' in error) {
+      const docxError = error as any;
+      if (docxError.properties?.errors) {
+        const errorDetails = docxError.properties.errors.map((e: any) => ({
+          message: e.message,
+          field: e.properties?.xtag || e.properties?.context,
+          explanation: e.properties?.explanation
+        }));
+        
+        console.info({ error: errorDetails });
+        
+        return new Response(
+          JSON.stringify({ 
+            error: "Template format error",
+            details: "The Word template has formatting issues. Please ensure merge fields like {{field_name}} are not split by formatting (bold, italic, etc.). Try retyping the merge fields without any formatting.",
+            technical: errorDetails
+          }),
+          {
+            status: 500,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      }
+    }
+    
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return new Response(
       JSON.stringify({ error: errorMessage }),

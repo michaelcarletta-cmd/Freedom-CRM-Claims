@@ -97,6 +97,11 @@ export function ClaimTemplates({ claimId, claim }: ClaimTemplatesProps) {
       });
 
       if (error) throw error;
+      
+      // Check if the response contains an error property (from edge function)
+      if (data?.error) {
+        throw new Error(data.details || data.error);
+      }
 
       // Create blob from the returned data
       const blob = new Blob([new Uint8Array(data.content.data)], {
@@ -111,7 +116,7 @@ export function ClaimTemplates({ claimId, claim }: ClaimTemplatesProps) {
     } catch (error: any) {
       toast({
         title: "Generation failed",
-        description: error.message,
+        description: error.message || "An error occurred while generating the document",
         variant: "destructive",
       });
     } finally {
