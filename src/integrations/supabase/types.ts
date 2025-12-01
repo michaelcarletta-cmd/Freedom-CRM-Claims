@@ -637,6 +637,7 @@ export type Database = {
           insurance_company_id: string | null
           insurance_email: string | null
           insurance_phone: string | null
+          loan_number: string | null
           loss_date: string | null
           loss_description: string | null
           loss_type: string | null
@@ -648,6 +649,7 @@ export type Database = {
           policyholder_name: string
           policyholder_phone: string | null
           referrer_id: string | null
+          ssn_last_four: string | null
           status: string | null
           updated_at: string | null
         }
@@ -664,6 +666,7 @@ export type Database = {
           insurance_company_id?: string | null
           insurance_email?: string | null
           insurance_phone?: string | null
+          loan_number?: string | null
           loss_date?: string | null
           loss_description?: string | null
           loss_type?: string | null
@@ -675,6 +678,7 @@ export type Database = {
           policyholder_name: string
           policyholder_phone?: string | null
           referrer_id?: string | null
+          ssn_last_four?: string | null
           status?: string | null
           updated_at?: string | null
         }
@@ -691,6 +695,7 @@ export type Database = {
           insurance_company_id?: string | null
           insurance_email?: string | null
           insurance_phone?: string | null
+          loan_number?: string | null
           loss_date?: string | null
           loss_description?: string | null
           loss_type?: string | null
@@ -702,6 +707,7 @@ export type Database = {
           policyholder_name?: string
           policyholder_phone?: string | null
           referrer_id?: string | null
+          ssn_last_four?: string | null
           status?: string | null
           updated_at?: string | null
         }

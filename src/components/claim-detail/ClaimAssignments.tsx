@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Users, Building2, UserPlus, X } from "lucide-react";
 
@@ -11,6 +13,8 @@ interface ClaimAssignmentsProps {
   claimId: string;
   currentReferrerId?: string | null;
   currentMortgageCompanyId?: string | null;
+  loanNumber?: string | null;
+  ssnLastFour?: string | null;
 }
 
 interface Contractor {
@@ -47,7 +51,7 @@ interface AssignedStaff {
   profiles: Staff;
 }
 
-export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCompanyId }: ClaimAssignmentsProps) {
+export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCompanyId, loanNumber, ssnLastFour }: ClaimAssignmentsProps) {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [assignedStaff, setAssignedStaff] = useState<AssignedStaff[]>([]);
   const [contractors, setContractors] = useState<Contractor[]>([]);
@@ -58,6 +62,8 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
   const [selectedContractor, setSelectedContractor] = useState<string>("");
   const [selectedReferrer, setSelectedReferrer] = useState<string>(currentReferrerId || "none");
   const [selectedMortgageCompany, setSelectedMortgageCompany] = useState<string>(currentMortgageCompanyId || "none");
+  const [editLoanNumber, setEditLoanNumber] = useState<string>(loanNumber || "");
+  const [editSsnLastFour, setEditSsnLastFour] = useState<string>(ssnLastFour || "");
 
   useEffect(() => {
     fetchData();
@@ -291,6 +297,23 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
     toast.success("Mortgage company updated");
   };
 
+  const handleUpdateMortgageDetails = async () => {
+    const { error } = await supabase
+      .from("claims")
+      .update({ 
+        loan_number: editLoanNumber || null, 
+        ssn_last_four: editSsnLastFour || null 
+      })
+      .eq("id", claimId);
+
+    if (error) {
+      toast.error("Failed to update mortgage details");
+      return;
+    }
+
+    toast.success("Mortgage details updated");
+  };
+
   return (
     <div className="grid gap-6">
       {/* Staff Assignments */}
@@ -422,7 +445,7 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
             Mortgage Company
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <Select value={selectedMortgageCompany} onValueChange={handleUpdateMortgageCompany}>
             <SelectTrigger>
               <SelectValue placeholder="Select a mortgage company" />
@@ -436,6 +459,35 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
               ))}
             </SelectContent>
           </Select>
+          
+          {selectedMortgageCompany !== "none" && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="loanNumber">Loan Number</Label>
+                  <Input
+                    id="loanNumber"
+                    value={editLoanNumber}
+                    onChange={(e) => setEditLoanNumber(e.target.value)}
+                    placeholder="Enter loan number"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ssnLastFour">SSN Last Four</Label>
+                  <Input
+                    id="ssnLastFour"
+                    value={editSsnLastFour}
+                    onChange={(e) => setEditSsnLastFour(e.target.value)}
+                    placeholder="Enter last 4 digits"
+                    maxLength={4}
+                  />
+                </div>
+              </div>
+              <Button onClick={handleUpdateMortgageDetails} className="w-full">
+                Save Mortgage Details
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

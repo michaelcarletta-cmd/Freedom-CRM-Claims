@@ -41,6 +41,8 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
     adjuster_email: claim?.adjuster_email || "",
     claim_amount: claim?.claim_amount || "",
     status: claim?.status || "open",
+    loan_number: claim?.loan_number || "",
+    ssn_last_four: claim?.ssn_last_four || "",
   });
 
   useEffect(() => {
@@ -65,6 +67,8 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
         adjuster_email: claim.adjuster_email || "",
         claim_amount: claim.claim_amount || "",
         status: claim.status || "open",
+        loan_number: claim.loan_number || "",
+        ssn_last_four: claim.ssn_last_four || "",
       });
     }
   }, [claim]);
@@ -377,6 +381,32 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
                   type="email"
                   value={formData.adjuster_email}
                   onChange={(e) => handleChange("adjuster_email", e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Mortgage Company Details */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold">Mortgage Company Details</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="loan_number">Loan Number</Label>
+                <Input
+                  id="loan_number"
+                  value={formData.loan_number}
+                  onChange={(e) => handleChange("loan_number", e.target.value)}
+                  placeholder="Enter loan number"
+                />
+              </div>
+              <div>
+                <Label htmlFor="ssn_last_four">SSN Last Four</Label>
+                <Input
+                  id="ssn_last_four"
+                  value={formData.ssn_last_four}
+                  onChange={(e) => handleChange("ssn_last_four", e.target.value)}
+                  placeholder="Enter last 4 digits"
+                  maxLength={4}
                 />
               </div>
             </div>
