@@ -16,9 +16,11 @@ import { ClaimPayments } from "./ClaimPayments";
 
 interface ClaimAccountingProps {
   claim: any;
+  userRole: string | null;
 }
 
-export function ClaimAccounting({ claim }: ClaimAccountingProps) {
+export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
+  const isAdmin = userRole === 'admin';
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -141,13 +143,13 @@ export function ClaimAccounting({ claim }: ClaimAccountingProps) {
       </div>
 
       {/* Settlement Details */}
-      <SettlementSection claimId={claim.id} settlement={settlement} />
+      <SettlementSection claimId={claim.id} settlement={settlement} isAdmin={isAdmin} />
 
       {/* Insurance Checks */}
-      <ChecksSection claimId={claim.id} checks={checks || []} />
+      <ChecksSection claimId={claim.id} checks={checks || []} isAdmin={isAdmin} />
 
       {/* Expenses */}
-      <ExpensesSection claimId={claim.id} expenses={expenses || []} />
+      <ExpensesSection claimId={claim.id} expenses={expenses || []} isAdmin={isAdmin} />
 
       {/* Fees & Profit Breakdown */}
       <FeesSection 
@@ -155,16 +157,17 @@ export function ClaimAccounting({ claim }: ClaimAccountingProps) {
         fees={fees} 
         grossProfit={grossProfit}
         totalChecksReceived={totalChecksReceived}
+        isAdmin={isAdmin}
       />
 
       {/* Payments Released */}
-      <ClaimPayments claimId={claim.id} />
+      <ClaimPayments claimId={claim.id} isAdmin={isAdmin} />
     </div>
   );
 }
 
 // Settlement Section Component
-function SettlementSection({ claimId, settlement }: any) {
+function SettlementSection({ claimId, settlement, isAdmin }: any) {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     replacement_cost_value: settlement?.replacement_cost_value || 0,
@@ -222,9 +225,10 @@ function SettlementSection({ claimId, settlement }: any) {
             <Building2 className="h-5 w-5" />
             Settlement Details
           </CardTitle>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => {
+          {isAdmin && (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={() => {
                 if (settlement) {
                   setFormData({
                     replacement_cost_value: settlement.replacement_cost_value,
@@ -345,6 +349,7 @@ function SettlementSection({ claimId, settlement }: any) {
               </div>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -421,7 +426,7 @@ function SettlementSection({ claimId, settlement }: any) {
 }
 
 // Checks Section Component  
-function ChecksSection({ claimId, checks }: any) {
+function ChecksSection({ claimId, checks, isAdmin }: any) {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     check_number: "",
@@ -469,9 +474,10 @@ function ChecksSection({ claimId, checks }: any) {
       <CardHeader>
         <div className="flex justify-between items-center">
           <CardTitle>Insurance Checks Received</CardTitle>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button>
+          {isAdmin && (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Check
               </Button>
@@ -544,6 +550,7 @@ function ChecksSection({ claimId, checks }: any) {
               </div>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -581,7 +588,7 @@ function ChecksSection({ claimId, checks }: any) {
 }
 
 // Expenses Section Component
-function ExpensesSection({ claimId, expenses }: any) {
+function ExpensesSection({ claimId, expenses, isAdmin }: any) {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     expense_date: "",
@@ -631,9 +638,10 @@ function ExpensesSection({ claimId, expenses }: any) {
       <CardHeader>
         <div className="flex justify-between items-center">
           <CardTitle>Expenses</CardTitle>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button>
+          {isAdmin && (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Expense
               </Button>
@@ -714,6 +722,7 @@ function ExpensesSection({ claimId, expenses }: any) {
               </div>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -751,7 +760,7 @@ function ExpensesSection({ claimId, expenses }: any) {
 }
 
 // Fees Section Component
-function FeesSection({ claimId, fees, grossProfit, totalChecksReceived }: any) {
+function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, isAdmin }: any) {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     company_fee_percentage: fees?.company_fee_percentage || 0,
@@ -803,9 +812,10 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived }: any) {
       <CardHeader>
         <div className="flex justify-between items-center">
           <CardTitle>Fees & Profit Breakdown</CardTitle>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => {
+          {isAdmin && (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={() => {
                 if (fees) {
                   setFormData({
                     company_fee_percentage: fees.company_fee_percentage,
@@ -885,6 +895,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived }: any) {
               </div>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </CardHeader>
       <CardContent>
