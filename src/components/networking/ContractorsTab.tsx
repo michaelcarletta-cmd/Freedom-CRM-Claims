@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { UserPlus, Mail, Phone, User } from "lucide-react";
 
 interface Contractor {
   id: string;
@@ -108,13 +109,18 @@ export const ContractorsTab = () => {
   };
 
   return (
-    <div className="space-y-4">
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogTrigger asChild>
-          <Button onClick={() => setFormData({ email: "", full_name: "", phone: "" })}>
-            Add Contractor
-          </Button>
-        </DialogTrigger>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <p className="text-muted-foreground">
+          Manage contractors who can access their assigned claims
+        </p>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => setFormData({ email: "", full_name: "", phone: "" })} size="lg" className="gap-2">
+              <UserPlus className="h-4 w-4" />
+              Add Contractor
+            </Button>
+          </DialogTrigger>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Contractor</DialogTitle>
@@ -150,32 +156,50 @@ export const ContractorsTab = () => {
             </Button>
           </div>
         </DialogContent>
-      </Dialog>
+        </Dialog>
+      </div>
 
-      <Card className="p-4">
-        <div className="space-y-2">
-          {contractors.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4">
+      {contractors.length === 0 ? (
+        <Card className="p-12">
+          <div className="text-center space-y-3">
+            <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+              <UserPlus className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <p className="text-muted-foreground">
               No contractors found. Contractors are users with the contractor role.
             </p>
-          ) : (
-            contractors.map((contractor) => (
-              <div
-                key={contractor.id}
-                className="flex items-center justify-between p-3 border rounded-lg"
-              >
-                <div className="flex-1">
-                  <div className="font-medium">{contractor.full_name || "No name"}</div>
-                  <div className="text-sm text-muted-foreground">Email: {contractor.email}</div>
+          </div>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {contractors.map((contractor) => (
+            <Card key={contractor.id} className="p-6 hover:shadow-lg transition-shadow duration-200">
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <User className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-lg truncate">{contractor.full_name || "No name"}</h3>
+                  </div>
+                </div>
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Mail className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{contractor.email}</span>
+                  </div>
                   {contractor.phone && (
-                    <div className="text-sm text-muted-foreground">Phone: {contractor.phone}</div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Phone className="h-4 w-4 flex-shrink-0" />
+                      <span>{contractor.phone}</span>
+                    </div>
                   )}
                 </div>
               </div>
-            ))
-          )}
+            </Card>
+          ))}
         </div>
-      </Card>
+      )}
     </div>
   );
 };

@@ -8,20 +8,20 @@ import { MortgageCompaniesTab } from "@/components/networking/MortgageCompaniesT
 export default function Networking() {
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Networking</h1>
-          <p className="text-muted-foreground">
+      <div className="space-y-8">
+        <div className="space-y-3">
+          <h1 className="text-4xl font-bold tracking-tight">Networking</h1>
+          <p className="text-muted-foreground text-lg">
             Manage your network of contractors, referrers, insurance companies, and mortgage companies
           </p>
         </div>
 
-        <Tabs defaultValue="contractors" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="contractors">Contractors</TabsTrigger>
-            <TabsTrigger value="referrers">Referrers</TabsTrigger>
-            <TabsTrigger value="insurance">Insurance Companies</TabsTrigger>
-            <TabsTrigger value="mortgage">Mortgage Companies</TabsTrigger>
+        <Tabs defaultValue="contractors" className="space-y-6">
+          <TabsList className="h-12 p-1">
+            <TabsTrigger value="contractors" className="text-base px-6">Contractors</TabsTrigger>
+            <TabsTrigger value="referrers" className="text-base px-6">Referrers</TabsTrigger>
+            <TabsTrigger value="insurance" className="text-base px-6">Insurance Companies</TabsTrigger>
+            <TabsTrigger value="mortgage" className="text-base px-6">Mortgage Companies</TabsTrigger>
           </TabsList>
 
           <TabsContent value="contractors">
