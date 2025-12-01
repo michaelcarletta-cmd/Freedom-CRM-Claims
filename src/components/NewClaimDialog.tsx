@@ -34,6 +34,9 @@ interface Client {
   email: string | null;
   phone: string | null;
   street: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
 }
 
 export function NewClaimDialog() {
@@ -52,7 +55,10 @@ export function NewClaimDialog() {
     policyholderName: "",
     policyholderPhone: "",
     policyholderEmail: "",
-    policyholderAddress: "",
+    policyholderStreet: "",
+    policyholderCity: "",
+    policyholderState: "",
+    policyholderZip: "",
     
     // Claim Information
     claimNumber: "",
@@ -78,7 +84,7 @@ export function NewClaimDialog() {
         supabase.from("insurance_companies").select("id, name, phone, email").eq("is_active", true).order("name"),
         supabase.from("loss_types").select("id, name").eq("is_active", true).order("name"),
         supabase.from("referrers").select("id, name, company").eq("is_active", true).order("name"),
-        supabase.from("clients").select("id, name, email, phone, street").order("name"),
+        supabase.from("clients").select("id, name, email, phone, street, city, state, zip_code").order("name"),
       ]);
 
       if (insuranceRes.error) throw insuranceRes.error;
@@ -119,7 +125,10 @@ export function NewClaimDialog() {
         policyholderName: "",
         policyholderPhone: "",
         policyholderEmail: "",
-        policyholderAddress: "",
+        policyholderStreet: "",
+        policyholderCity: "",
+        policyholderState: "",
+        policyholderZip: "",
       });
     } else {
       // Populate fields from selected client
@@ -130,7 +139,10 @@ export function NewClaimDialog() {
           policyholderName: selectedClient.name,
           policyholderPhone: selectedClient.phone || "",
           policyholderEmail: selectedClient.email || "",
-          policyholderAddress: selectedClient.street || "",
+          policyholderStreet: selectedClient.street || "",
+          policyholderCity: selectedClient.city || "",
+          policyholderState: selectedClient.state || "",
+          policyholderZip: selectedClient.zip_code || "",
         });
       }
     }
@@ -203,7 +215,10 @@ export function NewClaimDialog() {
               name: formData.policyholderName,
               email: formData.policyholderEmail || null,
               phone: formData.policyholderPhone || null,
-              street: formData.policyholderAddress || null,
+              street: formData.policyholderStreet || null,
+              city: formData.policyholderCity || null,
+              state: formData.policyholderState || null,
+              zip_code: formData.policyholderZip || null,
               user_id: userId, // Link client to auth user
             })
             .select()
@@ -214,16 +229,25 @@ export function NewClaimDialog() {
         }
       }
 
+      // Build policyholder address from separate fields
+      const addressParts = [
+        formData.policyholderStreet,
+        formData.policyholderCity,
+        formData.policyholderState,
+        formData.policyholderZip,
+      ].filter(Boolean);
+      const fullAddress = addressParts.length > 0 ? addressParts.join(", ") : null;
+
       // Now create the claim with the client_id
       const { data, error } = await supabase
         .from("claims")
         .insert({
-          claim_number: formData.claimNumber,
-          policy_number: formData.policyNumber,
-          policyholder_name: formData.policyholderName,
-          policyholder_phone: formData.policyholderPhone,
-          policyholder_email: formData.policyholderEmail,
-          policyholder_address: formData.policyholderAddress,
+          claim_number: formData.claimNumber || null,
+          policy_number: formData.policyNumber || null,
+          policyholder_name: formData.policyholderName || null,
+          policyholder_phone: formData.policyholderPhone || null,
+          policyholder_email: formData.policyholderEmail || null,
+          policyholder_address: fullAddress,
           insurance_company_id: formData.insuranceCompanyId || null,
           insurance_phone: formData.insurancePhone || null,
           insurance_email: formData.insuranceEmail || null,
@@ -270,7 +294,10 @@ export function NewClaimDialog() {
         policyholderName: "",
         policyholderPhone: "",
         policyholderEmail: "",
-        policyholderAddress: "",
+        policyholderStreet: "",
+        policyholderCity: "",
+        policyholderState: "",
+        policyholderZip: "",
         claimNumber: "",
         policyNumber: "",
         insuranceCompanyId: "",
@@ -336,10 +363,9 @@ export function NewClaimDialog() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="policyholderName">Full Name *</Label>
+                <Label htmlFor="policyholderName">Full Name</Label>
                 <Input
                   id="policyholderName"
-                  required
                   value={formData.policyholderName}
                   onChange={(e) => setFormData({ ...formData, policyholderName: e.target.value })}
                   placeholder="John Doe"
@@ -355,7 +381,7 @@ export function NewClaimDialog() {
                   placeholder="+1 (555) 123-4567"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 col-span-2">
                 <Label htmlFor="policyholderEmail">Email</Label>
                 <Input
                   id="policyholderEmail"
@@ -366,12 +392,39 @@ export function NewClaimDialog() {
                 />
               </div>
               <div className="space-y-2 col-span-2">
-                <Label htmlFor="policyholderAddress">Address</Label>
+                <Label htmlFor="policyholderStreet">Street Address</Label>
                 <Input
-                  id="policyholderAddress"
-                  value={formData.policyholderAddress}
-                  onChange={(e) => setFormData({ ...formData, policyholderAddress: e.target.value })}
-                  placeholder="123 Main St, City, State 12345"
+                  id="policyholderStreet"
+                  value={formData.policyholderStreet}
+                  onChange={(e) => setFormData({ ...formData, policyholderStreet: e.target.value })}
+                  placeholder="123 Main St"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="policyholderCity">City</Label>
+                <Input
+                  id="policyholderCity"
+                  value={formData.policyholderCity}
+                  onChange={(e) => setFormData({ ...formData, policyholderCity: e.target.value })}
+                  placeholder="Miami"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="policyholderState">State</Label>
+                <Input
+                  id="policyholderState"
+                  value={formData.policyholderState}
+                  onChange={(e) => setFormData({ ...formData, policyholderState: e.target.value })}
+                  placeholder="FL"
+                />
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label htmlFor="policyholderZip">ZIP Code</Label>
+                <Input
+                  id="policyholderZip"
+                  value={formData.policyholderZip}
+                  onChange={(e) => setFormData({ ...formData, policyholderZip: e.target.value })}
+                  placeholder="33101"
                 />
               </div>
             </div>
@@ -384,10 +437,9 @@ export function NewClaimDialog() {
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="claimNumber">Claim Number *</Label>
+                <Label htmlFor="claimNumber">Claim Number</Label>
                 <Input
                   id="claimNumber"
-                  required
                   value={formData.claimNumber}
                   onChange={(e) => setFormData({ ...formData, claimNumber: e.target.value })}
                   placeholder="CLM-2024-001"
