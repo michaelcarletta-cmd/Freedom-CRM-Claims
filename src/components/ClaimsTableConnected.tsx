@@ -6,12 +6,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, Search } from "lucide-react";
+import { Eye, Search, Trash2 } from "lucide-react";
 import { ClaimStatusSelect } from "./ClaimStatusSelect";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 
 interface Claim {
   id: string;
@@ -36,8 +38,12 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [lossTypeFilter, setLossTypeFilter] = useState<string>("all");
   const [showClosed, setShowClosed] = useState(false);
+  const [selectedClaims, setSelectedClaims] = useState<Set<string>>(new Set());
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchClaims();
@@ -77,6 +83,54 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
     }
 
     setFilteredClaims(filtered);
+  };
+
+  const toggleClaimSelection = (claimId: string) => {
+    const newSelected = new Set(selectedClaims);
+    if (newSelected.has(claimId)) {
+      newSelected.delete(claimId);
+    } else {
+      newSelected.add(claimId);
+    }
+    setSelectedClaims(newSelected);
+  };
+
+  const toggleAllClaims = () => {
+    if (selectedClaims.size === filteredClaims.length) {
+      setSelectedClaims(new Set());
+    } else {
+      setSelectedClaims(new Set(filteredClaims.map(c => c.id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("claims")
+        .delete()
+        .in("id", Array.from(selectedClaims));
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `Successfully deleted ${selectedClaims.size} claim(s)`,
+      });
+
+      setSelectedClaims(new Set());
+      setShowDeleteDialog(false);
+      fetchClaims();
+    } catch (error) {
+      console.error("Error deleting claims:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete claims",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const fetchClaims = async () => {
@@ -162,6 +216,22 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-col gap-3">
+          {selectedClaims.size > 0 && (
+            <div className="flex items-center justify-between p-3 bg-muted rounded-md">
+              <span className="text-sm font-medium">
+                {selectedClaims.size} claim(s) selected
+              </span>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Selected
+              </Button>
+            </div>
+          )}
+          
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -216,6 +286,12 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={filteredClaims.length > 0 && selectedClaims.size === filteredClaims.length}
+                    onCheckedChange={toggleAllClaims}
+                  />
+                </TableHead>
                 <TableHead>Claim #</TableHead>
                 <TableHead>Client Name</TableHead>
                 <TableHead>Property Address</TableHead>
@@ -229,7 +305,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
             <TableBody>
               {filteredClaims.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground">
                     No claims found
                   </TableCell>
                 </TableRow>
@@ -240,6 +316,12 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                     className="hover:bg-muted/50 transition-colors cursor-pointer"
                     onClick={() => navigate(`/claims/${claim.id}`)}
                   >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedClaims.has(claim.id)}
+                        onCheckedChange={() => toggleClaimSelection(claim.id)}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">{claim.claim_number}</TableCell>
                     <TableCell>{claim.policyholder_name}</TableCell>
                     <TableCell className="max-w-[200px] truncate">
@@ -275,6 +357,28 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
           </Table>
         </div>
       </CardContent>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedClaims.size} Claim(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the selected claims and all associated data including:
+              files, notes, tasks, payments, and accounting records. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteSelected}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };
