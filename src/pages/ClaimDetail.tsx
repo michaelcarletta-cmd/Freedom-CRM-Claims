@@ -109,7 +109,7 @@ const ClaimDetail = () => {
       />
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="w-full justify-start h-12 bg-muted/50 rounded-none border-b">
+        <TabsList className="w-full justify-start h-auto flex-wrap gap-1 bg-muted/50 rounded-none border-b p-1">
           <TabsTrigger value="overview" className="data-[state=active]:bg-background">Overview</TabsTrigger>
           <TabsTrigger value="communication" className="data-[state=active]:bg-background">Communication</TabsTrigger>
           <TabsTrigger value="tasks" className="data-[state=active]:bg-background">Tasks</TabsTrigger>
