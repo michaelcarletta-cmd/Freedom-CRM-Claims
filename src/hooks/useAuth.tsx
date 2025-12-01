@@ -47,7 +47,7 @@ export function useAuth() {
         .from("user_roles")
         .select("role")
         .eq("user_id", userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error("Error fetching user role:", error);
@@ -62,7 +62,6 @@ export function useAuth() {
       setLoading(false);
     }
   };
-
   const signOut = async () => {
     await supabase.auth.signOut();
   };
