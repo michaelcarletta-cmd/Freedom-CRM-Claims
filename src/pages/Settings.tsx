@@ -282,17 +282,17 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="statuses" className="space-y-6">
-        <TabsList className="flex flex-col md:flex-row md:flex-wrap h-auto w-full bg-muted/40 p-2 gap-1 justify-start items-stretch">
-          <TabsTrigger value="statuses" className="w-full md:w-auto md:flex-1 justify-start text-base font-medium whitespace-nowrap">Claim Statuses</TabsTrigger>
-          <TabsTrigger value="insurance" className="w-full md:w-auto md:flex-1 justify-start text-base font-medium whitespace-nowrap">Insurance Companies</TabsTrigger>
-          <TabsTrigger value="loss-types" className="w-full md:w-auto md:flex-1 justify-start text-base font-medium whitespace-nowrap">Loss Types</TabsTrigger>
-          <TabsTrigger value="referrers" className="w-full md:w-auto md:flex-1 justify-start text-base font-medium whitespace-nowrap">Referrers</TabsTrigger>
-          <TabsTrigger value="users" className="w-full md:w-auto md:flex-1 justify-start text-base font-medium whitespace-nowrap">User Management</TabsTrigger>
-          <TabsTrigger value="templates" className="w-full md:w-auto md:flex-1 justify-start text-base font-medium whitespace-nowrap">Templates</TabsTrigger>
-          <TabsTrigger value="custom-fields" className="w-full md:w-auto md:flex-1 justify-start text-base font-medium whitespace-nowrap">Custom Fields</TabsTrigger>
-          <TabsTrigger value="task-automations" className="w-full md:w-auto md:flex-1 justify-start text-base font-medium whitespace-nowrap">Task Automations</TabsTrigger>
-          <TabsTrigger value="automations" className="w-full md:w-auto md:flex-1 justify-start text-base font-medium whitespace-nowrap">Automations</TabsTrigger>
-          <TabsTrigger value="import" className="w-full md:w-auto md:flex-1 justify-start text-base font-medium whitespace-nowrap">Import Data</TabsTrigger>
+        <TabsList className="flex flex-col md:flex-row md:flex-wrap h-auto w-full bg-muted/40 p-2 gap-1">
+          <TabsTrigger value="statuses" className="w-full md:w-auto justify-start text-base font-medium px-4">Claim Statuses</TabsTrigger>
+          <TabsTrigger value="insurance" className="w-full md:w-auto justify-start text-base font-medium px-4">Insurance Companies</TabsTrigger>
+          <TabsTrigger value="loss-types" className="w-full md:w-auto justify-start text-base font-medium px-4">Loss Types</TabsTrigger>
+          <TabsTrigger value="referrers" className="w-full md:w-auto justify-start text-base font-medium px-4">Referrers</TabsTrigger>
+          <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium px-4">User Management</TabsTrigger>
+          <TabsTrigger value="templates" className="w-full md:w-auto justify-start text-base font-medium px-4">Templates</TabsTrigger>
+          <TabsTrigger value="custom-fields" className="w-full md:w-auto justify-start text-base font-medium px-4">Custom Fields</TabsTrigger>
+          <TabsTrigger value="task-automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Task Automations</TabsTrigger>
+          <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
+          <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
         </TabsList>
 
         <TabsContent value="statuses" className="w-full">
