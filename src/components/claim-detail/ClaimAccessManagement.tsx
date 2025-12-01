@@ -17,13 +17,15 @@ interface Profile {
   email: string;
 }
 
-interface UserRole {
-  user_id: string;
-  role: string;
+interface Client {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
 }
 
 export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
-  const [clients, setClients] = useState<Profile[]>([]);
+  const [allClients, setAllClients] = useState<Client[]>([]);
   const [contractors, setContractors] = useState<Profile[]>([]);
   const [referrers, setReferrers] = useState<any[]>([]);
   const [assignedContractors, setAssignedContractors] = useState<Profile[]>([]);
@@ -35,35 +37,41 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchUsers();
+    fetchClients();
+    fetchContractors();
     fetchReferrers();
     fetchClaimAssignments();
   }, [claimId]);
 
-  const fetchUsers = async () => {
+  const fetchClients = async () => {
     try {
-      // Get all user roles
+      const { data } = await supabase
+        .from("clients")
+        .select("*")
+        .order("name");
+      setAllClients(data || []);
+    } catch (error: any) {
+      console.error("Error fetching clients:", error);
+    }
+  };
+
+  const fetchContractors = async () => {
+    try {
       const { data: roles } = await supabase
         .from("user_roles")
-        .select("user_id, role");
+        .select("user_id")
+        .eq("role", "contractor");
 
       if (!roles) return;
 
-      // Get all profiles
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("*");
+        .select("*")
+        .in("id", roles.map(r => r.user_id));
 
-      if (!profiles) return;
-
-      // Separate by role
-      const clientRoles = roles.filter(r => r.role === "client");
-      const contractorRoles = roles.filter(r => r.role === "contractor");
-
-      setClients(profiles.filter(p => clientRoles.some(r => r.user_id === p.id)));
-      setContractors(profiles.filter(p => contractorRoles.some(r => r.user_id === p.id)));
+      setContractors(profiles || []);
     } catch (error: any) {
-      console.error("Error fetching users:", error);
+      console.error("Error fetching contractors:", error);
     }
   };
 
@@ -269,7 +277,7 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
     }
   };
 
-  const currentClient = clients.find(c => c.id === currentClientId);
+  const currentClient = allClients.find(c => c.id === currentClientId);
   const currentReferrer = referrers.find(r => r.id === currentReferrerId);
 
   return (
@@ -286,7 +294,7 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
           {currentClient ? (
             <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
               <div>
-                <p className="font-medium">{currentClient.full_name || currentClient.email}</p>
+                <p className="font-medium">{currentClient.name}</p>
                 <p className="text-sm text-muted-foreground">{currentClient.email}</p>
               </div>
               <Button variant="ghost" size="sm" onClick={removeClient}>
@@ -296,13 +304,13 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
           ) : (
             <div className="flex gap-2">
               <Select value={selectedClient} onValueChange={setSelectedClient}>
-                <SelectTrigger>
+                <SelectTrigger className="bg-background">
                   <SelectValue placeholder="Select client" />
                 </SelectTrigger>
-                <SelectContent>
-                  {clients.map((client) => (
+                <SelectContent className="bg-popover z-50">
+                  {allClients.map((client) => (
                     <SelectItem key={client.id} value={client.id}>
-                      {client.full_name || client.email}
+                      {client.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -327,10 +335,10 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
         <CardContent className="space-y-4">
           <div className="flex gap-2">
             <Select value={selectedContractor} onValueChange={setSelectedContractor}>
-              <SelectTrigger>
+              <SelectTrigger className="bg-background">
                 <SelectValue placeholder="Select contractor" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-popover z-50">
                 {contractors
                   .filter(c => !assignedContractors.some(ac => ac.id === c.id))
                   .map((contractor) => (
@@ -386,10 +394,10 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
           ) : (
             <div className="flex gap-2">
               <Select value={selectedReferrer} onValueChange={setSelectedReferrer}>
-                <SelectTrigger>
+                <SelectTrigger className="bg-background">
                   <SelectValue placeholder="Select referrer" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-popover z-50">
                   {referrers.map((referrer) => (
                     <SelectItem key={referrer.id} value={referrer.id}>
                       {referrer.name} {referrer.company ? `(${referrer.company})` : ""}
