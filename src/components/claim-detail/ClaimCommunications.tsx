@@ -11,38 +11,8 @@ interface Communication {
   duration?: string;
 }
 
-const mockCommunications: Communication[] = [
-  {
-    id: "1",
-    type: "phone",
-    contact: "John Smith",
-    summary: "Discussed repair timeline and contractor scheduling. Client confirmed availability for next week.",
-    timestamp: "2024-01-20 10:15 AM",
-    duration: "12 min",
-  },
-  {
-    id: "2",
-    type: "text",
-    contact: "John Smith",
-    summary: "Client sent photos of additional damage found in attic space.",
-    timestamp: "2024-01-19 4:30 PM",
-  },
-  {
-    id: "3",
-    type: "phone",
-    contact: "Sarah Mitchell (Adjuster)",
-    summary: "Adjuster confirmed approval and discussed next steps for claim settlement.",
-    timestamp: "2024-01-19 11:45 AM",
-    duration: "8 min",
-  },
-  {
-    id: "4",
-    type: "text",
-    contact: "John Smith",
-    summary: "Follow-up about missing documentation. Client will send by end of day.",
-    timestamp: "2024-01-18 2:20 PM",
-  },
-];
+// No mock data - all communications will be logged by users
+const communications: Communication[] = [];
 
 export const ClaimCommunications = ({ claimId }: { claimId: string }) => {
   return (
@@ -55,8 +25,13 @@ export const ClaimCommunications = ({ claimId }: { claimId: string }) => {
         </Button>
       </div>
 
-      <div className="space-y-3">
-        {mockCommunications.map((comm) => (
+      {communications.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          No communications logged yet. Click "Log Communication" to add one.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {communications.map((comm) => (
           <div
             key={comm.id}
             className="p-4 rounded-lg border border-border hover:bg-muted/30 transition-colors"
@@ -88,8 +63,9 @@ export const ClaimCommunications = ({ claimId }: { claimId: string }) => {
               </div>
             </div>
           </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
