@@ -108,6 +108,33 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
         }
       } else if (portalType === "referrer") {
         query = query.eq("referrer_id", user?.id);
+      } else if (!portalType) {
+        // Main claims page - check if user is staff (non-admin)
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user?.id);
+        
+        const isAdmin = roles?.some(r => r.role === "admin");
+        const isStaff = roles?.some(r => r.role === "staff");
+        
+        // If staff but not admin, only show assigned claims
+        if (isStaff && !isAdmin) {
+          const { data: staffAssignments } = await supabase
+            .from("claim_staff")
+            .select("claim_id")
+            .eq("staff_id", user?.id);
+          
+          if (staffAssignments && staffAssignments.length > 0) {
+            const claimIds = staffAssignments.map(a => a.claim_id);
+            query = query.in("id", claimIds);
+          } else {
+            setClaims([]);
+            setLoading(false);
+            return;
+          }
+        }
+        // If admin, query remains as is (fetch all)
       }
 
       const { data, error } = await query.order("created_at", { ascending: false });
