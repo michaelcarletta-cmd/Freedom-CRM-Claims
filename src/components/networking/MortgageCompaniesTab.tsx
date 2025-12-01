@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, Building2, Mail, Phone, User, Plus } from "lucide-react";
 
 interface MortgageCompany {
   id: string;
@@ -126,16 +126,21 @@ export const MortgageCompaniesTab = () => {
   };
 
   return (
-    <div className="space-y-4">
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogTrigger asChild>
-          <Button onClick={() => {
-            setEditingCompany(null);
-            setFormData({ name: "", contact_name: "", phone: "", email: "" });
-          }}>
-            Add Mortgage Company
-          </Button>
-        </DialogTrigger>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <p className="text-muted-foreground">
+          Manage mortgage companies associated with your claims
+        </p>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => {
+              setEditingCompany(null);
+              setFormData({ name: "", contact_name: "", phone: "", email: "" });
+            }} size="lg" className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add Mortgage Company
+            </Button>
+          </DialogTrigger>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingCompany ? "Edit" : "Add"} Mortgage Company</DialogTitle>
@@ -178,51 +183,72 @@ export const MortgageCompaniesTab = () => {
             </Button>
           </div>
         </DialogContent>
-      </Dialog>
+        </Dialog>
+      </div>
 
-      <Card className="p-4">
-        <div className="space-y-2">
-          {companies.map((company) => (
-            <div
-              key={company.id}
-              className="flex items-center justify-between p-3 border rounded-lg"
-            >
-              <div className="flex-1">
-                <div className="font-medium">{company.name}</div>
-                {company.contact_name && (
-                  <div className="text-sm text-muted-foreground">Contact: {company.contact_name}</div>
-                )}
-                {company.phone && (
-                  <div className="text-sm text-muted-foreground">Phone: {company.phone}</div>
-                )}
-                {company.email && (
-                  <div className="text-sm text-muted-foreground">Email: {company.email}</div>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {companies.map((company) => (
+          <Card key={company.id} className="p-6 hover:shadow-lg transition-shadow duration-200">
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Building2 className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-lg truncate">{company.name}</h3>
+                    {company.contact_name && (
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-1">
+                        <User className="h-3.5 w-3.5 flex-shrink-0" />
+                        <span className="truncate">{company.contact_name}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <Switch
                   checked={company.is_active}
                   onCheckedChange={() => handleToggleActive(company)}
                 />
+              </div>
+              
+              <div className="space-y-2.5">
+                {company.email && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Mail className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{company.email}</span>
+                  </div>
+                )}
+                {company.phone && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Phone className="h-4 w-4 flex-shrink-0" />
+                    <span>{company.phone}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 pt-2 border-t">
                 <Button
-                  variant="ghost"
-                  size="icon"
+                  variant="outline"
+                  size="sm"
                   onClick={() => handleEdit(company)}
+                  className="flex-1 gap-2"
                 >
-                  <Pencil className="h-4 w-4" />
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit
                 </Button>
                 <Button
-                  variant="ghost"
-                  size="icon"
+                  variant="outline"
+                  size="sm"
                   onClick={() => handleDelete(company.id)}
+                  className="gap-2"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
-          ))}
-        </div>
-      </Card>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 };
