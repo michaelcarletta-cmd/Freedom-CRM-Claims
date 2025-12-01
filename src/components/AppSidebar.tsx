@@ -1,6 +1,9 @@
-import { Home, FileText, CheckSquare, Inbox, Users, Network, DollarSign, FileStack, Settings } from "lucide-react";
+import { Home, FileText, CheckSquare, Inbox, Users, Network, DollarSign, FileStack, Settings, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import logo from "@/assets/freedom-claims-logo.svg";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 import {
   Sidebar,
@@ -30,6 +33,13 @@ const accountItems: any[] = [];
 
 export function AppSidebar() {
   const { open } = useSidebar();
+  const { signOut, user } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/auth");
+  };
 
   return (
     <Sidebar className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
@@ -66,6 +76,27 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Logout button at bottom */}
+        <div className="mt-auto p-4 border-t border-sidebar-border">
+          {user && (
+            <div className="mb-3">
+              {open && (
+                <p className="text-xs text-muted-foreground truncate">
+                  {user.email}
+                </p>
+              )}
+            </div>
+          )}
+          <Button
+            onClick={handleSignOut}
+            variant="ghost"
+            className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          >
+            <LogOut className="h-5 w-5" />
+            {open && <span className="ml-2">Log Out</span>}
+          </Button>
+        </div>
       </SidebarContent>
     </Sidebar>
   );
