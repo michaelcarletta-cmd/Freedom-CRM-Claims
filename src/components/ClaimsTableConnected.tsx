@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, Search } from "lucide-react";
 import { ClaimStatusSelect } from "./ClaimStatusSelect";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 
 interface Claim {
   id: string;
@@ -33,6 +35,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [lossTypeFilter, setLossTypeFilter] = useState<string>("all");
+  const [showClosed, setShowClosed] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -42,10 +45,15 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
 
   useEffect(() => {
     filterClaims();
-  }, [claims, searchQuery, statusFilter, lossTypeFilter]);
+  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed]);
 
   const filterClaims = () => {
     let filtered = [...claims];
+
+    // Hide closed claims by default
+    if (!showClosed) {
+      filtered = filtered.filter((claim) => claim.status !== "closed");
+    }
 
     // Search filter
     if (searchQuery) {
@@ -137,7 +145,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
             />
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-full sm:w-[200px]">
                 <SelectValue placeholder="Filter by status" />
@@ -163,6 +171,17 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                 ))}
               </SelectContent>
             </Select>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-closed"
+                checked={showClosed}
+                onCheckedChange={(checked) => setShowClosed(checked as boolean)}
+              />
+              <Label htmlFor="show-closed" className="text-sm cursor-pointer">
+                Show closed claims
+              </Label>
+            </div>
           </div>
         </div>
 
