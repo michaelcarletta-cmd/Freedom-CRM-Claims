@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Claims from "./pages/Claims";
 import ClaimDetail from "./pages/ClaimDetail";
 import Tasks from "./pages/Tasks";
+import Inbox from "./pages/Inbox";
 import Clients from "./pages/Clients";
 import ClientDetail from "./pages/ClientDetail";
 import Settings from "./pages/Settings";
@@ -96,6 +97,7 @@ function AppRoutes() {
       <Route path="/claims" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Claims /></AppLayout></ProtectedRoute>} />
       <Route path="/claims/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><ClaimDetail /></AppLayout></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Tasks /></AppLayout></ProtectedRoute>} />
+      <Route path="/inbox" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Inbox /></AppLayout></ProtectedRoute>} />
       <Route path="/clients" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
       <Route path="/clients/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><ClientDetail /></AppLayout></ProtectedRoute>} />
       <Route path="/networking" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Networking /></AppLayout></ProtectedRoute>} />
