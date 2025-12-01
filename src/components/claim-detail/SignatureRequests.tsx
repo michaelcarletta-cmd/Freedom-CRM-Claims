@@ -298,22 +298,45 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
               </div>
             </div>
             <DialogFooter>
-              <Button
-                onClick={() => createRequestMutation.mutate()}
-                disabled={!selectedTemplate || signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
-              >
-                {createRequestMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Mail className="w-4 h-4 mr-2" />
-                    Send for Signature
-                  </>
-                )}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (!selectedTemplate) return;
+                    // Create test request with user's own email from claim
+                    const testSigners = [{ 
+                      name: "Test Signer (You)", 
+                      email: claim.policyholder_email || "", 
+                      type: "policyholder", 
+                      order: 1 
+                    }];
+                    const originalSigners = signers;
+                    setSigners(testSigners);
+                    createRequestMutation.mutate(undefined, {
+                      onSettled: () => setSigners(originalSigners)
+                    });
+                  }}
+                  disabled={!selectedTemplate || !claim.policyholder_email || createRequestMutation.isPending}
+                >
+                  Send Test to Myself
+                </Button>
+                <Button
+                  onClick={() => createRequestMutation.mutate()}
+                  disabled={!selectedTemplate || signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
+                >
+                  {createRequestMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-4 h-4 mr-2" />
+                      Send for Signature
+                    </>
+                  )}
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>
