@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink } from "lucide-react";
+import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy } from "lucide-react";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -471,17 +471,20 @@ function ChecksSection({ claimId, checks, isAdmin, claim }: any) {
   });
 
   const handleOpenIink = () => {
-    // Build URL parameters with claim data for iink Payments
-    const params = new URLSearchParams();
-    if (claim?.policyholder_name) params.set('name', claim.policyholder_name);
-    if (claim?.policyholder_address) params.set('address', claim.policyholder_address);
-    if (claim?.claim_number) params.set('claim', claim.claim_number);
-    if (claim?.policy_number) params.set('policy', claim.policy_number);
-    if (claim?.insurance_company) params.set('insurance', claim.insurance_company);
+    window.open('https://iink.com', '_blank', 'noopener,noreferrer');
+  };
+
+  const handleCopyClaimDetails = () => {
+    const details = [
+      claim?.policyholder_name && `Name: ${claim.policyholder_name}`,
+      claim?.policyholder_address && `Address: ${claim.policyholder_address}`,
+      claim?.claim_number && `Claim #: ${claim.claim_number}`,
+      claim?.policy_number && `Policy #: ${claim.policy_number}`,
+      claim?.insurance_company && `Insurance: ${claim.insurance_company}`,
+    ].filter(Boolean).join('\n');
     
-    // Open iink Payments - note: iink may not support URL pre-fill, opens main portal
-    const iinkUrl = `https://iink.com`;
-    window.open(iinkUrl, '_blank', 'noopener,noreferrer');
+    navigator.clipboard.writeText(details);
+    toast({ title: "Copied to clipboard", description: "Claim details ready to paste into iink" });
   };
 
   return (
@@ -490,9 +493,13 @@ function ChecksSection({ claimId, checks, isAdmin, claim }: any) {
         <div className="flex justify-between items-center">
           <CardTitle>Insurance Checks Received</CardTitle>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleOpenIink}>
+            <Button variant="outline" size="sm" onClick={handleCopyClaimDetails}>
+              <Copy className="h-4 w-4 mr-2" />
+              Copy Details
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleOpenIink}>
               <ExternalLink className="h-4 w-4 mr-2" />
-              Send to iink
+              Open iink
             </Button>
           {isAdmin && (
             <Dialog open={open} onOpenChange={setOpen}>
