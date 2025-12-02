@@ -82,27 +82,22 @@ export function ReferrersSettings() {
         if (formData.email.trim()) {
           const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
           
-          const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: formData.email.trim(),
-            password: tempPassword,
-            options: {
-              data: {
-                full_name: formData.name.trim(),
-                role: 'referrer',
+          // Use edge function to create user without auto-login
+          const { data: funcData, error: funcError } = await supabase.functions.invoke(
+            "create-portal-user",
+            {
+              body: {
+                email: formData.email.trim(),
+                password: tempPassword,
+                fullName: formData.name.trim(),
+                role: "referrer",
+                phone: formData.phone.trim() || undefined,
               },
-            },
-          });
+            }
+          );
 
-          if (authError) throw authError;
-          if (!authData.user) throw new Error("Failed to create user account");
-
-          // Update profile with phone
-          if (formData.phone.trim()) {
-            await supabase
-              .from("profiles")
-              .update({ phone: formData.phone.trim() })
-              .eq("id", authData.user.id);
-          }
+          if (funcError) throw funcError;
+          if (funcData?.error) throw new Error(funcData.error);
 
           toast({ 
             title: "Success", 

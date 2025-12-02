@@ -85,34 +85,28 @@ export const ContractorsTab = () => {
     // Create a temporary password for the contractor
     const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
 
-    // Sign up the user
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: formData.email,
-      password: tempPassword,
-      options: {
-        data: {
-          full_name: formData.full_name,
-          role: 'contractor',
+    // Use edge function to create user without auto-login
+    const { data: funcData, error: funcError } = await supabase.functions.invoke(
+      "create-portal-user",
+      {
+        body: {
+          email: formData.email,
+          password: tempPassword,
+          fullName: formData.full_name,
+          role: "contractor",
+          phone: formData.phone || undefined,
         },
-      },
-    });
+      }
+    );
 
-    if (authError) {
-      toast.error("Failed to create contractor: " + authError.message);
+    if (funcError) {
+      toast.error("Failed to create contractor: " + funcError.message);
       return;
     }
 
-    if (!authData.user) {
-      toast.error("Failed to create contractor");
+    if (funcData?.error) {
+      toast.error("Failed to create contractor: " + funcData.error);
       return;
-    }
-
-    // Update profile with phone
-    if (formData.phone) {
-      await supabase
-        .from("profiles")
-        .update({ phone: formData.phone })
-        .eq("id", authData.user.id);
     }
 
     toast.success(`Contractor added! Login: ${formData.email} | Password: ${tempPassword}`, {
