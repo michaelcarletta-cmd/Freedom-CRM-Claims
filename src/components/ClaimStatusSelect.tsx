@@ -74,7 +74,7 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
 
   return (
     <Select value={currentStatus} onValueChange={handleStatusChange} disabled={loading}>
-      <SelectTrigger className="w-[180px] rounded-sm">
+      <SelectTrigger className="w-[180px] rounded-none">
         <SelectValue placeholder="Select status" />
       </SelectTrigger>
       <SelectContent>
