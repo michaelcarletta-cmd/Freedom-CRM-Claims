@@ -89,7 +89,7 @@ export const MortgageCompaniesTab = () => {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <CardTitle>Mortgage Companies</CardTitle>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
@@ -159,16 +159,17 @@ export const MortgageCompaniesTab = () => {
             {companies.length === 0 ? "No mortgage companies found" : "No companies match your search"}
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Company Name</TableHead>
-                <TableHead>Contact Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Phone</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[600px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="whitespace-nowrap">Company Name</TableHead>
+                  <TableHead className="whitespace-nowrap">Contact Name</TableHead>
+                  <TableHead className="whitespace-nowrap">Email</TableHead>
+                  <TableHead className="whitespace-nowrap">Phone</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
               {filteredCompanies.map((company) => (
                 <TableRow key={company.id}>
                   <TableCell className="font-medium">
@@ -209,8 +210,9 @@ export const MortgageCompaniesTab = () => {
                   </TableCell>
                 </TableRow>
               ))}
-            </TableBody>
-          </Table>
+              </TableBody>
+            </Table>
+          </div>
         )}
       </CardContent>
     </Card>
