@@ -201,21 +201,11 @@ export function ReferrersSettings() {
     if (!referrerToDelete) return;
 
     try {
-      // If referrer has email, delete the auth user first
+      // If referrer has email, delete the auth user first (by email lookup)
       if (referrerToDelete.email) {
-        // Find the auth user by email
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("email", referrerToDelete.email)
-          .maybeSingle();
-
-        if (profileData?.id) {
-          // Delete the auth user via edge function
-          await supabase.functions.invoke("delete-user", {
-            body: { userId: profileData.id },
-          });
-        }
+        await supabase.functions.invoke("delete-user", {
+          body: { email: referrerToDelete.email },
+        });
       }
 
       // Delete the referrer record
