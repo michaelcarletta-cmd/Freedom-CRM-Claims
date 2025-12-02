@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp } from "lucide-react";
+import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -146,7 +146,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
       <SettlementSection claimId={claim.id} settlement={settlement} isAdmin={isAdmin} />
 
       {/* Insurance Checks */}
-      <ChecksSection claimId={claim.id} checks={checks || []} isAdmin={isAdmin} />
+      <ChecksSection claimId={claim.id} checks={checks || []} isAdmin={isAdmin} claim={claim} />
 
       {/* Expenses */}
       <ExpensesSection claimId={claim.id} expenses={expenses || []} isAdmin={isAdmin} />
@@ -427,7 +427,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
 }
 
 // Checks Section Component  
-function ChecksSection({ claimId, checks, isAdmin }: any) {
+function ChecksSection({ claimId, checks, isAdmin, claim }: any) {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     check_number: "",
@@ -470,11 +470,30 @@ function ChecksSection({ claimId, checks, isAdmin }: any) {
     },
   });
 
+  const handleOpenIink = () => {
+    // Build URL parameters with claim data for iink Payments
+    const params = new URLSearchParams();
+    if (claim?.policyholder_name) params.set('name', claim.policyholder_name);
+    if (claim?.policyholder_address) params.set('address', claim.policyholder_address);
+    if (claim?.claim_number) params.set('claim', claim.claim_number);
+    if (claim?.policy_number) params.set('policy', claim.policy_number);
+    if (claim?.insurance_company) params.set('insurance', claim.insurance_company);
+    
+    // Open iink Payments with pre-filled parameters
+    const iinkUrl = `https://app.iinkpayments.com/deposit${params.toString() ? '?' + params.toString() : ''}`;
+    window.open(iinkUrl, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <Card>
       <CardHeader>
         <div className="flex justify-between items-center">
           <CardTitle>Insurance Checks Received</CardTitle>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleOpenIink}>
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Send to iink
+            </Button>
           {isAdmin && (
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
@@ -552,6 +571,7 @@ function ChecksSection({ claimId, checks, isAdmin }: any) {
             </DialogContent>
           </Dialog>
           )}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
