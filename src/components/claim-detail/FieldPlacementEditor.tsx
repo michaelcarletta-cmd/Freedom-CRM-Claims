@@ -188,6 +188,9 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
   // PDF overlay click handler
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!activeTool || !overlayRef.current) return;
+    
+    // Prevent if clicking on an existing field
+    if ((e.target as HTMLElement).closest('.field-indicator')) return;
 
     const rect = overlayRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -220,6 +223,44 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
     onFieldsChange(updatedFields);
 
     toast({ title: `${type} field added` });
+  };
+
+  // Drag handling for PDF fields
+  const [draggingField, setDraggingField] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  const handleFieldMouseDown = (e: React.MouseEvent, fieldId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const field = fields.find(f => f.id === fieldId);
+    if (!field) return;
+    
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setDragOffset({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
+    setDraggingField(fieldId);
+  };
+
+  const handleOverlayMouseMove = (e: React.MouseEvent) => {
+    if (!draggingField || !overlayRef.current) return;
+    
+    const rect = overlayRef.current.getBoundingClientRect();
+    const newX = e.clientX - rect.left - dragOffset.x;
+    const newY = e.clientY - rect.top - dragOffset.y;
+    
+    setFields(prev => prev.map(f => 
+      f.id === draggingField ? { ...f, x: Math.max(0, newX), y: Math.max(0, newY) } : f
+    ));
+  };
+
+  const handleOverlayMouseUp = () => {
+    if (draggingField) {
+      setDraggingField(null);
+      onFieldsChange(fields);
+    }
   };
 
   const addFieldToCanvas = (field: Field) => {
@@ -493,6 +534,12 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
             Click on the document to place a {activeTool} field
           </div>
         )}
+        
+        {!activeTool && fields.length > 0 && isPdf && (
+          <div className="mb-4 p-3 bg-muted border border-border rounded text-sm text-muted-foreground">
+            Drag fields to reposition. Double-click a field to remove it.
+          </div>
+        )}
 
         <div ref={containerRef} className="border rounded overflow-auto bg-gray-50">
           {isLoading && (
@@ -506,20 +553,25 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
             <div className="relative">
               <iframe
                 src={`https://docs.google.com/viewer?url=${encodeURIComponent(documentUrl)}&embedded=true`}
-                className="w-full h-[600px] border-0"
+                className="w-full h-[600px] border-0 pointer-events-none"
                 title="PDF Document"
               />
-              {/* Transparent overlay for click detection */}
+              {/* Transparent overlay for click and drag detection */}
               <div
                 ref={overlayRef}
-                className={`absolute inset-0 ${activeTool ? 'cursor-crosshair' : 'pointer-events-none'}`}
+                className={`absolute inset-0 ${activeTool ? 'cursor-crosshair' : ''}`}
                 onClick={handleOverlayClick}
+                onMouseMove={handleOverlayMouseMove}
+                onMouseUp={handleOverlayMouseUp}
+                onMouseLeave={handleOverlayMouseUp}
               >
-                {/* Render field indicators */}
+                {/* Render draggable field indicators */}
                 {fields.map((field) => (
                   <div
                     key={field.id}
-                    className="absolute border-2 border-dashed flex items-center justify-center text-xs font-bold"
+                    className={`field-indicator absolute border-2 border-dashed flex items-center justify-center text-xs font-bold select-none ${
+                      draggingField === field.id ? 'opacity-70' : ''
+                    } ${!activeTool ? 'cursor-move' : ''}`}
                     style={{
                       left: field.x,
                       top: field.y,
@@ -529,11 +581,10 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
                       backgroundColor: colors[field.type] + "33",
                       color: colors[field.type],
                     }}
-                    onClick={(e) => {
+                    onMouseDown={(e) => !activeTool && handleFieldMouseDown(e, field.id)}
+                    onDoubleClick={(e) => {
                       e.stopPropagation();
-                      if (!activeTool) {
-                        removeField(field.id);
-                      }
+                      removeField(field.id);
                     }}
                   >
                     {field.label}
@@ -551,7 +602,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
 
         {fields.length > 0 && (
           <div className="mt-4">
-            <Label className="text-sm mb-2 block">Placed Fields ({fields.length}) - Click field to remove</Label>
+            <Label className="text-sm mb-2 block">Placed Fields ({fields.length}) - {isPdf ? "Double-click field on document or click badge to remove" : "Click field to remove"}</Label>
             <div className="flex flex-wrap gap-2">
               {fields.map((field) => (
                 <Badge 
