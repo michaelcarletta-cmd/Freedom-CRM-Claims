@@ -162,7 +162,7 @@ const ClaimDetail = () => {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6 bg-muted/30 min-h-screen">
       <div className="flex items-center gap-4">
         <Link to={getBackLink()}>
           <Button variant="ghost" size="icon">
@@ -171,7 +171,7 @@ const ClaimDetail = () => {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-foreground">{claim.claim_number}</h1>
+            <h1 className="text-3xl font-bold text-sidebar">{claim.claim_number}</h1>
             {isStaffOrAdmin && (
               <ClaimStatusSelect 
                 claimId={claim.id} 
@@ -185,7 +185,7 @@ const ClaimDetail = () => {
               </span>
             )}
           </div>
-          <p className="text-foreground/80 mt-1 font-medium">{claim.policyholder_name}</p>
+          <p className="text-sidebar/80 mt-1 font-medium">{claim.policyholder_name}</p>
         </div>
         {isStaffOrAdmin && (
           <div className="flex flex-wrap gap-2">
