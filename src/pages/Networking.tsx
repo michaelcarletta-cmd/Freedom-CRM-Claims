@@ -15,14 +15,12 @@ export default function Networking() {
       </div>
 
       <Tabs defaultValue="contractors" className="space-y-6">
-        <div className="w-full overflow-x-auto">
-          <TabsList className="inline-flex h-12 p-1 w-full justify-start">
-            <TabsTrigger value="contractors" className="text-base px-6 whitespace-nowrap">Contractors</TabsTrigger>
-            <TabsTrigger value="referrers" className="text-base px-6 whitespace-nowrap">Referrers</TabsTrigger>
-            <TabsTrigger value="insurance" className="text-base px-6 whitespace-nowrap">Insurance Companies</TabsTrigger>
-            <TabsTrigger value="mortgage" className="text-base px-6 whitespace-nowrap">Mortgage Companies</TabsTrigger>
-          </TabsList>
-        </div>
+        <TabsList className="h-12 p-1">
+          <TabsTrigger value="contractors" className="text-base px-6">Contractors</TabsTrigger>
+          <TabsTrigger value="referrers" className="text-base px-6">Referrers</TabsTrigger>
+          <TabsTrigger value="insurance" className="text-base px-6">Insurance Companies</TabsTrigger>
+          <TabsTrigger value="mortgage" className="text-base px-6">Mortgage Companies</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="contractors">
           <ContractorsTab />
