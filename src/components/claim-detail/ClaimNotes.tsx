@@ -267,6 +267,9 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
 
       if (error) throw error;
 
+      // Optimistically remove from local state so the UI updates immediately
+      setUpdates((prev) => prev.filter((update) => update.id !== updateId));
+
       toast.success("Update deleted successfully");
       fetchUpdates();
     } catch (error: any) {
@@ -274,7 +277,6 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
       toast.error("Failed to delete update");
     }
   };
-
   return (
     <>
     <Tabs defaultValue="notes" className="w-full">
