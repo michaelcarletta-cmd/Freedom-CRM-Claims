@@ -6,26 +6,26 @@ import { MortgageCompaniesTab } from "@/components/networking/MortgageCompaniesT
 
 export default function Networking() {
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
-        <h1 className="text-4xl font-bold tracking-tight">Networking</h1>
-        <p className="text-muted-foreground text-lg">
+    <div className="space-y-4 md:space-y-8 p-4 md:p-0">
+      <div className="space-y-2 md:space-y-3">
+        <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-foreground">Networking</h1>
+        <p className="text-muted-foreground text-sm md:text-lg">
           Manage your network of contractors, referrers, insurance companies, and mortgage companies
         </p>
       </div>
 
       <Tabs defaultValue="contractors" className="space-y-6">
-        <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1 overflow-x-auto scrollbar-hide">
-          <TabsTrigger value="contractors" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
+        <TabsList className="flex flex-col md:flex-row w-full bg-muted p-2 gap-1 h-auto rounded-md">
+          <TabsTrigger value="contractors" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Contractors
           </TabsTrigger>
-          <TabsTrigger value="referrers" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
+          <TabsTrigger value="referrers" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Referrers
           </TabsTrigger>
-          <TabsTrigger value="insurance" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
+          <TabsTrigger value="insurance" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Insurance Companies
           </TabsTrigger>
-          <TabsTrigger value="mortgage" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
+          <TabsTrigger value="mortgage" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Mortgage Companies
           </TabsTrigger>
         </TabsList>

@@ -149,10 +149,10 @@ export const TemplatesSettings = () => {
         </AlertDescription>
       </Alert>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Document Templates</h2>
-          <p className="text-muted-foreground">Manage templates available across all claims</p>
+          <h2 className="text-xl md:text-2xl font-bold text-foreground">Document Templates</h2>
+          <p className="text-muted-foreground text-sm">Manage templates available across all claims</p>
         </div>
         <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
           <DialogTrigger asChild>
@@ -234,15 +234,15 @@ export const TemplatesSettings = () => {
             {templates?.length || 0} template(s) available
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Table>
+        <CardContent className="overflow-x-auto">
+          <Table className="min-w-[600px]">
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>File Name</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="whitespace-nowrap">Name</TableHead>
+                <TableHead className="whitespace-nowrap">Category</TableHead>
+                <TableHead className="whitespace-nowrap">File Name</TableHead>
+                <TableHead className="whitespace-nowrap">Status</TableHead>
+                <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

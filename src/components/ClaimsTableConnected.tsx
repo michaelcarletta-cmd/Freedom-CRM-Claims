@@ -309,8 +309,8 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
           </div>
         </div>
 
-        <div className="rounded-md border">
-          <Table>
+        <div className="rounded-md border overflow-x-auto">
+          <Table className="min-w-[800px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12">
@@ -319,14 +319,14 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                     onCheckedChange={toggleAllClaims}
                   />
                 </TableHead>
-                <TableHead>Claim #</TableHead>
-                <TableHead>Client Name</TableHead>
-                <TableHead>Property Address</TableHead>
-                <TableHead>Loss Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Date Submitted</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="whitespace-nowrap">Claim #</TableHead>
+                <TableHead className="whitespace-nowrap">Client Name</TableHead>
+                <TableHead className="whitespace-nowrap">Property Address</TableHead>
+                <TableHead className="whitespace-nowrap">Loss Type</TableHead>
+                <TableHead className="whitespace-nowrap">Status</TableHead>
+                <TableHead className="whitespace-nowrap">Amount</TableHead>
+                <TableHead className="whitespace-nowrap">Date Submitted</TableHead>
+                <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
