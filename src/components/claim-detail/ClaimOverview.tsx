@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Calendar, MapPin, DollarSign } from "lucide-react";
+import { User, Calendar, MapPin, DollarSign, Mail } from "lucide-react";
 import { format } from "date-fns";
 import { ClaimAssignments } from "./ClaimAssignments";
 import { ClaimCustomFields } from "./ClaimCustomFields";
@@ -8,6 +8,20 @@ interface ClaimOverviewProps {
   claim: any;
   isPortalUser?: boolean;
 }
+
+// Generate claim-specific email address using policy number
+const getClaimEmail = (claim: any): string => {
+  const domain = "inbound.resend.dev";
+  if (claim.policy_number) {
+    const sanitized = claim.policy_number
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+    return `claim-${sanitized}@${domain}`;
+  }
+  return claim.claim_email_id ? `claim-${claim.claim_email_id}@${domain}` : '';
+};
 
 export function ClaimOverview({ claim, isPortalUser = false }: ClaimOverviewProps) {
   return (
@@ -62,6 +76,17 @@ export function ClaimOverview({ claim, isPortalUser = false }: ClaimOverviewProp
               <p className="text-sm text-muted-foreground">Type of Loss</p>
               <p className="text-sm font-medium">{claim.loss_type || "N/A"}</p>
             </div>
+            {!isPortalUser && getClaimEmail(claim) && (
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Mail className="h-3 w-3" />
+                  Claim Email
+                </p>
+                <p className="text-sm font-medium font-mono text-primary break-all">
+                  {getClaimEmail(claim)}
+                </p>
+              </div>
+            )}
             <div className="space-y-1 md:col-span-2">
               <p className="text-sm text-muted-foreground">Loss Description</p>
               <p className="text-sm font-medium">{claim.loss_description || "N/A"}</p>
