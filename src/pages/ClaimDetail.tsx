@@ -45,6 +45,7 @@ const ClaimDetail = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [referrer, setReferrer] = useState<Referrer | null>(null);
 
@@ -278,7 +279,7 @@ const ClaimDetail = () => {
         </>
       )}
 
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="flex flex-col md:flex-row w-full bg-muted p-2 gap-1 h-auto rounded-md">
           <TabsTrigger value="overview" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Overview
@@ -365,7 +366,7 @@ const ClaimDetail = () => {
         )}
       </Tabs>
 
-      {isStaffOrAdmin && (
+      {isStaffOrAdmin && activeTab === "overview" && (
         <div className="mt-12 pt-6 border-t border-destructive/30">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
