@@ -384,7 +384,7 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
                         <span className="text-xs text-muted-foreground">
                           {format(new Date(update.created_at), "MMM d, yyyy h:mm a")}
                         </span>
-                        {isCurrentUser && (
+                        {(isStaff || isCurrentUser) && (
                           <div className="flex gap-1">
                             <Button
                               variant="ghost"
