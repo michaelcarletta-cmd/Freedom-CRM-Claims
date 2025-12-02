@@ -398,7 +398,10 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
                               variant="ghost"
                               size="icon"
                               className="h-6 w-6 text-destructive hover:text-destructive"
-                              onClick={() => handleDeleteUpdate(update.id)}
+                              onClick={() => {
+                                console.log("[ClaimNotes] Delete button clicked", update.id);
+                                handleDeleteUpdate(update.id);
+                              }}
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>
