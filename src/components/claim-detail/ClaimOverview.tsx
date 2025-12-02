@@ -1,12 +1,18 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Calendar, MapPin, DollarSign, Mail } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { User, Calendar, MapPin, DollarSign, Mail, UserPlus, Check, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ClaimAssignments } from "./ClaimAssignments";
 import { ClaimCustomFields } from "./ClaimCustomFields";
+import { CredentialsDialog } from "@/components/CredentialsDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface ClaimOverviewProps {
   claim: any;
   isPortalUser?: boolean;
+  onClaimUpdated?: (claim: any) => void;
 }
 
 // Generate claim-specific email address using policy number
@@ -23,16 +29,157 @@ const getClaimEmail = (claim: any): string => {
   return claim.claim_email_id ? `claim-${claim.claim_email_id}@${domain}` : '';
 };
 
-export function ClaimOverview({ claim, isPortalUser = false }: ClaimOverviewProps) {
+export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: ClaimOverviewProps) {
+  const [creatingPortal, setCreatingPortal] = useState(false);
+  const [hasPortalAccess, setHasPortalAccess] = useState(false);
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [credentials, setCredentials] = useState({ email: "", password: "" });
+
+  // Check if client already has portal access
+  useEffect(() => {
+    const checkPortalAccess = async () => {
+      if (claim.client_id) {
+        const { data } = await supabase
+          .from("clients")
+          .select("user_id")
+          .eq("id", claim.client_id)
+          .single();
+        setHasPortalAccess(!!data?.user_id);
+      } else {
+        setHasPortalAccess(false);
+      }
+    };
+    checkPortalAccess();
+  }, [claim.client_id]);
+
+  const handleCreatePortalAccess = async () => {
+    if (!claim.policyholder_email) {
+      toast.error("Policyholder email is required to create portal access");
+      return;
+    }
+
+    setCreatingPortal(true);
+    try {
+      const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+
+      // Create portal user via edge function
+      const { data: userData, error: userError } = await supabase.functions.invoke(
+        "create-portal-user",
+        {
+          body: {
+            email: claim.policyholder_email,
+            password: tempPassword,
+            fullName: claim.policyholder_name,
+            role: "client",
+            phone: claim.policyholder_phone,
+          },
+        }
+      );
+
+      if (userError) throw userError;
+      if (userData?.error) throw new Error(userData.error);
+
+      const userId = userData?.userId;
+      if (!userId) throw new Error("Failed to create user account");
+
+      let clientId = claim.client_id;
+
+      // Create or update client record
+      if (!clientId) {
+        // Check if client already exists with this email
+        const { data: existingClient } = await supabase
+          .from("clients")
+          .select("id")
+          .eq("email", claim.policyholder_email)
+          .single();
+
+        if (existingClient) {
+          // Update existing client with user_id
+          await supabase
+            .from("clients")
+            .update({ user_id: userId })
+            .eq("id", existingClient.id);
+          clientId = existingClient.id;
+        } else {
+          // Create new client
+          const { data: newClient, error: clientError } = await supabase
+            .from("clients")
+            .insert({
+              name: claim.policyholder_name,
+              email: claim.policyholder_email,
+              phone: claim.policyholder_phone,
+              user_id: userId,
+            })
+            .select()
+            .single();
+
+          if (clientError) throw clientError;
+          clientId = newClient.id;
+        }
+
+        // Link client to claim
+        const { error: updateError } = await supabase
+          .from("claims")
+          .update({ client_id: clientId })
+          .eq("id", claim.id);
+
+        if (updateError) throw updateError;
+
+        // Update parent component
+        if (onClaimUpdated) {
+          onClaimUpdated({ ...claim, client_id: clientId });
+        }
+      } else {
+        // Update existing client with user_id
+        await supabase
+          .from("clients")
+          .update({ user_id: userId })
+          .eq("id", clientId);
+      }
+
+      setHasPortalAccess(true);
+      setCredentials({ email: claim.policyholder_email, password: tempPassword });
+      setCredentialsOpen(true);
+      toast.success("Portal access created successfully");
+    } catch (error: any) {
+      console.error("Error creating portal access:", error);
+      toast.error(error.message || "Failed to create portal access");
+    } finally {
+      setCreatingPortal(false);
+    }
+  };
+
   return (
     <div className="grid gap-6">
       {/* Policyholder Information */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="flex items-center gap-2">
             <User className="h-5 w-5 text-primary" />
             Policyholder Information
           </CardTitle>
+          {!isPortalUser && claim.policyholder_email && (
+            hasPortalAccess ? (
+              <span className="flex items-center gap-1 text-xs text-green-500 bg-green-500/10 px-2 py-1 rounded">
+                <Check className="h-3 w-3" />
+                Portal Access Active
+              </span>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCreatePortalAccess}
+                disabled={creatingPortal}
+              >
+                {creatingPortal ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <UserPlus className="h-4 w-4 mr-2" />
+                )}
+                Create Portal Access
+              </Button>
+            )
+          )}
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
@@ -218,6 +365,16 @@ export function ClaimOverview({ claim, isPortalUser = false }: ClaimOverviewProp
 
       {/* Custom Fields */}
       <ClaimCustomFields claimId={claim.id} />
+
+      {/* Credentials Dialog */}
+      <CredentialsDialog
+        isOpen={credentialsOpen}
+        onClose={() => setCredentialsOpen(false)}
+        email={credentials.email}
+        password={credentials.password}
+        userType="Client"
+        userName={claim.policyholder_name}
+      />
     </div>
   );
 }

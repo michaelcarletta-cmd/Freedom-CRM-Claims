@@ -316,7 +316,11 @@ const ClaimDetail = () => {
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
-          <ClaimOverview claim={claim} isPortalUser={isPortalUser} />
+          <ClaimOverview 
+            claim={claim} 
+            isPortalUser={isPortalUser} 
+            onClaimUpdated={(updatedClaim) => setClaim(updatedClaim)}
+          />
         </TabsContent>
 
         <TabsContent value="communication" className="mt-6">
