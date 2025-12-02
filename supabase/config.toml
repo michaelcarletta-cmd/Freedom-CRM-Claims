@@ -18,6 +18,9 @@ verify_jwt = false
 [functions.automation-webhook]
 verify_jwt = false
 
+[functions.check-scheduled-automations]
+verify_jwt = false
+
 [functions.get-signature-document]
 verify_jwt = false
 
