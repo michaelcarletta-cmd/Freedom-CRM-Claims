@@ -67,11 +67,11 @@ serve(async (req) => {
   }
 
   try {
-    const { claimId, question, messages } = await req.json();
+    const { claimId, question, messages, mode } = await req.json();
     
-    if (!claimId || !question) {
+    if (!question) {
       return new Response(
-        JSON.stringify({ error: "Missing claimId or question" }),
+        JSON.stringify({ error: "Missing question" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -81,31 +81,84 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch claim details with related information
-    const { data: claim, error: claimError } = await supabase
-      .from("claims")
-      .select(`
-        *,
-        claim_settlements(*),
-        claim_checks(*),
-        claim_expenses(*),
-        claim_fees(*),
-        tasks(*),
-        claim_files(*)
-      `)
-      .eq("id", claimId)
-      .single();
+    let claim = null;
+    let claimsOverview = "";
 
-    if (claimError || !claim) {
-      return new Response(
-        JSON.stringify({ error: "Claim not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // If in general mode, fetch overview of all claims
+    if (mode === "general" || !claimId) {
+      const { data: allClaims } = await supabase
+        .from("claims")
+        .select(`
+          id,
+          claim_number,
+          policyholder_name,
+          status,
+          loss_type,
+          loss_date,
+          claim_amount,
+          insurance_company,
+          created_at
+        `)
+        .eq("is_closed", false)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (allClaims && allClaims.length > 0) {
+        claimsOverview = `\n\nRecent Active Claims (${allClaims.length}):\n`;
+        allClaims.forEach((c, i) => {
+          claimsOverview += `${i + 1}. ${c.claim_number || 'No #'} - ${c.policyholder_name} | ${c.status || 'Unknown'} | ${c.loss_type || 'Unknown loss'} | ${c.insurance_company || 'Unknown carrier'}\n`;
+        });
+      }
+
+      // Also fetch pending tasks
+      const { data: pendingTasks } = await supabase
+        .from("tasks")
+        .select(`
+          id,
+          title,
+          due_date,
+          priority,
+          claims!inner(claim_number, policyholder_name)
+        `)
+        .eq("status", "pending")
+        .order("due_date", { ascending: true })
+        .limit(10);
+
+      if (pendingTasks && pendingTasks.length > 0) {
+        claimsOverview += `\n\nPending Tasks (${pendingTasks.length}):\n`;
+        pendingTasks.forEach((t: any, i) => {
+          const dueDate = t.due_date ? new Date(t.due_date).toLocaleDateString() : 'No due date';
+          claimsOverview += `${i + 1}. ${t.title} | ${t.claims?.claim_number || 'No claim #'} - ${t.claims?.policyholder_name} | Due: ${dueDate} | Priority: ${t.priority || 'Normal'}\n`;
+        });
+      }
+    } else if (claimId) {
+      // Fetch specific claim details
+      const { data: claimData, error: claimError } = await supabase
+        .from("claims")
+        .select(`
+          *,
+          claim_settlements(*),
+          claim_checks(*),
+          claim_expenses(*),
+          claim_fees(*),
+          tasks(*),
+          claim_files(*)
+        `)
+        .eq("id", claimId)
+        .single();
+
+      if (claimError || !claimData) {
+        return new Response(
+          JSON.stringify({ error: "Claim not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      claim = claimData;
     }
 
     // Analyze uploaded files/estimates
     let filesContext = "";
-    if (claim.claim_files && claim.claim_files.length > 0) {
+    if (claim && claim.claim_files && claim.claim_files.length > 0) {
       filesContext = "\n\nUploaded Files:\n";
       for (const file of claim.claim_files) {
         const { data: signedUrl } = await supabase
@@ -122,8 +175,12 @@ serve(async (req) => {
       }
     }
 
-    // Build context from claim data
-    const claimContext = `
+    // Build context based on mode
+    let contextContent = "";
+    
+    if (claim) {
+      // Specific claim context
+      contextContent = `
 Claim Details:
 - Claim Number: ${claim.claim_number}
 - Policyholder: ${claim.policyholder_name}
@@ -152,7 +209,11 @@ Checks Received: ${claim.claim_checks.length} check(s) totaling $${claim.claim_c
 ${claim.tasks && claim.tasks.length > 0 ? `
 Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} pending, ${claim.tasks.filter((t: any) => t.status === "completed").length} completed
 ` : ""}${filesContext}
-    `.trim();
+      `.trim();
+    } else {
+      // General mode context
+      contextContent = `You are helping a public adjuster manage their claims workload.${claimsOverview}`;
+    }
 
     // Determine if web search is needed based on question content
     let webSearchResults = "";
@@ -160,7 +221,8 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
     
     if (needsWebSearch) {
       console.log("Performing web search for:", question);
-      const searchQuery = `${claim.loss_type || "property damage"} insurance claim ${question}`;
+      const lossType = claim?.loss_type || "property damage";
+      const searchQuery = `${lossType} insurance claim ${question}`;
       webSearchResults = await searchWeb(searchQuery);
       if (webSearchResults && webSearchResults !== "Web search unavailable: API key not configured") {
         webSearchResults = `\n\nRelevant Industry Information:\n${webSearchResults}`;
@@ -173,7 +235,17 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const systemPrompt = `You are an expert insurance claims adjuster and consultant specializing in property damage claims. Your role is to provide strategic advice, best practices, and actionable guidance to help maximize claim settlements while maintaining ethical standards.
+    const systemPrompt = mode === "general" 
+      ? `You are an expert AI assistant for public adjusters managing property insurance claims. You help with:
+- Drafting follow-up emails and communications
+- Summarizing claim statuses and next steps
+- Prioritizing tasks and workload management
+- Explaining insurance regulations and best practices
+- Suggesting negotiation strategies with carriers
+- Identifying claims that need attention
+
+You have access to the user's active claims and pending tasks. Provide practical, actionable advice. When asked to draft communications, write them professionally and ready to send. Be concise but thorough.`
+      : `You are an expert insurance claims adjuster and consultant specializing in property damage claims. Your role is to provide strategic advice, best practices, and actionable guidance to help maximize claim settlements while maintaining ethical standards.
 
 You have deep knowledge of:
 - Insurance policy interpretation and coverage analysis
@@ -204,7 +276,7 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
     // Add system prompt with claim context
     conversationMessages.push({ 
       role: "system", 
-      content: `${systemPrompt}\n\nCurrent Claim Context:\n${claimContext}${webSearchResults}` 
+      content: `${systemPrompt}\n\nContext:\n${contextContent}${webSearchResults}`
     });
     
     // Add previous conversation history if provided
