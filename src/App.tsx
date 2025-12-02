@@ -84,6 +84,7 @@ function AppRoutes() {
       <Routes>
         {publicRoutes}
         <Route path="/referrer-portal" element={<ReferrerPortal />} />
+        <Route path="/claims/:id" element={<ClaimDetail />} />
         <Route path="*" element={<Navigate to="/referrer-portal" replace />} />
       </Routes>
     );
