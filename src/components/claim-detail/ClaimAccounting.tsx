@@ -479,8 +479,8 @@ function ChecksSection({ claimId, checks, isAdmin, claim }: any) {
     if (claim?.policy_number) params.set('policy', claim.policy_number);
     if (claim?.insurance_company) params.set('insurance', claim.insurance_company);
     
-    // Open iink Payments with pre-filled parameters
-    const iinkUrl = `https://app.iinkpayments.com/deposit${params.toString() ? '?' + params.toString() : ''}`;
+    // Open iink Payments - note: iink may not support URL pre-fill, opens main portal
+    const iinkUrl = `https://iink.com`;
     window.open(iinkUrl, '_blank', 'noopener,noreferrer');
   };
 
