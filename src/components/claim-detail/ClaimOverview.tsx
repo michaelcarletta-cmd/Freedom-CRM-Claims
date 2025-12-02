@@ -138,9 +138,15 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
       }
 
       setHasPortalAccess(true);
-      setCredentials({ email: claim.policyholder_email, password: tempPassword });
-      setCredentialsOpen(true);
-      toast.success("Portal access created successfully");
+      
+      // Only show credentials dialog if this is a new user
+      if (!userData?.existingUser) {
+        setCredentials({ email: claim.policyholder_email, password: tempPassword });
+        setCredentialsOpen(true);
+        toast.success("Portal access created successfully");
+      } else {
+        toast.success("Portal access linked to existing account");
+      }
     } catch (error: any) {
       console.error("Error creating portal access:", error);
       toast.error(error.message || "Failed to create portal access");

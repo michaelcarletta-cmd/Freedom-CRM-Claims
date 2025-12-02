@@ -35,6 +35,40 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
+    // First check if user already exists
+    const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    
+    if (listError) {
+      console.error("Error listing users:", listError);
+    }
+
+    const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
+
+    if (existingUser) {
+      console.log("User already exists with email:", email, "- returning existing user ID");
+      
+      // Ensure user has the role in user_roles table
+      const { data: existingRole } = await supabaseAdmin
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", existingUser.id)
+        .eq("role", role)
+        .maybeSingle();
+
+      if (!existingRole) {
+        // Add the role if they don't have it
+        await supabaseAdmin
+          .from("user_roles")
+          .insert({ user_id: existingUser.id, role });
+        console.log("Added role", role, "to existing user");
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, userId: existingUser.id, existingUser: true }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
     // Create user with admin API (doesn't auto-login the caller)
     const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
