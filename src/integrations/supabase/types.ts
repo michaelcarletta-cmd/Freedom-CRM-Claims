@@ -719,6 +719,7 @@ export type Database = {
           insurance_email: string | null
           insurance_phone: string | null
           is_closed: boolean
+          jobnimbus_job_id: string | null
           loan_number: string | null
           loss_date: string | null
           loss_description: string | null
@@ -750,6 +751,7 @@ export type Database = {
           insurance_email?: string | null
           insurance_phone?: string | null
           is_closed?: boolean
+          jobnimbus_job_id?: string | null
           loan_number?: string | null
           loss_date?: string | null
           loss_description?: string | null
@@ -781,6 +783,7 @@ export type Database = {
           insurance_email?: string | null
           insurance_phone?: string | null
           is_closed?: boolean
+          jobnimbus_job_id?: string | null
           loan_number?: string | null
           loss_date?: string | null
           loss_description?: string | null
@@ -1082,6 +1085,50 @@ export type Database = {
         }
         Relationships: []
       }
+      jobnimbus_sync_queue: {
+        Row: {
+          claim_id: string | null
+          contractor_id: string
+          created_at: string | null
+          error_message: string | null
+          id: string
+          payload: Json | null
+          processed_at: string | null
+          status: string | null
+          sync_type: string
+        }
+        Insert: {
+          claim_id?: string | null
+          contractor_id: string
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          payload?: Json | null
+          processed_at?: string | null
+          status?: string | null
+          sync_type: string
+        }
+        Update: {
+          claim_id?: string | null
+          contractor_id?: string
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          payload?: Json | null
+          processed_at?: string | null
+          status?: string | null
+          sync_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jobnimbus_sync_queue_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loss_types: {
         Row: {
           created_at: string
@@ -1188,6 +1235,8 @@ export type Database = {
           email_signature: string | null
           full_name: string | null
           id: string
+          jobnimbus_api_key: string | null
+          jobnimbus_enabled: boolean | null
           license_number: string | null
           license_state: string | null
           phone: string | null
@@ -1200,6 +1249,8 @@ export type Database = {
           email_signature?: string | null
           full_name?: string | null
           id: string
+          jobnimbus_api_key?: string | null
+          jobnimbus_enabled?: boolean | null
           license_number?: string | null
           license_state?: string | null
           phone?: string | null
@@ -1212,6 +1263,8 @@ export type Database = {
           email_signature?: string | null
           full_name?: string | null
           id?: string
+          jobnimbus_api_key?: string | null
+          jobnimbus_enabled?: boolean | null
           license_number?: string | null
           license_state?: string | null
           phone?: string | null
@@ -1587,6 +1640,7 @@ export type Database = {
           insurance_email: string | null
           insurance_phone: string | null
           is_closed: boolean
+          jobnimbus_job_id: string | null
           loan_number: string | null
           loss_date: string | null
           loss_description: string | null
