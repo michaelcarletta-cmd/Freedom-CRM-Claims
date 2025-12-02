@@ -101,12 +101,12 @@ const Inbox = () => {
       </div>
 
       <Tabs defaultValue="emails" className="space-y-4">
-        <TabsList className="bg-muted">
-          <TabsTrigger value="emails" className="data-[state=active]:bg-background">
+        <TabsList className="flex flex-row w-full bg-muted/40 p-2 rounded-lg gap-1 overflow-x-auto scrollbar-hide">
+          <TabsTrigger value="emails" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
             <Mail className="h-4 w-4 mr-2" />
             Emails ({emails?.length || 0})
           </TabsTrigger>
-          <TabsTrigger value="signatures" className="data-[state=active]:bg-background">
+          <TabsTrigger value="signatures" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
             <FileSignature className="h-4 w-4 mr-2" />
             Signature Requests ({signatureRequests?.length || 0})
           </TabsTrigger>
