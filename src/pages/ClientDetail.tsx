@@ -85,26 +85,6 @@ const mockCommunications = [
   },
 ];
 
-const mockDocuments = [
-  {
-    id: "1",
-    name: "Driver_License.pdf",
-    uploadedAt: "2023-08-15",
-    type: "ID",
-  },
-  {
-    id: "2",
-    name: "Proof_of_Ownership.pdf",
-    uploadedAt: "2023-08-15",
-    type: "Property",
-  },
-  {
-    id: "3",
-    name: "Insurance_Policy_2024.pdf",
-    uploadedAt: "2024-01-10",
-    type: "Insurance",
-  },
-];
 
 const ClientDetail = () => {
   const { id } = useParams();
@@ -315,10 +295,10 @@ const ClientDetail = () => {
           <Card>
             <CardContent className="pt-6">
               <Tabs defaultValue="claims" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="claims">Claims History</TabsTrigger>
-                  <TabsTrigger value="communications">Communications</TabsTrigger>
-                  <TabsTrigger value="documents">Documents</TabsTrigger>
+                <TabsList className="flex flex-row w-full bg-muted/40 p-2 rounded-lg gap-1 overflow-x-auto scrollbar-hide">
+                  <TabsTrigger value="claims" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">Claims History</TabsTrigger>
+                  <TabsTrigger value="communications" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">Communications</TabsTrigger>
+                  <TabsTrigger value="documents" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">Documents</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="claims" className="mt-6 space-y-4">
@@ -399,33 +379,7 @@ const ClientDetail = () => {
                 </TabsContent>
 
                 <TabsContent value="documents" className="mt-6 space-y-4">
-                  {mockDocuments.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="p-4 rounded-lg border border-border hover:bg-muted/30 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-primary/10">
-                            <FileText className="h-4 w-4 text-primary" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">{doc.name}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge variant="outline" className="text-xs">{doc.type}</Badge>
-                              <span className="text-xs text-muted-foreground">
-                                Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <Button variant="outline" size="sm">
-                          <Eye className="h-3 w-3 mr-1" />
-                          View
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                  <p className="text-center text-muted-foreground py-8">No documents uploaded yet</p>
                 </TabsContent>
               </Tabs>
             </CardContent>
