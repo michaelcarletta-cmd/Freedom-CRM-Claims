@@ -34,6 +34,7 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
   const [hasPortalAccess, setHasPortalAccess] = useState(false);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [credentials, setCredentials] = useState({ email: "", password: "" });
+  const [resendingInvite, setResendingInvite] = useState(false);
 
   // Check if client already has portal access
   useEffect(() => {
@@ -145,15 +146,93 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
       if (userData?.existingUser) {
         toast.success("Portal access linked - user already has an account");
       } else {
+        // Automatically send invite email
+        try {
+          const appUrl = window.location.origin;
+          console.log("Sending portal invite email to:", claim.policyholder_email);
+          const { error: emailError } = await supabase.functions.invoke("send-portal-invite", {
+            body: { 
+              email: claim.policyholder_email, 
+              password: tempPassword, 
+              userType: "Client", 
+              userName: claim.policyholder_name || undefined,
+              appUrl 
+            },
+          });
+          if (emailError) {
+            console.error("Failed to send invite email:", emailError);
+            toast.warning("Portal created but email failed to send");
+          } else {
+            console.log("Invite email sent successfully");
+            toast.success("Portal access created and invite email sent");
+          }
+        } catch (emailErr) {
+          console.error("Error sending invite email:", emailErr);
+          toast.warning("Portal created but email failed to send");
+        }
+
         setCredentials({ email: claim.policyholder_email, password: tempPassword });
         setCredentialsOpen(true);
-        toast.success("Portal access created successfully");
       }
     } catch (error: any) {
       console.error("Error creating portal access:", error);
       toast.error(error.message || "Failed to create portal access");
     } finally {
       setCreatingPortal(false);
+    }
+  };
+
+  const handleResendInvite = async () => {
+    if (!claim.policyholder_email) {
+      toast.error("No email address available");
+      return;
+    }
+
+    setResendingInvite(true);
+    try {
+      // Generate a new password for the resend
+      const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+      
+      // Update the user's password via edge function
+      const { data, error } = await supabase.functions.invoke("create-portal-user", {
+        body: {
+          email: claim.policyholder_email,
+          password: tempPassword,
+          fullName: claim.policyholder_name,
+          role: "client",
+          phone: claim.policyholder_phone,
+        },
+      });
+
+      if (error) throw error;
+
+      // Send the invite email
+      const appUrl = window.location.origin;
+      const { error: emailError } = await supabase.functions.invoke("send-portal-invite", {
+        body: { 
+          email: claim.policyholder_email, 
+          password: tempPassword, 
+          userType: "Client", 
+          userName: claim.policyholder_name || undefined,
+          appUrl 
+        },
+      });
+
+      if (emailError) {
+        console.error("Failed to send invite email:", emailError);
+        toast.warning("Password reset but email failed to send");
+        setCredentials({ email: claim.policyholder_email, password: tempPassword });
+        setCredentialsOpen(true);
+      } else {
+        toast.success("New invite email sent successfully");
+        setCredentials({ email: claim.policyholder_email, password: tempPassword });
+        setCredentialsOpen(true);
+      }
+    } catch (error: any) {
+      console.error("Error resending invite:", error);
+      toast.error(error.message || "Failed to resend invite");
+    } finally {
+      setResendingInvite(false);
     }
   };
 
@@ -168,10 +247,19 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
           </CardTitle>
           {!isPortalUser && claim.policyholder_email && (
             hasPortalAccess ? (
-              <span className="flex items-center gap-1 text-xs text-green-500 bg-green-500/10 px-2 py-1 rounded">
-                <Check className="h-3 w-3" />
-                Portal Access Active
-              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleResendInvite}
+                disabled={resendingInvite}
+              >
+                {resendingInvite ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Mail className="h-4 w-4 mr-2" />
+                )}
+                Resend Invite
+              </Button>
             ) : (
               <Button
                 size="sm"
