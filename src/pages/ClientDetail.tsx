@@ -61,29 +61,6 @@ const mockClientClaims = [
   },
 ];
 
-const mockCommunications = [
-  {
-    id: "1",
-    type: "phone",
-    subject: "Follow-up on claim approval",
-    date: "2024-01-20 10:15 AM",
-    notes: "Discussed repair timeline and contractor scheduling.",
-  },
-  {
-    id: "2",
-    type: "email",
-    subject: "Document submission",
-    date: "2024-01-18 3:45 PM",
-    notes: "Client sent additional documentation for review.",
-  },
-  {
-    id: "3",
-    type: "text",
-    subject: "Quick question about estimate",
-    date: "2024-01-16 2:30 PM",
-    notes: "Clarified repair estimate details.",
-  },
-];
 
 
 const ClientDetail = () => {
@@ -345,37 +322,7 @@ const ClientDetail = () => {
                 </TabsContent>
 
                 <TabsContent value="communications" className="mt-6 space-y-4">
-                  {mockCommunications.map((comm) => (
-                    <div
-                      key={comm.id}
-                      className="p-4 rounded-lg border border-border hover:bg-muted/30 transition-colors"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className={`p-2 rounded-lg ${
-                          comm.type === "phone" ? "bg-primary/10" : 
-                          comm.type === "email" ? "bg-accent/10" : "bg-success/10"
-                        }`}>
-                          {comm.type === "phone" ? (
-                            <Phone className="h-4 w-4 text-primary" />
-                          ) : comm.type === "email" ? (
-                            <Mail className="h-4 w-4 text-accent" />
-                          ) : (
-                            <MessageSquare className="h-4 w-4 text-success" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium">{comm.subject}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {comm.type}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground mb-2">{comm.notes}</p>
-                          <span className="text-xs text-muted-foreground">{comm.date}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                  <p className="text-center text-muted-foreground py-8">No communications logged yet</p>
                 </TabsContent>
 
                 <TabsContent value="documents" className="mt-6 space-y-4">
