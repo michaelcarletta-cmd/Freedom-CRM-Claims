@@ -1,5 +1,6 @@
 import { ClaimsTableConnected } from "@/components/ClaimsTableConnected";
 import { NewClaimDialog } from "@/components/NewClaimDialog";
+import { ClaimsAIAssistant } from "@/components/ClaimsAIAssistant";
 
 const Claims = () => {
   return (
@@ -15,6 +16,8 @@ const Claims = () => {
         
         <ClaimsTableConnected />
       </div>
+      
+      <ClaimsAIAssistant />
     </div>
   );
 };
