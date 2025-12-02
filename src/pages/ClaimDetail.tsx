@@ -244,36 +244,36 @@ const ClaimDetail = () => {
       )}
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1 overflow-x-auto scrollbar-hide h-auto">
-          <TabsTrigger value="overview" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground">
+        <TabsList className="flex flex-row w-full bg-sidebar p-2 gap-1 overflow-x-auto scrollbar-hide h-auto rounded-none">
+          <TabsTrigger value="overview" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
             Overview
           </TabsTrigger>
-          <TabsTrigger value="communication" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground">
+          <TabsTrigger value="communication" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
             Communication
           </TabsTrigger>
           {isStaffOrAdmin && (
-            <TabsTrigger value="tasks" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground">
+            <TabsTrigger value="tasks" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
               Tasks
             </TabsTrigger>
           )}
-          <TabsTrigger value="inspections" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground">
+          <TabsTrigger value="inspections" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
             Inspections
           </TabsTrigger>
-          <TabsTrigger value="activity" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground">
+          <TabsTrigger value="activity" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
             Notes & Activity
           </TabsTrigger>
-          <TabsTrigger value="files" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground">
+          <TabsTrigger value="files" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
             Files
           </TabsTrigger>
-          <TabsTrigger value="accounting" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground">
+          <TabsTrigger value="accounting" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
             Accounting
           </TabsTrigger>
           {isStaffOrAdmin && (
             <>
-              <TabsTrigger value="templates" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground">
+              <TabsTrigger value="templates" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
                 Templates
               </TabsTrigger>
-              <TabsTrigger value="access" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground">
+              <TabsTrigger value="access" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
                 Portal Access
               </TabsTrigger>
             </>
