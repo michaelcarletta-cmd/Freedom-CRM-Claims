@@ -178,51 +178,55 @@ const ClaimDetail = () => {
   }
 
   return (
-    <div className="space-y-6 p-6 bg-muted/30 min-h-screen">
-      <div className="flex items-center gap-4">
-        <Link to={getBackLink()}>
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-        </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-sidebar">{claim.claim_number}</h1>
-            {isStaffOrAdmin && (
-              <ClaimStatusSelect 
-                claimId={claim.id} 
-                currentStatus={claim.status}
-                onStatusChange={handleStatusChange}
-              />
-            )}
-            {isPortalUser && claim.status && (
-              <span className="px-3 py-1 text-sm rounded-none bg-sidebar text-sidebar-foreground">
-                {claim.status}
-              </span>
+    <div className="space-y-4 md:space-y-6 p-4 md:p-6 bg-background min-h-screen">
+      <div className="flex flex-col md:flex-row md:items-center gap-4">
+        <div className="flex items-center gap-4">
+          <Link to={getBackLink()}>
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div className="flex-1">
+            <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">{claim.claim_number}</h1>
+              {isStaffOrAdmin && (
+                <ClaimStatusSelect 
+                  claimId={claim.id} 
+                  currentStatus={claim.status}
+                  onStatusChange={handleStatusChange}
+                />
+              )}
+              {isPortalUser && claim.status && (
+                <span className="px-3 py-1 text-sm rounded-none bg-primary text-primary-foreground w-fit">
+                  {claim.status}
+                </span>
+              )}
+            </div>
+            <p className="text-muted-foreground mt-1 font-medium">{claim.policyholder_name}</p>
+            {isStaffOrAdmin && (claim.policy_number || claim.claim_email_id) && (
+              <p className="text-xs text-muted-foreground mt-1 font-mono break-all">
+                Claim Email: {getClaimEmail(claim)}
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="ml-2 h-6 px-2 text-xs"
+                  onClick={() => {
+                    navigator.clipboard.writeText(getClaimEmail(claim));
+                    toast({ title: "Copied", description: "Claim email copied to clipboard" });
+                  }}
+                >
+                  Copy
+                </Button>
+              </p>
             )}
           </div>
-          <p className="text-sidebar/80 mt-1 font-medium">{claim.policyholder_name}</p>
-          {isStaffOrAdmin && (claim.policy_number || claim.claim_email_id) && (
-            <p className="text-xs text-muted-foreground mt-1 font-mono">
-              Claim Email: {getClaimEmail(claim)}
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="ml-2 h-6 px-2 text-xs"
-                onClick={() => {
-                  navigator.clipboard.writeText(getClaimEmail(claim));
-                  toast({ title: "Copied", description: "Claim email copied to clipboard" });
-                }}
-              >
-                Copy
-              </Button>
-            </p>
-          )}
         </div>
         {isStaffOrAdmin && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col md:flex-row flex-wrap gap-2 md:ml-auto">
             <Button
               variant="outline"
+              size="sm"
+              className="w-full md:w-auto"
               onClick={() => setNotifyDialogOpen(true)}
             >
               <Bell className="h-4 w-4 mr-2" />
@@ -230,15 +234,17 @@ const ClaimDetail = () => {
             </Button>
             <Button
               variant={claim.is_closed ? "outline" : "secondary"}
+              size="sm"
+              className="w-full md:w-auto"
               onClick={toggleClosedStatus}
             >
               {claim.is_closed ? "Reopen Claim" : "Close Claim"}
             </Button>
-            <Button className="bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
+            <Button size="sm" className="w-full md:w-auto bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
               <Edit className="h-4 w-4 mr-2" />
               Edit Claim
             </Button>
-            <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
+            <Button size="sm" variant="destructive" className="w-full md:w-auto" onClick={() => setDeleteDialogOpen(true)}>
               <Trash2 className="h-4 w-4 mr-2" />
               Delete Claim
             </Button>
@@ -276,36 +282,36 @@ const ClaimDetail = () => {
       )}
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="flex flex-row w-full bg-sidebar p-2 gap-1 overflow-x-auto scrollbar-hide h-auto rounded-none">
-          <TabsTrigger value="overview" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
+        <TabsList className="flex flex-col md:flex-row w-full bg-muted p-2 gap-1 h-auto rounded-md">
+          <TabsTrigger value="overview" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Overview
           </TabsTrigger>
-          <TabsTrigger value="communication" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
+          <TabsTrigger value="communication" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Communication
           </TabsTrigger>
           {isStaffOrAdmin && (
-            <TabsTrigger value="tasks" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
+            <TabsTrigger value="tasks" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
               Tasks
             </TabsTrigger>
           )}
-          <TabsTrigger value="inspections" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
+          <TabsTrigger value="inspections" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Inspections
           </TabsTrigger>
-          <TabsTrigger value="activity" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
+          <TabsTrigger value="activity" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Notes & Activity
           </TabsTrigger>
-          <TabsTrigger value="files" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
+          <TabsTrigger value="files" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Files
           </TabsTrigger>
-          <TabsTrigger value="accounting" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
+          <TabsTrigger value="accounting" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Accounting
           </TabsTrigger>
           {isStaffOrAdmin && (
             <>
-              <TabsTrigger value="templates" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
+              <TabsTrigger value="templates" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
                 Templates
               </TabsTrigger>
-              <TabsTrigger value="access" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">
+              <TabsTrigger value="access" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
                 Portal Access
               </TabsTrigger>
             </>
