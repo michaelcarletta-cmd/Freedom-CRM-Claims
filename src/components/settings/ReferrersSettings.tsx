@@ -8,6 +8,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2, Edit } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Referrer {
   id: string;
@@ -21,6 +31,8 @@ interface Referrer {
 export function ReferrersSettings() {
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [referrerToDelete, setReferrerToDelete] = useState<string | null>(null);
   const [editingReferrer, setEditingReferrer] = useState<Referrer | null>(null);
   const [formData, setFormData] = useState({
     name: "",
@@ -180,23 +192,20 @@ export function ReferrersSettings() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    console.log("Delete clicked for referrer:", id);
-    if (!confirm("Are you sure you want to delete this referrer?")) {
-      console.log("Delete cancelled by user");
-      return;
-    }
+  const handleDeleteClick = (id: string) => {
+    setReferrerToDelete(id);
+    setDeleteDialogOpen(true);
+  };
 
-    console.log("Attempting to delete referrer:", id);
+  const handleDeleteConfirm = async () => {
+    if (!referrerToDelete) return;
+
     try {
-      const { error, count } = await supabase
+      const { error } = await supabase
         .from("referrers")
         .delete()
-        .eq("id", id)
-        .select();
+        .eq("id", referrerToDelete);
 
-      console.log("Delete result - error:", error, "count:", count);
-      
       if (error) throw error;
 
       toast({
@@ -212,6 +221,9 @@ export function ReferrersSettings() {
         description: error.message || "Failed to delete referrer",
         variant: "destructive",
       });
+    } finally {
+      setDeleteDialogOpen(false);
+      setReferrerToDelete(null);
     }
   };
 
@@ -324,7 +336,7 @@ export function ReferrersSettings() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => handleDelete(referrer.id)}
+                  onClick={() => handleDeleteClick(referrer.id)}
                   className="text-destructive hover:text-destructive"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -334,6 +346,23 @@ export function ReferrersSettings() {
           ))}
         </div>
       </Card>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Referrer</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this referrer? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
