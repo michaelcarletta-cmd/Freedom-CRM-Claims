@@ -285,10 +285,10 @@ export function ClaimTemplates({ claimId, claim }: ClaimTemplatesProps) {
                 </Select>
               </div>
               <div>
-                <Label>Template File (DOCX)</Label>
+                <Label>Template File (DOCX or PDF)</Label>
                 <Input
                   type="file"
-                  accept=".docx"
+                  accept=".docx,.pdf"
                   onChange={(e) =>
                     setTemplateForm({
                       ...templateForm,
