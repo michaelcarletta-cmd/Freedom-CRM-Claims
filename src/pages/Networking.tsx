@@ -15,7 +15,7 @@ export default function Networking() {
       </div>
 
       <Tabs defaultValue="contractors" className="space-y-6">
-        <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1 overflow-x-auto">
+        <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1 overflow-x-auto scrollbar-hide">
           <TabsTrigger value="contractors" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
             Contractors
           </TabsTrigger>
