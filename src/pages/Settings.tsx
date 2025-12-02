@@ -34,6 +34,7 @@ import { TaskAutomationsSettings } from "@/components/settings/TaskAutomationsSe
 import { ImportSettings } from "@/components/settings/ImportSettings";
 import { UserManagementSettings } from "@/components/settings/UserManagementSettings";
 import { ProfileSettings } from "@/components/settings/ProfileSettings";
+import { AIKnowledgeBaseSettings } from "@/components/settings/AIKnowledgeBaseSettings";
 
 interface ClaimStatus {
   id: string;
@@ -295,6 +296,7 @@ export default function Settings() {
           <TabsTrigger value="task-automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Task Automations</TabsTrigger>
           <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
           <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
+          <TabsTrigger value="ai-knowledge" className="w-full md:w-auto justify-start text-base font-medium px-4">AI Knowledge Base</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="w-full">
@@ -400,6 +402,10 @@ export default function Settings() {
 
         <TabsContent value="import" className="w-full">
           <ImportSettings />
+        </TabsContent>
+
+        <TabsContent value="ai-knowledge" className="w-full">
+          <AIKnowledgeBaseSettings />
         </TabsContent>
       </Tabs>
     </div>

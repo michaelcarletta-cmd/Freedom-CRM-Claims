@@ -61,6 +61,59 @@ async function analyzeDocument(fileUrl: string, fileName: string): Promise<strin
   }
 }
 
+// Search knowledge base for relevant chunks
+async function searchKnowledgeBase(supabase: any, question: string, category?: string): Promise<string> {
+  try {
+    // Get all chunks - simple text matching for now
+    // In production, you'd use vector embeddings for semantic search
+    let query = supabase
+      .from("ai_knowledge_chunks")
+      .select(`
+        content,
+        metadata,
+        ai_knowledge_documents!inner(category, file_name, status)
+      `)
+      .eq("ai_knowledge_documents.status", "completed");
+
+    if (category) {
+      query = query.eq("ai_knowledge_documents.category", category);
+    }
+
+    const { data: chunks, error } = await query.limit(50);
+
+    if (error || !chunks || chunks.length === 0) {
+      return "";
+    }
+
+    // Simple keyword matching - find chunks that contain words from the question
+    const questionWords = question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    
+    const scoredChunks = chunks.map((chunk: any) => {
+      const contentLower = chunk.content.toLowerCase();
+      const matchCount = questionWords.filter(word => contentLower.includes(word)).length;
+      return { ...chunk, score: matchCount };
+    }).filter((c: any) => c.score > 0)
+      .sort((a: any, b: any) => b.score - a.score)
+      .slice(0, 5);
+
+    if (scoredChunks.length === 0) {
+      return "";
+    }
+
+    let knowledgeContext = "\n\nRelevant Knowledge Base Information:\n";
+    scoredChunks.forEach((chunk: any, i: number) => {
+      const source = chunk.ai_knowledge_documents?.file_name || "Unknown source";
+      const category = chunk.ai_knowledge_documents?.category || "General";
+      knowledgeContext += `\n[Source: ${source} | Category: ${category}]\n${chunk.content}\n`;
+    });
+
+    return knowledgeContext;
+  } catch (error) {
+    console.error("Error searching knowledge base:", error);
+    return "";
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -83,6 +136,7 @@ serve(async (req) => {
 
     let claim = null;
     let claimsOverview = "";
+    let knowledgeBaseContext = "";
 
     // If in general mode, fetch overview of all claims
     if (mode === "general" || !claimId) {
@@ -215,6 +269,9 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
       contextContent = `You are helping a public adjuster manage their claims workload.${claimsOverview}`;
     }
 
+    // Search the knowledge base for relevant information
+    knowledgeBaseContext = await searchKnowledgeBase(supabase, question);
+    
     // Determine if web search is needed based on question content
     let webSearchResults = "";
     const needsWebSearch = /regulation|law|legal|code|requirement|guideline|best practice|industry standard/i.test(question);
@@ -276,7 +333,7 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
     // Add system prompt with claim context
     conversationMessages.push({ 
       role: "system", 
-      content: `${systemPrompt}\n\nContext:\n${contextContent}${webSearchResults}`
+      content: `${systemPrompt}\n\nContext:\n${contextContent}${knowledgeBaseContext}${webSearchResults}`
     });
     
     // Add previous conversation history if provided

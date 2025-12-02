@@ -1,0 +1,354 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "sonner";
+import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+const CATEGORIES = [
+  { value: "insurance-regulations", label: "Insurance Regulations" },
+  { value: "building-codes", label: "Building Codes" },
+  { value: "manufacturer-specs", label: "Manufacturer Specifications" },
+  { value: "company-policies", label: "Company Policies" },
+  { value: "training-materials", label: "Training Materials" },
+  { value: "legal-documents", label: "Legal Documents" },
+  { value: "other", label: "Other" },
+];
+
+const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a,.webm";
+
+export const AIKnowledgeBaseSettings = () => {
+  const queryClient = useQueryClient();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [category, setCategory] = useState<string>("");
+  const [description, setDescription] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
+
+  const { data: documents, isLoading } = useQuery({
+    queryKey: ["ai-knowledge-documents"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ai_knowledge_documents")
+        .select("*")
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const doc = documents?.find(d => d.id === docId);
+      if (!doc) throw new Error("Document not found");
+
+      // Delete from storage
+      const { error: storageError } = await supabase.storage
+        .from("ai-knowledge-base")
+        .remove([doc.file_path]);
+      
+      if (storageError) console.error("Storage delete error:", storageError);
+
+      // Delete from database (chunks will cascade delete)
+      const { error } = await supabase
+        .from("ai_knowledge_documents")
+        .delete()
+        .eq("id", docId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
+      toast.success("Document deleted");
+      setDeleteDocId(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to delete document");
+    },
+  });
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error("File size must be less than 20MB");
+        return;
+      }
+      setSelectedFile(file);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile || !category) {
+      toast.error("Please select a file and category");
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Upload file to storage
+      const fileExt = selectedFile.name.split(".").pop();
+      const filePath = `${user.id}/${Date.now()}-${selectedFile.name}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("ai-knowledge-base")
+        .upload(filePath, selectedFile);
+
+      if (uploadError) throw uploadError;
+
+      // Create document record
+      const { data: docData, error: docError } = await supabase
+        .from("ai_knowledge_documents")
+        .insert({
+          file_name: selectedFile.name,
+          file_path: filePath,
+          file_type: selectedFile.type,
+          file_size: selectedFile.size,
+          category,
+          description: description || null,
+          uploaded_by: user.id,
+          status: "pending",
+        })
+        .select()
+        .single();
+
+      if (docError) throw docError;
+
+      // Trigger processing
+      const { error: processError } = await supabase.functions.invoke(
+        "process-knowledge-document",
+        { body: { documentId: docData.id } }
+      );
+
+      if (processError) {
+        console.error("Processing trigger error:", processError);
+        // Don't throw - the document is uploaded, just processing failed to start
+        toast.warning("Document uploaded but processing may be delayed");
+      } else {
+        toast.success("Document uploaded and processing started");
+      }
+
+      // Reset form
+      setSelectedFile(null);
+      setCategory("");
+      setDescription("");
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
+
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      toast.error(error.message || "Failed to upload document");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "completed":
+        return <Badge className="bg-green-500/20 text-green-400 border-green-500/30"><CheckCircle className="h-3 w-3 mr-1" />Processed</Badge>;
+      case "processing":
+        return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Processing</Badge>;
+      case "failed":
+        return <Badge className="bg-red-500/20 text-red-400 border-red-500/30"><XCircle className="h-3 w-3 mr-1" />Failed</Badge>;
+      default:
+        return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
+    }
+  };
+
+  const getFileIcon = (fileName: string) => {
+    if (fileName.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)) {
+      return <Video className="h-5 w-5 text-purple-400" />;
+    }
+    return <FileText className="h-5 w-5 text-blue-400" />;
+  };
+
+  const getCategoryLabel = (value: string) => {
+    return CATEGORIES.find(c => c.value === value)?.label || value;
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className="bg-card border-border">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-primary" />
+            AI Knowledge Base
+          </CardTitle>
+          <CardDescription>
+            Upload documents and videos to train the AI assistant. Supported formats: PDF, Word docs, and video/audio files.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>File</Label>
+              <Input
+                type="file"
+                accept={ACCEPTED_FILE_TYPES}
+                onChange={handleFileSelect}
+                disabled={uploading}
+                className="cursor-pointer"
+              />
+              {selectedFile && (
+                <p className="text-sm text-muted-foreground">
+                  Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Category *</Label>
+              <Select value={category} onValueChange={setCategory} disabled={uploading}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Description (optional)</Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief description of the document content..."
+              disabled={uploading}
+              rows={2}
+            />
+          </div>
+
+          <Button
+            onClick={handleUpload}
+            disabled={!selectedFile || !category || uploading}
+            className="w-full md:w-auto"
+          >
+            {uploading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Document
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-card border-border">
+        <CardHeader>
+          <CardTitle>Uploaded Documents</CardTitle>
+          <CardDescription>
+            {documents?.length || 0} documents in the knowledge base
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : documents && documents.length > 0 ? (
+            <ScrollArea className="h-[400px]">
+              <div className="space-y-3">
+                {documents.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {getFileIcon(doc.file_name)}
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{doc.file_name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className="text-xs">
+                            {getCategoryLabel(doc.category)}
+                          </Badge>
+                          {getStatusBadge(doc.status)}
+                          {doc.error_message && (
+                            <span className="text-xs text-red-400 truncate max-w-[200px]">
+                              {doc.error_message}
+                            </span>
+                          )}
+                        </div>
+                        {doc.description && (
+                          <p className="text-sm text-muted-foreground mt-1 truncate">
+                            {doc.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setDeleteDocId(doc.id)}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p>No documents uploaded yet</p>
+              <p className="text-sm">Upload documents to enhance the AI assistant's knowledge</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={!!deleteDocId} onOpenChange={() => setDeleteDocId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Document</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this document? This will remove all extracted knowledge from the AI assistant.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteDocId && deleteMutation.mutate(deleteDocId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
