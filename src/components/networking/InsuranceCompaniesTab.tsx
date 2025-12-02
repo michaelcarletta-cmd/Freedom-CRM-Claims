@@ -85,7 +85,7 @@ export const InsuranceCompaniesTab = () => {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <CardTitle>Insurance Companies</CardTitle>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
@@ -147,14 +147,15 @@ export const InsuranceCompaniesTab = () => {
             {companies.length === 0 ? "No insurance companies found" : "No companies match your search"}
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Company Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Phone</TableHead>
-              </TableRow>
-            </TableHeader>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[500px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="whitespace-nowrap">Company Name</TableHead>
+                  <TableHead className="whitespace-nowrap">Email</TableHead>
+                  <TableHead className="whitespace-nowrap">Phone</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {filteredCompanies.map((company) => (
                 <TableRow key={company.id}>
@@ -186,8 +187,9 @@ export const InsuranceCompaniesTab = () => {
                   </TableCell>
                 </TableRow>
               ))}
-            </TableBody>
-          </Table>
+              </TableBody>
+            </Table>
+          </div>
         )}
       </CardContent>
     </Card>
