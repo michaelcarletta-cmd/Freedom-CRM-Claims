@@ -89,15 +89,18 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
         // Check if client already exists with this email
         const { data: existingClient } = await supabase
           .from("clients")
-          .select("id")
+          .select("id, name")
           .eq("email", claim.policyholder_email)
-          .single();
+          .maybeSingle();
 
         if (existingClient) {
-          // Update existing client with user_id
+          // Update existing client with user_id and sync name with policyholder
           await supabase
             .from("clients")
-            .update({ user_id: userId })
+            .update({ 
+              user_id: userId,
+              name: claim.policyholder_name || existingClient.name 
+            })
             .eq("id", existingClient.id);
           clientId = existingClient.id;
         } else {
