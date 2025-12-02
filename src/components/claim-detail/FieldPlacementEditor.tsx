@@ -602,10 +602,10 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
             </div>
           )}
           
-          {/* PDF Field Placement - Simple page template */}
+          {/* PDF Field Placement - Side by side with preview */}
           {isPdf && !isLoading && (
-            <div className="flex flex-col items-center p-4 gap-4">
-              <div className="flex items-center gap-2 text-sm">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2 text-sm px-4">
                 <span className="text-muted-foreground">PDF Document</span>
                 <Button
                   variant="outline"
@@ -622,115 +622,139 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
                   size="sm"
                   onClick={() => window.open(documentUrl, '_blank')}
                 >
-                  Open PDF
+                  Open in New Tab
                 </Button>
               </div>
               
-              {/* Page template for field placement */}
-              <div
-                ref={overlayRef}
-                className={`relative bg-white shadow-lg border ${activeTool ? 'cursor-crosshair ring-2 ring-primary' : 'cursor-default'}`}
-                style={{ width: '612px', height: '792px' }} /* Standard letter size at 72 DPI */
-                onClick={handleOverlayClick}
-                onMouseMove={handleOverlayMouseMove}
-                onMouseUp={handleOverlayMouseUp}
-                onMouseLeave={handleOverlayMouseUp}
-              >
-                {/* Page header - non-interactive */}
-                <div className="absolute top-2 left-0 right-0 text-center text-xs text-muted-foreground pointer-events-none">
-                  Page {currentPage}
-                </div>
-                
-                {/* Visual guide lines */}
-                <div className="absolute inset-4 border border-dashed border-muted/50 pointer-events-none" />
-                <div className="absolute bottom-20 left-4 right-4 border-t border-dashed border-muted/30 pointer-events-none">
-                  <span className="absolute -top-3 left-0 text-[10px] text-muted-foreground/50">Typical signature area</span>
-                </div>
-                
-                {/* Click instruction when tool is active */}
-                {activeTool && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="bg-primary/10 text-primary px-4 py-2 rounded text-sm font-medium">
-                      Click anywhere to place {activeTool} field
+              <div className="flex gap-4 p-4">
+                {/* PDF Preview - Left side */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-muted-foreground mb-2 text-center">PDF Preview (scroll to view)</div>
+                  <object
+                    data={documentUrl}
+                    type="application/pdf"
+                    className="w-full h-[700px] border rounded bg-white"
+                  >
+                    <div className="flex flex-col items-center justify-center h-[700px] bg-muted/20 border rounded">
+                      <p className="text-muted-foreground mb-4">PDF preview not available in browser</p>
+                      <Button variant="outline" onClick={() => window.open(documentUrl, '_blank')}>
+                        Open PDF in New Tab
+                      </Button>
                     </div>
-                  </div>
-                )}
+                  </object>
+                </div>
                 
-                {/* Render draggable field indicators - only for current page */}
-                {fields.filter(f => f.page === currentPage).map((field) => (
+                {/* Field Placement Template - Right side */}
+                <div className="flex-shrink-0">
+                  <div className="text-xs text-muted-foreground mb-2 text-center">Click to place fields (Page {currentPage})</div>
                   <div
-                    key={field.id}
-                    className={`field-indicator absolute border-2 border-dashed flex items-center justify-center text-xs font-bold select-none ${
-                      draggingField === field.id ? 'opacity-70' : ''
-                    } ${!activeTool ? 'cursor-move' : ''}`}
-                    style={{
-                      left: field.x,
-                      top: field.y,
-                      width: field.width,
-                      height: field.height,
-                      borderColor: colors[field.type],
-                      backgroundColor: colors[field.type] + "33",
-                      color: colors[field.type],
-                    }}
-                    onMouseDown={(e) => !activeTool && handleFieldMouseDown(e, field.id)}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      removeField(field.id);
-                    }}
+                    ref={overlayRef}
+                    className={`relative bg-white shadow-lg border ${activeTool ? 'cursor-crosshair ring-2 ring-primary' : 'cursor-pointer'}`}
+                    style={{ width: '400px', height: '518px' }} /* Scaled down letter size */
+                    onClick={handleOverlayClick}
+                    onMouseMove={handleOverlayMouseMove}
+                    onMouseUp={handleOverlayMouseUp}
+                    onMouseLeave={handleOverlayMouseUp}
                   >
-                    {field.label}
+                    {/* Visual guide lines */}
+                    <div className="absolute inset-2 border border-dashed border-muted/50 pointer-events-none" />
+                    
+                    {/* Click instruction when no fields */}
+                    {fields.filter(f => f.page === currentPage).length === 0 && !activeTool && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="text-center text-muted-foreground text-sm px-4">
+                          <p>Click anywhere to add a field</p>
+                          <p className="text-xs mt-1">Match position to PDF on left</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Click instruction when tool is active */}
+                    {activeTool && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="bg-primary/10 text-primary px-4 py-2 rounded text-sm font-medium">
+                          Click to place {activeTool}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Render draggable field indicators - only for current page */}
+                    {fields.filter(f => f.page === currentPage).map((field) => (
+                      <div
+                        key={field.id}
+                        className={`field-indicator absolute border-2 border-dashed flex items-center justify-center text-xs font-bold select-none ${
+                          draggingField === field.id ? 'opacity-70' : ''
+                        } ${!activeTool ? 'cursor-move' : ''}`}
+                        style={{
+                          left: field.x * (400/612), /* Scale position */
+                          top: field.y * (518/792),
+                          width: field.width * (400/612),
+                          height: field.height * (518/792),
+                          borderColor: colors[field.type],
+                          backgroundColor: colors[field.type] + "33",
+                          color: colors[field.type],
+                        }}
+                        onMouseDown={(e) => !activeTool && handleFieldMouseDown(e, field.id)}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          removeField(field.id);
+                        }}
+                      >
+                        {field.label}
+                      </div>
+                    ))}
+                    
+                    {/* Field type picker popup */}
+                    {pendingClickPos && (
+                      <div 
+                        className="field-picker absolute bg-popover border rounded-lg shadow-lg p-2 z-50"
+                        style={{ 
+                          left: Math.min(pendingClickPos.x * (400/612), 250), 
+                          top: pendingClickPos.y * (518/792) 
+                        }}
+                      >
+                        <div className="text-xs text-muted-foreground mb-2">Select field type:</div>
+                        <div className="flex flex-col gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="justify-start"
+                            onClick={() => handleSelectFieldType("signature")}
+                          >
+                            <Pencil className="w-4 h-4 mr-2 text-blue-500" />
+                            Signature
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="justify-start"
+                            onClick={() => handleSelectFieldType("date")}
+                          >
+                            <Calendar className="w-4 h-4 mr-2 text-green-500" />
+                            Date
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="justify-start"
+                            onClick={() => handleSelectFieldType("text")}
+                          >
+                            <Type className="w-4 h-4 mr-2 text-purple-500" />
+                            Text
+                          </Button>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="w-full mt-1 text-muted-foreground"
+                          onClick={() => setPendingClickPos(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                ))}
-                
-                {/* Field type picker popup */}
-                {pendingClickPos && (
-                  <div 
-                    className="field-picker absolute bg-popover border rounded-lg shadow-lg p-2 z-50"
-                    style={{ 
-                      left: Math.min(pendingClickPos.x, 400), 
-                      top: pendingClickPos.y 
-                    }}
-                  >
-                    <div className="text-xs text-muted-foreground mb-2">Select field type:</div>
-                    <div className="flex flex-col gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="justify-start"
-                        onClick={() => handleSelectFieldType("signature")}
-                      >
-                        <Pencil className="w-4 h-4 mr-2 text-blue-500" />
-                        Signature
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="justify-start"
-                        onClick={() => handleSelectFieldType("date")}
-                      >
-                        <Calendar className="w-4 h-4 mr-2 text-green-500" />
-                        Date
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="justify-start"
-                        onClick={() => handleSelectFieldType("text")}
-                      >
-                        <Type className="w-4 h-4 mr-2 text-purple-500" />
-                        Text
-                      </Button>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="w-full mt-1 text-muted-foreground"
-                      onClick={() => setPendingClickPos(null)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           )}
