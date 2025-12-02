@@ -12,12 +12,42 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Play, Trash2, History } from "lucide-react";
+import { Loader2, Plus, Play, Trash2, Clock, Mail, MessageSquare, CheckSquare, AlertCircle } from "lucide-react";
+
+interface TriggerConfig {
+  // For scheduled
+  schedule_type?: 'once' | 'daily' | 'weekly' | 'days_after';
+  schedule_time?: string;
+  schedule_day?: string;
+  days_after_creation?: number;
+  // For inactivity
+  inactivity_days?: number;
+  // For status_change
+  status?: string;
+}
+
+interface ActionConfig {
+  type: 'send_email' | 'send_sms' | 'create_task' | 'send_notification';
+  config: {
+    // Email/SMS
+    recipient_type?: 'policyholder' | 'adjuster' | 'referrer';
+    subject?: string;
+    message?: string;
+    // Task
+    title?: string;
+    description?: string;
+    priority?: 'low' | 'medium' | 'high';
+    due_date_offset?: number;
+  };
+}
 
 export const AutomationsSettings = () => {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedAutomation, setSelectedAutomation] = useState<any>(null);
+  const [triggerType, setTriggerType] = useState<string>("");
+  const [triggerConfig, setTriggerConfig] = useState<TriggerConfig>({});
+  const [actions, setActions] = useState<ActionConfig[]>([]);
+  const [currentAction, setCurrentAction] = useState<ActionConfig | null>(null);
 
   const { data: automations, isLoading } = useQuery({
     queryKey: ["automations"],
@@ -44,6 +74,19 @@ export const AutomationsSettings = () => {
     },
   });
 
+  const { data: statuses } = useQuery({
+    queryKey: ["claim-statuses"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_statuses")
+        .select("*")
+        .eq("is_active", true)
+        .order("display_order");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const createMutation = useMutation({
     mutationFn: async (automation: any) => {
       const { error } = await supabase.from("automations").insert(automation);
@@ -52,7 +95,7 @@ export const AutomationsSettings = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["automations"] });
       toast.success("Automation created successfully");
-      setIsDialogOpen(false);
+      resetForm();
     },
     onError: (error: any) => {
       toast.error(error.message);
@@ -97,20 +140,87 @@ export const AutomationsSettings = () => {
     },
   });
 
+  const resetForm = () => {
+    setIsDialogOpen(false);
+    setTriggerType("");
+    setTriggerConfig({});
+    setActions([]);
+    setCurrentAction(null);
+  };
+
+  const addAction = () => {
+    if (currentAction) {
+      setActions([...actions, currentAction]);
+      setCurrentAction(null);
+    }
+  };
+
+  const removeAction = (index: number) => {
+    setActions(actions.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
+    if (actions.length === 0) {
+      toast.error("Please add at least one action");
+      return;
+    }
+
     const automation = {
       name: formData.get("name") as string,
       description: formData.get("description") as string,
-      trigger_type: formData.get("trigger_type") as string,
-      trigger_config: {},
-      actions: [],
+      trigger_type: triggerType,
+      trigger_config: triggerConfig,
+      actions: actions,
       is_active: true,
     };
 
     createMutation.mutate(automation);
+  };
+
+  const getTriggerDescription = (automation: any) => {
+    const config = automation.trigger_config || {};
+    switch (automation.trigger_type) {
+      case 'scheduled':
+        if (config.schedule_type === 'once') return `Once at ${config.schedule_time}`;
+        if (config.schedule_type === 'daily') return `Daily at ${config.schedule_time}`;
+        if (config.schedule_type === 'weekly') return `Weekly on ${config.schedule_day} at ${config.schedule_time}`;
+        if (config.days_after_creation) return `${config.days_after_creation} days after claim creation`;
+        return 'Scheduled';
+      case 'inactivity':
+        return `After ${config.inactivity_days || 7} days of inactivity`;
+      case 'status_change':
+        return config.status ? `When status changes to ${config.status}` : 'On any status change';
+      default:
+        return automation.trigger_type.replace('_', ' ');
+    }
+  };
+
+  const getActionIcon = (type: string) => {
+    switch (type) {
+      case 'send_email': return <Mail className="h-4 w-4" />;
+      case 'send_sms': return <MessageSquare className="h-4 w-4" />;
+      case 'create_task': return <CheckSquare className="h-4 w-4" />;
+      case 'send_notification': return <AlertCircle className="h-4 w-4" />;
+      default: return null;
+    }
+  };
+
+  const getActionDescription = (action: ActionConfig) => {
+    switch (action.type) {
+      case 'send_email':
+        return `Email to ${action.config.recipient_type}: ${action.config.subject}`;
+      case 'send_sms':
+        return `SMS to ${action.config.recipient_type}`;
+      case 'create_task':
+        return `Create task: ${action.config.title}`;
+      case 'send_notification':
+        return `Send notification`;
+      default:
+        return action.type;
+    }
   };
 
   if (isLoading) {
@@ -126,54 +236,400 @@ export const AutomationsSettings = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Automations</h2>
-          <p className="text-muted-foreground">Create automated workflows for your claims</p>
+          <p className="text-muted-foreground">Create automated workflows for follow-ups, reminders, and more</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => open ? setIsDialogOpen(true) : resetForm()}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
               New Automation
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleSubmit}>
               <DialogHeader>
                 <DialogTitle>Create Automation</DialogTitle>
                 <DialogDescription>
-                  Set up a new automation workflow
+                  Set up automated follow-ups, emails, texts, and tasks
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input id="name" name="name" placeholder="e.g., Create inspection task" required />
+              <div className="space-y-6 py-4">
+                {/* Basic Info */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Automation Name</Label>
+                    <Input id="name" name="name" placeholder="e.g., 7-Day Follow-up Email" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea id="description" name="description" placeholder="What does this automation do?" />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea id="description" name="description" placeholder="What does this automation do?" />
+
+                {/* Trigger Configuration */}
+                <div className="space-y-4 border-t pt-4">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    When should this run?
+                  </h3>
+                  <div className="space-y-2">
+                    <Label>Trigger Type</Label>
+                    <Select value={triggerType} onValueChange={(value) => {
+                      setTriggerType(value);
+                      setTriggerConfig({});
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select when to trigger" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="scheduled">Scheduled (specific time after claim creation)</SelectItem>
+                        <SelectItem value="inactivity">After Inactivity Period</SelectItem>
+                        <SelectItem value="status_change">When Claim Status Changes</SelectItem>
+                        <SelectItem value="manual">Manual Trigger Only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Scheduled Trigger Config */}
+                  {triggerType === 'scheduled' && (
+                    <div className="space-y-4 pl-4 border-l-2 border-muted">
+                      <div className="space-y-2">
+                        <Label>Schedule Type</Label>
+                        <Select 
+                          value={triggerConfig.schedule_type || ''} 
+                          onValueChange={(value) => setTriggerConfig({ ...triggerConfig, schedule_type: value as any })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select schedule type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="days_after">Days after claim creation</SelectItem>
+                            <SelectItem value="daily">Daily recurring</SelectItem>
+                            <SelectItem value="weekly">Weekly recurring</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      {triggerConfig.schedule_type === 'days_after' && (
+                        <div className="space-y-2">
+                          <Label>Days After Claim Creation</Label>
+                          <Input 
+                            type="number" 
+                            min="1"
+                            placeholder="e.g., 7"
+                            value={triggerConfig.days_after_creation || ''}
+                            onChange={(e) => setTriggerConfig({ ...triggerConfig, days_after_creation: parseInt(e.target.value) })}
+                          />
+                        </div>
+                      )}
+
+                      {(triggerConfig.schedule_type === 'daily' || triggerConfig.schedule_type === 'weekly') && (
+                        <div className="space-y-2">
+                          <Label>Time of Day</Label>
+                          <Input 
+                            type="time"
+                            value={triggerConfig.schedule_time || '09:00'}
+                            onChange={(e) => setTriggerConfig({ ...triggerConfig, schedule_time: e.target.value })}
+                          />
+                        </div>
+                      )}
+
+                      {triggerConfig.schedule_type === 'weekly' && (
+                        <div className="space-y-2">
+                          <Label>Day of Week</Label>
+                          <Select 
+                            value={triggerConfig.schedule_day || ''} 
+                            onValueChange={(value) => setTriggerConfig({ ...triggerConfig, schedule_day: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select day" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="monday">Monday</SelectItem>
+                              <SelectItem value="tuesday">Tuesday</SelectItem>
+                              <SelectItem value="wednesday">Wednesday</SelectItem>
+                              <SelectItem value="thursday">Thursday</SelectItem>
+                              <SelectItem value="friday">Friday</SelectItem>
+                              <SelectItem value="saturday">Saturday</SelectItem>
+                              <SelectItem value="sunday">Sunday</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Inactivity Trigger Config */}
+                  {triggerType === 'inactivity' && (
+                    <div className="space-y-4 pl-4 border-l-2 border-muted">
+                      <div className="space-y-2">
+                        <Label>Days Without Activity</Label>
+                        <Input 
+                          type="number" 
+                          min="1"
+                          placeholder="e.g., 14"
+                          value={triggerConfig.inactivity_days || ''}
+                          onChange={(e) => setTriggerConfig({ ...triggerConfig, inactivity_days: parseInt(e.target.value) })}
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Trigger when a claim has no updates, notes, or file uploads for this many days
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Status Change Trigger Config */}
+                  {triggerType === 'status_change' && (
+                    <div className="space-y-4 pl-4 border-l-2 border-muted">
+                      <div className="space-y-2">
+                        <Label>When Status Changes To</Label>
+                        <Select 
+                          value={triggerConfig.status || ''} 
+                          onValueChange={(value) => setTriggerConfig({ ...triggerConfig, status: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Any status (leave empty)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">Any status change</SelectItem>
+                            {statuses?.map((status) => (
+                              <SelectItem key={status.id} value={status.name}>
+                                {status.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="trigger_type">Trigger Type</Label>
-                  <Select name="trigger_type" required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select trigger" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="status_change">Claim Status Change</SelectItem>
-                      <SelectItem value="scheduled">Scheduled</SelectItem>
-                      <SelectItem value="manual">Manual Trigger</SelectItem>
-                      <SelectItem value="webhook">External Webhook</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                {/* Actions Configuration */}
+                <div className="space-y-4 border-t pt-4">
+                  <h3 className="font-semibold">What actions should be taken?</h3>
+                  
+                  {/* Added Actions */}
+                  {actions.length > 0 && (
+                    <div className="space-y-2">
+                      {actions.map((action, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                          <div className="flex items-center gap-2">
+                            {getActionIcon(action.type)}
+                            <span className="text-sm">{getActionDescription(action)}</span>
+                          </div>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => removeAction(index)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add New Action */}
+                  <div className="space-y-4 p-4 border rounded-lg">
+                    <div className="space-y-2">
+                      <Label>Action Type</Label>
+                      <Select 
+                        value={currentAction?.type || ''} 
+                        onValueChange={(value) => setCurrentAction({ type: value as any, config: {} })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select action type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="send_email">Send Email</SelectItem>
+                          <SelectItem value="send_sms">Send SMS/Text</SelectItem>
+                          <SelectItem value="create_task">Create Task</SelectItem>
+                          <SelectItem value="send_notification">Send Portal Notification</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Email Config */}
+                    {currentAction?.type === 'send_email' && (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Send To</Label>
+                          <Select 
+                            value={currentAction.config.recipient_type || ''} 
+                            onValueChange={(value) => setCurrentAction({
+                              ...currentAction,
+                              config: { ...currentAction.config, recipient_type: value as any }
+                            })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select recipient" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="policyholder">Policyholder</SelectItem>
+                              <SelectItem value="adjuster">Insurance Adjuster</SelectItem>
+                              <SelectItem value="referrer">Referrer</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Email Subject</Label>
+                          <Input 
+                            placeholder="e.g., Claim Status Update - {claim.claim_number}"
+                            value={currentAction.config.subject || ''}
+                            onChange={(e) => setCurrentAction({
+                              ...currentAction,
+                              config: { ...currentAction.config, subject: e.target.value }
+                            })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Email Body</Label>
+                          <Textarea 
+                            placeholder="Use {claim.field} for merge fields..."
+                            rows={4}
+                            value={currentAction.config.message || ''}
+                            onChange={(e) => setCurrentAction({
+                              ...currentAction,
+                              config: { ...currentAction.config, message: e.target.value }
+                            })}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Available: {'{claim.policyholder_name}'}, {'{claim.claim_number}'}, {'{claim.status}'}, {'{claim.loss_type}'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SMS Config */}
+                    {currentAction?.type === 'send_sms' && (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Send To</Label>
+                          <Select 
+                            value={currentAction.config.recipient_type || ''} 
+                            onValueChange={(value) => setCurrentAction({
+                              ...currentAction,
+                              config: { ...currentAction.config, recipient_type: value as any }
+                            })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select recipient" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="policyholder">Policyholder</SelectItem>
+                              <SelectItem value="adjuster">Insurance Adjuster</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Message</Label>
+                          <Textarea 
+                            placeholder="Use {claim.field} for merge fields..."
+                            rows={3}
+                            value={currentAction.config.message || ''}
+                            onChange={(e) => setCurrentAction({
+                              ...currentAction,
+                              config: { ...currentAction.config, message: e.target.value }
+                            })}
+                          />
+                          <p className="text-xs text-muted-foreground">Keep under 160 characters for best delivery</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Task Config */}
+                    {currentAction?.type === 'create_task' && (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Task Title</Label>
+                          <Input 
+                            placeholder="e.g., Follow up with policyholder"
+                            value={currentAction.config.title || ''}
+                            onChange={(e) => setCurrentAction({
+                              ...currentAction,
+                              config: { ...currentAction.config, title: e.target.value }
+                            })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Task Description</Label>
+                          <Textarea 
+                            placeholder="Task details..."
+                            rows={2}
+                            value={currentAction.config.description || ''}
+                            onChange={(e) => setCurrentAction({
+                              ...currentAction,
+                              config: { ...currentAction.config, description: e.target.value }
+                            })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Priority</Label>
+                            <Select 
+                              value={currentAction.config.priority || 'medium'} 
+                              onValueChange={(value) => setCurrentAction({
+                                ...currentAction,
+                                config: { ...currentAction.config, priority: value as any }
+                              })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="low">Low</SelectItem>
+                                <SelectItem value="medium">Medium</SelectItem>
+                                <SelectItem value="high">High</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Due In (Days)</Label>
+                            <Input 
+                              type="number"
+                              min="0"
+                              placeholder="e.g., 3"
+                              value={currentAction.config.due_date_offset || ''}
+                              onChange={(e) => setCurrentAction({
+                                ...currentAction,
+                                config: { ...currentAction.config, due_date_offset: parseInt(e.target.value) }
+                              })}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Notification Config */}
+                    {currentAction?.type === 'send_notification' && (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Notification Message</Label>
+                          <Textarea 
+                            placeholder="Message to send to portal users..."
+                            rows={3}
+                            value={currentAction.config.message || ''}
+                            onChange={(e) => setCurrentAction({
+                              ...currentAction,
+                              config: { ...currentAction.config, message: e.target.value }
+                            })}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {currentAction?.type && (
+                      <Button type="button" variant="outline" onClick={addAction}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Action
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button type="button" variant="outline" onClick={resetForm}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createMutation.isPending}>
+                <Button type="submit" disabled={createMutation.isPending || actions.length === 0}>
                   {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Create
+                  Create Automation
                 </Button>
               </DialogFooter>
             </form>
@@ -188,6 +644,13 @@ export const AutomationsSettings = () => {
         </TabsList>
 
         <TabsContent value="automations" className="space-y-4">
+          {automations?.length === 0 && (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No automations created yet. Click "New Automation" to get started.
+              </CardContent>
+            </Card>
+          )}
           {automations?.map((automation) => (
             <Card key={automation.id}>
               <CardHeader>
@@ -224,13 +687,33 @@ export const AutomationsSettings = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">
-                    {automation.trigger_type.replace('_', ' ')}
-                  </Badge>
-                  <Badge variant={automation.is_active ? "default" : "secondary"}>
-                    {automation.is_active ? "Active" : "Inactive"}
-                  </Badge>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {getTriggerDescription(automation)}
+                    </Badge>
+                    <Badge variant={automation.is_active ? "default" : "secondary"}>
+                      {automation.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                  
+                  {/* Show actions */}
+                  {Array.isArray(automation.actions) && automation.actions.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      {(automation.actions as unknown as ActionConfig[]).map((action, index) => (
+                        <Badge key={index} variant="secondary" className="flex items-center gap-1">
+                          {getActionIcon(action.type)}
+                          <span className="text-xs">
+                            {action.type === 'send_email' && 'Email'}
+                            {action.type === 'send_sms' && 'SMS'}
+                            {action.type === 'create_task' && 'Task'}
+                            {action.type === 'send_notification' && 'Notification'}
+                          </span>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -238,6 +721,13 @@ export const AutomationsSettings = () => {
         </TabsContent>
 
         <TabsContent value="history" className="space-y-4">
+          {executions?.length === 0 && (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No execution history yet. Automations will appear here when they run.
+              </CardContent>
+            </Card>
+          )}
           {executions?.map((execution: any) => (
             <Card key={execution.id}>
               <CardContent className="pt-6">

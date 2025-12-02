@@ -112,6 +112,12 @@ async function executeAction(supabase: any, action: any, execution: any) {
     case 'update_claim':
       return await updateClaim(supabase, config, execution);
     
+    case 'send_email':
+      return await sendEmail(supabase, config, execution);
+    
+    case 'send_sms':
+      return await sendSms(supabase, config, execution);
+    
     case 'webhook':
       return await callWebhook(config, execution);
     
@@ -127,14 +133,17 @@ async function createTask(supabase: any, config: any, execution: any) {
     .eq('id', execution.claim_id)
     .single();
 
+  const dueDate = config.due_date_offset 
+    ? new Date(Date.now() + config.due_date_offset * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    : null;
+
   const taskData = {
     claim_id: execution.claim_id,
-    title: replaceVariables(config.title, claim, execution.trigger_data),
+    title: replaceVariables(config.title || 'Automated Task', claim, execution.trigger_data),
     description: config.description ? replaceVariables(config.description, claim, execution.trigger_data) : null,
     priority: config.priority || 'medium',
     status: 'pending',
-    due_date: config.due_date,
-    assigned_to: config.assigned_to,
+    due_date: dueDate,
   };
 
   const { data, error } = await supabase
@@ -144,6 +153,7 @@ async function createTask(supabase: any, config: any, execution: any) {
     .single();
 
   if (error) throw error;
+  console.log('Created task:', data.id);
   return data;
 }
 
@@ -154,8 +164,7 @@ async function sendNotification(supabase: any, config: any, execution: any) {
     .eq('id', execution.claim_id)
     .single();
 
-  // For now, just create a claim update as notification
-  const message = replaceVariables(config.message, claim, execution.trigger_data);
+  const message = replaceVariables(config.message || 'Automated notification', claim, execution.trigger_data);
   
   const { data, error } = await supabase
     .from('claim_updates')
@@ -168,7 +177,162 @@ async function sendNotification(supabase: any, config: any, execution: any) {
     .single();
 
   if (error) throw error;
+  console.log('Created notification:', data.id);
   return data;
+}
+
+async function sendEmail(supabase: any, config: any, execution: any) {
+  // Get claim with all related data
+  const { data: claim } = await supabase
+    .from('claims')
+    .select(`
+      *,
+      referrer:referrers(name, email)
+    `)
+    .eq('id', execution.claim_id)
+    .single();
+
+  if (!claim) throw new Error('Claim not found');
+
+  // Determine recipient based on config
+  let recipientEmail = '';
+  let recipientName = '';
+
+  switch (config.recipient_type) {
+    case 'policyholder':
+      recipientEmail = claim.policyholder_email;
+      recipientName = claim.policyholder_name;
+      break;
+    case 'adjuster':
+      recipientEmail = claim.adjuster_email;
+      recipientName = claim.adjuster_name;
+      break;
+    case 'referrer':
+      recipientEmail = claim.referrer?.email;
+      recipientName = claim.referrer?.name;
+      break;
+  }
+
+  if (!recipientEmail) {
+    throw new Error(`No email found for ${config.recipient_type}`);
+  }
+
+  const subject = replaceVariables(config.subject || 'Claim Update', claim, execution.trigger_data);
+  const body = replaceVariables(config.message || '', claim, execution.trigger_data);
+
+  // Use Resend to send email
+  const resendApiKey = Deno.env.get('RESEND_API_KEY');
+  if (!resendApiKey) {
+    throw new Error('RESEND_API_KEY not configured');
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${resendApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'Freedom Claims <noreply@claims.freedom.com>',
+      to: [recipientEmail],
+      subject: subject,
+      html: `<div style="font-family: sans-serif;">${body.replace(/\n/g, '<br>')}</div>`,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to send email: ${errorText}`);
+  }
+
+  // Log email to database
+  await supabase.from('emails').insert({
+    claim_id: execution.claim_id,
+    recipient_email: recipientEmail,
+    recipient_name: recipientName,
+    recipient_type: config.recipient_type,
+    subject: subject,
+    body: body,
+  });
+
+  console.log('Sent email to:', recipientEmail);
+  return { sent_to: recipientEmail };
+}
+
+async function sendSms(supabase: any, config: any, execution: any) {
+  // Get claim data
+  const { data: claim } = await supabase
+    .from('claims')
+    .select('*')
+    .eq('id', execution.claim_id)
+    .single();
+
+  if (!claim) throw new Error('Claim not found');
+
+  // Determine recipient phone
+  let recipientPhone = '';
+
+  switch (config.recipient_type) {
+    case 'policyholder':
+      recipientPhone = claim.policyholder_phone;
+      break;
+    case 'adjuster':
+      recipientPhone = claim.adjuster_phone;
+      break;
+  }
+
+  if (!recipientPhone) {
+    throw new Error(`No phone found for ${config.recipient_type}`);
+  }
+
+  const messageBody = replaceVariables(config.message || '', claim, execution.trigger_data);
+
+  // Use Twilio to send SMS
+  const twilioAccountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
+  const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+  const twilioPhoneNumber = Deno.env.get('TWILIO_PHONE_NUMBER');
+
+  if (!twilioAccountSid || !twilioAuthToken || !twilioPhoneNumber) {
+    throw new Error('Twilio credentials not configured');
+  }
+
+  const formData = new URLSearchParams();
+  formData.append('To', recipientPhone);
+  formData.append('From', twilioPhoneNumber);
+  formData.append('Body', messageBody);
+
+  const response = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + btoa(`${twilioAccountSid}:${twilioAuthToken}`),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData.toString(),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to send SMS: ${errorText}`);
+  }
+
+  const twilioResponse = await response.json();
+
+  // Log SMS to database
+  await supabase.from('sms_messages').insert({
+    claim_id: execution.claim_id,
+    to_number: recipientPhone,
+    from_number: twilioPhoneNumber,
+    message_body: messageBody,
+    direction: 'outbound',
+    status: 'sent',
+    twilio_sid: twilioResponse.sid,
+  });
+
+  console.log('Sent SMS to:', recipientPhone);
+  return { sent_to: recipientPhone, sid: twilioResponse.sid };
 }
 
 async function updateClaim(supabase: any, config: any, execution: any) {
