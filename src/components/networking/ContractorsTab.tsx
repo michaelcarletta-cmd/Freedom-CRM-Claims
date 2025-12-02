@@ -17,14 +17,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { UserPlus, Mail, Phone, Search, Trash2 } from "lucide-react";
+import { UserPlus, Mail, Phone, Search, Trash2, Settings, Link2 } from "lucide-react";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
+import { Switch } from "@/components/ui/switch";
 
 interface Contractor {
   id: string;
   full_name: string | null;
   email: string;
   phone: string | null;
+  jobnimbus_api_key?: string | null;
+  jobnimbus_enabled?: boolean;
 }
 
 export const ContractorsTab = () => {
@@ -40,6 +43,10 @@ export const ContractorsTab = () => {
     phone: "",
   });
   const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null);
+  const [integrationDialogOpen, setIntegrationDialogOpen] = useState(false);
+  const [selectedContractor, setSelectedContractor] = useState<Contractor | null>(null);
+  const [jobnimbusApiKey, setJobnimbusApiKey] = useState("");
+  const [jobnimbusEnabled, setJobnimbusEnabled] = useState(false);
 
   useEffect(() => {
     fetchContractors();
@@ -79,7 +86,7 @@ export const ContractorsTab = () => {
     // Fetch profiles for these users
     const { data: profileData, error: profileError } = await supabase
       .from("profiles")
-      .select("*")
+      .select("id, full_name, email, phone, jobnimbus_api_key, jobnimbus_enabled")
       .in("id", contractorIds);
 
     if (profileError) {
@@ -88,6 +95,34 @@ export const ContractorsTab = () => {
     }
 
     setContractors(profileData || []);
+  };
+
+  const handleOpenIntegration = (contractor: Contractor) => {
+    setSelectedContractor(contractor);
+    setJobnimbusApiKey(contractor.jobnimbus_api_key || "");
+    setJobnimbusEnabled(contractor.jobnimbus_enabled || false);
+    setIntegrationDialogOpen(true);
+  };
+
+  const handleSaveIntegration = async () => {
+    if (!selectedContractor) return;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        jobnimbus_api_key: jobnimbusApiKey || null,
+        jobnimbus_enabled: jobnimbusEnabled,
+      })
+      .eq("id", selectedContractor.id);
+
+    if (error) {
+      toast.error("Failed to save integration settings");
+      return;
+    }
+
+    toast.success("Integration settings saved");
+    setIntegrationDialogOpen(false);
+    fetchContractors();
   };
 
   const handleAddContractor = async () => {
@@ -225,6 +260,7 @@ export const ContractorsTab = () => {
                   <TableHead className="whitespace-nowrap">Name</TableHead>
                   <TableHead className="whitespace-nowrap">Email</TableHead>
                   <TableHead className="whitespace-nowrap">Phone</TableHead>
+                  <TableHead className="whitespace-nowrap">Integrations</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -249,6 +285,21 @@ export const ContractorsTab = () => {
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenIntegration(contractor)}
+                      className="gap-1"
+                    >
+                      <Link2 className="h-4 w-4" />
+                      {contractor.jobnimbus_enabled ? (
+                        <span className="text-xs text-success">JobNimbus</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Configure</span>
+                      )}
+                    </Button>
                   </TableCell>
                   <TableCell>
                     <Button
@@ -294,6 +345,47 @@ export const ContractorsTab = () => {
           userType="Contractor"
         />
       )}
+
+      <Dialog open={integrationDialogOpen} onOpenChange={setIntegrationDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Integration Settings - {selectedContractor?.full_name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6">
+            <div className="p-4 border rounded-lg space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium">JobNimbus Integration</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically sync claims, tasks, notes, and files
+                  </p>
+                </div>
+                <Switch
+                  checked={jobnimbusEnabled}
+                  onCheckedChange={setJobnimbusEnabled}
+                />
+              </div>
+              {jobnimbusEnabled && (
+                <div>
+                  <Label>JobNimbus API Key</Label>
+                  <Input
+                    type="password"
+                    value={jobnimbusApiKey}
+                    onChange={(e) => setJobnimbusApiKey(e.target.value)}
+                    placeholder="Enter API key from JobNimbus settings"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Find this in JobNimbus → Settings → API
+                  </p>
+                </div>
+              )}
+            </div>
+            <Button onClick={handleSaveIntegration} className="w-full">
+              Save Integration Settings
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

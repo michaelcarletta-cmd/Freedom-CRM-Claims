@@ -38,3 +38,6 @@ verify_jwt = true
 
 [functions.process-knowledge-document]
 verify_jwt = true
+
+[functions.process-jobnimbus-sync]
+verify_jwt = false
