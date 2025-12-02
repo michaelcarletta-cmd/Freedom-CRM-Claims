@@ -68,12 +68,21 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         { body: { templateId: selectedTemplate.id, claimId } }
       );
       if (docError) throw docError;
+      if (docData.error) throw new Error(docData.error);
+
+      // Handle both PDF and Word document responses
+      const isPDF = docData.isPDF;
+      const contentArray = Array.isArray(docData.content) 
+        ? docData.content 
+        : docData.content?.data || docData.content;
+      
+      const mimeType = isPDF 
+        ? "application/pdf" 
+        : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
       // Upload to storage
       const fileName = `signatures/${claimId}/${Date.now()}-${docData.fileName}`;
-      const blob = new Blob([new Uint8Array(docData.content.data)], {
-        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      });
+      const blob = new Blob([new Uint8Array(contentArray)], { type: mimeType });
       
       const { error: uploadError } = await supabase.storage
         .from("claim-files")
