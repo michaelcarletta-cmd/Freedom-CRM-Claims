@@ -9,8 +9,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, Mail, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CredentialsDialogProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ interface CredentialsDialogProps {
   email: string;
   password: string;
   userType: string;
+  userName?: string;
 }
 
 export const CredentialsDialog = ({
@@ -26,9 +28,12 @@ export const CredentialsDialog = ({
   email,
   password,
   userType,
+  userName,
 }: CredentialsDialogProps) => {
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedPassword, setCopiedPassword] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   const handleCopy = async (text: string, type: "email" | "password") => {
     await navigator.clipboard.writeText(text);
@@ -48,13 +53,32 @@ export const CredentialsDialog = ({
     toast.success("Credentials copied to clipboard");
   };
 
+  const handleSendInvite = async () => {
+    setSendingEmail(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-portal-invite", {
+        body: { email, password, userType, userName },
+      });
+
+      if (error) throw error;
+
+      setEmailSent(true);
+      toast.success("Invitation email sent successfully");
+    } catch (error: any) {
+      console.error("Error sending invite:", error);
+      toast.error(error.message || "Failed to send invitation email");
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{userType} Account Created</DialogTitle>
           <DialogDescription>
-            Save these login credentials. The password cannot be retrieved later.
+            Save these login credentials or send them via email. The password cannot be retrieved later.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -84,7 +108,22 @@ export const CredentialsDialog = ({
               </Button>
             </div>
           </div>
-          <div className="flex gap-3 justify-end pt-2">
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Button 
+              variant="outline" 
+              onClick={handleSendInvite}
+              disabled={sendingEmail || emailSent}
+              className="flex-1"
+            >
+              {sendingEmail ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : emailSent ? (
+                <Check className="h-4 w-4 mr-2 text-green-500" />
+              ) : (
+                <Mail className="h-4 w-4 mr-2" />
+              )}
+              {emailSent ? "Email Sent" : "Send Invite Email"}
+            </Button>
             <Button variant="outline" onClick={handleCopyAll}>
               Copy All
             </Button>
