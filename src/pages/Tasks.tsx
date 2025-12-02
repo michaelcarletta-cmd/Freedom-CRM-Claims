@@ -243,17 +243,21 @@ const Tasks = () => {
         <p className="text-muted-foreground mt-1">Manage all your tasks across claims</p>
       </div>
 
-      <Tabs defaultValue="pending" className="w-full">
-        <TabsList>
-          <TabsTrigger value="pending">Pending ({pendingTasks.length})</TabsTrigger>
-          <TabsTrigger value="completed">Completed ({completedTasks.length})</TabsTrigger>
+      <Tabs defaultValue="pending" className="space-y-6">
+        <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1 overflow-x-auto scrollbar-hide">
+          <TabsTrigger value="pending" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
+            Pending ({pendingTasks.length})
+          </TabsTrigger>
+          <TabsTrigger value="completed" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
+            Completed ({completedTasks.length})
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="pending" className="mt-6">
+        <TabsContent value="pending">
           <TaskList taskList={pendingTasks} />
         </TabsContent>
 
-        <TabsContent value="completed" className="mt-6">
+        <TabsContent value="completed">
           <TaskList taskList={completedTasks} />
         </TabsContent>
       </Tabs>
