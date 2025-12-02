@@ -181,14 +181,22 @@ export function ReferrersSettings() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this referrer?")) return;
+    console.log("Delete clicked for referrer:", id);
+    if (!confirm("Are you sure you want to delete this referrer?")) {
+      console.log("Delete cancelled by user");
+      return;
+    }
 
+    console.log("Attempting to delete referrer:", id);
     try {
-      const { error } = await supabase
+      const { error, count } = await supabase
         .from("referrers")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .select();
 
+      console.log("Delete result - error:", error, "count:", count);
+      
       if (error) throw error;
 
       toast({
@@ -198,9 +206,10 @@ export function ReferrersSettings() {
 
       fetchReferrers();
     } catch (error: any) {
+      console.error("Delete error:", error);
       toast({
         title: "Error",
-        description: "Failed to delete referrer",
+        description: error.message || "Failed to delete referrer",
         variant: "destructive",
       });
     }
