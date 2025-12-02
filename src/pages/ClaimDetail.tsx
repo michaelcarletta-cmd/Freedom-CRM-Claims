@@ -180,12 +180,12 @@ const ClaimDetail = () => {
               />
             )}
             {isPortalUser && claim.status && (
-              <span className="px-3 py-1 text-sm rounded-full bg-muted text-muted-foreground">
+              <span className="px-3 py-1 text-sm rounded-none bg-sidebar text-sidebar-foreground">
                 {claim.status}
               </span>
             )}
           </div>
-          <p className="text-muted-foreground mt-1">{claim.policyholder_name}</p>
+          <p className="text-foreground/80 mt-1 font-medium">{claim.policyholder_name}</p>
         </div>
         {isStaffOrAdmin && (
           <div className="flex flex-wrap gap-2">
