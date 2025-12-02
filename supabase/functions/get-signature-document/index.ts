@@ -45,29 +45,43 @@ serve(async (req) => {
       );
     }
 
-    const documentPath = signer.signature_requests.document_path;
+    const request = signer.signature_requests;
+    const documentPath = request.document_path;
 
-    if (!documentPath) {
-      return new Response(
-        JSON.stringify({ error: "No document path configured for this request" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    let signedUrl = null;
+    if (documentPath) {
+      const { data: urlData, error: urlError } = await supabaseClient.storage
+        .from("claim-files")
+        .createSignedUrl(documentPath, 3600);
+
+      if (urlError) {
+        console.error("Error creating signed URL:", urlError);
+      } else {
+        signedUrl = urlData?.signedUrl || null;
+      }
     }
 
-    const { data: urlData, error: urlError } = await supabaseClient.storage
-      .from("claim-files")
-      .createSignedUrl(documentPath, 3600);
-
-    if (urlError || !urlData?.signedUrl) {
-      console.error("Error creating signed URL:", urlError);
-      return new Response(
-        JSON.stringify({ error: "Unable to generate document link" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
+    // Return all data needed for the signing page
     return new Response(
-      JSON.stringify({ signedUrl: urlData.signedUrl }),
+      JSON.stringify({
+        signer: {
+          id: signer.id,
+          signer_name: signer.signer_name,
+          signer_email: signer.signer_email,
+          signer_type: signer.signer_type,
+          signing_order: signer.signing_order,
+          status: signer.status,
+          signed_at: signer.signed_at,
+        },
+        request: {
+          id: request.id,
+          document_name: request.document_name,
+          document_path: request.document_path,
+          field_data: request.field_data,
+          status: request.status,
+        },
+        signedUrl,
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

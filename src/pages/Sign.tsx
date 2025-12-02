@@ -20,6 +20,7 @@ export default function Sign() {
   const [signed, setSigned] = useState(false);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
   
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
   const [drawingFields, setDrawingFields] = useState<Record<string, boolean>>({});
@@ -27,49 +28,46 @@ export default function Sign() {
   useEffect(() => {
     if (token) {
       fetchSignerData();
+    } else {
+      setError("No signing token provided");
+      setLoading(false);
     }
   }, [token]);
 
   const fetchSignerData = async () => {
     try {
-      const { data: signerData, error: signerError } = await supabase
-        .from("signature_signers")
-        .select(`
-          *,
-          signature_requests(*)
-        `)
-        .eq("access_token", token)
-        .maybeSingle();
-
-      if (signerError) throw signerError;
-      
-      if (!signerData) {
-        throw new Error("Signature request not found or link has expired");
-      }
-      
-      if (signerData.status === "signed") {
-        setSigned(true);
-      }
-      
-      setSigner(signerData);
-      setRequest(signerData.signature_requests);
-
-      // Get document URL via backend function (works for public signers)
-      const { data: urlData, error: urlError } = await supabase.functions.invoke(
+      // Fetch all data from the edge function (bypasses RLS)
+      const { data, error: fetchError } = await supabase.functions.invoke(
         "get-signature-document",
         { body: { token } }
       );
 
-      if (urlError || !urlData?.signedUrl) {
-        console.error("Error fetching signed URL from function", urlError);
-      } else {
-        setDocumentUrl(urlData.signedUrl);
+      if (fetchError) {
+        throw new Error(fetchError.message || "Failed to fetch signature data");
       }
 
-    } catch (error: any) {
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      if (!data?.signer || !data?.request) {
+        throw new Error("Signature request not found or link has expired");
+      }
+      
+      if (data.signer.status === "signed") {
+        setSigned(true);
+      }
+      
+      setSigner(data.signer);
+      setRequest(data.request);
+      setDocumentUrl(data.signedUrl);
+
+    } catch (err: any) {
+      console.error("Error fetching signer data:", err);
+      setError(err.message || "Invalid or expired link");
       toast({
         title: "Invalid or expired link",
-        description: error.message,
+        description: err.message,
         variant: "destructive",
       });
     } finally {
@@ -168,10 +166,10 @@ export default function Sign() {
 
       setSigned(true);
       toast({ title: "Document signed successfully" });
-    } catch (error: any) {
+    } catch (err: any) {
       toast({
         title: "Failed to sign",
-        description: error.message,
+        description: err.message,
         variant: "destructive",
       });
     } finally {
@@ -187,14 +185,14 @@ export default function Sign() {
     );
   }
 
-  if (!signer || !request) {
+  if (error || !signer || !request) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
           <CardHeader>
             <CardTitle>Invalid Link</CardTitle>
             <CardDescription>
-              This signature link is invalid or has expired.
+              {error || "This signature link is invalid or has expired."}
             </CardDescription>
           </CardHeader>
         </Card>
