@@ -41,24 +41,26 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const [selectedClaims, setSelectedClaims] = useState<Set<string>>(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [activeStatuses, setActiveStatuses] = useState<string[]>([]);
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
     fetchClaims();
+    fetchActiveStatuses();
   }, [portalType, user]);
 
   useEffect(() => {
     filterClaims();
-  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed]);
+  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed, activeStatuses]);
 
   const filterClaims = () => {
     let filtered = [...claims];
 
-    // Hide closed claims by default
-    if (!showClosed) {
-      filtered = filtered.filter((claim) => claim.status !== "closed");
+    // Hide inactive statuses (like closed) by default
+    if (!showClosed && activeStatuses.length > 0) {
+      filtered = filtered.filter((claim) => activeStatuses.includes(claim.status));
     }
 
     // Search filter
@@ -146,14 +148,13 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       if (portalType === "client") {
         query = query.eq("client_id", user?.id);
       } else if (portalType === "contractor") {
-        // Get claim IDs assigned to this contractor
         const { data: assignments } = await supabase
           .from("claim_contractors")
           .select("claim_id")
           .eq("contractor_id", user?.id);
-        
+
         if (assignments && assignments.length > 0) {
-          const claimIds = assignments.map(a => a.claim_id);
+          const claimIds = assignments.map((a) => a.claim_id);
           query = query.in("id", claimIds);
         } else {
           setClaims([]);
@@ -163,24 +164,22 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       } else if (portalType === "referrer") {
         query = query.eq("referrer_id", user?.id);
       } else if (!portalType) {
-        // Main claims page - check if user is staff (non-admin)
         const { data: roles } = await supabase
           .from("user_roles")
           .select("role")
           .eq("user_id", user?.id);
-        
-        const isAdmin = roles?.some(r => r.role === "admin");
-        const isStaff = roles?.some(r => r.role === "staff");
-        
-        // If staff but not admin, only show assigned claims
+
+        const isAdmin = roles?.some((r) => r.role === "admin");
+        const isStaff = roles?.some((r) => r.role === "staff");
+
         if (isStaff && !isAdmin) {
           const { data: staffAssignments } = await supabase
             .from("claim_staff")
             .select("claim_id")
             .eq("staff_id", user?.id);
-          
+
           if (staffAssignments && staffAssignments.length > 0) {
-            const claimIds = staffAssignments.map(a => a.claim_id);
+            const claimIds = staffAssignments.map((a) => a.claim_id);
             query = query.in("id", claimIds);
           } else {
             setClaims([]);
@@ -188,7 +187,6 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
             return;
           }
         }
-        // If admin, query remains as is (fetch all)
       }
 
       const { data, error } = await query.order("created_at", { ascending: false });
@@ -199,6 +197,21 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       console.error("Error fetching claims:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchActiveStatuses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("claim_statuses")
+        .select("name, is_active");
+
+      if (error) throw error;
+
+      const active = (data || []).filter((s) => s.is_active).map((s) => s.name);
+      setActiveStatuses(active);
+    } catch (error) {
+      console.error("Error fetching active statuses:", error);
     }
   };
 

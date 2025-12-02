@@ -17,10 +17,12 @@ import { EditClaimDialog } from "@/components/claim-detail/EditClaimDialog";
 import { DeleteClaimDialog } from "@/components/claim-detail/DeleteClaimDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Edit, Trash2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const ClaimDetail = () => {
   const { id } = useParams();
   const { userRole } = useAuth();
+  const { toast } = useToast();
   const [claim, setClaim] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -55,6 +57,35 @@ const ClaimDetail = () => {
     }
   };
 
+  const toggleClosedStatus = async () => {
+    if (!id || !claim) return;
+
+    const newStatus = claim.status === "closed" ? "open" : "closed";
+
+    try {
+      const { error } = await supabase
+        .from("claims")
+        .update({ status: newStatus })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setClaim({ ...claim, status: newStatus });
+      toast({
+        title: "Status updated",
+        description:
+          newStatus === "closed" ? "Claim has been closed and removed from the active list." : "Claim has been reopened.",
+      });
+    } catch (error: any) {
+      console.error("Error toggling closed status:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update claim status",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return <div className="p-8">Loading...</div>;
   }
@@ -83,6 +114,12 @@ const ClaimDetail = () => {
           <p className="text-muted-foreground mt-1">{claim.policyholder_name}</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant={claim.status === "closed" ? "outline" : "secondary"}
+            onClick={toggleClosedStatus}
+          >
+            {claim.status === "closed" ? "Reopen Claim" : "Close Claim"}
+          </Button>
           <Button className="bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
             <Edit className="h-4 w-4 mr-2" />
             Edit Claim
