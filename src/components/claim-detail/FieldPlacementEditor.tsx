@@ -190,26 +190,34 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
   }, [fabricCanvas, activeTool, currentSignerIndex, isPdf]);
 
   // PDF overlay click handler
+  const [pendingClickPos, setPendingClickPos] = useState<{x: number, y: number} | null>(null);
+  
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    console.log("Overlay clicked, activeTool:", activeTool);
-    
-    if (!activeTool) {
-      toast({ title: "Select a field type first", description: "Click 'Add Signature', 'Add Date', or 'Add Text' button above" });
-      return;
-    }
-    
     if (!overlayRef.current) return;
     
     // Prevent if clicking on an existing field
     if ((e.target as HTMLElement).closest('.field-indicator')) return;
+    if ((e.target as HTMLElement).closest('.field-picker')) return;
 
     const rect = overlayRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    console.log("Adding field at:", x, y);
-    addFieldForPdf(activeTool, x, y);
-    setActiveTool(null);
+    if (activeTool) {
+      // If tool already selected, place field immediately
+      addFieldForPdf(activeTool, x, y);
+      setActiveTool(null);
+    } else {
+      // Show field type picker at click location
+      setPendingClickPos({ x, y });
+    }
+  };
+  
+  const handleSelectFieldType = (type: "signature" | "date" | "text") => {
+    if (pendingClickPos) {
+      addFieldForPdf(type, pendingClickPos.x, pendingClickPos.y);
+      setPendingClickPos(null);
+    }
   };
 
   const addFieldForPdf = (type: "signature" | "date" | "text", x: number, y: number) => {
@@ -673,6 +681,56 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
                     {field.label}
                   </div>
                 ))}
+                
+                {/* Field type picker popup */}
+                {pendingClickPos && (
+                  <div 
+                    className="field-picker absolute bg-popover border rounded-lg shadow-lg p-2 z-50"
+                    style={{ 
+                      left: Math.min(pendingClickPos.x, 400), 
+                      top: pendingClickPos.y 
+                    }}
+                  >
+                    <div className="text-xs text-muted-foreground mb-2">Select field type:</div>
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="justify-start"
+                        onClick={() => handleSelectFieldType("signature")}
+                      >
+                        <Pencil className="w-4 h-4 mr-2 text-blue-500" />
+                        Signature
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="justify-start"
+                        onClick={() => handleSelectFieldType("date")}
+                      >
+                        <Calendar className="w-4 h-4 mr-2 text-green-500" />
+                        Date
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="justify-start"
+                        onClick={() => handleSelectFieldType("text")}
+                      >
+                        <Type className="w-4 h-4 mr-2 text-purple-500" />
+                        Text
+                      </Button>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full mt-1 text-muted-foreground"
+                      onClick={() => setPendingClickPos(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           )}
