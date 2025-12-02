@@ -24,6 +24,7 @@ interface Claim {
   status: string;
   created_at: string;
   loss_type: string;
+  is_closed: boolean;
 }
 
 interface ClaimsTableConnectedProps {
@@ -53,14 +54,14 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
 
   useEffect(() => {
     filterClaims();
-  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed, activeStatuses]);
+  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed]);
 
   const filterClaims = () => {
     let filtered = [...claims];
 
-    // Hide inactive statuses (like closed) by default
-    if (!showClosed && activeStatuses.length > 0) {
-      filtered = filtered.filter((claim) => activeStatuses.includes(claim.status));
+    // Hide closed claims by default
+    if (!showClosed) {
+      filtered = filtered.filter((claim) => !claim.is_closed);
     }
 
     // Search filter

@@ -61,43 +61,21 @@ const ClaimDetail = () => {
     if (!id || !claim) return;
 
     try {
-      let newStatus: string;
-      
-      if (claim.status === "closed") {
-        // When reopening, find the first active non-closed status from claim_statuses
-        const { data: statuses, error: statusError } = await supabase
-          .from("claim_statuses")
-          .select("name, is_active, display_order")
-          .eq("is_active", true)
-          .order("display_order", { ascending: true });
-
-        if (statusError) throw statusError;
-
-        const activeStatuses = statuses || [];
-        const firstNonClosedStatus = activeStatuses.find(
-          (status) => status.name.toLowerCase() !== "closed"
-        );
-
-        newStatus =
-          firstNonClosedStatus?.name ||
-          activeStatuses[0]?.name ||
-          "open";
-      } else {
-        newStatus = "closed";
-      }
+      const newIsClosed = !claim.is_closed;
 
       const { error } = await supabase
         .from("claims")
-        .update({ status: newStatus })
+        .update({ is_closed: newIsClosed })
         .eq("id", id);
 
       if (error) throw error;
 
-      setClaim({ ...claim, status: newStatus });
+      setClaim({ ...claim, is_closed: newIsClosed });
       toast({
         title: "Status updated",
-        description:
-          newStatus === "closed" ? "Claim has been closed and removed from the active list." : "Claim has been reopened.",
+        description: newIsClosed
+          ? "Claim has been closed and removed from the active list."
+          : "Claim has been reopened.",
       });
     } catch (error: any) {
       console.error("Error toggling closed status:", error);
@@ -138,10 +116,10 @@ const ClaimDetail = () => {
         </div>
         <div className="flex gap-2">
           <Button
-            variant={claim.status === "closed" ? "outline" : "secondary"}
+            variant={claim.is_closed ? "outline" : "secondary"}
             onClick={toggleClosedStatus}
           >
-            {claim.status === "closed" ? "Reopen Claim" : "Close Claim"}
+            {claim.is_closed ? "Reopen Claim" : "Close Claim"}
           </Button>
           <Button className="bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
             <Edit className="h-4 w-4 mr-2" />
