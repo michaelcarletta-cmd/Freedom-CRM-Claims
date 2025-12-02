@@ -627,21 +627,14 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
               </div>
               
               <div className="flex gap-4 p-4">
-                {/* PDF Preview - Left side */}
+                {/* PDF Preview - Left side using Google Docs Viewer */}
                 <div className="flex-1 min-w-0">
                   <div className="text-xs text-muted-foreground mb-2 text-center">PDF Preview (scroll to view)</div>
-                  <object
-                    data={documentUrl}
-                    type="application/pdf"
+                  <iframe
+                    src={`https://docs.google.com/viewer?url=${encodeURIComponent(documentUrl)}&embedded=true`}
                     className="w-full h-[700px] border rounded bg-white"
-                  >
-                    <div className="flex flex-col items-center justify-center h-[700px] bg-muted/20 border rounded">
-                      <p className="text-muted-foreground mb-4">PDF preview not available in browser</p>
-                      <Button variant="outline" onClick={() => window.open(documentUrl, '_blank')}>
-                        Open PDF in New Tab
-                      </Button>
-                    </div>
-                  </object>
+                    title="PDF Preview"
+                  />
                 </div>
                 
                 {/* Field Placement Template - Right side */}
