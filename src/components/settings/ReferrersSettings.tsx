@@ -93,6 +93,7 @@ export function ReferrersSettings() {
         toast({ title: "Success", description: "Referrer updated" });
       } else {
         let tempPassword: string | null = null;
+        let createdUserId: string | null = null;
         
         // Create user account if email is provided
         if (formData.email.trim()) {
@@ -114,9 +115,10 @@ export function ReferrersSettings() {
 
           if (funcError) throw funcError;
           if (funcData?.error) throw new Error(funcData.error);
+          createdUserId = funcData?.userId || null;
         }
 
-        // Create referrer record
+        // Create referrer record with user_id link
         const { error } = await supabase
           .from("referrers")
           .insert({
@@ -124,6 +126,7 @@ export function ReferrersSettings() {
             company: formData.company.trim() || null,
             phone: formData.phone.trim() || null,
             email: formData.email.trim() || null,
+            user_id: createdUserId,
           });
 
         if (error) throw error;
