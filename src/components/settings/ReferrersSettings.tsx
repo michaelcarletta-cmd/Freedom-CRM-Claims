@@ -128,9 +128,18 @@ export function ReferrersSettings() {
       setFormData({ name: "", company: "", phone: "", email: "" });
       fetchReferrers();
     } catch (error: any) {
+      let errorMessage = "Failed to save referrer";
+      
+      // Check for duplicate email error
+      if (error.message?.includes("already been registered") || error.message?.includes("email_exists")) {
+        errorMessage = "This email address is already registered. Please use a different email.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error",
-        description: error.message || "Failed to save referrer",
+        description: errorMessage,
         variant: "destructive",
       });
     }
