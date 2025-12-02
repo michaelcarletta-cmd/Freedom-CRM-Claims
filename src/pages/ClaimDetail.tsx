@@ -51,6 +51,22 @@ const ClaimDetail = () => {
   const isPortalUser = userRole === "client" || userRole === "contractor" || userRole === "referrer";
   const isStaffOrAdmin = userRole === "admin" || userRole === "staff";
 
+  // Generate claim-specific email address using policy number
+  const getClaimEmail = (claim: any): string => {
+    const domain = "inbound.resend.dev"; // User should configure RESEND_INBOUND_DOMAIN
+    if (claim.policy_number) {
+      // Sanitize policy number: lowercase, replace non-alphanumeric with hyphens
+      const sanitized = claim.policy_number
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+      return `claim-${sanitized}@${domain}`;
+    }
+    // Fallback to claim_email_id if no policy number
+    return `claim-${claim.claim_email_id}@${domain}`;
+  };
+
   useEffect(() => {
     if (id) {
       fetchClaim();
@@ -186,15 +202,15 @@ const ClaimDetail = () => {
             )}
           </div>
           <p className="text-sidebar/80 mt-1 font-medium">{claim.policyholder_name}</p>
-          {isStaffOrAdmin && claim.claim_email_id && (
+          {isStaffOrAdmin && (claim.policy_number || claim.claim_email_id) && (
             <p className="text-xs text-muted-foreground mt-1 font-mono">
-              Claim Email: claim-{claim.claim_email_id}@inbound.resend.dev
+              Claim Email: {getClaimEmail(claim)}
               <Button 
                 variant="ghost" 
                 size="sm" 
                 className="ml-2 h-6 px-2 text-xs"
                 onClick={() => {
-                  navigator.clipboard.writeText(`claim-${claim.claim_email_id}@inbound.resend.dev`);
+                  navigator.clipboard.writeText(getClaimEmail(claim));
                   toast({ title: "Copied", description: "Claim email copied to clipboard" });
                 }}
               >
