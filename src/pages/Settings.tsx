@@ -30,7 +30,7 @@ import { ReferrersSettings } from "@/components/settings/ReferrersSettings";
 import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
 import { TemplatesSettings } from "@/components/settings/TemplatesSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
-import { TaskAutomationsSettings } from "@/components/settings/TaskAutomationsSettings";
+
 import { ImportSettings } from "@/components/settings/ImportSettings";
 import { UserManagementSettings } from "@/components/settings/UserManagementSettings";
 import { ProfileSettings } from "@/components/settings/ProfileSettings";
@@ -293,7 +293,6 @@ export default function Settings() {
           <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium px-4">User Management</TabsTrigger>
           <TabsTrigger value="templates" className="w-full md:w-auto justify-start text-base font-medium px-4">Templates</TabsTrigger>
           <TabsTrigger value="custom-fields" className="w-full md:w-auto justify-start text-base font-medium px-4">Custom Fields</TabsTrigger>
-          <TabsTrigger value="task-automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Task Automations</TabsTrigger>
           <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
           <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
           <TabsTrigger value="ai-knowledge" className="w-full md:w-auto justify-start text-base font-medium px-4">AI Knowledge Base</TabsTrigger>
@@ -390,10 +389,6 @@ export default function Settings() {
 
         <TabsContent value="custom-fields" className="w-full">
           <CustomFieldsSettings />
-        </TabsContent>
-
-        <TabsContent value="task-automations" className="w-full">
-          <TaskAutomationsSettings />
         </TabsContent>
 
         <TabsContent value="automations" className="w-full">

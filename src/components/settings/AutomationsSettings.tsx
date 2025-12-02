@@ -12,7 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Play, Trash2, Clock, Mail, MessageSquare, CheckSquare, AlertCircle } from "lucide-react";
+import { Loader2, Plus, Play, Trash2, Clock, Mail, MessageSquare, CheckSquare, AlertCircle, Zap, ListTodo } from "lucide-react";
+import { TaskAutomationsSettings } from "./TaskAutomationsSettings";
 
 interface TriggerConfig {
   // For scheduled
@@ -233,11 +234,25 @@ export const AutomationsSettings = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Automations</h2>
-          <p className="text-muted-foreground">Create automated workflows for follow-ups, reminders, and more</p>
-        </div>
+      <div>
+        <h2 className="text-2xl font-bold text-foreground">Automations</h2>
+        <p className="text-muted-foreground">Create automated workflows for follow-ups, reminders, and more</p>
+      </div>
+
+      <Tabs defaultValue="workflows" className="space-y-4">
+        <TabsList className="bg-muted/40">
+          <TabsTrigger value="workflows" className="flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            Workflows
+          </TabsTrigger>
+          <TabsTrigger value="task-automations" className="flex items-center gap-2">
+            <ListTodo className="h-4 w-4" />
+            Task Automations
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="workflows" className="space-y-6">
+          <div className="flex items-center justify-end">
         <Dialog open={isDialogOpen} onOpenChange={(open) => open ? setIsDialogOpen(true) : resetForm()}>
           <DialogTrigger asChild>
             <Button>
@@ -758,6 +773,12 @@ export const AutomationsSettings = () => {
               </CardContent>
             </Card>
           ))}
+        </TabsContent>
+      </Tabs>
+    </TabsContent>
+
+        <TabsContent value="task-automations">
+          <TaskAutomationsSettings />
         </TabsContent>
       </Tabs>
     </div>
