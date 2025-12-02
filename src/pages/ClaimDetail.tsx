@@ -15,9 +15,24 @@ import { ClaimTemplates } from "@/components/claim-detail/ClaimTemplates";
 import { ClaimAccessManagement } from "@/components/claim-detail/ClaimAccessManagement";
 import { EditClaimDialog } from "@/components/claim-detail/EditClaimDialog";
 import { DeleteClaimDialog } from "@/components/claim-detail/DeleteClaimDialog";
+import { NotifyPortalDialog } from "@/components/claim-detail/NotifyPortalDialog";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Edit, Trash2 } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Bell } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+interface Contractor {
+  contractor_id: string;
+  profiles?: {
+    full_name: string | null;
+    email: string;
+  } | null;
+}
+
+interface Referrer {
+  id: string;
+  name: string;
+  email: string | null;
+}
 
 const ClaimDetail = () => {
   const { id } = useParams();
@@ -27,12 +42,22 @@ const ClaimDetail = () => {
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
+  const [contractors, setContractors] = useState<Contractor[]>([]);
+  const [referrer, setReferrer] = useState<Referrer | null>(null);
 
   useEffect(() => {
     if (id) {
       fetchClaim();
+      fetchContractors();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (claim?.referrer_id) {
+      fetchReferrer(claim.referrer_id);
+    }
+  }, [claim?.referrer_id]);
 
   const fetchClaim = async () => {
     try {
@@ -48,6 +73,35 @@ const ClaimDetail = () => {
       console.error("Error fetching claim:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchContractors = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("claim_contractors")
+        .select("contractor_id")
+        .eq("claim_id", id);
+
+      if (error) throw error;
+      setContractors(data || []);
+    } catch (error) {
+      console.error("Error fetching contractors:", error);
+    }
+  };
+
+  const fetchReferrer = async (referrerId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("referrers")
+        .select("id, name, email")
+        .eq("id", referrerId)
+        .maybeSingle();
+
+      if (error) throw error;
+      setReferrer(data);
+    } catch (error) {
+      console.error("Error fetching referrer:", error);
     }
   };
 
@@ -114,7 +168,14 @@ const ClaimDetail = () => {
           </div>
           <p className="text-muted-foreground mt-1">{claim.policyholder_name}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setNotifyDialogOpen(true)}
+          >
+            <Bell className="h-4 w-4 mr-2" />
+            Notify Portal
+          </Button>
           <Button
             variant={claim.is_closed ? "outline" : "secondary"}
             onClick={toggleClosedStatus}
@@ -144,6 +205,17 @@ const ClaimDetail = () => {
         onOpenChange={setDeleteDialogOpen}
         claimId={claim.id}
         claimNumber={claim.claim_number}
+      />
+
+      <NotifyPortalDialog
+        open={notifyDialogOpen}
+        onOpenChange={setNotifyDialogOpen}
+        claimId={claim.id}
+        clientId={claim.client_id}
+        referrerId={claim.referrer_id}
+        contractors={contractors}
+        policyholderName={claim.policyholder_name}
+        referrer={referrer}
       />
 
       <Tabs defaultValue="overview" className="w-full">
