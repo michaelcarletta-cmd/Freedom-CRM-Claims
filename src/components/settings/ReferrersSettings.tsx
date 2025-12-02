@@ -204,7 +204,17 @@ export function ReferrersSettings() {
     if (!referrerToDelete) return;
 
     try {
-      // If referrer has email, delete the auth user first (by email lookup)
+      // First, remove referrer from all claims (set referrer_id to null)
+      const { error: claimsError } = await supabase
+        .from("claims")
+        .update({ referrer_id: null })
+        .eq("referrer_id", referrerToDelete.id);
+
+      if (claimsError) {
+        console.error("Error removing referrer from claims:", claimsError);
+      }
+
+      // If referrer has email, delete the auth user (by email lookup)
       if (referrerToDelete.email) {
         await supabase.functions.invoke("delete-user", {
           body: { email: referrerToDelete.email },
