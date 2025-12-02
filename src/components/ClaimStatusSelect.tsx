@@ -74,7 +74,7 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
 
   return (
     <Select value={currentStatus} onValueChange={handleStatusChange} disabled={loading}>
-      <SelectTrigger className="w-[180px]">
+      <SelectTrigger className="w-[180px] rounded-sm">
         <SelectValue placeholder="Select status" />
       </SelectTrigger>
       <SelectContent>
@@ -82,7 +82,7 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
           <SelectItem key={status.id} value={status.name}>
             <div className="flex items-center gap-2">
               <div
-                className="w-2 h-2 rounded-full"
+                className="w-2 h-2"
                 style={{ backgroundColor: status.color }}
               />
               {status.name}
