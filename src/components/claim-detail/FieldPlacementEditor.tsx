@@ -53,12 +53,8 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
   // Load template state
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   
-  // PDF interaction mode
-  const [pdfMode, setPdfMode] = useState<"edit" | "scroll">("edit");
-  
   // PDF page tracking
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
   // Fetch available templates
   const { data: templates } = useQuery({
@@ -540,11 +536,11 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
 
         {activeTool && (
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-            Click on the document to place a {activeTool} field
+            Click on the page template to place a {activeTool} field
           </div>
         )}
         
-        {!activeTool && fields.length > 0 && isPdf && pdfMode === "edit" && (
+        {!activeTool && fields.length > 0 && isPdf && (
           <div className="mb-4 p-3 bg-muted border border-border rounded text-sm text-muted-foreground">
             Drag fields to reposition. Double-click a field to remove it.
           </div>
@@ -552,22 +548,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
         
         {isPdf && (
           <div className="mb-4 flex gap-2 flex-wrap items-center">
-            <Button
-              variant={pdfMode === "edit" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPdfMode("edit")}
-            >
-              Edit Fields
-            </Button>
-            <Button
-              variant={pdfMode === "scroll" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPdfMode("scroll")}
-            >
-              Scroll Document
-            </Button>
-            <div className="border-l border-border h-6 mx-2" />
-            <span className="text-sm text-muted-foreground">Page:</span>
+            <span className="text-sm font-medium">Page:</span>
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"
@@ -593,7 +574,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
               </Button>
             </div>
             <span className="text-sm text-muted-foreground">
-              (Fields on page {currentPage}: {fields.filter(f => f.page === currentPage).length})
+              ({fields.filter(f => f.page === currentPage).length} fields on this page)
             </span>
           </div>
         )}
@@ -605,30 +586,42 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
             </div>
           )}
           
-          {/* PDF Display with overlay for field placement */}
+          {/* PDF Field Placement - Simple page template */}
           {isPdf && !isLoading && (
-            <div className="relative">
-              <iframe
-                src={`https://docs.google.com/viewer?url=${encodeURIComponent(documentUrl)}&embedded=true`}
-                className={`w-full h-[600px] border-0 ${pdfMode === "edit" ? "pointer-events-none" : ""}`}
-                title="PDF Document"
-              />
-              {/* Transparent overlay for click and drag detection - only active in edit mode */}
+            <div className="flex flex-col items-center p-4 gap-4">
+              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <a 
+                  href={documentUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary underline hover:no-underline"
+                >
+                  Open PDF in new tab to view content
+                </a>
+              </div>
+              
+              {/* Page template for field placement */}
               <div
                 ref={overlayRef}
-                className={`absolute inset-0 ${pdfMode === "scroll" ? "pointer-events-none" : ""} ${activeTool ? 'cursor-crosshair' : ''}`}
+                className={`relative bg-white shadow-lg ${activeTool ? 'cursor-crosshair' : ''}`}
+                style={{ width: '612px', height: '792px' }} /* Standard letter size at 72 DPI */
                 onClick={handleOverlayClick}
                 onMouseMove={handleOverlayMouseMove}
                 onMouseUp={handleOverlayMouseUp}
                 onMouseLeave={handleOverlayMouseUp}
               >
+                {/* Page header */}
+                <div className="absolute top-2 left-0 right-0 text-center text-xs text-muted-foreground border-b border-dashed border-muted pb-2 mx-4">
+                  Page {currentPage} - Place fields where signatures should appear
+                </div>
+                
                 {/* Render draggable field indicators - only for current page */}
                 {fields.filter(f => f.page === currentPage).map((field) => (
                   <div
                     key={field.id}
                     className={`field-indicator absolute border-2 border-dashed flex items-center justify-center text-xs font-bold select-none ${
                       draggingField === field.id ? 'opacity-70' : ''
-                    } ${!activeTool && pdfMode === "edit" ? 'cursor-move' : 'pointer-events-none'}`}
+                    } ${!activeTool ? 'cursor-move' : ''}`}
                     style={{
                       left: field.x,
                       top: field.y,
@@ -638,10 +631,10 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
                       backgroundColor: colors[field.type] + "33",
                       color: colors[field.type],
                     }}
-                    onMouseDown={(e) => !activeTool && pdfMode === "edit" && handleFieldMouseDown(e, field.id)}
+                    onMouseDown={(e) => !activeTool && handleFieldMouseDown(e, field.id)}
                     onDoubleClick={(e) => {
                       e.stopPropagation();
-                      if (pdfMode === "edit") removeField(field.id);
+                      removeField(field.id);
                     }}
                   >
                     {field.label}
