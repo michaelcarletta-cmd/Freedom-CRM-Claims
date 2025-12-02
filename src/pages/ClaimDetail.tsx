@@ -60,9 +60,23 @@ const ClaimDetail = () => {
   const toggleClosedStatus = async () => {
     if (!id || !claim) return;
 
-    const newStatus = claim.status === "closed" ? "open" : "closed";
-
     try {
+      let newStatus: string;
+      
+      if (claim.status === "closed") {
+        // When reopening, find the first active status from claim_statuses
+        const { data: activeStatuses } = await supabase
+          .from("claim_statuses")
+          .select("name")
+          .eq("is_active", true)
+          .order("display_order", { ascending: true })
+          .limit(1);
+        
+        newStatus = activeStatuses?.[0]?.name || "open";
+      } else {
+        newStatus = "closed";
+      }
+
       const { error } = await supabase
         .from("claims")
         .update({ status: newStatus })
