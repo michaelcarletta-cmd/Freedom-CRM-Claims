@@ -43,39 +43,31 @@ export const NewClientDialog = ({
     setIsSaving(true);
 
     try {
-      let userId: string | null = null;
       let tempPassword: string | null = null;
 
       // Create user account if email is provided
       if (formData.email) {
         tempPassword = Math.random().toString(36).slice(-8) + "A1!";
         
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: formData.email,
-          password: tempPassword,
-          options: {
-            data: {
-              full_name: formData.name,
-              role: 'client',
+        // Use edge function to create user without auto-login
+        const { data: funcData, error: funcError } = await supabase.functions.invoke(
+          "create-portal-user",
+          {
+            body: {
+              email: formData.email,
+              password: tempPassword,
+              fullName: formData.name,
+              role: "client",
+              phone: formData.phone || undefined,
             },
-          },
-        });
+          }
+        );
 
-        if (authError) throw authError;
-        if (!authData.user) throw new Error("Failed to create user account");
-
-        userId = authData.user.id;
-
-        // Update profile with phone
-        if (formData.phone) {
-          await supabase
-            .from("profiles")
-            .update({ phone: formData.phone })
-            .eq("id", authData.user.id);
-        }
+        if (funcError) throw funcError;
+        if (funcData?.error) throw new Error(funcData.error);
       }
 
-      // Create client record, linking to user account if created
+      // Create client record
       const { error } = await supabase.from("clients").insert({
         name: formData.name,
         email: formData.email || null,
@@ -84,7 +76,6 @@ export const NewClientDialog = ({
         city: formData.city || null,
         state: formData.state || null,
         zip_code: formData.zipCode || null,
-        user_id: userId, // Link client to auth user
       });
 
       if (error) throw error;
