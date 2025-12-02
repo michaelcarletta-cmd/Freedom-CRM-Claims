@@ -6,9 +6,10 @@ import { ClaimCustomFields } from "./ClaimCustomFields";
 
 interface ClaimOverviewProps {
   claim: any;
+  isPortalUser?: boolean;
 }
 
-export function ClaimOverview({ claim }: ClaimOverviewProps) {
+export function ClaimOverview({ claim, isPortalUser = false }: ClaimOverviewProps) {
   return (
     <div className="grid gap-6">
       {/* Policyholder Information */}
@@ -155,8 +156,8 @@ export function ClaimOverview({ claim }: ClaimOverviewProps) {
         </CardContent>
       </Card>
 
-      {/* Mortgage Company Information */}
-      {claim.mortgage_company_id && (
+      {/* Mortgage Company Information - Hidden for portal users */}
+      {!isPortalUser && claim.mortgage_company_id && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -179,14 +180,16 @@ export function ClaimOverview({ claim }: ClaimOverviewProps) {
         </Card>
       )}
 
-      {/* Claim Assignments */}
-      <ClaimAssignments 
-        claimId={claim.id}
-        currentReferrerId={claim.referrer_id}
-        currentMortgageCompanyId={claim.mortgage_company_id}
-        loanNumber={claim.loan_number}
-        ssnLastFour={claim.ssn_last_four}
-      />
+      {/* Claim Assignments - Hidden for portal users */}
+      {!isPortalUser && (
+        <ClaimAssignments 
+          claimId={claim.id}
+          currentReferrerId={claim.referrer_id}
+          currentMortgageCompanyId={claim.mortgage_company_id}
+          loanNumber={claim.loan_number}
+          ssnLastFour={claim.ssn_last_four}
+        />
+      )}
 
       {/* Custom Fields */}
       <ClaimCustomFields claimId={claim.id} />

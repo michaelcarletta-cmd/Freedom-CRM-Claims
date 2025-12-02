@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ interface Referrer {
 
 const ClaimDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { userRole } = useAuth();
   const { toast } = useToast();
   const [claim, setClaim] = useState<any>(null);
@@ -45,6 +46,10 @@ const ClaimDetail = () => {
   const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [referrer, setReferrer] = useState<Referrer | null>(null);
+
+  // Check if user is a portal user (client, contractor, referrer)
+  const isPortalUser = userRole === "client" || userRole === "contractor" || userRole === "referrer";
+  const isStaffOrAdmin = userRole === "admin" || userRole === "staff";
 
   useEffect(() => {
     if (id) {
@@ -141,6 +146,13 @@ const ClaimDetail = () => {
     }
   };
 
+  const getBackLink = () => {
+    if (userRole === "client") return "/client-portal";
+    if (userRole === "contractor") return "/contractor-portal";
+    if (userRole === "referrer") return "/referrer-portal";
+    return "/claims";
+  };
+
   if (loading) {
     return <div className="p-8">Loading...</div>;
   }
@@ -150,9 +162,9 @@ const ClaimDetail = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div className="flex items-center gap-4">
-        <Link to="/claims">
+        <Link to={getBackLink()}>
           <Button variant="ghost" size="icon">
             <ArrowLeft className="h-5 w-5" />
           </Button>
@@ -160,79 +172,116 @@ const ClaimDetail = () => {
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold text-foreground">{claim.claim_number}</h1>
-            <ClaimStatusSelect 
-              claimId={claim.id} 
-              currentStatus={claim.status}
-              onStatusChange={handleStatusChange}
-            />
+            {isStaffOrAdmin && (
+              <ClaimStatusSelect 
+                claimId={claim.id} 
+                currentStatus={claim.status}
+                onStatusChange={handleStatusChange}
+              />
+            )}
+            {isPortalUser && claim.status && (
+              <span className="px-3 py-1 text-sm rounded-full bg-muted text-muted-foreground">
+                {claim.status}
+              </span>
+            )}
           </div>
           <p className="text-muted-foreground mt-1">{claim.policyholder_name}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setNotifyDialogOpen(true)}
-          >
-            <Bell className="h-4 w-4 mr-2" />
-            Notify Portal
-          </Button>
-          <Button
-            variant={claim.is_closed ? "outline" : "secondary"}
-            onClick={toggleClosedStatus}
-          >
-            {claim.is_closed ? "Reopen Claim" : "Close Claim"}
-          </Button>
-          <Button className="bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
-            <Edit className="h-4 w-4 mr-2" />
-            Edit Claim
-          </Button>
-          <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete Claim
-          </Button>
-        </div>
+        {isStaffOrAdmin && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setNotifyDialogOpen(true)}
+            >
+              <Bell className="h-4 w-4 mr-2" />
+              Notify Portal
+            </Button>
+            <Button
+              variant={claim.is_closed ? "outline" : "secondary"}
+              onClick={toggleClosedStatus}
+            >
+              {claim.is_closed ? "Reopen Claim" : "Close Claim"}
+            </Button>
+            <Button className="bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Claim
+            </Button>
+            <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Claim
+            </Button>
+          </div>
+        )}
       </div>
 
-      <EditClaimDialog
-        open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
-        claim={claim}
-        onClaimUpdated={(updatedClaim) => setClaim(updatedClaim)}
-      />
+      {isStaffOrAdmin && (
+        <>
+          <EditClaimDialog
+            open={editDialogOpen}
+            onOpenChange={setEditDialogOpen}
+            claim={claim}
+            onClaimUpdated={(updatedClaim) => setClaim(updatedClaim)}
+          />
 
-      <DeleteClaimDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        claimId={claim.id}
-        claimNumber={claim.claim_number}
-      />
+          <DeleteClaimDialog
+            open={deleteDialogOpen}
+            onOpenChange={setDeleteDialogOpen}
+            claimId={claim.id}
+            claimNumber={claim.claim_number}
+          />
 
-      <NotifyPortalDialog
-        open={notifyDialogOpen}
-        onOpenChange={setNotifyDialogOpen}
-        claimId={claim.id}
-        clientId={claim.client_id}
-        referrerId={claim.referrer_id}
-        contractors={contractors}
-        policyholderName={claim.policyholder_name}
-        referrer={referrer}
-      />
+          <NotifyPortalDialog
+            open={notifyDialogOpen}
+            onOpenChange={setNotifyDialogOpen}
+            claimId={claim.id}
+            clientId={claim.client_id}
+            referrerId={claim.referrer_id}
+            contractors={contractors}
+            policyholderName={claim.policyholder_name}
+            referrer={referrer}
+          />
+        </>
+      )}
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="w-full justify-start h-auto flex-wrap gap-1 bg-muted/50 rounded-none border-b p-1">
-          <TabsTrigger value="overview" className="data-[state=active]:bg-background">Overview</TabsTrigger>
-          <TabsTrigger value="communication" className="data-[state=active]:bg-background">Communication</TabsTrigger>
-          <TabsTrigger value="tasks" className="data-[state=active]:bg-background">Tasks</TabsTrigger>
-          <TabsTrigger value="inspections" className="data-[state=active]:bg-background">Inspections</TabsTrigger>
-          <TabsTrigger value="activity" className="data-[state=active]:bg-background">Notes & Activity</TabsTrigger>
-          <TabsTrigger value="files" className="data-[state=active]:bg-background">Files</TabsTrigger>
-          <TabsTrigger value="accounting" className="data-[state=active]:bg-background">Accounting</TabsTrigger>
-          <TabsTrigger value="templates" className="data-[state=active]:bg-background">Templates</TabsTrigger>
-          <TabsTrigger value="access" className="data-[state=active]:bg-background">Portal Access</TabsTrigger>
+        <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1 overflow-x-auto scrollbar-hide h-auto">
+          <TabsTrigger value="overview" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:text-foreground">
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="communication" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:text-foreground">
+            Communication
+          </TabsTrigger>
+          {isStaffOrAdmin && (
+            <TabsTrigger value="tasks" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:text-foreground">
+              Tasks
+            </TabsTrigger>
+          )}
+          <TabsTrigger value="inspections" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:text-foreground">
+            Inspections
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:text-foreground">
+            Notes & Activity
+          </TabsTrigger>
+          <TabsTrigger value="files" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:text-foreground">
+            Files
+          </TabsTrigger>
+          <TabsTrigger value="accounting" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:text-foreground">
+            Accounting
+          </TabsTrigger>
+          {isStaffOrAdmin && (
+            <>
+              <TabsTrigger value="templates" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:text-foreground">
+                Templates
+              </TabsTrigger>
+              <TabsTrigger value="access" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap data-[state=active]:bg-background data-[state=active]:text-foreground">
+                Portal Access
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
-          <ClaimOverview claim={claim} />
+          <ClaimOverview claim={claim} isPortalUser={isPortalUser} />
         </TabsContent>
 
         <TabsContent value="communication" className="mt-6">
@@ -242,9 +291,11 @@ const ClaimDetail = () => {
           />
         </TabsContent>
 
-        <TabsContent value="tasks" className="mt-6">
-          <ClaimTasks claimId={id || ""} />
-        </TabsContent>
+        {isStaffOrAdmin && (
+          <TabsContent value="tasks" className="mt-6">
+            <ClaimTasks claimId={id || ""} />
+          </TabsContent>
+        )}
 
         <TabsContent value="inspections" className="mt-6">
           <ClaimInspections claimId={id || ""} />
@@ -262,13 +313,17 @@ const ClaimDetail = () => {
           <ClaimAccounting claim={claim} userRole={userRole} />
         </TabsContent>
 
-        <TabsContent value="templates" className="mt-6">
-          <ClaimTemplates claimId={id!} claim={claim} />
-        </TabsContent>
+        {isStaffOrAdmin && (
+          <>
+            <TabsContent value="templates" className="mt-6">
+              <ClaimTemplates claimId={id!} claim={claim} />
+            </TabsContent>
 
-        <TabsContent value="access" className="mt-6">
-          <ClaimAccessManagement claimId={id!} />
-        </TabsContent>
+            <TabsContent value="access" className="mt-6">
+              <ClaimAccessManagement claimId={id!} />
+            </TabsContent>
+          </>
+        )}
       </Tabs>
     </div>
   );
