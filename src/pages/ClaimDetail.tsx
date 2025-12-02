@@ -244,10 +244,6 @@ const ClaimDetail = () => {
               <Edit className="h-4 w-4 mr-2" />
               Edit Claim
             </Button>
-            <Button size="sm" variant="destructive" className="w-full md:w-auto" onClick={() => setDeleteDialogOpen(true)}>
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Claim
-            </Button>
           </div>
         )}
       </div>
@@ -363,6 +359,21 @@ const ClaimDetail = () => {
           </>
         )}
       </Tabs>
+
+      {isStaffOrAdmin && (
+        <div className="mt-12 pt-6 border-t border-destructive/30">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-destructive">Danger Zone</h3>
+              <p className="text-sm text-muted-foreground">Permanently delete this claim and all associated data</p>
+            </div>
+            <Button size="sm" variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Claim
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
