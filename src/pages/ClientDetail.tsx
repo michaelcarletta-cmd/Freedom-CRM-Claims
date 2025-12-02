@@ -6,6 +6,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { 
   ArrowLeft, 
   Edit, 
@@ -16,7 +20,9 @@ import {
   FileText,
   MessageSquare,
   Eye,
-  DollarSign
+  DollarSign,
+  Send,
+  Loader2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { EditClientDialog } from "@/components/EditClientDialog";
@@ -70,6 +76,10 @@ const ClientDetail = () => {
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [claims, setClaims] = useState<any[]>([]);
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const fetchClient = async () => {
     if (!id) return;
@@ -119,7 +129,39 @@ const ClientDetail = () => {
       toast.error("No email address available");
       return;
     }
-    window.location.href = `mailto:${client.email}`;
+    setIsEmailDialogOpen(true);
+  };
+
+  const handleSendEmailSubmit = async () => {
+    if (!emailSubject || !emailBody) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const { error } = await supabase.functions.invoke("send-email", {
+        body: {
+          to: client!.email,
+          subject: emailSubject,
+          body: emailBody,
+          recipientName: client!.name,
+          recipientType: "client",
+        }
+      });
+
+      if (error) throw error;
+
+      toast.success("Email sent successfully");
+      setIsEmailDialogOpen(false);
+      setEmailSubject("");
+      setEmailBody("");
+    } catch (error: any) {
+      console.error("Error sending email:", error);
+      toast.error(error.message || "Failed to send email");
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   const handleCall = () => {
@@ -400,6 +442,61 @@ const ClientDetail = () => {
             });
         }}
       />
+
+      <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Send Email to {client?.name}</DialogTitle>
+            <DialogDescription>Send an email to {client?.email}</DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email-subject">Subject</Label>
+              <Input
+                id="email-subject"
+                placeholder="Email subject"
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email-body">Message</Label>
+              <Textarea
+                id="email-body"
+                placeholder="Type your message here..."
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                className="min-h-[200px]"
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsEmailDialogOpen(false)} 
+                disabled={sendingEmail}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSendEmailSubmit} disabled={sendingEmail}>
+                {sendingEmail ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Send Email
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
