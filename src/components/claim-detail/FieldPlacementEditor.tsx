@@ -3,7 +3,7 @@ import { Canvas as FabricCanvas, Rect, Textbox, FabricImage } from "fabric";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Pencil, Calendar, Type, Trash2, Save, ChevronLeft, ChevronRight } from "lucide-react";
+import { Pencil, Calendar, Type, Trash2, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -12,10 +12,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import * as pdfjsLib from "pdfjs-dist";
-
-// Set the worker source
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface Field {
   id: string;
@@ -27,7 +23,6 @@ interface Field {
   label: string;
   required: boolean;
   signerIndex?: number;
-  page?: number;
 }
 
 interface FieldPlacementEditorProps {
@@ -39,13 +34,11 @@ interface FieldPlacementEditorProps {
 export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount }: FieldPlacementEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [fields, setFields] = useState<Field[]>([]);
   const [activeTool, setActiveTool] = useState<"signature" | "date" | "text" | null>(null);
   const [currentSignerIndex, setCurrentSignerIndex] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [isPdf, setIsPdf] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -97,123 +90,68 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
     },
   });
 
-  // Render PDF page to canvas
-  const renderPdfPage = async (pdf: pdfjsLib.PDFDocumentProxy, pageNum: number, canvas: FabricCanvas) => {
-    const page = await pdf.getPage(pageNum);
-    const containerWidth = containerRef.current?.clientWidth || 800;
-    const viewport = page.getViewport({ scale: 1 });
-    const scale = Math.min(containerWidth / viewport.width, 1.5);
-    const scaledViewport = page.getViewport({ scale });
-
-    // Create an off-screen canvas for PDF rendering
-    const offscreenCanvas = document.createElement("canvas");
-    offscreenCanvas.width = scaledViewport.width;
-    offscreenCanvas.height = scaledViewport.height;
-    const context = offscreenCanvas.getContext("2d");
-
-    if (!context) return;
-
-    await page.render({
-      canvasContext: context,
-      viewport: scaledViewport,
-    }).promise;
-
-    // Convert to data URL and set as background
-    const dataUrl = offscreenCanvas.toDataURL();
-    
-    canvas.setDimensions({
-      width: scaledViewport.width,
-      height: scaledViewport.height,
-    });
-
-    const bgImage = await FabricImage.fromURL(dataUrl);
-    canvas.backgroundImage = bgImage;
-    canvas.renderAll();
-  };
-
-  // Initialize canvas
+  // Initialize - detect PDF vs image
   useEffect(() => {
-    if (!canvasRef.current || !containerRef.current) return;
+    const isPdfDocument = documentUrl.toLowerCase().includes('.pdf') || 
+      documentUrl.includes('application/pdf');
+    setIsPdf(isPdfDocument);
+    setIsLoading(false);
+    
+    if (isPdfDocument) {
+      toast({ title: "PDF loaded! Add signature and date fields using the overlay." });
+    }
+  }, [documentUrl]);
+
+  // Initialize canvas for non-PDF documents
+  useEffect(() => {
+    if (isPdf || !canvasRef.current || !containerRef.current) return;
 
     const initCanvas = async () => {
       setIsLoading(true);
-      
-      // Check if it's a PDF
-      const isPdfDocument = documentUrl.toLowerCase().includes('.pdf') || 
-        documentUrl.includes('application/pdf');
-      setIsPdf(isPdfDocument);
 
-      const containerWidth = containerRef.current?.clientWidth || 800;
-      
-      // Create fabric canvas
-      const canvas = new FabricCanvas(canvasRef.current!, {
-        width: containerWidth,
-        height: 600,
-        backgroundColor: "#ffffff",
-        selection: true,
-      });
+      try {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = documentUrl;
 
-      if (isPdfDocument) {
-        try {
-          const loadingTask = pdfjsLib.getDocument(documentUrl);
-          const pdf = await loadingTask.promise;
-          setPdfDoc(pdf);
-          setTotalPages(pdf.numPages);
-          
-          await renderPdfPage(pdf, 1, canvas);
-          setFabricCanvas(canvas);
-          toast({ title: "PDF loaded! Add signature and date fields." });
-        } catch (error) {
-          console.error("PDF load error:", error);
-          toast({ 
-            title: "Failed to load PDF", 
-            description: "Unable to display PDF for field placement",
-            variant: "destructive" 
-          });
-        }
-      } else {
-        // Handle image documents
-        try {
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-          img.src = documentUrl;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
 
-          await new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-          });
+        const containerWidth = containerRef.current?.clientWidth || 800;
+        const scale = Math.min(containerWidth / img.width, 1);
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
 
-          const scale = Math.min(containerWidth / img.width, 1);
-          const scaledWidth = img.width * scale;
-          const scaledHeight = img.height * scale;
+        const canvas = new FabricCanvas(canvasRef.current!, {
+          width: scaledWidth,
+          height: scaledHeight,
+          backgroundColor: "#ffffff",
+          selection: true,
+        });
 
-          canvas.setDimensions({
-            width: scaledWidth,
-            height: scaledHeight,
-          });
+        const bgImage = await FabricImage.fromURL(documentUrl);
+        bgImage.scaleX = scale;
+        bgImage.scaleY = scale;
+        canvas.backgroundImage = bgImage;
+        canvas.renderAll();
+        
+        setFabricCanvas(canvas);
+        toast({ title: "Document loaded! Add signature and date fields." });
 
-          const bgImage = await FabricImage.fromURL(documentUrl);
-          bgImage.scaleX = scale;
-          bgImage.scaleY = scale;
-          canvas.backgroundImage = bgImage;
-          canvas.renderAll();
-          
-          setFabricCanvas(canvas);
-          toast({ title: "Document loaded! Add signature and date fields." });
-        } catch (error) {
-          toast({ 
-            title: "Failed to load document", 
-            description: "Unable to display document for field placement",
-            variant: "destructive" 
-          });
-        }
+        canvas.on("object:modified", () => {
+          updateFieldsFromCanvas(canvas);
+        });
+      } catch (error) {
+        toast({ 
+          title: "Failed to load document", 
+          description: "Unable to display document for field placement",
+          variant: "destructive" 
+        });
       }
 
       setIsLoading(false);
-
-      canvas.on("object:modified", () => {
-        updateFieldsFromCanvas(canvas);
-      });
     };
 
     initCanvas();
@@ -221,33 +159,11 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
     return () => {
       fabricCanvas?.dispose();
     };
-  }, [documentUrl]);
+  }, [documentUrl, isPdf]);
 
-  // Handle page change for PDF
-  const changePage = async (newPage: number) => {
-    if (!pdfDoc || !fabricCanvas || newPage < 1 || newPage > totalPages) return;
-    
-    // Save current page fields positions
-    updateFieldsFromCanvas(fabricCanvas);
-    
-    // Clear canvas objects but keep fields in state
-    fabricCanvas.getObjects().forEach(obj => {
-      fabricCanvas.remove(obj);
-    });
-    
-    setCurrentPage(newPage);
-    await renderPdfPage(pdfDoc, newPage, fabricCanvas);
-    
-    // Re-add fields for the new page
-    fields.filter(f => f.page === newPage).forEach(field => {
-      addFieldToCanvas(field);
-    });
-    
-    fabricCanvas.renderAll();
-  };
-
+  // Canvas click handler for non-PDF
   useEffect(() => {
-    if (!fabricCanvas) return;
+    if (!fabricCanvas || isPdf) return;
 
     const handleCanvasClick = (e: any) => {
       if (!activeTool || e.target) return;
@@ -262,7 +178,44 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
     return () => {
       fabricCanvas.off("mouse:down", handleCanvasClick);
     };
-  }, [fabricCanvas, activeTool, currentSignerIndex, currentPage]);
+  }, [fabricCanvas, activeTool, currentSignerIndex, isPdf]);
+
+  // PDF overlay click handler
+  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!activeTool || !overlayRef.current) return;
+
+    const rect = overlayRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    addFieldForPdf(activeTool, x, y);
+    setActiveTool(null);
+  };
+
+  const addFieldForPdf = (type: "signature" | "date" | "text", x: number, y: number) => {
+    const fieldId = `${type}-${Date.now()}`;
+    const width = type === "signature" ? 200 : type === "date" ? 120 : 150;
+    const height = type === "signature" ? 60 : 30;
+
+    const newField: Field = {
+      id: fieldId,
+      type,
+      x,
+      y,
+      width,
+      height,
+      label: type === "signature" ? `Signature ${currentSignerIndex + 1}` :
+             type === "date" ? "Date" : "Text Field",
+      required: true,
+      signerIndex: currentSignerIndex,
+    };
+
+    const updatedFields = [...fields, newField];
+    setFields(updatedFields);
+    onFieldsChange(updatedFields);
+
+    toast({ title: `${type} field added` });
+  };
 
   const addFieldToCanvas = (field: Field) => {
     if (!fabricCanvas) return;
@@ -320,7 +273,6 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
              type === "date" ? "Date" : "Text Field",
       required: true,
       signerIndex: currentSignerIndex,
-      page: isPdf ? currentPage : undefined,
     };
 
     addFieldToCanvas(newField);
@@ -335,9 +287,6 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
   const updateFieldsFromCanvas = (canvas: FabricCanvas) => {
     const objects = canvas.getObjects();
     const updatedFields = fields.map(field => {
-      // Only update fields on current page
-      if (isPdf && field.page !== currentPage) return field;
-      
       const obj = objects.find((o: any) => o.data?.fieldId === field.id);
       if (obj && obj.left !== undefined && obj.top !== undefined) {
         return {
@@ -355,30 +304,43 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
   };
 
   const clearAllFields = () => {
-    if (!fabricCanvas) return;
-    
-    fabricCanvas.getObjects().forEach(obj => {
-      if ((obj as any).data?.fieldId) {
-        fabricCanvas.remove(obj);
-      }
-    });
-    
-    // Clear all fields or just current page
-    if (isPdf) {
-      const remainingFields = fields.filter(f => f.page !== currentPage);
-      setFields(remainingFields);
-      onFieldsChange(remainingFields);
-      toast({ title: "Fields cleared from current page" });
-    } else {
-      setFields([]);
-      onFieldsChange([]);
-      toast({ title: "All fields cleared" });
+    if (!isPdf && fabricCanvas) {
+      fabricCanvas.getObjects().forEach(obj => {
+        if ((obj as any).data?.fieldId) {
+          fabricCanvas.remove(obj);
+        }
+      });
     }
+    
+    setFields([]);
+    onFieldsChange([]);
+    toast({ title: "All fields cleared" });
+  };
+
+  const removeField = (fieldId: string) => {
+    if (!isPdf && fabricCanvas) {
+      const objects = fabricCanvas.getObjects();
+      objects.forEach(obj => {
+        if ((obj as any).data?.fieldId === fieldId) {
+          fabricCanvas.remove(obj);
+        }
+      });
+      // Also remove associated label
+      objects.forEach(obj => {
+        if (obj instanceof Textbox && !obj.selectable) {
+          fabricCanvas.remove(obj);
+        }
+      });
+    }
+    
+    const updatedFields = fields.filter(f => f.id !== fieldId);
+    setFields(updatedFields);
+    onFieldsChange(updatedFields);
   };
 
   const loadTemplate = (templateId: string) => {
     const template = templates?.find(t => t.id === templateId);
-    if (!template || !fabricCanvas) return;
+    if (!template) return;
 
     // Clear existing fields
     clearAllFields();
@@ -386,23 +348,21 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
     // Load template fields with proper type casting
     const templateFields = (Array.isArray(template.field_data) ? template.field_data : []) as unknown as Field[];
     
-    templateFields.forEach((field) => {
-      // Set page to current page if loading on a PDF
-      const fieldWithPage = {
-        ...field,
-        page: isPdf ? currentPage : undefined,
-      };
-      addFieldToCanvas(fieldWithPage);
-    });
+    if (!isPdf && fabricCanvas) {
+      templateFields.forEach((field) => {
+        addFieldToCanvas(field);
+      });
+    }
 
-    const fieldsWithPage = templateFields.map(f => ({
-      ...f,
-      page: isPdf ? currentPage : undefined,
-    }));
-
-    setFields(fieldsWithPage);
-    onFieldsChange(fieldsWithPage);
+    setFields(templateFields);
+    onFieldsChange(templateFields);
     toast({ title: `Template "${template.name}" loaded` });
+  };
+
+  const colors: Record<string, string> = {
+    signature: "#3b82f6",
+    date: "#10b981",
+    text: "#8b5cf6",
   };
 
   return (
@@ -490,7 +450,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
           )}
           <Button variant="outline" size="sm" onClick={clearAllFields}>
             <Trash2 className="w-4 h-4 mr-2" />
-            Clear {isPdf ? "Page" : "All"}
+            Clear All
           </Button>
         </div>
       </div>
@@ -529,48 +489,73 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
           </div>
         )}
 
-        {/* PDF Page Navigation */}
-        {isPdf && totalPages > 1 && (
-          <div className="flex items-center justify-center gap-4 mb-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => changePage(currentPage - 1)}
-              disabled={currentPage <= 1}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <span className="text-sm">
-              Page {currentPage} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => changePage(currentPage + 1)}
-              disabled={currentPage >= totalPages}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
-
         <div ref={containerRef} className="border rounded overflow-auto bg-gray-50">
           {isLoading && (
             <div className="flex items-center justify-center h-96">
               <p className="text-muted-foreground">Loading document...</p>
             </div>
           )}
-          <canvas ref={canvasRef} style={{ display: isLoading ? 'none' : 'block' }} />
+          
+          {/* PDF Display with overlay for field placement */}
+          {isPdf && !isLoading && (
+            <div className="relative">
+              <iframe
+                src={documentUrl}
+                className="w-full h-[600px] border-0"
+                title="PDF Document"
+              />
+              {/* Transparent overlay for click detection */}
+              <div
+                ref={overlayRef}
+                className={`absolute inset-0 ${activeTool ? 'cursor-crosshair' : 'pointer-events-none'}`}
+                onClick={handleOverlayClick}
+              >
+                {/* Render field indicators */}
+                {fields.map((field) => (
+                  <div
+                    key={field.id}
+                    className="absolute border-2 border-dashed flex items-center justify-center text-xs font-bold"
+                    style={{
+                      left: field.x,
+                      top: field.y,
+                      width: field.width,
+                      height: field.height,
+                      borderColor: colors[field.type],
+                      backgroundColor: colors[field.type] + "33",
+                      color: colors[field.type],
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!activeTool) {
+                        removeField(field.id);
+                      }
+                    }}
+                  >
+                    {field.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Canvas for non-PDF documents */}
+          {!isPdf && (
+            <canvas ref={canvasRef} style={{ display: isLoading ? 'none' : 'block' }} />
+          )}
         </div>
 
         {fields.length > 0 && (
           <div className="mt-4">
-            <Label className="text-sm mb-2 block">Placed Fields ({fields.length})</Label>
+            <Label className="text-sm mb-2 block">Placed Fields ({fields.length}) - Click field to remove</Label>
             <div className="flex flex-wrap gap-2">
               {fields.map((field) => (
-                <Badge key={field.id} variant="outline">
+                <Badge 
+                  key={field.id} 
+                  variant="outline"
+                  className="cursor-pointer hover:bg-destructive/10"
+                  onClick={() => removeField(field.id)}
+                >
                   {field.label} {field.signerIndex !== undefined && `(Signer ${field.signerIndex + 1})`}
-                  {field.page && ` - Page ${field.page}`}
                 </Badge>
               ))}
             </div>
