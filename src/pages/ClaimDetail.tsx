@@ -64,15 +64,24 @@ const ClaimDetail = () => {
       let newStatus: string;
       
       if (claim.status === "closed") {
-        // When reopening, find the first active status from claim_statuses
-        const { data: activeStatuses } = await supabase
+        // When reopening, find the first active non-closed status from claim_statuses
+        const { data: statuses, error: statusError } = await supabase
           .from("claim_statuses")
-          .select("name")
+          .select("name, is_active, display_order")
           .eq("is_active", true)
-          .order("display_order", { ascending: true })
-          .limit(1);
-        
-        newStatus = activeStatuses?.[0]?.name || "open";
+          .order("display_order", { ascending: true });
+
+        if (statusError) throw statusError;
+
+        const activeStatuses = statuses || [];
+        const firstNonClosedStatus = activeStatuses.find(
+          (status) => status.name.toLowerCase() !== "closed"
+        );
+
+        newStatus =
+          firstNonClosedStatus?.name ||
+          activeStatuses[0]?.name ||
+          "open";
       } else {
         newStatus = "closed";
       }
