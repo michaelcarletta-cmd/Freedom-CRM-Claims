@@ -14,6 +14,7 @@ interface PortalInviteRequest {
   password: string;
   userType: string;
   userName?: string;
+  appUrl?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -23,15 +24,14 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { email, password, userType, userName }: PortalInviteRequest = await req.json();
+    const { email, password, userType, userName, appUrl }: PortalInviteRequest = await req.json();
 
     console.log(`Sending portal invite to ${email} for ${userType}`);
 
-    const portalUrl = Deno.env.get("SUPABASE_URL")?.replace("supabase.co", "lovableproject.com") || "https://your-app.lovable.app";
-    const appUrl = portalUrl.includes("supabase") ? "https://your-app.lovable.app" : portalUrl;
+    // Use the app URL passed from frontend, or fall back to a default
+    const loginUrl = appUrl ? `${appUrl}/auth` : "https://claim-mate-hq.lovable.app/auth";
     
-    // Use a more appropriate URL - in production this would be the actual app URL
-    const loginUrl = `${appUrl}/auth`;
+    console.log(`Using login URL: ${loginUrl}`);
 
     const emailResponse = await resend.emails.send({
       from: "Freedom Claims <onboarding@resend.dev>",

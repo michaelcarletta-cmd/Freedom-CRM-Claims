@@ -56,8 +56,9 @@ export const CredentialsDialog = ({
   const handleSendInvite = async () => {
     setSendingEmail(true);
     try {
+      const appUrl = window.location.origin;
       const { data, error } = await supabase.functions.invoke("send-portal-invite", {
-        body: { email, password, userType, userName },
+        body: { email, password, userType, userName, appUrl },
       });
 
       if (error) throw error;
