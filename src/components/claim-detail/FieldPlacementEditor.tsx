@@ -90,21 +90,25 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
     },
   });
 
-  // Initialize - detect PDF vs image
+  // Initialize canvas - single effect that handles both PDF and non-PDF
   useEffect(() => {
+    if (!containerRef.current) return;
+    
+    // Check if it's a PDF by looking at the URL
     const isPdfDocument = documentUrl.toLowerCase().includes('.pdf') || 
       documentUrl.includes('application/pdf');
-    setIsPdf(isPdfDocument);
-    setIsLoading(false);
     
+    setIsPdf(isPdfDocument);
+    
+    // For PDFs, just show in iframe - no canvas needed
     if (isPdfDocument) {
+      setIsLoading(false);
       toast({ title: "PDF loaded! Add signature and date fields using the overlay." });
+      return;
     }
-  }, [documentUrl]);
-
-  // Initialize canvas for non-PDF documents
-  useEffect(() => {
-    if (isPdf || !canvasRef.current || !containerRef.current) return;
+    
+    // For non-PDF documents, initialize the canvas
+    if (!canvasRef.current) return;
 
     const initCanvas = async () => {
       setIsLoading(true);
@@ -144,6 +148,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
           updateFieldsFromCanvas(canvas);
         });
       } catch (error) {
+        console.error("Failed to load document:", error);
         toast({ 
           title: "Failed to load document", 
           description: "Unable to display document for field placement",
