@@ -50,12 +50,37 @@ serve(async (req) => {
 
     if (downloadError) throw downloadError;
 
-    // Convert blob to array buffer
+    // Check file type based on extension
+    const fileName = template.file_name.toLowerCase();
+    const isPDF = fileName.endsWith('.pdf');
+
+    // For PDFs, return the file as-is (no merge field replacement possible)
+    if (isPDF) {
+      const arrayBuffer = await fileData.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      
+      const outputFileName = `${claim.claim_number || 'document'}-${template.name.replace(/\s+/g, "_")}.pdf`;
+
+      return new Response(
+        JSON.stringify({
+          content: Array.from(uint8Array),
+          fileName: outputFileName,
+          isPDF: true,
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
+    // For Word documents (.docx), process with docxtemplater
     const arrayBuffer = await fileData.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
 
     // Use docxtemplater to fill the template
-    // Import modules via CDN
     const PizZip = (await import("https://esm.sh/pizzip@3.1.4")).default;
     const Docxtemplater = (await import("https://esm.sh/docxtemplater@3.42.0")).default;
 
@@ -144,12 +169,13 @@ serve(async (req) => {
       compression: "DEFLATE",
     });
 
-    const fileName = `${claim.claim_number}-${template.name.replace(/\s+/g, "_")}.docx`;
+    const outputFileName = `${claim.claim_number || 'document'}-${template.name.replace(/\s+/g, "_")}.docx`;
 
     return new Response(
       JSON.stringify({
         content: outputBuffer,
-        fileName,
+        fileName: outputFileName,
+        isPDF: false,
       }),
       {
         headers: {
