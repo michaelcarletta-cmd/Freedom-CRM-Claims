@@ -6,8 +6,19 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { UserPlus, Mail, Phone, Search } from "lucide-react";
+import { UserPlus, Mail, Phone, Search, Trash2 } from "lucide-react";
+import { CredentialsDialog } from "@/components/CredentialsDialog";
 
 interface Contractor {
   id: string;
@@ -21,11 +32,14 @@ export const ContractorsTab = () => {
   const [filteredContractors, setFilteredContractors] = useState<Contractor[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [contractorToDelete, setContractorToDelete] = useState<Contractor | null>(null);
   const [formData, setFormData] = useState({
     email: "",
     full_name: "",
     phone: "",
   });
+  const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null);
 
   useEffect(() => {
     fetchContractors();
@@ -109,12 +123,35 @@ export const ContractorsTab = () => {
       return;
     }
 
-    toast.success(`Contractor added! Login: ${formData.email} | Password: ${tempPassword}`, {
-      duration: 10000,
-    });
     setDialogOpen(false);
     setFormData({ email: "", full_name: "", phone: "" });
+    setCredentials({ email: formData.email, password: tempPassword });
     fetchContractors();
+  };
+
+  const handleDeleteClick = (contractor: Contractor) => {
+    setContractorToDelete(contractor);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!contractorToDelete) return;
+
+    try {
+      // Delete the auth user via edge function
+      await supabase.functions.invoke("delete-user", {
+        body: { userId: contractorToDelete.id },
+      });
+
+      toast.success("Contractor deleted completely");
+      fetchContractors();
+    } catch (error: any) {
+      console.error("Delete error:", error);
+      toast.error(error.message || "Failed to delete contractor");
+    } finally {
+      setDeleteDialogOpen(false);
+      setContractorToDelete(null);
+    }
   };
 
   return (
@@ -187,6 +224,7 @@ export const ContractorsTab = () => {
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -211,12 +249,49 @@ export const ContractorsTab = () => {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteClick(contractor)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
       </CardContent>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Contractor</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this contractor? This will also remove their portal access and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {credentials && (
+        <CredentialsDialog
+          isOpen={!!credentials}
+          onClose={() => setCredentials(null)}
+          email={credentials.email}
+          password={credentials.password}
+          userType="Contractor"
+        />
+      )}
     </Card>
   );
 };

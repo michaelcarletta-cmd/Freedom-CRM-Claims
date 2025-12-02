@@ -18,6 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { CredentialsDialog } from "@/components/CredentialsDialog";
 
 interface Referrer {
   id: string;
@@ -32,7 +33,7 @@ export function ReferrersSettings() {
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [referrerToDelete, setReferrerToDelete] = useState<string | null>(null);
+  const [referrerToDelete, setReferrerToDelete] = useState<Referrer | null>(null);
   const [editingReferrer, setEditingReferrer] = useState<Referrer | null>(null);
   const [formData, setFormData] = useState({
     name: "",
@@ -40,6 +41,7 @@ export function ReferrersSettings() {
     phone: "",
     email: "",
   });
+  const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -90,9 +92,11 @@ export function ReferrersSettings() {
         if (error) throw error;
         toast({ title: "Success", description: "Referrer updated" });
       } else {
+        let tempPassword: string | null = null;
+        
         // Create user account if email is provided
         if (formData.email.trim()) {
-          const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+          tempPassword = Math.random().toString(36).slice(-8) + "A1!";
           
           // Use edge function to create user without auto-login
           const { data: funcData, error: funcError } = await supabase.functions.invoke(
@@ -110,12 +114,6 @@ export function ReferrersSettings() {
 
           if (funcError) throw funcError;
           if (funcData?.error) throw new Error(funcData.error);
-
-          toast({ 
-            title: "Success", 
-            description: `Referrer added. Login: ${formData.email.trim()} | Password: ${tempPassword}`,
-            duration: 10000,
-          });
         }
 
         // Create referrer record
@@ -130,7 +128,9 @@ export function ReferrersSettings() {
 
         if (error) throw error;
         
-        if (!formData.email.trim()) {
+        if (tempPassword && formData.email.trim()) {
+          setCredentials({ email: formData.email.trim(), password: tempPassword });
+        } else {
           toast({ title: "Success", description: "Referrer added (no portal access - email required)" });
         }
       }
@@ -192,8 +192,8 @@ export function ReferrersSettings() {
     }
   };
 
-  const handleDeleteClick = (id: string) => {
-    setReferrerToDelete(id);
+  const handleDeleteClick = (referrer: Referrer) => {
+    setReferrerToDelete(referrer);
     setDeleteDialogOpen(true);
   };
 
@@ -201,16 +201,34 @@ export function ReferrersSettings() {
     if (!referrerToDelete) return;
 
     try {
+      // If referrer has email, delete the auth user first
+      if (referrerToDelete.email) {
+        // Find the auth user by email
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("email", referrerToDelete.email)
+          .maybeSingle();
+
+        if (profileData?.id) {
+          // Delete the auth user via edge function
+          await supabase.functions.invoke("delete-user", {
+            body: { userId: profileData.id },
+          });
+        }
+      }
+
+      // Delete the referrer record
       const { error } = await supabase
         .from("referrers")
         .delete()
-        .eq("id", referrerToDelete);
+        .eq("id", referrerToDelete.id);
 
       if (error) throw error;
 
       toast({
         title: "Success",
-        description: "Referrer deleted",
+        description: "Referrer deleted completely",
       });
 
       fetchReferrers();
@@ -336,7 +354,7 @@ export function ReferrersSettings() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => handleDeleteClick(referrer.id)}
+                  onClick={() => handleDeleteClick(referrer)}
                   className="text-destructive hover:text-destructive"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -352,7 +370,7 @@ export function ReferrersSettings() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Referrer</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this referrer? This action cannot be undone.
+              Are you sure you want to delete this referrer? This will also remove their portal access and cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -363,6 +381,16 @@ export function ReferrersSettings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {credentials && (
+        <CredentialsDialog
+          isOpen={!!credentials}
+          onClose={() => setCredentials(null)}
+          email={credentials.email}
+          password={credentials.password}
+          userType="Referrer"
+        />
+      )}
     </div>
   );
 }
