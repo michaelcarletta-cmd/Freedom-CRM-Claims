@@ -589,15 +589,25 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
           {/* PDF Field Placement - Simple page template */}
           {isPdf && !isLoading && (
             <div className="flex flex-col items-center p-4 gap-4">
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <a 
-                  href={documentUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-primary underline hover:no-underline"
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">PDF Document</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(documentUrl);
+                    toast({ title: "PDF URL copied to clipboard" });
+                  }}
                 >
-                  Open PDF in new tab to view content
-                </a>
+                  Copy URL
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(documentUrl, '_blank')}
+                >
+                  Open PDF
+                </Button>
               </div>
               
               {/* Page template for field placement */}
