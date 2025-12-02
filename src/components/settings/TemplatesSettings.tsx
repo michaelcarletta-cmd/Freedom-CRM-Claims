@@ -11,12 +11,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Upload, FileText, Trash2, Download, Loader2, Info } from "lucide-react";
+import { Upload, FileText, Trash2, Download, Loader2, Info, Layout } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export const TemplatesSettings = () => {
   const queryClient = useQueryClient();
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [deleteFieldTemplateId, setDeleteFieldTemplateId] = useState<string | null>(null);
   const [templateForm, setTemplateForm] = useState({
     name: "",
     description: "",
@@ -31,6 +42,19 @@ export const TemplatesSettings = () => {
         .from("document_templates")
         .select("*")
         .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: fieldTemplates, isLoading: fieldTemplatesLoading } = useQuery({
+    queryKey: ["signature-field-templates"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("signature_field_templates")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -93,6 +117,24 @@ export const TemplatesSettings = () => {
     onSuccess: () => {
       toast.success("Template deleted");
       queryClient.invalidateQueries({ queryKey: ["document-templates-all"] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const deleteFieldTemplateMutation = useMutation({
+    mutationFn: async (templateId: string) => {
+      const { error } = await supabase
+        .from("signature_field_templates")
+        .update({ is_active: false })
+        .eq("id", templateId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Field template deleted");
+      setDeleteFieldTemplateId(null);
+      queryClient.invalidateQueries({ queryKey: ["signature-field-templates"] });
     },
     onError: (error: Error) => {
       toast.error(error.message);
@@ -296,6 +338,109 @@ export const TemplatesSettings = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Field Layout Templates Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Field Layout Templates</CardTitle>
+          <CardDescription>
+            Saved field layouts that can be reused across signature requests. Create these while placing fields on signature requests.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {fieldTemplatesLoading ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+          ) : fieldTemplates && fieldTemplates.length > 0 ? (
+            <div className="space-y-3">
+              {fieldTemplates.map((template) => {
+                const fieldData = template.field_data as any[];
+                const fieldCount = fieldData?.length || 0;
+                const signatureCount = fieldData?.filter((f) => f.type === "signature").length || 0;
+                const dateCount = fieldData?.filter((f) => f.type === "date").length || 0;
+                const textCount = fieldData?.filter((f) => f.type === "text").length || 0;
+
+                return (
+                  <div
+                    key={template.id}
+                    className="flex items-start justify-between p-4 border rounded-lg bg-card hover:bg-accent/5 transition-colors"
+                  >
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Layout className="w-4 h-4 text-primary" />
+                        <h4 className="font-medium">{template.name}</h4>
+                      </div>
+                      {template.description && (
+                        <p className="text-sm text-muted-foreground">{template.description}</p>
+                      )}
+                      <div className="flex gap-2 flex-wrap">
+                        <Badge variant="outline" className="text-xs">
+                          {fieldCount} total fields
+                        </Badge>
+                        {signatureCount > 0 && (
+                          <Badge variant="outline" className="text-xs bg-blue-500/10">
+                            {signatureCount} signature
+                          </Badge>
+                        )}
+                        {dateCount > 0 && (
+                          <Badge variant="outline" className="text-xs bg-green-500/10">
+                            {dateCount} date
+                          </Badge>
+                        )}
+                        {textCount > 0 && (
+                          <Badge variant="outline" className="text-xs bg-purple-500/10">
+                            {textCount} text
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Created {new Date(template.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setDeleteFieldTemplateId(template.id)}
+                      className="ml-4"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Layout className="w-12 h-12 mx-auto mb-4 opacity-20" />
+              <p>No field layout templates yet</p>
+              <p className="text-sm mt-2">
+                Create templates while placing fields on signature requests
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={!!deleteFieldTemplateId} onOpenChange={() => setDeleteFieldTemplateId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Template</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this field layout template? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteFieldTemplateId && deleteFieldTemplateMutation.mutate(deleteFieldTemplateId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
