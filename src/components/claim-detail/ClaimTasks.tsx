@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, CheckCircle2, Calendar, User, Trash2 } from "lucide-react";
+import { Plus, CheckCircle2, Calendar, User, Trash2, Edit } from "lucide-react";
 import { format, isPast } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -38,6 +38,7 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -118,24 +119,47 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
         data: { user },
       } = await supabase.auth.getUser();
 
-      const { error } = await supabase.from("tasks").insert({
-        claim_id: claimId,
-        title: formData.title,
-        description: formData.description || null,
-        due_date: formData.due_date || null,
-        assigned_to: formData.assigned_to || null,
-        priority: formData.priority,
-        created_by: user?.id,
-      });
+      if (editingTask) {
+        // Update existing task
+        const { error } = await supabase
+          .from("tasks")
+          .update({
+            title: formData.title,
+            description: formData.description || null,
+            due_date: formData.due_date || null,
+            assigned_to: formData.assigned_to || null,
+            priority: formData.priority,
+          })
+          .eq("id", editingTask.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: "Success",
-        description: "Task created successfully",
-      });
+        toast({
+          title: "Success",
+          description: "Task updated successfully",
+        });
+      } else {
+        // Create new task
+        const { error } = await supabase.from("tasks").insert({
+          claim_id: claimId,
+          title: formData.title,
+          description: formData.description || null,
+          due_date: formData.due_date || null,
+          assigned_to: formData.assigned_to || null,
+          priority: formData.priority,
+          created_by: user?.id,
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: "Success",
+          description: "Task created successfully",
+        });
+      }
 
       setOpen(false);
+      setEditingTask(null);
       setFormData({
         title: "",
         description: "",
@@ -146,12 +170,24 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to create task",
+        description: error.message || (editingTask ? "Failed to update task" : "Failed to create task"),
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEdit = (task: Task) => {
+    setEditingTask(task);
+    setFormData({
+      title: task.title,
+      description: task.description || "",
+      due_date: task.due_date || "",
+      assigned_to: task.assigned_to || "",
+      priority: task.priority,
+    });
+    setOpen(true);
   };
 
   const handleToggleComplete = async (taskId: string, currentStatus: string) => {
@@ -205,7 +241,19 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-foreground">Tasks</h3>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(isOpen) => {
+          setOpen(isOpen);
+          if (!isOpen) {
+            setEditingTask(null);
+            setFormData({
+              title: "",
+              description: "",
+              due_date: "",
+              assigned_to: "",
+              priority: "medium",
+            });
+          }
+        }}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
@@ -214,7 +262,7 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create New Task</DialogTitle>
+              <DialogTitle>{editingTask ? "Edit Task" : "Create New Task"}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -292,7 +340,7 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={loading}>
-                  {loading ? "Creating..." : "Create Task"}
+                  {loading ? (editingTask ? "Updating..." : "Creating...") : (editingTask ? "Update Task" : "Create Task")}
                 </Button>
               </div>
             </form>
@@ -345,14 +393,24 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
                           <p className="text-sm text-muted-foreground mt-1">{task.description}</p>
                         )}
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(task.id)}
-                        className="text-destructive hover:text-destructive shrink-0"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex gap-1 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(task)}
+                          className="hover:text-primary"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(task.id)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-muted-foreground">
                       {task.due_date && (

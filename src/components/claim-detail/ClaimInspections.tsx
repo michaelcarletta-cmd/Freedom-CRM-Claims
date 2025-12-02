@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Calendar, User, Trash2, ClipboardCheck } from "lucide-react";
+import { Plus, Calendar, User, Trash2, ClipboardCheck, Edit } from "lucide-react";
 import { format, isPast } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 
@@ -30,6 +30,7 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [editingInspection, setEditingInspection] = useState<Inspection | null>(null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -93,23 +94,45 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
         data: { user },
       } = await supabase.auth.getUser();
 
-      const { error } = await supabase.from("inspections").insert({
-        claim_id: claimId,
-        inspection_date: formData.inspection_date,
-        inspection_type: formData.inspection_type || null,
-        inspector_name: formData.inspector_name || null,
-        notes: formData.notes || null,
-        created_by: user?.id,
-      });
+      if (editingInspection) {
+        // Update existing inspection
+        const { error } = await supabase
+          .from("inspections")
+          .update({
+            inspection_date: formData.inspection_date,
+            inspection_type: formData.inspection_type || null,
+            inspector_name: formData.inspector_name || null,
+            notes: formData.notes || null,
+          })
+          .eq("id", editingInspection.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: "Success",
-        description: "Inspection scheduled successfully",
-      });
+        toast({
+          title: "Success",
+          description: "Inspection updated successfully",
+        });
+      } else {
+        // Create new inspection
+        const { error } = await supabase.from("inspections").insert({
+          claim_id: claimId,
+          inspection_date: formData.inspection_date,
+          inspection_type: formData.inspection_type || null,
+          inspector_name: formData.inspector_name || null,
+          notes: formData.notes || null,
+          created_by: user?.id,
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: "Success",
+          description: "Inspection scheduled successfully",
+        });
+      }
 
       setOpen(false);
+      setEditingInspection(null);
       setFormData({
         inspection_date: "",
         inspection_type: "",
@@ -119,12 +142,23 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to schedule inspection",
+        description: error.message || (editingInspection ? "Failed to update inspection" : "Failed to schedule inspection"),
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEdit = (inspection: Inspection) => {
+    setEditingInspection(inspection);
+    setFormData({
+      inspection_date: inspection.inspection_date,
+      inspection_type: inspection.inspection_type || "",
+      inspector_name: inspection.inspector_name || "",
+      notes: inspection.notes || "",
+    });
+    setOpen(true);
   };
 
   const handleStatusChange = async (inspectionId: string, newStatus: string) => {
@@ -187,7 +221,18 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-foreground">Inspections</h3>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(isOpen) => {
+          setOpen(isOpen);
+          if (!isOpen) {
+            setEditingInspection(null);
+            setFormData({
+              inspection_date: "",
+              inspection_type: "",
+              inspector_name: "",
+              notes: "",
+            });
+          }
+        }}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
@@ -196,7 +241,7 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Schedule New Inspection</DialogTitle>
+              <DialogTitle>{editingInspection ? "Edit Inspection" : "Schedule New Inspection"}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -254,7 +299,7 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={loading}>
-                  {loading ? "Scheduling..." : "Schedule Inspection"}
+                  {loading ? (editingInspection ? "Updating..." : "Scheduling...") : (editingInspection ? "Update Inspection" : "Schedule Inspection")}
                 </Button>
               </div>
             </form>
@@ -328,6 +373,14 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
                         </SelectContent>
                       </Select>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleEdit(inspection)}
+                      className="hover:text-primary"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"

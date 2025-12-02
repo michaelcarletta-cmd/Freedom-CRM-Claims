@@ -1,12 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useEffect } from "react";
-import { Plus, Send, Bot, MessageSquare, Loader2 } from "lucide-react";
+import { Plus, Send, Bot, MessageSquare, Loader2, Edit, Trash2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -46,6 +47,9 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
   const [notifyReferrer, setNotifyReferrer] = useState(false);
   const [notifyContractors, setNotifyContractors] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [editingUpdate, setEditingUpdate] = useState<Update | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editContent, setEditContent] = useState("");
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
@@ -224,7 +228,55 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
     }
   };
 
+  const handleEditUpdate = (update: Update) => {
+    setEditingUpdate(update);
+    setEditContent(update.content);
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingUpdate || !editContent.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from("claim_updates")
+        .update({ content: editContent })
+        .eq("id", editingUpdate.id);
+
+      if (error) throw error;
+
+      toast.success("Update edited successfully");
+      setEditDialogOpen(false);
+      setEditingUpdate(null);
+      setEditContent("");
+      fetchUpdates();
+    } catch (error: any) {
+      console.error("Error editing update:", error);
+      toast.error("Failed to edit update");
+    }
+  };
+
+  const handleDeleteUpdate = async (updateId: string) => {
+    if (!confirm("Are you sure you want to delete this update?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("claim_updates")
+        .delete()
+        .eq("id", updateId);
+
+      if (error) throw error;
+
+      toast.success("Update deleted successfully");
+      fetchUpdates();
+    } catch (error: any) {
+      console.error("Error deleting update:", error);
+      toast.error("Failed to delete update");
+    }
+  };
+
   return (
+    <>
     <Tabs defaultValue="notes" className="w-full">
       <TabsList className="grid w-full grid-cols-2 mb-6">
         <TabsTrigger value="notes" className="flex items-center gap-2">
@@ -317,9 +369,31 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{authorName}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {format(new Date(update.created_at), "MMM d, yyyy h:mm a")}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {format(new Date(update.created_at), "MMM d, yyyy h:mm a")}
+                      </span>
+                      {isCurrentUser && (
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => handleEditUpdate(update)}
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteUpdate(update.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm text-foreground whitespace-pre-wrap">{update.content}</p>
                   {update.recipients && update.recipients.length > 0 && isStaff && (
@@ -427,5 +501,29 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
         </div>
       </TabsContent>
     </Tabs>
+
+    <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Update</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            className="min-h-[100px]"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit}>
+              Save Changes
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 };
