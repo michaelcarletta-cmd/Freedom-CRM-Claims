@@ -11,7 +11,7 @@ interface ClaimOverviewProps {
 
 // Generate claim-specific email address using policy number
 const getClaimEmail = (claim: any): string => {
-  const domain = "inbound.resend.dev";
+  const domain = "claims.freedom.com";
   if (claim.policy_number) {
     const sanitized = claim.policy_number
       .toLowerCase()

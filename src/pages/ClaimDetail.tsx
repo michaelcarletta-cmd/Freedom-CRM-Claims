@@ -53,7 +53,7 @@ const ClaimDetail = () => {
 
   // Generate claim-specific email address using policy number
   const getClaimEmail = (claim: any): string => {
-    const domain = "inbound.resend.dev"; // User should configure RESEND_INBOUND_DOMAIN
+    const domain = "claims.freedom.com";
     if (claim.policy_number) {
       // Sanitize policy number: lowercase, replace non-alphanumeric with hyphens
       const sanitized = claim.policy_number
