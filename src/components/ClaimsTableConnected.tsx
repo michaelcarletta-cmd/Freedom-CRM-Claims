@@ -163,7 +163,20 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
           return;
         }
       } else if (portalType === "referrer") {
-        query = query.eq("referrer_id", user?.id);
+        // Find the referrer record linked to this user
+        const { data: referrerData } = await supabase
+          .from("referrers")
+          .select("id")
+          .eq("user_id", user?.id)
+          .maybeSingle();
+
+        if (referrerData?.id) {
+          query = query.eq("referrer_id", referrerData.id);
+        } else {
+          setClaims([]);
+          setLoading(false);
+          return;
+        }
       } else if (!portalType) {
         const { data: roles } = await supabase
           .from("user_roles")
