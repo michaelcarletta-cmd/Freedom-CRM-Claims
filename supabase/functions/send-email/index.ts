@@ -48,7 +48,21 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
+    // Fetch user's email signature from profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email_signature')
+      .eq('id', user.id)
+      .single();
+
+    const emailSignature = (profile as any)?.email_signature || '';
+
     const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+
+    // Append signature if available
+    const fullBody = emailSignature 
+      ? `${body}\n\n--\n${emailSignature}`
+      : body;
 
     const emailResponse = await resend.emails.send({
       from: "Freedom Claims <onboarding@resend.dev>",
@@ -56,7 +70,7 @@ serve(async (req) => {
       subject: subject,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="white-space: pre-wrap;">${body}</div>
+          <div style="white-space: pre-wrap;">${fullBody}</div>
           <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
           <p style="color: #999; font-size: 11px;">
             This email was sent from Freedom Claims CRM.

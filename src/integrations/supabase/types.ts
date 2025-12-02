@@ -629,6 +629,7 @@ export type Database = {
           adjuster_name: string | null
           adjuster_phone: string | null
           claim_amount: number | null
+          claim_email_id: string | null
           claim_number: string | null
           client_id: string | null
           created_at: string | null
@@ -659,6 +660,7 @@ export type Database = {
           adjuster_name?: string | null
           adjuster_phone?: string | null
           claim_amount?: number | null
+          claim_email_id?: string | null
           claim_number?: string | null
           client_id?: string | null
           created_at?: string | null
@@ -689,6 +691,7 @@ export type Database = {
           adjuster_name?: string | null
           adjuster_phone?: string | null
           claim_amount?: number | null
+          claim_email_id?: string | null
           claim_number?: string | null
           client_id?: string | null
           created_at?: string | null
@@ -1102,25 +1105,37 @@ export type Database = {
         Row: {
           created_at: string | null
           email: string
+          email_signature: string | null
           full_name: string | null
           id: string
+          license_number: string | null
+          license_state: string | null
           phone: string | null
+          title: string | null
           updated_at: string | null
         }
         Insert: {
           created_at?: string | null
           email: string
+          email_signature?: string | null
           full_name?: string | null
           id: string
+          license_number?: string | null
+          license_state?: string | null
           phone?: string | null
+          title?: string | null
           updated_at?: string | null
         }
         Update: {
           created_at?: string | null
           email?: string
+          email_signature?: string | null
           full_name?: string | null
           id?: string
+          license_number?: string | null
+          license_state?: string | null
           phone?: string | null
+          title?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -1482,6 +1497,7 @@ export type Database = {
           adjuster_name: string | null
           adjuster_phone: string | null
           claim_amount: number | null
+          claim_email_id: string | null
           claim_number: string | null
           client_id: string | null
           created_at: string | null

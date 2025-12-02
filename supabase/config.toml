@@ -26,3 +26,9 @@ verify_jwt = true
 
 [functions.delete-user]
 verify_jwt = false
+
+[functions.claims-ai-assistant]
+verify_jwt = true
+
+[functions.inbound-email]
+verify_jwt = false

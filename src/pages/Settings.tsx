@@ -34,6 +34,7 @@ import { TaskAutomationsSettings } from "@/components/settings/TaskAutomationsSe
 import { ImportSettings } from "@/components/settings/ImportSettings";
 import { UserManagementSettings } from "@/components/settings/UserManagementSettings";
 import { FieldTemplatesSettings } from "@/components/settings/FieldTemplatesSettings";
+import { ProfileSettings } from "@/components/settings/ProfileSettings";
 
 interface ClaimStatus {
   id: string;
@@ -284,6 +285,7 @@ export default function Settings() {
 
       <Tabs defaultValue="statuses" className="space-y-6">
         <TabsList className="flex flex-col md:flex-row md:flex-wrap h-auto w-full bg-muted/40 p-2 gap-1">
+          <TabsTrigger value="profile" className="w-full md:w-auto justify-start text-base font-medium px-4">My Profile</TabsTrigger>
           <TabsTrigger value="statuses" className="w-full md:w-auto justify-start text-base font-medium px-4">Claim Statuses</TabsTrigger>
           <TabsTrigger value="insurance" className="w-full md:w-auto justify-start text-base font-medium px-4">Insurance Companies</TabsTrigger>
           <TabsTrigger value="loss-types" className="w-full md:w-auto justify-start text-base font-medium px-4">Loss Types</TabsTrigger>
@@ -296,6 +298,10 @@ export default function Settings() {
           <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
           <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="profile" className="w-full">
+          <ProfileSettings />
+        </TabsContent>
 
         <TabsContent value="statuses" className="w-full">
           <Card>
