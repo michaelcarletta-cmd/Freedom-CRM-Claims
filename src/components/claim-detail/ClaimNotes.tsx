@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
 import { Plus, Send, Bot, MessageSquare, Loader2, Edit, Trash2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -8,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -42,6 +44,9 @@ interface AiMessage {
 export const ClaimNotes = ({ claimId }: { claimId: string }) => {
   const [updates, setUpdates] = useState<Update[]>([]);
   const [newUpdate, setNewUpdate] = useState("");
+  const [useCustomTimestamp, setUseCustomTimestamp] = useState(false);
+  const [customDate, setCustomDate] = useState("");
+  const [customTime, setCustomTime] = useState("");
   const [claim, setClaim] = useState<Claim | null>(null);
   const [notifyClient, setNotifyClient] = useState(false);
   const [notifyReferrer, setNotifyReferrer] = useState(false);
@@ -50,6 +55,7 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
   const [editingUpdate, setEditingUpdate] = useState<Update | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editContent, setEditContent] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Update | null>(null);
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
@@ -130,6 +136,11 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
   const handleAddUpdate = async () => {
     if (!newUpdate.trim() || !user) return;
 
+    if (useCustomTimestamp && (!customDate || !customTime)) {
+      toast.error("Please select both a date and time for the note.");
+      return;
+    }
+
     setLoading(true);
     const recipients: string[] = [];
 
@@ -141,6 +152,12 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
       }
     }
 
+    let createdAt: string | undefined;
+    if (useCustomTimestamp && customDate && customTime) {
+      const iso = new Date(`${customDate}T${customTime}:00`).toISOString();
+      createdAt = iso;
+    }
+
     const { data: update, error: updateError } = await supabase
       .from("claim_updates")
       .insert({
@@ -149,6 +166,7 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
         user_id: user.id,
         update_type: "note",
         recipients: recipients,
+        ...(createdAt ? { created_at: createdAt } : {}),
       })
       .select()
       .single();
@@ -170,6 +188,9 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
     }
 
     setNewUpdate("");
+    setUseCustomTimestamp(false);
+    setCustomDate("");
+    setCustomTime("");
     setNotifyClient(false);
     setNotifyReferrer(false);
     setNotifyContractors(false);
@@ -259,11 +280,6 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
       return;
     }
 
-    const confirmed = window.confirm("Are you sure you want to delete this update?");
-    if (!confirmed) {
-      return;
-    }
-
     try {
       const { error } = await supabase
         .from("claim_updates")
@@ -309,6 +325,42 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
               className="min-h-[100px]"
             />
 
+            <div className="grid gap-2 sm:grid-cols-2 items-end">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    id="custom-timestamp"
+                    checked={useCustomTimestamp}
+                    onCheckedChange={(checked) => setUseCustomTimestamp(checked as boolean)}
+                  />
+                  Use custom date & time
+                </Label>
+                {useCustomTimestamp && (
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      type="date"
+                      value={customDate}
+                      onChange={(e) => setCustomDate(e.target.value)}
+                    />
+                    <Input
+                      type="time"
+                      value={customTime}
+                      onChange={(e) => setCustomTime(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <Button
+                onClick={handleAddUpdate}
+                disabled={loading || !newUpdate.trim()}
+                className="w-full sm:w-auto bg-primary hover:bg-primary/90 justify-center"
+              >
+                <Send className="h-4 w-4 mr-2" />
+                {loading ? "Sending..." : "Add Update"}
+              </Button>
+            </div>
+
             {isStaff && claim && (
               <div className="space-y-2 p-3 rounded-lg bg-muted/30">
                 <Label className="text-sm font-medium">Notify:</Label>
@@ -352,15 +404,6 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
                 </div>
               </div>
             )}
-
-            <Button
-              onClick={handleAddUpdate}
-              disabled={loading || !newUpdate.trim()}
-              className="w-full bg-primary hover:bg-primary/90"
-            >
-              <Send className="h-4 w-4 mr-2" />
-              {loading ? "Sending..." : "Add Update"}
-            </Button>
           </div>
 
           <div className="space-y-4">
@@ -537,6 +580,31 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete note?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This note will be permanently removed from the claim activity history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (deleteTarget) {
+                  await handleDeleteUpdate(deleteTarget.id);
+                  setDeleteTarget(null);
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };
