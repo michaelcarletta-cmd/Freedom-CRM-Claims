@@ -191,7 +191,14 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
 
   // PDF overlay click handler
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!activeTool || !overlayRef.current) return;
+    console.log("Overlay clicked, activeTool:", activeTool);
+    
+    if (!activeTool) {
+      toast({ title: "Select a field type first", description: "Click 'Add Signature', 'Add Date', or 'Add Text' button above" });
+      return;
+    }
+    
+    if (!overlayRef.current) return;
     
     // Prevent if clicking on an existing field
     if ((e.target as HTMLElement).closest('.field-indicator')) return;
@@ -200,6 +207,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
+    console.log("Adding field at:", x, y);
     addFieldForPdf(activeTool, x, y);
     setActiveTool(null);
   };
@@ -613,17 +621,32 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
               {/* Page template for field placement */}
               <div
                 ref={overlayRef}
-                className={`relative bg-white shadow-lg ${activeTool ? 'cursor-crosshair' : ''}`}
+                className={`relative bg-white shadow-lg border ${activeTool ? 'cursor-crosshair ring-2 ring-primary' : 'cursor-default'}`}
                 style={{ width: '612px', height: '792px' }} /* Standard letter size at 72 DPI */
                 onClick={handleOverlayClick}
                 onMouseMove={handleOverlayMouseMove}
                 onMouseUp={handleOverlayMouseUp}
                 onMouseLeave={handleOverlayMouseUp}
               >
-                {/* Page header */}
-                <div className="absolute top-2 left-0 right-0 text-center text-xs text-muted-foreground border-b border-dashed border-muted pb-2 mx-4">
-                  Page {currentPage} - Place fields where signatures should appear
+                {/* Page header - non-interactive */}
+                <div className="absolute top-2 left-0 right-0 text-center text-xs text-muted-foreground pointer-events-none">
+                  Page {currentPage}
                 </div>
+                
+                {/* Visual guide lines */}
+                <div className="absolute inset-4 border border-dashed border-muted/50 pointer-events-none" />
+                <div className="absolute bottom-20 left-4 right-4 border-t border-dashed border-muted/30 pointer-events-none">
+                  <span className="absolute -top-3 left-0 text-[10px] text-muted-foreground/50">Typical signature area</span>
+                </div>
+                
+                {/* Click instruction when tool is active */}
+                {activeTool && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="bg-primary/10 text-primary px-4 py-2 rounded text-sm font-medium">
+                      Click anywhere to place {activeTool} field
+                    </div>
+                  </div>
+                )}
                 
                 {/* Render draggable field indicators - only for current page */}
                 {fields.filter(f => f.page === currentPage).map((field) => (
