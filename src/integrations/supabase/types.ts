@@ -729,7 +729,7 @@ export type Database = {
           policy_number: string | null
           policyholder_address: string | null
           policyholder_email: string | null
-          policyholder_name: string
+          policyholder_name: string | null
           policyholder_phone: string | null
           referrer_id: string | null
           ssn_last_four: string | null
@@ -761,7 +761,7 @@ export type Database = {
           policy_number?: string | null
           policyholder_address?: string | null
           policyholder_email?: string | null
-          policyholder_name: string
+          policyholder_name?: string | null
           policyholder_phone?: string | null
           referrer_id?: string | null
           ssn_last_four?: string | null
@@ -793,7 +793,7 @@ export type Database = {
           policy_number?: string | null
           policyholder_address?: string | null
           policyholder_email?: string | null
-          policyholder_name?: string
+          policyholder_name?: string | null
           policyholder_phone?: string | null
           referrer_id?: string | null
           ssn_last_four?: string | null
@@ -1650,7 +1650,7 @@ export type Database = {
           policy_number: string | null
           policyholder_address: string | null
           policyholder_email: string | null
-          policyholder_name: string
+          policyholder_name: string | null
           policyholder_phone: string | null
           referrer_id: string | null
           ssn_last_four: string | null
