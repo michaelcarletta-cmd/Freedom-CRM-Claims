@@ -505,7 +505,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
           {isPdf && !isLoading && (
             <div className="relative">
               <iframe
-                src={documentUrl}
+                src={`https://docs.google.com/viewer?url=${encodeURIComponent(documentUrl)}&embedded=true`}
                 className="w-full h-[600px] border-0"
                 title="PDF Document"
               />
