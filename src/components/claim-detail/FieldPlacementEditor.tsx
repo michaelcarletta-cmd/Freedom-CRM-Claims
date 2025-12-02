@@ -51,6 +51,9 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
 
   // Load template state
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  
+  // PDF interaction mode
+  const [pdfMode, setPdfMode] = useState<"edit" | "scroll">("edit");
 
   // Fetch available templates
   const { data: templates } = useQuery({
@@ -535,9 +538,33 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
           </div>
         )}
         
-        {!activeTool && fields.length > 0 && isPdf && (
+        {!activeTool && fields.length > 0 && isPdf && pdfMode === "edit" && (
           <div className="mb-4 p-3 bg-muted border border-border rounded text-sm text-muted-foreground">
             Drag fields to reposition. Double-click a field to remove it.
+          </div>
+        )}
+        
+        {isPdf && (
+          <div className="mb-4 flex gap-2">
+            <Button
+              variant={pdfMode === "edit" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setPdfMode("edit")}
+            >
+              Edit Fields
+            </Button>
+            <Button
+              variant={pdfMode === "scroll" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setPdfMode("scroll")}
+            >
+              Scroll Document
+            </Button>
+            {pdfMode === "scroll" && (
+              <span className="text-sm text-muted-foreground self-center ml-2">
+                Scroll to navigate, then switch back to Edit to place fields
+              </span>
+            )}
           </div>
         )}
 
@@ -553,13 +580,13 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
             <div className="relative">
               <iframe
                 src={`https://docs.google.com/viewer?url=${encodeURIComponent(documentUrl)}&embedded=true`}
-                className="w-full h-[600px] border-0 pointer-events-none"
+                className={`w-full h-[600px] border-0 ${pdfMode === "edit" ? "pointer-events-none" : ""}`}
                 title="PDF Document"
               />
-              {/* Transparent overlay for click and drag detection */}
+              {/* Transparent overlay for click and drag detection - only active in edit mode */}
               <div
                 ref={overlayRef}
-                className={`absolute inset-0 ${activeTool ? 'cursor-crosshair' : ''}`}
+                className={`absolute inset-0 ${pdfMode === "scroll" ? "pointer-events-none" : ""} ${activeTool ? 'cursor-crosshair' : ''}`}
                 onClick={handleOverlayClick}
                 onMouseMove={handleOverlayMouseMove}
                 onMouseUp={handleOverlayMouseUp}
@@ -571,7 +598,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
                     key={field.id}
                     className={`field-indicator absolute border-2 border-dashed flex items-center justify-center text-xs font-bold select-none ${
                       draggingField === field.id ? 'opacity-70' : ''
-                    } ${!activeTool ? 'cursor-move' : ''}`}
+                    } ${!activeTool && pdfMode === "edit" ? 'cursor-move' : 'pointer-events-none'}`}
                     style={{
                       left: field.x,
                       top: field.y,
@@ -581,10 +608,10 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
                       backgroundColor: colors[field.type] + "33",
                       color: colors[field.type],
                     }}
-                    onMouseDown={(e) => !activeTool && handleFieldMouseDown(e, field.id)}
+                    onMouseDown={(e) => !activeTool && pdfMode === "edit" && handleFieldMouseDown(e, field.id)}
                     onDoubleClick={(e) => {
                       e.stopPropagation();
-                      removeField(field.id);
+                      if (pdfMode === "edit") removeField(field.id);
                     }}
                   >
                     {field.label}
