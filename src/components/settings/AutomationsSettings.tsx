@@ -399,14 +399,14 @@ export const AutomationsSettings = () => {
                       <div className="space-y-2">
                         <Label>When Status Changes To</Label>
                         <Select 
-                          value={triggerConfig.status || ''} 
-                          onValueChange={(value) => setTriggerConfig({ ...triggerConfig, status: value })}
+                          value={triggerConfig.status || '_any'} 
+                          onValueChange={(value) => setTriggerConfig({ ...triggerConfig, status: value === '_any' ? undefined : value })}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Any status (leave empty)" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Any status change</SelectItem>
+                            <SelectItem value="_any">Any status change</SelectItem>
                             {statuses?.map((status) => (
                               <SelectItem key={status.id} value={status.name}>
                                 {status.name}
