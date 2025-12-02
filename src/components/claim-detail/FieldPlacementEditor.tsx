@@ -23,6 +23,7 @@ interface Field {
   label: string;
   required: boolean;
   signerIndex?: number;
+  page?: number;
 }
 
 interface FieldPlacementEditorProps {
@@ -54,6 +55,10 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
   
   // PDF interaction mode
   const [pdfMode, setPdfMode] = useState<"edit" | "scroll">("edit");
+  
+  // PDF page tracking
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Fetch available templates
   const { data: templates } = useQuery({
@@ -219,13 +224,14 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
              type === "date" ? "Date" : "Text Field",
       required: true,
       signerIndex: currentSignerIndex,
+      page: currentPage,
     };
 
     const updatedFields = [...fields, newField];
     setFields(updatedFields);
     onFieldsChange(updatedFields);
 
-    toast({ title: `${type} field added` });
+    toast({ title: `${type} field added to page ${currentPage}` });
   };
 
   // Drag handling for PDF fields
@@ -545,7 +551,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
         )}
         
         {isPdf && (
-          <div className="mb-4 flex gap-2">
+          <div className="mb-4 flex gap-2 flex-wrap items-center">
             <Button
               variant={pdfMode === "edit" ? "default" : "outline"}
               size="sm"
@@ -560,11 +566,35 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
             >
               Scroll Document
             </Button>
-            {pdfMode === "scroll" && (
-              <span className="text-sm text-muted-foreground self-center ml-2">
-                Scroll to navigate, then switch back to Edit to place fields
-              </span>
-            )}
+            <div className="border-l border-border h-6 mx-2" />
+            <span className="text-sm text-muted-foreground">Page:</span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+              >
+                -
+              </Button>
+              <Input
+                type="number"
+                min={1}
+                value={currentPage}
+                onChange={(e) => setCurrentPage(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-16 h-8 text-center"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => p + 1)}
+              >
+                +
+              </Button>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              (Fields on page {currentPage}: {fields.filter(f => f.page === currentPage).length})
+            </span>
           </div>
         )}
 
@@ -592,8 +622,8 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
                 onMouseUp={handleOverlayMouseUp}
                 onMouseLeave={handleOverlayMouseUp}
               >
-                {/* Render draggable field indicators */}
-                {fields.map((field) => (
+                {/* Render draggable field indicators - only for current page */}
+                {fields.filter(f => f.page === currentPage).map((field) => (
                   <div
                     key={field.id}
                     className={`field-indicator absolute border-2 border-dashed flex items-center justify-center text-xs font-bold select-none ${
@@ -635,10 +665,10 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
                 <Badge 
                   key={field.id} 
                   variant="outline"
-                  className="cursor-pointer hover:bg-destructive/10"
+                  className={`cursor-pointer hover:bg-destructive/10 ${field.page === currentPage ? 'ring-2 ring-primary' : ''}`}
                   onClick={() => removeField(field.id)}
                 >
-                  {field.label} {field.signerIndex !== undefined && `(Signer ${field.signerIndex + 1})`}
+                  {field.label} {field.page && `(P${field.page})`} {field.signerIndex !== undefined && `S${field.signerIndex + 1}`}
                 </Badge>
               ))}
             </div>
