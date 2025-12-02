@@ -32,6 +32,7 @@ interface Referrer {
   id: string;
   name: string;
   email: string | null;
+  user_id: string | null;
 }
 
 const ClaimDetail = () => {
@@ -115,7 +116,7 @@ const ClaimDetail = () => {
     try {
       const { data, error } = await supabase
         .from("referrers")
-        .select("id, name, email")
+        .select("id, name, email, user_id")
         .eq("id", referrerId)
         .maybeSingle();
 

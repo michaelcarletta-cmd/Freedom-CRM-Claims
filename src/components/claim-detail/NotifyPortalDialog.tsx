@@ -27,6 +27,13 @@ interface Referrer {
   id: string;
   name: string;
   email: string | null;
+  user_id?: string | null;
+}
+
+interface Client {
+  id: string;
+  name: string;
+  user_id: string | null;
 }
 
 interface NotifyPortalDialogProps {
@@ -55,29 +62,55 @@ export function NotifyPortalDialog({
   const [notifyReferrer, setNotifyReferrer] = useState(false);
   const [notifyContractors, setNotifyContractors] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [client, setClient] = useState<Client | null>(null);
   const { user } = useAuth();
 
+  // Fetch client data to get their user_id for portal notifications
   useEffect(() => {
+    const fetchClient = async () => {
+      if (clientId) {
+        const { data } = await supabase
+          .from("clients")
+          .select("id, name, user_id")
+          .eq("id", clientId)
+          .single();
+        setClient(data);
+      } else {
+        setClient(null);
+      }
+    };
+
     if (open) {
       setMessage("");
       setNotifyClient(false);
       setNotifyReferrer(false);
       setNotifyContractors(false);
+      fetchClient();
     }
-  }, [open]);
+  }, [open, clientId]);
 
   const handleSendNotification = async () => {
     if (!message.trim() || !user) return;
 
     const recipients: string[] = [];
-    if (notifyClient && clientId) recipients.push(clientId);
-    if (notifyReferrer && referrerId) recipients.push(referrerId);
+    
+    // Use client's user_id (auth user), not client_id (client record)
+    if (notifyClient && client?.user_id) {
+      recipients.push(client.user_id);
+    }
+    
+    // Use referrer's user_id (auth user), not referrer_id (referrer record)
+    if (notifyReferrer && referrer?.user_id) {
+      recipients.push(referrer.user_id);
+    }
+    
+    // Contractors are already user_ids
     if (notifyContractors) {
       contractors.forEach((c) => recipients.push(c.contractor_id));
     }
 
     if (recipients.length === 0) {
-      toast.error("Please select at least one recipient");
+      toast.error("Please select at least one recipient with portal access");
       return;
     }
 
@@ -118,7 +151,10 @@ export function NotifyPortalDialog({
     }
   };
 
-  const hasRecipients = clientId || referrerId || contractors.length > 0;
+  // Check if recipients have portal access (user_id set)
+  const clientHasPortal = client?.user_id;
+  const referrerHasPortal = referrer?.user_id;
+  const hasRecipients = clientHasPortal || referrerHasPortal || contractors.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -133,9 +169,9 @@ export function NotifyPortalDialog({
         {!hasRecipients ? (
           <div className="py-8 text-center text-muted-foreground">
             <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>No portal users are assigned to this claim.</p>
+            <p>No portal users with access are assigned to this claim.</p>
             <p className="text-sm mt-1">
-              Assign a client, referrer, or contractor first.
+              Assign a client, referrer, or contractor with portal access first.
             </p>
           </div>
         ) : (
@@ -143,7 +179,7 @@ export function NotifyPortalDialog({
             <div className="space-y-3">
               <Label className="text-sm font-medium">Select Recipients:</Label>
               <div className="space-y-2 p-3 rounded-lg bg-muted/30">
-                {clientId && (
+                {clientHasPortal && (
                   <div className="flex items-center space-x-3">
                     <Checkbox
                       id="notify-client"
@@ -155,11 +191,11 @@ export function NotifyPortalDialog({
                       className="flex items-center gap-2 text-sm cursor-pointer"
                     >
                       <UserCheck className="h-4 w-4 text-primary" />
-                      Client/Policyholder ({policyholderName})
+                      Client/Policyholder ({client?.name || policyholderName})
                     </Label>
                   </div>
                 )}
-                {referrerId && referrer && (
+                {referrerHasPortal && referrer && (
                   <div className="flex items-center space-x-3">
                     <Checkbox
                       id="notify-referrer"
