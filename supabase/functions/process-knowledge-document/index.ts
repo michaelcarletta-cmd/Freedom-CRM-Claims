@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Maximum file size for processing (500KB to stay within memory limits)
+const MAX_FILE_SIZE_BYTES = 500 * 1024;
+
 // Split text into chunks for RAG
 function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[] {
   const chunks: string[] = [];
@@ -22,21 +25,38 @@ function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[
   return chunks;
 }
 
-// Download file and convert to base64
-async function downloadFileAsBase64(fileUrl: string): Promise<{ base64: string; mimeType: string }> {
+// Download file with size check
+async function downloadFileWithSizeCheck(fileUrl: string): Promise<{ base64: string; mimeType: string }> {
   console.log('Downloading file from URL...');
+  
+  // First, do a HEAD request to check file size
+  const headResponse = await fetch(fileUrl, { method: 'HEAD' });
+  const contentLength = headResponse.headers.get('content-length');
+  
+  if (contentLength && parseInt(contentLength) > MAX_FILE_SIZE_BYTES) {
+    throw new Error(`File too large (${Math.round(parseInt(contentLength) / 1024)}KB). Maximum supported size is ${MAX_FILE_SIZE_BYTES / 1024}KB. Please upload a smaller file or split the document into smaller parts.`);
+  }
+  
   const response = await fetch(fileUrl);
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.status}`);
   }
   
   const arrayBuffer = await response.arrayBuffer();
+  
+  // Double-check actual size
+  if (arrayBuffer.byteLength > MAX_FILE_SIZE_BYTES) {
+    throw new Error(`File too large (${Math.round(arrayBuffer.byteLength / 1024)}KB). Maximum supported size is ${MAX_FILE_SIZE_BYTES / 1024}KB.`);
+  }
+  
   const uint8Array = new Uint8Array(arrayBuffer);
   
-  // Convert to base64
+  // Convert to base64 in chunks to reduce memory spikes
+  const chunkSize = 32768;
   let binary = '';
-  for (let i = 0; i < uint8Array.length; i++) {
-    binary += String.fromCharCode(uint8Array[i]);
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+    binary += String.fromCharCode(...chunk);
   }
   const base64 = btoa(binary);
   
@@ -53,13 +73,9 @@ async function extractTextFromDocument(base64Data: string, mimeType: string, fil
 
   console.log(`Extracting text from document: ${fileName} (${mimeType})`);
 
-  // Determine the correct mime type for the AI
   let aiMimeType = mimeType;
   if (fileName.endsWith('.pdf') || mimeType.includes('pdf')) {
     aiMimeType = 'application/pdf';
-  } else if (fileName.match(/\.docx?$/i) || mimeType.includes('word') || mimeType.includes('document')) {
-    // For Word docs, we'll try as-is but may need different handling
-    aiMimeType = mimeType;
   }
 
   const dataUrl = `data:${aiMimeType};base64,${base64Data}`;
@@ -98,7 +114,7 @@ async function extractTextFromDocument(base64Data: string, mimeType: string, fil
 
   const data = await response.json();
   const extractedText = data.choices?.[0]?.message?.content || '';
-  console.log(`Extracted ${extractedText.length} characters`);
+  console.log(`Extracted ${extractedText.length} characters from ${fileName}`);
   return extractedText;
 }
 
@@ -154,7 +170,6 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Store documentId early for error handling
   let documentId: string | null = null;
 
   try {
@@ -187,6 +202,11 @@ serve(async (req) => {
       });
     }
 
+    // Check file size before processing
+    if (document.file_size && document.file_size > MAX_FILE_SIZE_BYTES) {
+      throw new Error(`File too large (${Math.round(document.file_size / 1024)}KB). Maximum supported size is ${MAX_FILE_SIZE_BYTES / 1024}KB. Please upload smaller documents (under 500KB).`);
+    }
+
     // Update status to processing
     await supabase
       .from('ai_knowledge_documents')
@@ -205,10 +225,10 @@ serve(async (req) => {
     const fileUrl = signedUrlData.signedUrl;
     const fileType = document.file_type.toLowerCase();
 
-    console.log(`Processing document: ${document.file_name}, type: ${fileType}`);
+    console.log(`Processing document: ${document.file_name}, type: ${fileType}, size: ${document.file_size || 'unknown'}`);
 
-    // Download file and convert to base64
-    const { base64, mimeType } = await downloadFileAsBase64(fileUrl);
+    // Download file with size check
+    const { base64, mimeType } = await downloadFileWithSizeCheck(fileUrl);
     
     let extractedText = '';
 
@@ -287,7 +307,6 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error processing document:', errorMessage);
     
-    // Try to update document status to failed
     if (documentId) {
       try {
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
