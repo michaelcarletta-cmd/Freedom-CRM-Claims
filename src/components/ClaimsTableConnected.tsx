@@ -23,6 +23,7 @@ interface Claim {
   claim_amount: number | null;
   status: string;
   created_at: string;
+  updated_at: string;
   loss_type: string;
   is_closed: boolean;
 }
@@ -203,7 +204,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
         }
       }
 
-      const { data, error } = await query.order("created_at", { ascending: false });
+      const { data, error } = await query.order("updated_at", { ascending: false });
 
       if (error) throw error;
       setClaims(data || []);
