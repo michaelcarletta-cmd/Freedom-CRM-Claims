@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Play, Trash2, Clock, Mail, MessageSquare, CheckSquare, AlertCircle, Zap, ListTodo } from "lucide-react";
+import { Loader2, Plus, Play, Trash2, Clock, Mail, MessageSquare, CheckSquare, AlertCircle, Zap, ListTodo, Pencil } from "lucide-react";
 import { TaskAutomationsSettings } from "./TaskAutomationsSettings";
 
 interface TriggerConfig {
@@ -47,6 +47,9 @@ interface ActionConfig {
 export const AutomationsSettings = () => {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formName, setFormName] = useState("");
+  const [formDescription, setFormDescription] = useState("");
   const [triggerType, setTriggerType] = useState<string>("");
   const [triggerConfig, setTriggerConfig] = useState<TriggerConfig>({});
   const [actions, setActions] = useState<ActionConfig[]>([]);
@@ -105,6 +108,21 @@ export const AutomationsSettings = () => {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, automation }: { id: string; automation: any }) => {
+      const { error } = await supabase.from("automations").update(automation).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["automations"] });
+      toast.success("Automation updated successfully");
+      resetForm();
+    },
+    onError: (error: any) => {
+      toast.error(error.message);
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("automations").delete().eq("id", id);
@@ -145,10 +163,24 @@ export const AutomationsSettings = () => {
 
   const resetForm = () => {
     setIsDialogOpen(false);
+    setEditingId(null);
+    setFormName("");
+    setFormDescription("");
     setTriggerType("");
     setTriggerConfig({});
     setActions([]);
     setCurrentAction(null);
+  };
+
+  const openEditDialog = (automation: any) => {
+    setEditingId(automation.id);
+    setFormName(automation.name);
+    setFormDescription(automation.description || "");
+    setTriggerType(automation.trigger_type);
+    setTriggerConfig(automation.trigger_config || {});
+    setActions((automation.actions as ActionConfig[]) || []);
+    setCurrentAction(null);
+    setIsDialogOpen(true);
   };
 
   const addAction = () => {
@@ -164,7 +196,6 @@ export const AutomationsSettings = () => {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
     
     if (actions.length === 0) {
       toast.error("Please add at least one action");
@@ -172,15 +203,18 @@ export const AutomationsSettings = () => {
     }
 
     const automation = {
-      name: formData.get("name") as string,
-      description: formData.get("description") as string,
+      name: formName,
+      description: formDescription,
       trigger_type: triggerType,
       trigger_config: triggerConfig,
       actions: actions,
-      is_active: true,
     };
 
-    createMutation.mutate(automation);
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, automation });
+    } else {
+      createMutation.mutate({ ...automation, is_active: true });
+    }
   };
 
   const getTriggerDescription = (automation: any) => {
@@ -268,7 +302,7 @@ export const AutomationsSettings = () => {
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleSubmit}>
               <DialogHeader>
-                <DialogTitle>Create Automation</DialogTitle>
+                <DialogTitle>{editingId ? 'Edit Automation' : 'Create Automation'}</DialogTitle>
                 <DialogDescription>
                   Set up automated follow-ups, emails, texts, and tasks
                 </DialogDescription>
@@ -278,11 +312,22 @@ export const AutomationsSettings = () => {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Automation Name</Label>
-                    <Input id="name" name="name" placeholder="e.g., 7-Day Follow-up Email" required />
+                    <Input 
+                      id="name" 
+                      placeholder="e.g., 7-Day Follow-up Email" 
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      required 
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>
-                    <Textarea id="description" name="description" placeholder="What does this automation do?" />
+                    <Textarea 
+                      id="description" 
+                      placeholder="What does this automation do?" 
+                      value={formDescription}
+                      onChange={(e) => setFormDescription(e.target.value)}
+                    />
                   </div>
                 </div>
 
@@ -675,9 +720,9 @@ export const AutomationsSettings = () => {
                 <Button type="button" variant="outline" onClick={resetForm}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createMutation.isPending || actions.length === 0}>
-                  {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Create Automation
+                <Button type="submit" disabled={(createMutation.isPending || updateMutation.isPending) || actions.length === 0}>
+                  {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {editingId ? 'Save Changes' : 'Create Automation'}
                 </Button>
               </DialogFooter>
             </form>
@@ -724,6 +769,13 @@ export const AutomationsSettings = () => {
                         <Play className="h-4 w-4" />
                       </Button>
                     )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openEditDialog(automation)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                     <Button
                       size="sm"
                       variant="destructive"
