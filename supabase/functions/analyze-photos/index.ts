@@ -732,7 +732,7 @@ REMEMBER: Be SPECIFIC and DETAILED. Each photo should have substantial analysis,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "google/gemini-2.5-pro", // Use pro model for better reliability with images
+            model: "google/gemini-2.5-flash", // Use flash model for cost efficiency
             messages: [
               { role: "system", content: systemPrompt },
               {
@@ -743,7 +743,7 @@ REMEMBER: Be SPECIFIC and DETAILED. Each photo should have substantial analysis,
                 ]
               }
             ],
-            max_tokens: 8000, // Increased for detailed analysis of all photos
+            max_tokens: 8000,
           }),
         });
 
@@ -787,7 +787,7 @@ REMEMBER: Be SPECIFIC and DETAILED. Each photo should have substantial analysis,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
+          model: "google/gemini-2.5-flash",
           messages: [
             { role: "system", content: systemPrompt },
             {
