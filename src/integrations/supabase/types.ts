@@ -992,6 +992,39 @@ export type Database = {
         }
         Relationships: []
       }
+      company_branding: {
+        Row: {
+          company_address: string | null
+          company_email: string | null
+          company_name: string | null
+          company_phone: string | null
+          created_at: string
+          id: string
+          letterhead_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          company_address?: string | null
+          company_email?: string | null
+          company_name?: string | null
+          company_phone?: string | null
+          created_at?: string
+          id?: string
+          letterhead_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company_address?: string | null
+          company_email?: string | null
+          company_name?: string | null
+          company_phone?: string | null
+          created_at?: string
+          id?: string
+          letterhead_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       custom_fields: {
         Row: {
           created_at: string

@@ -284,6 +284,151 @@ Based on the documented damage and required restoration work:
 
 This letter is prepared based on visible evidence in the photo documentation.`;
         break;
+
+      case "demand-package":
+        userPrompt = `Create a COMPLETE DEMAND PACKAGE based on these ${photos.length} photos documenting property damage.
+
+${claimContext}
+
+Photo Information:
+${photoDescriptions.join('\n')}
+
+IMPORTANT: Reference each photo by its number (Photo 1, Photo 2, etc.) throughout all sections.
+
+Create a comprehensive demand package that combines all elements into one cohesive document. Structure it as follows:
+
+## I. FINAL DEMAND LETTER
+
+To the Claims Department:
+
+This Notice of Final Demand is submitted on behalf of [Policyholder] regarding the above-referenced claim. This demand is accompanied by complete documentation supporting our position that the carrier has failed to properly adjust this claim.
+
+### A. Introduction
+- Brief statement of the demand
+- Reference to attached documentation and exhibits
+
+### B. Factual Background
+- Property description and loss date
+- Summary of the loss event  
+- Timeline of claim handling
+- Documentation submitted with photo references
+
+---
+
+## II. DAMAGE ANALYSIS
+
+### A. Property Overview
+- General condition documented in the photos
+- Areas affected by the loss
+
+### B. Detailed Damage Assessment
+For each area documented (reference specific photo numbers):
+- Location and component affected
+- Type of damage observed
+- Severity rating
+- Forensic indicators supporting cause of loss
+
+### C. Cause of Loss
+- Physical evidence connecting damage to the reported loss event
+- Weather data or event documentation (if referenced)
+
+---
+
+## III. PROOF OF LOSS / VALUATION
+
+### A. Scope of Work Required
+To restore the property to pre-loss condition:
+
+**Roofing System** (if applicable):
+- Full replacement of each damaged slope per manufacturer warranty requirements
+- Applicable manufacturer specifications
+- Building code requirements (IRC, IBC)
+
+**Exterior Components**:
+- Siding, gutters, windows as damaged
+- Applicable specifications
+
+**Interior Components** (if visible):
+- Drywall, flooring, etc. as applicable
+
+### B. Materials & Specifications
+- Specific materials required per manufacturer specs
+- Installation requirements
+- Code compliance standards
+
+### C. Valuation Summary
+- Summary of all work required
+- Note that specific dollar amounts are per the attached estimate
+
+---
+
+## IV. RESTORATION REQUIREMENTS
+
+### A. Building Code Compliance
+- International Residential Code (IRC) requirements
+- International Building Code (IBC) requirements
+- Local code amendments (NJ/PA specific)
+
+### B. Manufacturer Specifications
+- Product-specific installation requirements
+- Warranty requirements that mandate full replacement
+
+### C. Industry Standards
+- ASTM standards applicable
+- ARMA guidelines
+- NRCA best practices
+
+---
+
+## V. PROSPECTIVE LIABILITY
+
+### A. New Jersey Insurance Code (N.J.S.A. Title 17)
+- **N.J.S.A. 17:29B-4**: Unfair Claims Settlement Practices Act - prohibits misrepresenting pertinent facts or policy provisions relating to coverages at issue
+- **N.J.A.C. 11:2-17.6**: Requires insurers to acknowledge receipt of claims within 10 working days
+- **N.J.A.C. 11:2-17.7**: Requires insurers to affirm or deny coverage within a reasonable time
+- **N.J.A.C. 11:2-17.8**: Payment of claims must occur within 30 days after proof of loss is received
+- **N.J.S.A. 17:29B-4(9)**: Prohibits failure to affirm or deny coverage within reasonable time after proof of loss
+
+### B. Pennsylvania Insurance Code (40 P.S.)
+- **40 P.S. § 1171.5**: Unfair Insurance Practices Act - prohibits misrepresentation and unfair settlement practices
+- **31 Pa. Code § 146.5**: Requires acknowledgment of claims within 10 working days
+- **31 Pa. Code § 146.6**: Requires written denial stating specific reasons if claim is denied
+- **31 Pa. Code § 146.7**: Payment required within 15 days after agreement on settlement amount
+- **42 Pa.C.S. § 8371**: Bad Faith statute - allows recovery of interest, punitive damages, court costs and attorney fees
+
+### C. Potential Exposure
+Failure to properly adjust this claim may result in:
+- Statutory penalties under state unfair claims practices acts
+- Bad faith claims with potential for punitive damages
+- Attorney fees and costs
+- Interest on unpaid amounts
+
+---
+
+## VI. DEMAND FOR PAYMENT
+
+Based on the foregoing documentation and analysis:
+
+1. The loss event caused the documented damage to the insured property
+2. The damage requires full restoration as detailed in the scope of work
+3. The insured is entitled to full replacement cost value under the policy terms
+4. The carrier's failure to properly pay this claim violates state insurance regulations
+
+**THEREFORE, WE DEMAND:**
+- Full payment of the claim within 30 days
+- Payment of all supplements as documented
+- Response to this demand in writing
+
+Failure to respond appropriately will result in pursuit of all available legal remedies.
+
+---
+
+## CONCLUSION
+
+This Complete Demand Package provides comprehensive documentation of the loss, damage assessment, valuation support, and legal basis for this claim. The attached photo documentation (Exhibit A) provides visual evidence supporting each element of this demand.
+
+We request immediate attention to this matter and resolution within the timeframes required by state law.`;
+        break;
         
       default: // full-report
         userPrompt = `Create a Forensic Photo Documentation Report analyzing all ${photos.length} provided photos.
