@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain } from "lucide-react";
+import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +32,7 @@ const CATEGORIES = [
   { value: "other", label: "Other" },
 ];
 
-const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a,.webm";
+const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a,.webm,.jpg,.jpeg,.png,.gif,.webp,.bmp";
 
 export const AIKnowledgeBaseSettings = () => {
   const queryClient = useQueryClient();
@@ -201,6 +201,9 @@ export const AIKnowledgeBaseSettings = () => {
     if (fileName.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)) {
       return <Video className="h-5 w-5 text-purple-400" />;
     }
+    if (fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i)) {
+      return <Image className="h-5 w-5 text-green-400" />;
+    }
     return <FileText className="h-5 w-5 text-blue-400" />;
   };
 
@@ -217,7 +220,7 @@ export const AIKnowledgeBaseSettings = () => {
             AI Knowledge Base
           </CardTitle>
           <CardDescription>
-            Upload documents and videos to train the AI assistant. Supported formats: PDF, Word docs, and video/audio files.
+            Upload documents, images, and videos to train the AI assistant. Supported formats: PDF, Word docs, images (JPG, PNG), and video/audio files.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
