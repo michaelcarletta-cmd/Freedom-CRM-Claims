@@ -44,3 +44,18 @@ verify_jwt = true
 
 [functions.process-jobnimbus-sync]
 verify_jwt = false
+
+[functions.analyze-photos]
+verify_jwt = true
+
+[functions.generate-invoice]
+verify_jwt = true
+
+[functions.quickbooks-auth]
+verify_jwt = true
+
+[functions.quickbooks-payment]
+verify_jwt = true
+
+[functions.stripe-connect-payout]
+verify_jwt = true
