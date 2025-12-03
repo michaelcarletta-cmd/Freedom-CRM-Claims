@@ -65,6 +65,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   const [activeTab, setActiveTab] = useState<"standard" | "ai">("ai");
   const [aiReportType, setAiReportType] = useState("full-report");
   const [aiReport, setAiReport] = useState<string | null>(null);
+  const [aiPhotoUrls, setAiPhotoUrls] = useState<{ url: string; fileName: string; category: string; description: string }[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -72,6 +73,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       setReportTitle(`Photo Report - ${claim?.policyholder_name || "Claim"} - ${new Date().toLocaleDateString()}`);
       setSelectedPhotos(photos.map(p => p.id));
       setAiReport(null);
+      setAiPhotoUrls([]);
     }
   }, [open, claim, photos]);
 
@@ -111,7 +113,8 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       }
 
       setAiReport(data.report);
-      toast({ title: "AI analysis complete" });
+      setAiPhotoUrls(data.photoUrls || []);
+      toast({ title: "Analysis complete" });
     } catch (error: any) {
       console.error("AI report error:", error);
       toast({ 
@@ -128,13 +131,26 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     if (!aiReport) return;
     
     try {
+      // Build photos HTML
+      const photosHtml = aiPhotoUrls.length > 0 ? `
+  <div style="margin-top: 40px;">
+    <h2 style="color: #2563eb; border-bottom: 1px solid #ddd; padding-bottom: 10px;">Photo Documentation</h2>
+    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 20px;">
+      ${aiPhotoUrls.map(photo => `
+        <div style="page-break-inside: avoid;">
+          <img src="${photo.url}" style="width: 100%; height: auto; border-radius: 8px; border: 1px solid #ddd;" />
+          <p style="margin-top: 8px; font-size: 12px; color: #666;"><strong>${photo.category}</strong>${photo.description ? ` - ${photo.description}` : ''}</p>
+        </div>
+      `).join('')}
+    </div>
+  </div>` : '';
+
       // Create HTML content for PDF
       const html = `
 <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6;">
   <div style="margin-bottom: 30px;">
     <h1 style="border-bottom: 2px solid #333; padding-bottom: 10px;">${reportTitle}</h1>
-    <span style="background: #8b5cf6; color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px;">AI Generated</span>
-    <p>Generated on ${new Date().toLocaleString()}</p>
+    <p style="color: #666;">Generated on ${new Date().toLocaleString()}</p>
   </div>
   <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
     <p><strong>Claim Number:</strong> ${claim?.claim_number || 'N/A'}</p>
@@ -145,6 +161,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   <div>
     ${aiReport.replace(/\n/g, '<br>').replace(/##\s(.*)/g, '<h2 style="color: #2563eb; margin-top: 30px;">$1</h2>').replace(/###\s(.*)/g, '<h3 style="color: #4b5563;">$1</h3>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}
   </div>
+  ${photosHtml}
 </div>`;
 
       // Generate PDF

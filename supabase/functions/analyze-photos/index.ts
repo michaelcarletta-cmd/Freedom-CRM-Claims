@@ -74,6 +74,7 @@ Claim Information:
     // Get signed URLs and build image content for AI
     const imageContents: any[] = [];
     const photoDescriptions: string[] = [];
+    const photoUrls: { url: string; fileName: string; category: string; description: string }[] = [];
     
     for (const photo of photos) {
       const path = photo.annotated_file_path || photo.file_path;
@@ -87,6 +88,12 @@ Claim Information:
           image_url: { url: signedUrl.signedUrl }
         });
         photoDescriptions.push(`Photo: ${photo.file_name} | Category: ${photo.category} | Description: ${photo.description || 'No description'}`);
+        photoUrls.push({
+          url: signedUrl.signedUrl,
+          fileName: photo.file_name,
+          category: photo.category || 'Uncategorized',
+          description: photo.description || ''
+        });
       }
     }
 
@@ -98,13 +105,13 @@ Claim Information:
     }
 
     // Build prompt based on report type
-    let systemPrompt = `You are an expert insurance claims adjuster and damage assessment specialist. You analyze property damage photos to help maximize claim settlements for policyholders.`;
+    let systemPrompt = `You are an expert property damage assessment specialist working for a public adjusting firm. Analyze property damage photos and provide professional observations. Focus only on what you can see in the photos - do not include action items, recommendations for gathering documents, suggestions for specialist inspections, or coverage advice since those are handled separately by the adjusters.`;
     
     let userPrompt = "";
     
     switch (reportType) {
       case "damage-assessment":
-        userPrompt = `Analyze these ${photos.length} photos and create a comprehensive Damage Assessment Report.
+        userPrompt = `Analyze these ${photos.length} photos and create a Damage Assessment Report.
 
 ${claimContext}
 
@@ -118,16 +125,14 @@ Please provide:
    - Severity assessment (minor/moderate/severe)
    - Likely cause based on the loss type
    - Estimated scope of repairs needed
-3. **Hidden Damage Concerns** - Potential secondary or hidden damage to investigate
-4. **Documentation Recommendations** - Additional photos or evidence needed
-5. **Repair Recommendations** - Suggested repairs and materials
-6. **Insurance Claim Notes** - Key points to emphasize when presenting to the carrier
+3. **Hidden Damage Concerns** - Potential secondary or hidden damage based on visible indicators
+4. **Repair Scope** - Suggested repairs and materials based on visible damage
 
-Format this as a professional report that can be shared with the insurance adjuster.`;
+Keep observations factual and based on what's visible in the photos.`;
         break;
         
       case "before-after":
-        userPrompt = `Analyze these before/after comparison photos and create a detailed Progress Report.
+        userPrompt = `Analyze these before/after comparison photos and create a Progress Report.
 
 ${claimContext}
 
@@ -139,10 +144,9 @@ Please provide:
 2. **Damage Documentation** - What damage is visible in the "before" photos
 3. **Repair Documentation** - What repairs are visible in the "after" photos
 4. **Quality Assessment** - Evaluation of repair quality and completeness
-5. **Outstanding Items** - Any remaining work or concerns visible
-6. **Recommendations** - Next steps or additional documentation needed
+5. **Outstanding Items** - Any remaining work visible
 
-Format this as a professional comparison report.`;
+Format this as a professional comparison report based on what's visible in the photos.`;
         break;
         
       case "quick-analysis":
@@ -153,17 +157,16 @@ ${claimContext}
 Photo Information:
 ${photoDescriptions.join('\n')}
 
-Please provide a brief but comprehensive analysis including:
+Please provide a brief analysis including:
 - Main types of damage visible
 - Severity assessment
 - Key areas of concern
-- Immediate recommendations
 
-Keep the response concise but actionable.`;
+Keep the response concise and factual based on what's visible.`;
         break;
         
       default: // full-report
-        userPrompt = `Create a comprehensive Photo Documentation Report analyzing all ${photos.length} provided photos.
+        userPrompt = `Create a Photo Documentation Report analyzing all ${photos.length} provided photos.
 
 ${claimContext}
 
@@ -190,27 +193,14 @@ For each distinct area shown in the photos:
 - Any pre-existing vs. new damage observations
 
 ## 4. Repair Scope
-- Recommended repairs for each damaged area
+- Repairs needed for each damaged area based on visible damage
 - Materials likely needed
 - Priority of repairs (safety, structural, cosmetic)
 
-## 5. Additional Documentation Needs
-- Areas that need more photos
-- Types of documentation to gather
-- Specialist inspections recommended
+## 5. Summary
+- Overall damage assessment summary
 
-## 6. Insurance Considerations
-- Key evidence for the claim
-- Points to emphasize with the adjuster
-- Potential coverage concerns
-- Documentation that strengthens the claim
-
-## 7. Summary & Next Steps
-- Overall damage assessment
-- Immediate actions recommended
-- Timeline considerations
-
-Format this as a professional report suitable for insurance documentation.`;
+Focus only on factual observations from the photos. Do not include action items, document gathering suggestions, specialist inspection recommendations, or coverage advice.`;
     }
 
     // Limit photos to prevent timeout (AI can handle ~10-15 images reliably)
@@ -300,7 +290,8 @@ Format this as a professional report suitable for insurance documentation.`;
       JSON.stringify({ 
         report: reportContent,
         photoCount: photos.length,
-        reportType 
+        reportType,
+        photoUrls: photoUrls.slice(0, 15) // Include photo URLs for report
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
