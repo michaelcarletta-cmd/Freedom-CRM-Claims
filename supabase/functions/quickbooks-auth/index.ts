@@ -17,7 +17,7 @@ serve(async (req) => {
   }
 
   try {
-    const { action, code, realmId, redirectUri } = await req.json();
+    const { action, code, realmId, redirectUri, refreshToken } = await req.json();
     console.log('QuickBooks auth action:', action);
 
     if (action === 'get-auth-url') {
@@ -82,7 +82,6 @@ serve(async (req) => {
     }
 
     if (action === 'refresh-token') {
-      const { refreshToken } = await req.json();
       const tokenUrl = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
       const credentials = btoa(`${QUICKBOOKS_CLIENT_ID}:${QUICKBOOKS_CLIENT_SECRET}`);
       
