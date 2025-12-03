@@ -22,10 +22,47 @@ function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[
   return chunks;
 }
 
-// Extract text from PDF using Lovable AI
-async function extractTextFromPDF(fileUrl: string): Promise<string> {
+// Download file and convert to base64
+async function downloadFileAsBase64(fileUrl: string): Promise<{ base64: string; mimeType: string }> {
+  console.log('Downloading file from URL...');
+  const response = await fetch(fileUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download file: ${response.status}`);
+  }
+  
+  const arrayBuffer = await response.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  
+  // Convert to base64
+  let binary = '';
+  for (let i = 0; i < uint8Array.length; i++) {
+    binary += String.fromCharCode(uint8Array[i]);
+  }
+  const base64 = btoa(binary);
+  
+  const mimeType = response.headers.get('content-type') || 'application/octet-stream';
+  console.log(`Downloaded file: ${uint8Array.length} bytes, mime: ${mimeType}`);
+  
+  return { base64, mimeType };
+}
+
+// Extract text from PDF using Lovable AI with base64 data
+async function extractTextFromDocument(base64Data: string, mimeType: string, fileName: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
+
+  console.log(`Extracting text from document: ${fileName} (${mimeType})`);
+
+  // Determine the correct mime type for the AI
+  let aiMimeType = mimeType;
+  if (fileName.endsWith('.pdf') || mimeType.includes('pdf')) {
+    aiMimeType = 'application/pdf';
+  } else if (fileName.match(/\.docx?$/i) || mimeType.includes('word') || mimeType.includes('document')) {
+    // For Word docs, we'll try as-is but may need different handling
+    aiMimeType = mimeType;
+  }
+
+  const dataUrl = `data:${aiMimeType};base64,${base64Data}`;
 
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
@@ -41,11 +78,11 @@ async function extractTextFromPDF(fileUrl: string): Promise<string> {
           content: [
             {
               type: 'text',
-              text: 'Please extract all the text content from this document. Return only the extracted text, preserving the structure and formatting as much as possible. Do not add any commentary or analysis.'
+              text: 'Please extract all the text content from this document. Return only the extracted text, preserving the structure and formatting as much as possible. Include all headings, paragraphs, lists, and tables. Do not add any commentary or analysis.'
             },
             {
               type: 'image_url',
-              image_url: { url: fileUrl }
+              image_url: { url: dataUrl }
             }
           ]
         }
@@ -55,18 +92,24 @@ async function extractTextFromPDF(fileUrl: string): Promise<string> {
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('PDF extraction error:', errorText);
-    throw new Error(`Failed to extract PDF text: ${response.status}`);
+    console.error('Document extraction error:', errorText);
+    throw new Error(`Failed to extract document text: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  const extractedText = data.choices?.[0]?.message?.content || '';
+  console.log(`Extracted ${extractedText.length} characters`);
+  return extractedText;
 }
 
-// Transcribe audio/video using Lovable AI
-async function transcribeMedia(fileUrl: string): Promise<string> {
+// Transcribe audio/video using Lovable AI with base64 data
+async function transcribeMedia(base64Data: string, mimeType: string, fileName: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
+
+  console.log(`Transcribing media: ${fileName} (${mimeType})`);
+
+  const dataUrl = `data:${mimeType};base64,${base64Data}`;
 
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
@@ -86,7 +129,7 @@ async function transcribeMedia(fileUrl: string): Promise<string> {
             },
             {
               type: 'image_url',
-              image_url: { url: fileUrl }
+              image_url: { url: dataUrl }
             }
           ]
         }
@@ -97,11 +140,13 @@ async function transcribeMedia(fileUrl: string): Promise<string> {
   if (!response.ok) {
     const errorText = await response.text();
     console.error('Transcription error:', errorText);
-    throw new Error(`Failed to transcribe media: ${response.status}`);
+    throw new Error(`Failed to transcribe media: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  const transcribedText = data.choices?.[0]?.message?.content || '';
+  console.log(`Transcribed ${transcribedText.length} characters`);
+  return transcribedText;
 }
 
 serve(async (req) => {
@@ -109,8 +154,12 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Store documentId early for error handling
+  let documentId: string | null = null;
+
   try {
-    const { documentId } = await req.json();
+    const body = await req.json();
+    documentId = body.documentId;
     
     if (!documentId) {
       return new Response(JSON.stringify({ error: 'documentId is required' }), {
@@ -154,27 +203,30 @@ serve(async (req) => {
     }
 
     const fileUrl = signedUrlData.signedUrl;
-    let extractedText = '';
     const fileType = document.file_type.toLowerCase();
 
     console.log(`Processing document: ${document.file_name}, type: ${fileType}`);
 
+    // Download file and convert to base64
+    const { base64, mimeType } = await downloadFileAsBase64(fileUrl);
+    
+    let extractedText = '';
+
     // Process based on file type
     if (fileType === 'application/pdf' || document.file_name.endsWith('.pdf')) {
-      extractedText = await extractTextFromPDF(fileUrl);
+      extractedText = await extractTextFromDocument(base64, 'application/pdf', document.file_name);
     } else if (
       fileType.includes('video') || 
       fileType.includes('audio') ||
       document.file_name.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)
     ) {
-      extractedText = await transcribeMedia(fileUrl);
+      extractedText = await transcribeMedia(base64, mimeType, document.file_name);
     } else if (
       fileType.includes('word') || 
       fileType.includes('document') ||
       document.file_name.match(/\.(docx|doc)$/i)
     ) {
-      // For Word docs, use similar approach as PDF
-      extractedText = await extractTextFromPDF(fileUrl);
+      extractedText = await extractTextFromDocument(base64, mimeType, document.file_name);
     } else {
       throw new Error(`Unsupported file type: ${fileType}`);
     }
@@ -236,9 +288,8 @@ serve(async (req) => {
     console.error('Error processing document:', errorMessage);
     
     // Try to update document status to failed
-    try {
-      const { documentId } = await req.clone().json();
-      if (documentId) {
+    if (documentId) {
+      try {
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
         const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -250,9 +301,9 @@ serve(async (req) => {
             error_message: errorMessage 
           })
           .eq('id', documentId);
+      } catch (e) {
+        console.error('Failed to update document status:', e);
       }
-    } catch (e) {
-      console.error('Failed to update document status:', e);
     }
 
     return new Response(JSON.stringify({ error: errorMessage }), {
