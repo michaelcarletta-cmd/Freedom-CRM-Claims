@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2, Plus, Play, Trash2, Clock, Mail, MessageSquare, CheckSquare, AlertCircle, Zap, ListTodo, Pencil } from "lucide-react";
 import { TaskAutomationsSettings } from "./TaskAutomationsSettings";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 
 interface TriggerConfig {
   // For scheduled
@@ -49,6 +50,7 @@ interface ActionConfig {
     description?: string;
     priority?: 'low' | 'medium' | 'high';
     due_date_offset?: number;
+    due_date_type?: 'calendar' | 'business'; // Calendar or business days
     // Status change
     new_status?: string;
   };
@@ -705,13 +707,13 @@ export const AutomationsSettings = () => {
                         </div>
                         <div className="space-y-2">
                           <Label>Email Body</Label>
-                          <Textarea 
+                          <RichTextEditor
                             placeholder="Use {claim.field} for merge fields..."
                             rows={4}
                             value={currentAction.config.message || ''}
-                            onChange={(e) => setCurrentAction({
+                            onChange={(value) => setCurrentAction({
                               ...currentAction,
-                              config: { ...currentAction.config, message: e.target.value, email_template_id: undefined }
+                              config: { ...currentAction.config, message: value, email_template_id: undefined }
                             })}
                           />
                           <p className="text-xs text-muted-foreground">
@@ -888,6 +890,24 @@ export const AutomationsSettings = () => {
                               })}
                             />
                           </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Day Type</Label>
+                          <Select 
+                            value={currentAction.config.due_date_type || 'calendar'} 
+                            onValueChange={(value) => setCurrentAction({
+                              ...currentAction,
+                              config: { ...currentAction.config, due_date_type: value as 'calendar' | 'business' }
+                            })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="calendar">Calendar Days</SelectItem>
+                              <SelectItem value="business">Business Days (Mon-Fri)</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                     )}
