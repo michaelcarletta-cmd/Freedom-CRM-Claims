@@ -52,11 +52,25 @@ serve(async (req) => {
       throw new Error('Failed to fetch photos');
     }
 
-    console.log(`Processing ${photos.length} photos for estimate suggestions`);
+    // Limit to 5 photos max to avoid memory issues
+    const photosToProcess = photos.slice(0, 5);
+    console.log(`Processing ${photosToProcess.length} of ${photos.length} photos for estimate suggestions`);
 
-    // Download photos and convert to base64 (OpenAI can't access signed URLs directly)
+    // Helper function to convert ArrayBuffer to base64 without stack overflow
+    function arrayBufferToBase64(buffer: ArrayBuffer): string {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+        binary += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+      return btoa(binary);
+    }
+
+    // Download photos and convert to base64
     const photoBase64s: string[] = [];
-    for (const photo of photos) {
+    for (const photo of photosToProcess) {
       try {
         const { data: fileData, error: downloadError } = await supabase
           .storage
@@ -68,11 +82,11 @@ serve(async (req) => {
           continue;
         }
 
-        // Convert blob to base64
         const arrayBuffer = await fileData.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        const base64 = arrayBufferToBase64(arrayBuffer);
         const mimeType = photo.file_name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
         photoBase64s.push(`data:${mimeType};base64,${base64}`);
+        console.log(`Processed photo ${photoBase64s.length}: ${photo.file_name}`);
       } catch (err) {
         console.error('Error processing photo:', err);
         continue;
