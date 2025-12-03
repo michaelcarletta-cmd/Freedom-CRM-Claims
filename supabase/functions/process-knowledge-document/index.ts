@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,8 +23,42 @@ function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[
   return chunks;
 }
 
-// Extract text from document using URL (no memory loading)
-async function extractTextFromDocumentUrl(fileUrl: string, fileName: string): Promise<string> {
+// Get mime type from file type or extension
+function getMimeType(fileType: string, fileName: string): string {
+  if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
+    return 'application/pdf';
+  }
+  if (fileType.includes('word') || fileName.match(/\.docx?$/i)) {
+    return fileType.includes('docx') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/msword';
+  }
+  if (fileType.includes('video') || fileName.match(/\.(mp4|mov|avi|mkv|webm)$/i)) {
+    return 'video/mp4';
+  }
+  if (fileType.includes('audio') || fileName.match(/\.(mp3|wav|m4a)$/i)) {
+    return 'audio/mpeg';
+  }
+  return fileType || 'application/octet-stream';
+}
+
+// Download file and convert to base64 data URL
+async function downloadAndEncodeFile(fileUrl: string, mimeType: string): Promise<string> {
+  console.log(`Downloading file for processing...`);
+  
+  const response = await fetch(fileUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download file: ${response.status}`);
+  }
+  
+  const arrayBuffer = await response.arrayBuffer();
+  const base64 = base64Encode(arrayBuffer);
+  
+  console.log(`Downloaded file: ${arrayBuffer.byteLength} bytes, mime: ${mimeType}`);
+  
+  return `data:${mimeType};base64,${base64}`;
+}
+
+// Extract text from document using base64 data
+async function extractTextFromDocument(dataUrl: string, fileName: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
@@ -47,7 +82,7 @@ async function extractTextFromDocumentUrl(fileUrl: string, fileName: string): Pr
             },
             {
               type: 'image_url',
-              image_url: { url: fileUrl }
+              image_url: { url: dataUrl }
             }
           ]
         }
@@ -59,7 +94,6 @@ async function extractTextFromDocumentUrl(fileUrl: string, fileName: string): Pr
     const errorText = await response.text();
     console.error('Document extraction error:', errorText);
     
-    // Check for rate limit errors
     if (response.status === 429) {
       throw new Error('Rate limit exceeded. Please try again in a few minutes.');
     }
@@ -72,12 +106,12 @@ async function extractTextFromDocumentUrl(fileUrl: string, fileName: string): Pr
 
   const data = await response.json();
   const extractedText = data.choices?.[0]?.message?.content || '';
-  console.log(`Extracted ${extractedText.length} characters from ${fileName}`);
+  console.log(`Extracted ${extractedText.length} characters`);
   return extractedText;
 }
 
-// Transcribe audio/video using URL
-async function transcribeMediaUrl(fileUrl: string, fileName: string): Promise<string> {
+// Transcribe audio/video using base64 data
+async function transcribeMedia(dataUrl: string, fileName: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
@@ -101,7 +135,7 @@ async function transcribeMediaUrl(fileUrl: string, fileName: string): Promise<st
             },
             {
               type: 'image_url',
-              image_url: { url: fileUrl }
+              image_url: { url: dataUrl }
             }
           ]
         }
@@ -183,26 +217,30 @@ serve(async (req) => {
 
     const fileUrl = signedUrlData.signedUrl;
     const fileType = document.file_type.toLowerCase();
+    const mimeType = getMimeType(fileType, document.file_name);
 
-    console.log(`Processing document: ${document.file_name}, type: ${fileType}, size: ${document.file_size || 'unknown'}`);
+    console.log(`Processing document: ${document.file_name}, type: ${fileType}`);
+
+    // Download and encode file as base64 data URL
+    const dataUrl = await downloadAndEncodeFile(fileUrl, mimeType);
 
     let extractedText = '';
 
-    // Process based on file type - pass URL directly to AI (no memory loading!)
+    // Process based on file type
     if (fileType === 'application/pdf' || document.file_name.endsWith('.pdf')) {
-      extractedText = await extractTextFromDocumentUrl(fileUrl, document.file_name);
+      extractedText = await extractTextFromDocument(dataUrl, document.file_name);
     } else if (
       fileType.includes('video') || 
       fileType.includes('audio') ||
       document.file_name.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)
     ) {
-      extractedText = await transcribeMediaUrl(fileUrl, document.file_name);
+      extractedText = await transcribeMedia(dataUrl, document.file_name);
     } else if (
       fileType.includes('word') || 
       fileType.includes('document') ||
       document.file_name.match(/\.(docx|doc)$/i)
     ) {
-      extractedText = await extractTextFromDocumentUrl(fileUrl, document.file_name);
+      extractedText = await extractTextFromDocument(dataUrl, document.file_name);
     } else {
       throw new Error(`Unsupported file type: ${fileType}`);
     }
