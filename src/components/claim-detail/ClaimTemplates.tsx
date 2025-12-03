@@ -177,9 +177,9 @@ export function ClaimTemplates({ claimId, claim }: ClaimTemplatesProps) {
 
   return (
     <Tabs defaultValue="templates" className="w-full">
-      <TabsList>
-        <TabsTrigger value="templates">Templates</TabsTrigger>
-        <TabsTrigger value="signatures">Signature Requests</TabsTrigger>
+      <TabsList className="inline-flex h-10 items-center justify-start gap-1 rounded-md bg-muted p-1 mb-4">
+        <TabsTrigger value="templates" className="rounded-sm px-4 py-1.5 text-sm font-medium">Templates</TabsTrigger>
+        <TabsTrigger value="signatures" className="rounded-sm px-4 py-1.5 text-sm font-medium">Signature Requests</TabsTrigger>
       </TabsList>
 
       <TabsContent value="templates" className="space-y-6">
