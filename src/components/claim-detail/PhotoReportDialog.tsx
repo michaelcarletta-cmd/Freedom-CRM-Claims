@@ -65,7 +65,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   const [activeTab, setActiveTab] = useState<"standard" | "ai">("ai");
   const [aiReportType, setAiReportType] = useState("full-report");
   const [aiReport, setAiReport] = useState<string | null>(null);
-  const [aiPhotoUrls, setAiPhotoUrls] = useState<{ url: string; fileName: string; category: string; description: string }[]>([]);
+  const [aiPhotoUrls, setAiPhotoUrls] = useState<{ url: string; fileName: string; category: string; description: string; photoNumber: number }[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -131,15 +131,39 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     if (!aiReport) return;
     
     try {
-      // Build photos HTML
-      const photosHtml = aiPhotoUrls.length > 0 ? `
-  <div style="margin-top: 40px;">
+      // Convert photo URLs to base64 for PDF embedding
+      const photoBase64s: { base64: string; photoNumber: number; category: string; description: string }[] = [];
+      
+      for (const photo of aiPhotoUrls) {
+        try {
+          const response = await fetch(photo.url);
+          const blob = await response.blob();
+          const base64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          photoBase64s.push({
+            base64,
+            photoNumber: photo.photoNumber,
+            category: photo.category,
+            description: photo.description
+          });
+        } catch (e) {
+          console.error("Failed to convert photo to base64:", e);
+        }
+      }
+
+      // Build photos HTML with base64 images and photo numbers
+      const photosHtml = photoBase64s.length > 0 ? `
+  <div style="margin-top: 40px; page-break-before: always;">
     <h2 style="color: #2563eb; border-bottom: 1px solid #ddd; padding-bottom: 10px;">Photo Documentation</h2>
-    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 20px;">
-      ${aiPhotoUrls.map(photo => `
-        <div style="page-break-inside: avoid;">
-          <img src="${photo.url}" style="width: 100%; height: auto; border-radius: 8px; border: 1px solid #ddd;" />
-          <p style="margin-top: 8px; font-size: 12px; color: #666;"><strong>${photo.category}</strong>${photo.description ? ` - ${photo.description}` : ''}</p>
+    <div style="margin-top: 20px;">
+      ${photoBase64s.map(photo => `
+        <div style="page-break-inside: avoid; margin-bottom: 30px;">
+          <p style="font-weight: bold; font-size: 14px; margin-bottom: 8px; color: #1f2937;">Photo ${photo.photoNumber}: ${photo.category}</p>
+          <img src="${photo.base64}" style="width: 100%; max-width: 600px; height: auto; border-radius: 8px; border: 1px solid #ddd;" />
+          ${photo.description ? `<p style="margin-top: 8px; font-size: 12px; color: #666; font-style: italic;">${photo.description}</p>` : ''}
         </div>
       `).join('')}
     </div>
@@ -167,13 +191,16 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       // Generate PDF
       const container = document.createElement("div");
       container.innerHTML = html;
+      document.body.appendChild(container);
       
       const pdfBlob = await html2pdf().from(container).set({
         margin: 10,
         filename: `${reportTitle.replace(/[^a-z0-9]/gi, "_")}.pdf`,
-        html2canvas: { scale: 2 },
+        html2canvas: { scale: 2, useCORS: true, allowTaint: true },
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
       }).outputPdf("blob");
+      
+      document.body.removeChild(container);
       
       const reportPath = `${claimId}/reports/ai_photo_report_${Date.now()}.pdf`;
       
@@ -200,6 +227,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       toast({ title: "Report saved to claim files and downloaded" });
       onOpenChange(false);
     } catch (error: any) {
+      console.error("Error saving report:", error);
       toast({ title: "Error saving report", variant: "destructive" });
     }
   };
