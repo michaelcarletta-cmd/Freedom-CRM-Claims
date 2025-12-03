@@ -848,6 +848,7 @@ export type Database = {
           phone: string | null
           state: string | null
           street: string | null
+          stripe_account_id: string | null
           updated_at: string | null
           user_id: string | null
           zip_code: string | null
@@ -861,6 +862,7 @@ export type Database = {
           phone?: string | null
           state?: string | null
           street?: string | null
+          stripe_account_id?: string | null
           updated_at?: string | null
           user_id?: string | null
           zip_code?: string | null
@@ -874,6 +876,7 @@ export type Database = {
           phone?: string | null
           state?: string | null
           street?: string | null
+          stripe_account_id?: string | null
           updated_at?: string | null
           user_id?: string | null
           zip_code?: string | null
@@ -1282,6 +1285,7 @@ export type Database = {
           license_number: string | null
           license_state: string | null
           phone: string | null
+          stripe_account_id: string | null
           title: string | null
           updated_at: string | null
         }
@@ -1296,6 +1300,7 @@ export type Database = {
           license_number?: string | null
           license_state?: string | null
           phone?: string | null
+          stripe_account_id?: string | null
           title?: string | null
           updated_at?: string | null
         }
@@ -1310,6 +1315,7 @@ export type Database = {
           license_number?: string | null
           license_state?: string | null
           phone?: string | null
+          stripe_account_id?: string | null
           title?: string | null
           updated_at?: string | null
         }
@@ -1324,6 +1330,7 @@ export type Database = {
           is_active: boolean
           name: string
           phone: string | null
+          stripe_account_id: string | null
           updated_at: string
           user_id: string | null
         }
@@ -1335,6 +1342,7 @@ export type Database = {
           is_active?: boolean
           name: string
           phone?: string | null
+          stripe_account_id?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -1346,6 +1354,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           phone?: string | null
+          stripe_account_id?: string | null
           updated_at?: string
           user_id?: string | null
         }
