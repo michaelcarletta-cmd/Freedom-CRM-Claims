@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Send, Loader2, FileText, Paperclip, X } from "lucide-react";
+import { Send, Loader2, FileText, Paperclip, X, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
@@ -48,7 +48,8 @@ export function EmailComposer({
   claimId,
   claim
 }: EmailComposerProps) {
-  const [selectedRecipient, setSelectedRecipient] = useState<Recipient | null>(null);
+  const [selectedRecipients, setSelectedRecipients] = useState<Recipient[]>([]);
+  const [manualEmail, setManualEmail] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
@@ -133,18 +134,18 @@ export function EmailComposer({
   };
 
   // Build recipients list from claim data
-  const recipients: Recipient[] = [];
+  const availableRecipients: Recipient[] = [];
   
   if (claim.policyholder_email) {
-    recipients.push({
+    availableRecipients.push({
       email: claim.policyholder_email,
-      name: claim.policyholder_name,
+      name: claim.policyholder_name || "Policyholder",
       type: "policyholder"
     });
   }
   
   if (claim.adjuster_email) {
-    recipients.push({
+    availableRecipients.push({
       email: claim.adjuster_email,
       name: claim.adjuster_name || "Adjuster",
       type: "adjuster"
@@ -171,7 +172,7 @@ export function EmailComposer({
   // Add contractors to recipients
   contractors?.forEach((contractor: any) => {
     if (contractor.profiles?.email) {
-      recipients.push({
+      availableRecipients.push({
         email: contractor.profiles.email,
         name: contractor.profiles.full_name || "Contractor",
         type: "contractor"
@@ -197,16 +198,52 @@ export function EmailComposer({
 
   // Add referrer to recipients
   if (referrer?.email) {
-    recipients.push({
+    availableRecipients.push({
       email: referrer.email,
       name: referrer.name,
       type: "referrer"
     });
   }
 
+  const addRecipientFromDropdown = (email: string) => {
+    if (email === "_select") return;
+    const recipient = availableRecipients.find(r => r.email === email);
+    if (recipient && !selectedRecipients.some(r => r.email === recipient.email)) {
+      setSelectedRecipients(prev => [...prev, recipient]);
+    }
+  };
+
+  const addManualEmail = () => {
+    const email = manualEmail.trim();
+    if (!email) return;
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    
+    if (selectedRecipients.some(r => r.email === email)) {
+      toast.error("This email is already added");
+      return;
+    }
+    
+    setSelectedRecipients(prev => [...prev, {
+      email,
+      name: email,
+      type: "manual"
+    }]);
+    setManualEmail("");
+  };
+
+  const removeRecipient = (email: string) => {
+    setSelectedRecipients(prev => prev.filter(r => r.email !== email));
+  };
+
   const handleSend = async () => {
-    if (!selectedRecipient || !emailSubject || !body) {
-      toast.error("Please fill in all fields");
+    if (selectedRecipients.length === 0 || !emailSubject || !body) {
+      toast.error("Please add at least one recipient and fill in all fields");
       return;
     }
 
@@ -214,12 +251,14 @@ export function EmailComposer({
     try {
       const { error } = await supabase.functions.invoke("send-email", {
         body: {
-          to: selectedRecipient.email,
+          recipients: selectedRecipients.map(r => ({
+            email: r.email,
+            name: r.name,
+            type: r.type
+          })),
           subject: emailSubject,
           body,
           claimId,
-          recipientName: selectedRecipient.name,
-          recipientType: selectedRecipient.type,
           attachments: selectedFiles.map(f => ({
             filePath: f.file_path,
             fileName: f.file_name,
@@ -230,9 +269,9 @@ export function EmailComposer({
 
       if (error) throw error;
 
-      toast.success("Email sent successfully");
+      toast.success(`Email sent to ${selectedRecipients.length} recipient(s)`);
       onClose();
-      setSelectedRecipient(null);
+      setSelectedRecipients([]);
       setEmailSubject("");
       setBody("");
       setSelectedFiles([]);
@@ -249,7 +288,7 @@ export function EmailComposer({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Compose Email</DialogTitle>
-          <DialogDescription>Send an email to claim contacts</DialogDescription>
+          <DialogDescription>Send an email to one or more recipients</DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">
@@ -274,25 +313,64 @@ export function EmailComposer({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="recipient">To</Label>
-            <Select
-              value={selectedRecipient?.email}
-              onValueChange={(email) => {
-                const recipient = recipients.find(r => r.email === email);
-                setSelectedRecipient(recipient || null);
-              }}
-            >
+            <Label>Recipients</Label>
+            
+            {/* Selected Recipients */}
+            {selectedRecipients.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {selectedRecipients.map((recipient) => (
+                  <Badge key={recipient.email} variant="secondary" className="flex items-center gap-1 pr-1">
+                    <span className="max-w-[200px] truncate">
+                      {recipient.name !== recipient.email ? `${recipient.name} <${recipient.email}>` : recipient.email}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-4 w-4 p-0 hover:bg-transparent"
+                      onClick={() => removeRecipient(recipient.email)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {/* Add from dropdown */}
+            <Select onValueChange={addRecipientFromDropdown} value="_select">
               <SelectTrigger>
-                <SelectValue placeholder="Select recipient" />
+                <SelectValue placeholder="Add from claim contacts..." />
               </SelectTrigger>
               <SelectContent>
-                {recipients.map((recipient) => (
-                  <SelectItem key={recipient.email} value={recipient.email}>
-                    {recipient.name} ({recipient.type}) - {recipient.email}
-                  </SelectItem>
-                ))}
+                <SelectItem value="_select">-- Select a contact --</SelectItem>
+                {availableRecipients
+                  .filter(r => !selectedRecipients.some(sr => sr.email === r.email))
+                  .map((recipient) => (
+                    <SelectItem key={recipient.email} value={recipient.email}>
+                      {recipient.name} ({recipient.type}) - {recipient.email}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
+
+            {/* Add manual email */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter email address manually..."
+                value={manualEmail}
+                onChange={(e) => setManualEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addManualEmail();
+                  }
+                }}
+              />
+              <Button type="button" variant="outline" onClick={addManualEmail}>
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -390,7 +468,7 @@ export function EmailComposer({
             <Button variant="outline" onClick={onClose} disabled={sending}>
               Cancel
             </Button>
-            <Button onClick={handleSend} disabled={sending}>
+            <Button onClick={handleSend} disabled={sending || selectedRecipients.length === 0}>
               {sending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -399,7 +477,7 @@ export function EmailComposer({
               ) : (
                 <>
                   <Send className="h-4 w-4 mr-2" />
-                  Send Email {selectedFiles.length > 0 && `(${selectedFiles.length} files)`}
+                  Send Email {selectedRecipients.length > 0 && `(${selectedRecipients.length})`} {selectedFiles.length > 0 && `+ ${selectedFiles.length} files`}
                 </>
               )}
             </Button>
