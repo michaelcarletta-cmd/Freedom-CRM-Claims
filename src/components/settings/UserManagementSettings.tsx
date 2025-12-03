@@ -5,13 +5,14 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, Trash2, Shield, UserX } from "lucide-react";
+import { UserPlus, Trash2, Shield, UserX, CheckCircle, XCircle, Clock } from "lucide-react";
 
 interface Profile {
   id: string;
   email: string;
   full_name: string | null;
   phone: string | null;
+  approval_status: string;
 }
 
 interface UserRole {
@@ -42,6 +43,7 @@ const ROLE_COLORS = {
 
 export function UserManagementSettings() {
   const [users, setUsers] = useState<UserWithRoles[]>([]);
+  const [pendingUsers, setPendingUsers] = useState<UserWithRoles[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<Record<string, string | undefined>>({});
@@ -82,18 +84,24 @@ export function UserManagementSettings() {
         throw rolesError;
       }
 
-      console.log("Fetched profiles:", profiles);
-      console.log("Fetched roles:", roles);
-
-      // Combine profiles with their roles (including users with no roles so you always see yourself)
+      // Combine profiles with their roles
       const usersWithRoles: UserWithRoles[] = (profiles || [])
         .map((profile) => ({
           ...profile,
+          approval_status: profile.approval_status || 'approved',
           roles: (roles || []).filter((role) => role.user_id === profile.id),
         }));
 
-      console.log("Users with roles:", usersWithRoles);
-      setUsers(usersWithRoles);
+      // Separate pending staff users from approved users
+      const pending = usersWithRoles.filter(
+        u => u.approval_status === 'pending' && u.roles.some(r => r.role === 'staff')
+      );
+      const approved = usersWithRoles.filter(
+        u => u.approval_status !== 'pending' || !u.roles.some(r => r.role === 'staff')
+      );
+
+      setPendingUsers(pending);
+      setUsers(approved);
     } catch (error: any) {
       console.error("Error fetching users:", error);
       toast({
@@ -103,6 +111,58 @@ export function UserManagementSettings() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const approveUser = async (userId: string, userName: string) => {
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ approval_status: 'approved' })
+        .eq("id", userId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `${userName} has been approved and can now access the system.`,
+      });
+
+      fetchUsers();
+    } catch (error: any) {
+      console.error("Failed to approve user", error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to approve user",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const denyUser = async (userId: string, userName: string) => {
+    if (!confirm(`Are you sure you want to deny access to ${userName}? They will not be able to log in.`)) return;
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ approval_status: 'denied' })
+        .eq("id", userId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Access Denied",
+        description: `${userName} has been denied access.`,
+      });
+
+      fetchUsers();
+    } catch (error: any) {
+      console.error("Failed to deny user", error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to deny user",
+        variant: "destructive",
+      });
     }
   };
 
@@ -122,7 +182,6 @@ export function UserManagementSettings() {
             description: "User already has this role",
             variant: "default",
           });
-          // Reset the select
           setSelectedRoles(prev => ({ ...prev, [userId]: undefined }));
           return;
         }
@@ -134,7 +193,6 @@ export function UserManagementSettings() {
         description: "Role added successfully",
       });
 
-      // Reset the select after successful add
       setSelectedRoles(prev => ({ ...prev, [userId]: undefined }));
       fetchUsers();
     } catch (error: any) {
@@ -148,7 +206,6 @@ export function UserManagementSettings() {
   };
 
   const removeRole = async (roleId: string, userId: string, role: string) => {
-    // Prevent removing your own admin role
     if (userId === currentUserId && role === "admin") {
       toast({
         title: "Cannot Remove Your Own Admin Role",
@@ -185,7 +242,6 @@ export function UserManagementSettings() {
   };
 
   const removeAllRoles = async (userId: string, userName: string) => {
-    // Prevent removing your own roles
     if (userId === currentUserId) {
       toast({
         title: "Cannot Remove Your Own Roles",
@@ -222,7 +278,6 @@ export function UserManagementSettings() {
   };
 
   const deleteUser = async (userId: string, userName: string) => {
-    // Prevent deleting yourself
     if (userId === currentUserId) {
       toast({
         title: "Cannot Delete Your Own Account",
@@ -235,7 +290,6 @@ export function UserManagementSettings() {
     if (!confirm(`Are you sure you want to PERMANENTLY DELETE ${userName}? This will remove their account, all roles, and cannot be undone.`)) return;
 
     try {
-      // First delete all their roles
       const { error: rolesError } = await supabase
         .from("user_roles")
         .delete()
@@ -243,7 +297,6 @@ export function UserManagementSettings() {
 
       if (rolesError) throw rolesError;
 
-      // Then delete their profile
       const { error: profileError } = await supabase
         .from("profiles")
         .delete()
@@ -280,6 +333,48 @@ export function UserManagementSettings() {
         </p>
       </div>
 
+      {/* Pending Approvals Section */}
+      {pendingUsers.length > 0 && (
+        <Card className="p-6 border-yellow-500/50 bg-yellow-500/5">
+          <div className="flex items-center gap-2 mb-4">
+            <Clock className="h-5 w-5 text-yellow-500" />
+            <h4 className="font-semibold text-yellow-500">Pending Staff Approvals ({pendingUsers.length})</h4>
+          </div>
+          <div className="space-y-3">
+            {pendingUsers.map((user) => (
+              <div
+                key={user.id}
+                className="flex items-center justify-between p-4 border border-yellow-500/30 rounded-lg bg-background"
+              >
+                <div>
+                  <p className="font-medium">{user.full_name || "Unnamed User"}</p>
+                  <p className="text-sm text-muted-foreground">{user.email}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => approveUser(user.id, user.full_name || user.email)}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                    Approve
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => denyUser(user.id, user.full_name || user.email)}
+                  >
+                    <XCircle className="h-4 w-4 mr-1" />
+                    Deny
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <Card className="p-6">
         <div className="space-y-4">
           {users.map((user) => (
@@ -293,6 +388,9 @@ export function UserManagementSettings() {
                   <p className="text-foreground font-medium">
                     {user.full_name || "Unnamed User"}
                   </p>
+                  {user.approval_status === 'denied' && (
+                    <Badge variant="destructive" className="text-xs">Denied</Badge>
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground mb-3">{user.email}</p>
                 
@@ -405,7 +503,7 @@ export function UserManagementSettings() {
             <p className="font-medium text-foreground">Role Descriptions</p>
             <ul className="text-muted-foreground space-y-1 list-disc list-inside">
               <li><strong>Admin:</strong> Full system access, can manage all settings and users</li>
-              <li><strong>Staff:</strong> Can manage claims, clients, and tasks</li>
+              <li><strong>Staff:</strong> Can manage claims, clients, and tasks (requires approval)</li>
               <li><strong>Client:</strong> Can only view claims they're assigned to via portal</li>
               <li><strong>Contractor:</strong> Can view claims they're assigned to work on</li>
               <li><strong>Referrer:</strong> Can view claims they've referred</li>
