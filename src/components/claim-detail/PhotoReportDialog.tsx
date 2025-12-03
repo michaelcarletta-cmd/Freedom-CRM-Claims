@@ -242,7 +242,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       const weatherExhibitHtml = (isDemandPackage && weatherData && weatherData.daily) ? `
   <div style="margin-top: 40px; page-break-before: always;">
     <h2 style="color: #1e3a5f; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; font-size: 24px;">EXHIBIT B: WEATHER REPORT</h2>
-    <p style="margin-top: 20px; font-size: 14px; color: #666;">Historical weather data retrieved from Open-Meteo Archive API</p>
+    <p style="margin-top: 20px; font-size: 14px; color: #666;">Historical weather data retrieved from Visual Crossing Weather Services</p>
     
     <div style="margin-top: 30px; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
       <h3 style="color: #1e3a5f; margin-bottom: 15px;">Location Information</h3>
@@ -273,7 +273,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
               </td>
               <td style="padding: 12px; border: 1px solid #ddd;">${weatherData.daily.weatherDescription?.[i] || 'N/A'}</td>
               <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.maxTemp?.[i]}°F / ${weatherData.daily.minTemp?.[i]}°F</td>
-              <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.precipitation?.[i]} mm</td>
+              <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.precipitation?.[i]} in</td>
               <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.maxWindSpeed?.[i]} mph</td>
               <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.maxWindGusts?.[i]} mph</td>
             </tr>
@@ -285,7 +285,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     <div style="margin-top: 30px; padding: 15px; background: #eff6ff; border-left: 4px solid #1e3a5f; border-radius: 4px;">
       <h4 style="color: #1e3a5f; margin-bottom: 10px;">Data Source</h4>
       <p style="font-size: 13px; color: #374151;">
-        Weather data sourced from Open-Meteo Historical Weather API. Data includes temperature, precipitation, 
+        Weather data sourced from Visual Crossing Weather Services. Data includes temperature, precipitation, 
         wind speed, and wind gusts recorded at the property location for the loss date and surrounding days.
         This historical weather documentation supports the cause of loss analysis.
       </p>
