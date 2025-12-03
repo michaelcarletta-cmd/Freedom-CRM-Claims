@@ -399,7 +399,11 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error saving report:", error);
-      toast({ title: "Error saving report", variant: "destructive" });
+      toast({ 
+        title: "Error saving report", 
+        description: error.message || "Please try again",
+        variant: "destructive" 
+      });
     }
   };
 
