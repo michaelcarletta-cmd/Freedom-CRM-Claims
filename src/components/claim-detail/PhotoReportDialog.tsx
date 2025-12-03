@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Download, Grid, Columns, Sparkles, Loader2 } from "lucide-react";
+import { FileText, Download, Grid, Columns, Sparkles, Loader2, Cloud, Wind, Droplets, Thermometer } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import html2pdf from "html2pdf.js";
@@ -95,6 +95,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [aiPhotoUrls, setAiPhotoUrls] = useState<{ url: string; fileName: string; category: string; description: string; photoNumber: number }[]>([]);
   const [weatherData, setWeatherData] = useState<any>(null);
+  const [previewingWeather, setPreviewingWeather] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -104,8 +105,31 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       setAiReport(null);
       setAiPhotoUrls([]);
       setWeatherData(null);
+      setPreviewingWeather(false);
     }
   }, [open, claim, photos]);
+
+  const previewWeather = async () => {
+    setPreviewingWeather(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-photos", {
+        body: { claimId, weatherOnly: true },
+      });
+      
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      
+      setWeatherData(data.weatherData);
+      if (!data.weatherData) {
+        toast({ title: "No weather data available", description: "Could not find weather data for this claim's address/date", variant: "destructive" });
+      }
+    } catch (error: any) {
+      console.error("Weather preview error:", error);
+      toast({ title: "Error fetching weather", description: error.message, variant: "destructive" });
+    } finally {
+      setPreviewingWeather(false);
+    }
+  };
 
   const togglePhoto = (photoId: string) => {
     setSelectedPhotos(prev =>
@@ -478,6 +502,89 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
                 ))}
               </div>
             </div>
+
+            {aiReportType === 'demand-package' && (
+              <div className="border rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Cloud className="h-4 w-4 text-muted-foreground" />
+                    <Label className="text-sm font-medium">Weather History Preview</Label>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={previewWeather}
+                    disabled={previewingWeather}
+                  >
+                    {previewingWeather ? (
+                      <>
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <Cloud className="h-3 w-3 mr-1" />
+                        Check Weather
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                {weatherData && weatherData.daily && (
+                  <div className="bg-muted/30 rounded-lg p-3 space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      {weatherData.location}
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-1 px-2">Date</th>
+                            <th className="text-left py-1 px-2">Conditions</th>
+                            <th className="text-center py-1 px-2">
+                              <Thermometer className="h-3 w-3 inline" />
+                            </th>
+                            <th className="text-center py-1 px-2">
+                              <Droplets className="h-3 w-3 inline" />
+                            </th>
+                            <th className="text-center py-1 px-2">
+                              <Wind className="h-3 w-3 inline" /> Speed
+                            </th>
+                            <th className="text-center py-1 px-2">
+                              <Wind className="h-3 w-3 inline" /> Gusts
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {weatherData.daily.dates?.map((date: string, i: number) => (
+                            <tr 
+                              key={date} 
+                              className={i === weatherData.dayIndex ? "bg-amber-100 dark:bg-amber-900/30 font-medium" : ""}
+                            >
+                              <td className="py-1 px-2">
+                                {date}
+                                {i === weatherData.dayIndex && <span className="text-amber-600 ml-1">(Loss)</span>}
+                              </td>
+                              <td className="py-1 px-2">{weatherData.daily.weatherDescription?.[i]}</td>
+                              <td className="text-center py-1 px-2">{weatherData.daily.maxTemp?.[i]}°/{weatherData.daily.minTemp?.[i]}°F</td>
+                              <td className="text-center py-1 px-2">{weatherData.daily.precipitation?.[i]} mm</td>
+                              <td className="text-center py-1 px-2">{weatherData.daily.maxWindSpeed?.[i]} mph</td>
+                              <td className="text-center py-1 px-2">{weatherData.daily.maxWindGusts?.[i]} mph</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                
+                {!weatherData && !previewingWeather && (
+                  <p className="text-xs text-muted-foreground">
+                    Click "Check Weather" to preview historical wind, hail, and precipitation data for the loss date.
+                  </p>
+                )}
+              </div>
+            )}
 
             <PhotoSelector 
               photos={photos} 
