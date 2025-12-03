@@ -11,7 +11,6 @@ import { ClaimFiles } from "@/components/claim-detail/ClaimFiles";
 import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
 import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
-import { ClaimTemplates } from "@/components/claim-detail/ClaimTemplates";
 import { ClaimAccessManagement } from "@/components/claim-detail/ClaimAccessManagement";
 import { EditClaimDialog } from "@/components/claim-detail/EditClaimDialog";
 import { DeleteClaimDialog } from "@/components/claim-detail/DeleteClaimDialog";
@@ -284,19 +283,19 @@ const ClaimDetail = () => {
           <TabsTrigger value="overview" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Overview
           </TabsTrigger>
-          <TabsTrigger value="communication" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-            Communication
+          <TabsTrigger value="activity" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+            Notes & Activity
           </TabsTrigger>
           {isStaffOrAdmin && (
             <TabsTrigger value="tasks" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
               Tasks
             </TabsTrigger>
           )}
+          <TabsTrigger value="communication" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+            Communication
+          </TabsTrigger>
           <TabsTrigger value="inspections" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Inspections
-          </TabsTrigger>
-          <TabsTrigger value="activity" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-            Notes & Activity
           </TabsTrigger>
           <TabsTrigger value="files" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Files
@@ -305,14 +304,9 @@ const ClaimDetail = () => {
             Accounting
           </TabsTrigger>
           {isStaffOrAdmin && (
-            <>
-              <TabsTrigger value="templates" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-                Templates
-              </TabsTrigger>
-              <TabsTrigger value="access" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-                Portal Access
-              </TabsTrigger>
-            </>
+            <TabsTrigger value="access" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+              Portal Access
+            </TabsTrigger>
           )}
         </TabsList>
 
@@ -324,11 +318,8 @@ const ClaimDetail = () => {
           />
         </TabsContent>
 
-        <TabsContent value="communication" className="mt-6">
-          <ClaimCommunicationTab 
-            claimId={id || ""} 
-            claim={claim}
-          />
+        <TabsContent value="activity" className="mt-6">
+          <ClaimActivity claimId={id || ""} />
         </TabsContent>
 
         {isStaffOrAdmin && (
@@ -337,16 +328,19 @@ const ClaimDetail = () => {
           </TabsContent>
         )}
 
+        <TabsContent value="communication" className="mt-6">
+          <ClaimCommunicationTab 
+            claimId={id || ""} 
+            claim={claim}
+          />
+        </TabsContent>
+
         <TabsContent value="inspections" className="mt-6">
           <ClaimInspections claimId={id || ""} />
         </TabsContent>
 
-        <TabsContent value="activity" className="mt-6">
-          <ClaimActivity claimId={id || ""} />
-        </TabsContent>
-
         <TabsContent value="files" className="mt-6">
-          <ClaimFiles claimId={id || ""} />
+          <ClaimFiles claimId={id || ""} claim={claim} isStaffOrAdmin={isStaffOrAdmin} />
         </TabsContent>
 
         <TabsContent value="accounting" className="mt-6">
@@ -354,15 +348,9 @@ const ClaimDetail = () => {
         </TabsContent>
 
         {isStaffOrAdmin && (
-          <>
-            <TabsContent value="templates" className="mt-6">
-              <ClaimTemplates claimId={id!} claim={claim} />
-            </TabsContent>
-
-            <TabsContent value="access" className="mt-6">
-              <ClaimAccessManagement claimId={id!} />
-            </TabsContent>
-          </>
+          <TabsContent value="access" className="mt-6">
+            <ClaimAccessManagement claimId={id!} />
+          </TabsContent>
         )}
       </Tabs>
 
