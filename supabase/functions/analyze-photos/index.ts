@@ -732,7 +732,7 @@ REMEMBER: Be SPECIFIC and DETAILED. Each photo should have substantial analysis,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "gpt-4o", // GPT-4o for vision capabilities
+            model: "gpt-4o-mini", // GPT-4o-mini for cost-effective vision
             messages: [
               { role: "system", content: systemPrompt },
               {
@@ -787,7 +787,7 @@ REMEMBER: Be SPECIFIC and DETAILED. Each photo should have substantial analysis,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o",
+          model: "gpt-4o-mini",
           messages: [
             { role: "system", content: systemPrompt },
             {
