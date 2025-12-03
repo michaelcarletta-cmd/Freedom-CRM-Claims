@@ -1,10 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Maximum file size: 5MB to avoid memory issues
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 // Split text into chunks for RAG
 function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[] {
@@ -22,8 +26,55 @@ function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[
   return chunks;
 }
 
-// Extract text from document using URL (no download needed)
-async function extractTextFromDocument(fileUrl: string, fileName: string): Promise<string> {
+// Get mime type from file type
+function getMimeType(fileType: string, fileName: string): string {
+  if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
+    return 'application/pdf';
+  }
+  if (fileType.includes('word') || fileName.match(/\.docx?$/i)) {
+    return fileType.includes('docx') 
+      ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+      : 'application/msword';
+  }
+  if (fileType.includes('video') || fileName.match(/\.(mp4|mov|avi|mkv|webm)$/i)) {
+    return 'video/mp4';
+  }
+  if (fileType.includes('audio') || fileName.match(/\.(mp3|wav|m4a)$/i)) {
+    return 'audio/mpeg';
+  }
+  return fileType || 'application/octet-stream';
+}
+
+// Download file and convert to base64 data URL
+async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize: number | null): Promise<string> {
+  // Check file size before downloading
+  if (fileSize && fileSize > MAX_FILE_SIZE) {
+    throw new Error(`File too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum supported size is 5MB. Please upload a smaller file.`);
+  }
+  
+  console.log(`Downloading file for processing...`);
+  
+  const response = await fetch(fileUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download file: ${response.status}`);
+  }
+  
+  const arrayBuffer = await response.arrayBuffer();
+  
+  // Double-check size after download
+  if (arrayBuffer.byteLength > MAX_FILE_SIZE) {
+    throw new Error(`File too large (${Math.round(arrayBuffer.byteLength / 1024 / 1024)}MB). Maximum supported size is 5MB.`);
+  }
+  
+  const base64 = base64Encode(arrayBuffer);
+  
+  console.log(`Downloaded file: ${arrayBuffer.byteLength} bytes, mime: ${mimeType}`);
+  
+  return `data:${mimeType};base64,${base64}`;
+}
+
+// Extract text from document using base64 data
+async function extractTextFromDocument(dataUrl: string, fileName: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
@@ -47,7 +98,7 @@ async function extractTextFromDocument(fileUrl: string, fileName: string): Promi
             },
             {
               type: 'image_url',
-              image_url: { url: fileUrl }
+              image_url: { url: dataUrl }
             }
           ]
         }
@@ -75,8 +126,8 @@ async function extractTextFromDocument(fileUrl: string, fileName: string): Promi
   return extractedText;
 }
 
-// Transcribe audio/video using URL
-async function transcribeMedia(fileUrl: string, fileName: string): Promise<string> {
+// Transcribe audio/video using base64 data
+async function transcribeMedia(dataUrl: string, fileName: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
@@ -100,7 +151,7 @@ async function transcribeMedia(fileUrl: string, fileName: string): Promise<strin
             },
             {
               type: 'image_url',
-              image_url: { url: fileUrl }
+              image_url: { url: dataUrl }
             }
           ]
         }
@@ -165,6 +216,20 @@ serve(async (req) => {
       });
     }
 
+    // Check file size before processing
+    if (document.file_size && document.file_size > MAX_FILE_SIZE) {
+      const errorMsg = `File too large (${Math.round(document.file_size / 1024 / 1024)}MB). Maximum supported size is 5MB. Please upload a smaller file.`;
+      await supabase
+        .from('ai_knowledge_documents')
+        .update({ status: 'failed', error_message: errorMsg })
+        .eq('id', documentId);
+      
+      return new Response(JSON.stringify({ error: errorMsg }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Update status to processing
     await supabase
       .from('ai_knowledge_documents')
@@ -182,26 +247,30 @@ serve(async (req) => {
 
     const fileUrl = signedUrlData.signedUrl;
     const fileType = document.file_type.toLowerCase();
+    const mimeType = getMimeType(fileType, document.file_name);
 
     console.log(`Processing document: ${document.file_name}, type: ${fileType}, size: ${document.file_size || 'unknown'}`);
 
+    // Download and encode file as base64 data URL
+    const dataUrl = await downloadAndEncodeFile(fileUrl, mimeType, document.file_size);
+
     let extractedText = '';
 
-    // Process based on file type - pass URL directly to AI (no download needed)
+    // Process based on file type
     if (fileType === 'application/pdf' || document.file_name.endsWith('.pdf')) {
-      extractedText = await extractTextFromDocument(fileUrl, document.file_name);
+      extractedText = await extractTextFromDocument(dataUrl, document.file_name);
     } else if (
       fileType.includes('video') || 
       fileType.includes('audio') ||
       document.file_name.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)
     ) {
-      extractedText = await transcribeMedia(fileUrl, document.file_name);
+      extractedText = await transcribeMedia(dataUrl, document.file_name);
     } else if (
       fileType.includes('word') || 
       fileType.includes('document') ||
       document.file_name.match(/\.(docx|doc)$/i)
     ) {
-      extractedText = await extractTextFromDocument(fileUrl, document.file_name);
+      extractedText = await extractTextFromDocument(dataUrl, document.file_name);
     } else {
       throw new Error(`Unsupported file type: ${fileType}`);
     }
