@@ -303,12 +303,12 @@ export const AutomationsSettings = () => {
       </div>
 
       <Tabs defaultValue="workflows" className="space-y-4">
-        <TabsList className="bg-muted/40">
-          <TabsTrigger value="workflows" className="flex items-center gap-2">
+        <TabsList className="flex flex-col md:flex-row h-auto w-full bg-muted/40 p-2 gap-1">
+          <TabsTrigger value="workflows" className="w-full md:w-auto justify-start text-base font-medium px-4 flex items-center gap-2">
             <Zap className="h-4 w-4" />
             Workflows
           </TabsTrigger>
-          <TabsTrigger value="task-automations" className="flex items-center gap-2">
+          <TabsTrigger value="task-automations" className="w-full md:w-auto justify-start text-base font-medium px-4 flex items-center gap-2">
             <ListTodo className="h-4 w-4" />
             Task Automations
           </TabsTrigger>

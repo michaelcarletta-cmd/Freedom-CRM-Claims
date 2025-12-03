@@ -36,10 +36,11 @@ const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a,
 
 export const AIKnowledgeBaseSettings = () => {
   const queryClient = useQueryClient();
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [category, setCategory] = useState<string>("");
   const [description, setDescription] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
 
   const { data: documents, isLoading } = useQuery({
@@ -86,81 +87,100 @@ export const AIKnowledgeBaseSettings = () => {
   });
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = Array.from(e.target.files || []);
+    const validFiles: File[] = [];
+    
+    for (const file of files) {
       if (file.size > 20 * 1024 * 1024) {
-        toast.error("File size must be less than 20MB");
-        return;
+        toast.error(`${file.name} is too large (max 20MB)`);
+        continue;
       }
-      setSelectedFile(file);
+      validFiles.push(file);
     }
+    
+    setSelectedFiles(validFiles);
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !category) {
-      toast.error("Please select a file and category");
+    if (selectedFiles.length === 0 || !category) {
+      toast.error("Please select file(s) and category");
       return;
     }
 
     setUploading(true);
+    setUploadProgress({ current: 0, total: selectedFiles.length });
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Upload file to storage
-      const fileExt = selectedFile.name.split(".").pop();
-      const filePath = `${user.id}/${Date.now()}-${selectedFile.name}`;
+      let successCount = 0;
+      let failCount = 0;
 
-      const { error: uploadError } = await supabase.storage
-        .from("ai-knowledge-base")
-        .upload(filePath, selectedFile);
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        setUploadProgress({ current: i + 1, total: selectedFiles.length });
 
-      if (uploadError) throw uploadError;
+        try {
+          // Upload file to storage
+          const filePath = `${user.id}/${Date.now()}-${file.name}`;
 
-      // Create document record
-      const { data: docData, error: docError } = await supabase
-        .from("ai_knowledge_documents")
-        .insert({
-          file_name: selectedFile.name,
-          file_path: filePath,
-          file_type: selectedFile.type,
-          file_size: selectedFile.size,
-          category,
-          description: description || null,
-          uploaded_by: user.id,
-          status: "pending",
-        })
-        .select()
-        .single();
+          const { error: uploadError } = await supabase.storage
+            .from("ai-knowledge-base")
+            .upload(filePath, file);
 
-      if (docError) throw docError;
+          if (uploadError) throw uploadError;
 
-      // Trigger processing
-      const { error: processError } = await supabase.functions.invoke(
-        "process-knowledge-document",
-        { body: { documentId: docData.id } }
-      );
+          // Create document record
+          const { data: docData, error: docError } = await supabase
+            .from("ai_knowledge_documents")
+            .insert({
+              file_name: file.name,
+              file_path: filePath,
+              file_type: file.type,
+              file_size: file.size,
+              category,
+              description: description || null,
+              uploaded_by: user.id,
+              status: "pending",
+            })
+            .select()
+            .single();
 
-      if (processError) {
-        console.error("Processing trigger error:", processError);
-        // Don't throw - the document is uploaded, just processing failed to start
-        toast.warning("Document uploaded but processing may be delayed");
-      } else {
-        toast.success("Document uploaded and processing started");
+          if (docError) throw docError;
+
+          // Trigger processing (don't await, let it run in background)
+          supabase.functions.invoke(
+            "process-knowledge-document",
+            { body: { documentId: docData.id } }
+          ).catch(err => console.error("Processing trigger error:", err));
+
+          successCount++;
+        } catch (error: any) {
+          console.error(`Upload error for ${file.name}:`, error);
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`${successCount} file(s) uploaded and processing started`);
+      }
+      if (failCount > 0) {
+        toast.error(`${failCount} file(s) failed to upload`);
       }
 
       // Reset form
-      setSelectedFile(null);
+      setSelectedFiles([]);
       setCategory("");
       setDescription("");
       queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
 
     } catch (error: any) {
       console.error("Upload error:", error);
-      toast.error(error.message || "Failed to upload document");
+      toast.error(error.message || "Failed to upload documents");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -203,17 +223,18 @@ export const AIKnowledgeBaseSettings = () => {
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>File</Label>
+              <Label>File(s) - Select multiple for bulk upload</Label>
               <Input
                 type="file"
                 accept={ACCEPTED_FILE_TYPES}
                 onChange={handleFileSelect}
                 disabled={uploading}
                 className="cursor-pointer"
+                multiple
               />
-              {selectedFile && (
+              {selectedFiles.length > 0 && (
                 <p className="text-sm text-muted-foreground">
-                  Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                  Selected: {selectedFiles.length} file(s) ({(selectedFiles.reduce((acc, f) => acc + f.size, 0) / 1024 / 1024).toFixed(2)} MB total)
                 </p>
               )}
             </div>
@@ -248,21 +269,24 @@ export const AIKnowledgeBaseSettings = () => {
 
           <Button
             onClick={handleUpload}
-            disabled={!selectedFile || !category || uploading}
+            disabled={selectedFiles.length === 0 || !category || uploading}
             className="w-full md:w-auto"
           >
             {uploading ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Uploading...
+                {uploadProgress ? `Uploading ${uploadProgress.current}/${uploadProgress.total}...` : 'Uploading...'}
               </>
             ) : (
               <>
                 <Upload className="h-4 w-4 mr-2" />
-                Upload Document
+                Upload {selectedFiles.length > 1 ? `${selectedFiles.length} Documents` : 'Document'}
               </>
             )}
           </Button>
+          <p className="text-xs text-muted-foreground mt-2">
+            Processing time: PDFs/Word docs take 30-60 seconds. Videos/audio may take 2-5 minutes for transcription.
+          </p>
         </CardContent>
       </Card>
 

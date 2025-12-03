@@ -173,12 +173,12 @@ export const TemplatesSettings = () => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="documents" className="space-y-6">
-        <TabsList className="bg-muted/40">
-          <TabsTrigger value="documents" className="flex items-center gap-2">
+        <TabsList className="flex flex-col md:flex-row h-auto w-full bg-muted/40 p-2 gap-1">
+          <TabsTrigger value="documents" className="w-full md:w-auto justify-start text-base font-medium px-4 flex items-center gap-2">
             <FileText className="h-4 w-4" />
             Document Templates
           </TabsTrigger>
-          <TabsTrigger value="email" className="flex items-center gap-2">
+          <TabsTrigger value="email" className="w-full md:w-auto justify-start text-base font-medium px-4 flex items-center gap-2">
             <Mail className="h-4 w-4" />
             Email Templates
           </TabsTrigger>
