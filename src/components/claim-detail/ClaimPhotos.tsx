@@ -101,6 +101,13 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
     fetchPhotos();
   }, [claimId]);
 
+  // Connect camera stream to video element when both are available
+  useEffect(() => {
+    if (cameraDialogOpen && cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraDialogOpen, cameraStream]);
+
   const fetchPhotos = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -236,15 +243,12 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
 
   // Camera functions
   const startCamera = async () => {
+    setCameraDialogOpen(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: "environment" } 
       });
       setCameraStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-      setCameraDialogOpen(true);
     } catch (error) {
       console.error("Camera error:", error);
       toast({ 
@@ -252,6 +256,7 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
         description: "Please allow camera access to take photos.",
         variant: "destructive" 
       });
+      setCameraDialogOpen(false);
     }
   };
 
