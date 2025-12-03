@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { FileText, Download, Grid, Columns, Sparkles, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import html2pdf from "html2pdf.js";
 
 interface ClaimPhoto {
   id: string;
@@ -127,60 +128,53 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     if (!aiReport) return;
     
     try {
-      // Create HTML report with AI content
+      // Create HTML content for PDF
       const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>${reportTitle}</title>
-  <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
-    h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }
-    h2 { color: #2563eb; margin-top: 30px; }
-    h3 { color: #4b5563; }
-    .header { margin-bottom: 30px; }
-    .claim-info { background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-    .ai-badge { background: #8b5cf6; color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; }
-    pre { white-space: pre-wrap; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>${reportTitle}</h1>
-    <span class="ai-badge">AI Generated</span>
+<div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6;">
+  <div style="margin-bottom: 30px;">
+    <h1 style="border-bottom: 2px solid #333; padding-bottom: 10px;">${reportTitle}</h1>
+    <span style="background: #8b5cf6; color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px;">AI Generated</span>
     <p>Generated on ${new Date().toLocaleString()}</p>
   </div>
-  <div class="claim-info">
+  <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
     <p><strong>Claim Number:</strong> ${claim?.claim_number || 'N/A'}</p>
     <p><strong>Policyholder:</strong> ${claim?.policyholder_name || 'N/A'}</p>
     <p><strong>Property:</strong> ${claim?.policyholder_address || 'N/A'}</p>
     <p><strong>Loss Type:</strong> ${claim?.loss_type || 'N/A'}</p>
   </div>
-  <div class="content">
-    ${aiReport.replace(/\n/g, '<br>').replace(/##\s(.*)/g, '<h2>$1</h2>').replace(/###\s(.*)/g, '<h3>$1</h3>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}
+  <div>
+    ${aiReport.replace(/\n/g, '<br>').replace(/##\s(.*)/g, '<h2 style="color: #2563eb; margin-top: 30px;">$1</h2>').replace(/###\s(.*)/g, '<h3 style="color: #4b5563;">$1</h3>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}
   </div>
-</body>
-</html>`;
+</div>`;
 
-      const blob = new Blob([html], { type: "text/html" });
-      const reportPath = `${claimId}/reports/ai_photo_report_${Date.now()}.html`;
+      // Generate PDF
+      const container = document.createElement("div");
+      container.innerHTML = html;
       
-      await supabase.storage.from("claim-files").upload(reportPath, blob);
+      const pdfBlob = await html2pdf().from(container).set({
+        margin: 10,
+        filename: `${reportTitle.replace(/[^a-z0-9]/gi, "_")}.pdf`,
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+      }).outputPdf("blob");
+      
+      const reportPath = `${claimId}/reports/ai_photo_report_${Date.now()}.pdf`;
+      
+      await supabase.storage.from("claim-files").upload(reportPath, pdfBlob);
       
       await supabase.from("claim_files").insert({
         claim_id: claimId,
-        file_name: `AI Photo Report - ${new Date().toLocaleDateString()}.html`,
+        file_name: `AI Photo Report - ${new Date().toLocaleDateString()}.pdf`,
         file_path: reportPath,
-        file_type: "text/html",
-        file_size: blob.size,
+        file_type: "application/pdf",
+        file_size: pdfBlob.size,
       });
 
-      // Download the report
-      const url = URL.createObjectURL(blob);
+      // Download the PDF
+      const url = URL.createObjectURL(pdfBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${reportTitle.replace(/[^a-z0-9]/gi, "_")}.html`;
+      a.download = `${reportTitle.replace(/[^a-z0-9]/gi, "_")}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -436,7 +430,7 @@ function PhotoSelector({
           <Button variant="outline" size="sm" onClick={selectNone}>Clear</Button>
         </div>
       </div>
-      <div className="grid grid-cols-4 md:grid-cols-6 gap-2 max-h-48 overflow-auto p-2 border rounded">
+      <div className="grid grid-cols-6 md:grid-cols-10 gap-1 max-h-40 overflow-auto p-2 border rounded">
         {photos.map(photo => (
           <PhotoThumbnail
             key={photo.id}
@@ -509,8 +503,8 @@ function PhotoThumbnail({
       )}
       {selected && (
         <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-          <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-            <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+          <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+            <svg className="w-2 h-2 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
               <polyline points="20 6 9 17 4 12" />
             </svg>
           </div>
