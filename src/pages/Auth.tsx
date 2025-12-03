@@ -101,6 +101,11 @@ export default function Auth() {
         title: "Account Created",
         description: "Your account is pending approval. An administrator will review your request.",
       });
+
+      // Notify admins of the new signup (fire and forget)
+      supabase.functions.invoke('notify-admin-pending-signup', {
+        body: { userName: fullName, userEmail: email }
+      }).catch(err => console.error('Failed to notify admins:', err));
     }
 
     setLoading(false);
