@@ -272,7 +272,12 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
       };
 
       setAiMessages((prev) => [...prev, reportMessage]);
-      toast.success(`${reportNames[reportType]} generated`);
+      
+      if (data.savedFile) {
+        toast.success(`${reportNames[reportType]} generated and saved to AI Assistant Reports folder as "${data.savedFile.fileName}"`);
+      } else {
+        toast.success(`${reportNames[reportType]} generated`);
+      }
     } catch (error: any) {
       console.error("Error generating report:", error);
       toast.error(error.message || "Failed to generate report");
