@@ -164,7 +164,9 @@ const EstimateAssistant = ({ claimId, photos, photoUrls = {} }: EstimateAssistan
                               <img 
                                 src={imageUrl} 
                                 alt={photo.file_name}
-                                className="w-full h-20 object-cover"
+                                loading="lazy"
+                                decoding="async"
+                                className="w-full h-20 object-cover bg-muted"
                               />
                             ) : (
                               <div className="w-full h-20 bg-muted flex items-center justify-center">
