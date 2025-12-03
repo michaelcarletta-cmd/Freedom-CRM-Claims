@@ -5,10 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Send, Loader2, FileText } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Send, Loader2, FileText, Paperclip, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 
 interface Recipient {
   email: string;
@@ -22,6 +25,14 @@ interface EmailTemplate {
   subject: string;
   body: string;
   category: string | null;
+}
+
+interface ClaimFile {
+  id: string;
+  file_name: string;
+  file_path: string;
+  file_type: string | null;
+  file_size: number | null;
 }
 
 interface EmailComposerProps {
@@ -41,6 +52,8 @@ export function EmailComposer({
   const [emailSubject, setEmailSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<ClaimFile[]>([]);
+  const [showFileSelector, setShowFileSelector] = useState(false);
 
   // Fetch email templates
   const { data: emailTemplates } = useQuery({
@@ -53,6 +66,21 @@ export function EmailComposer({
         .order("name");
       if (error) throw error;
       return data as EmailTemplate[];
+    },
+    enabled: isOpen,
+  });
+
+  // Fetch claim files for attachments
+  const { data: claimFiles } = useQuery({
+    queryKey: ["claim-files-for-email", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_files")
+        .select("id, file_name, file_path, file_type, file_size")
+        .eq("claim_id", claimId)
+        .order("file_name");
+      if (error) throw error;
+      return data as ClaimFile[];
     },
     enabled: isOpen,
   });
@@ -80,6 +108,28 @@ export function EmailComposer({
       setEmailSubject(replaceMergeFields(template.subject));
       setBody(replaceMergeFields(template.body));
     }
+  };
+
+  const toggleFileSelection = (file: ClaimFile) => {
+    setSelectedFiles(prev => {
+      const isSelected = prev.some(f => f.id === file.id);
+      if (isSelected) {
+        return prev.filter(f => f.id !== file.id);
+      } else {
+        return [...prev, file];
+      }
+    });
+  };
+
+  const removeFile = (fileId: string) => {
+    setSelectedFiles(prev => prev.filter(f => f.id !== fileId));
+  };
+
+  const formatFileSize = (bytes: number | null) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   // Build recipients list from claim data
@@ -170,6 +220,11 @@ export function EmailComposer({
           claimId,
           recipientName: selectedRecipient.name,
           recipientType: selectedRecipient.type,
+          attachments: selectedFiles.map(f => ({
+            filePath: f.file_path,
+            fileName: f.file_name,
+            fileType: f.file_type
+          }))
         }
       });
 
@@ -180,6 +235,7 @@ export function EmailComposer({
       setSelectedRecipient(null);
       setEmailSubject("");
       setBody("");
+      setSelectedFiles([]);
     } catch (error: any) {
       console.error("Error sending email:", error);
       toast.error(error.message || "Failed to send email");
@@ -190,7 +246,7 @@ export function EmailComposer({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Compose Email</DialogTitle>
           <DialogDescription>Send an email to claim contacts</DialogDescription>
@@ -256,8 +312,78 @@ export function EmailComposer({
               placeholder="Type your message here..."
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              className="min-h-[200px]"
+              className="min-h-[150px]"
             />
+          </div>
+
+          {/* File Attachments Section */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Attachments</Label>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowFileSelector(!showFileSelector)}
+              >
+                <Paperclip className="h-4 w-4 mr-2" />
+                {showFileSelector ? "Hide Files" : "Add Files"}
+              </Button>
+            </div>
+
+            {/* Selected Files Display */}
+            {selectedFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {selectedFiles.map(file => (
+                  <Badge key={file.id} variant="secondary" className="flex items-center gap-1 pr-1">
+                    <FileText className="h-3 w-3" />
+                    <span className="max-w-[150px] truncate">{file.file_name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-4 w-4 p-0 hover:bg-transparent"
+                      onClick={() => removeFile(file.id)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {/* File Selector */}
+            {showFileSelector && (
+              <div className="border rounded-md p-2 bg-muted/30">
+                <ScrollArea className="h-[150px]">
+                  {claimFiles && claimFiles.length > 0 ? (
+                    <div className="space-y-1">
+                      {claimFiles.map(file => (
+                        <div 
+                          key={file.id}
+                          className="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer"
+                          onClick={() => toggleFileSelection(file)}
+                        >
+                          <Checkbox 
+                            checked={selectedFiles.some(f => f.id === file.id)}
+                            onCheckedChange={() => toggleFileSelection(file)}
+                          />
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <span className="flex-1 truncate text-sm">{file.file_name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatFileSize(file.file_size)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No files uploaded to this claim yet
+                    </p>
+                  )}
+                </ScrollArea>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2 justify-end">
@@ -273,7 +399,7 @@ export function EmailComposer({
               ) : (
                 <>
                   <Send className="h-4 w-4 mr-2" />
-                  Send Email
+                  Send Email {selectedFiles.length > 0 && `(${selectedFiles.length} files)`}
                 </>
               )}
             </Button>
