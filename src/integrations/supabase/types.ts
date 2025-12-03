@@ -190,6 +190,53 @@ export type Database = {
         }
         Relationships: []
       }
+      claim_adjusters: {
+        Row: {
+          adjuster_email: string | null
+          adjuster_name: string
+          adjuster_phone: string | null
+          claim_id: string
+          company: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_primary: boolean | null
+          notes: string | null
+        }
+        Insert: {
+          adjuster_email?: string | null
+          adjuster_name: string
+          adjuster_phone?: string | null
+          claim_id: string
+          company?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_primary?: boolean | null
+          notes?: string | null
+        }
+        Update: {
+          adjuster_email?: string | null
+          adjuster_name?: string
+          adjuster_phone?: string | null
+          claim_id?: string
+          company?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_primary?: boolean | null
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_adjusters_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_checks: {
         Row: {
           amount: number
