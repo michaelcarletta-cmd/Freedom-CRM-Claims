@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Download, Grid, Columns } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FileText, Download, Grid, Columns, Sparkles, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -30,6 +31,29 @@ interface PhotoReportDialogProps {
   claimId: string;
 }
 
+const AI_REPORT_TYPES = [
+  { 
+    id: "full-report", 
+    name: "Full Photo Report", 
+    description: "Comprehensive analysis of all photos with damage assessment and recommendations" 
+  },
+  { 
+    id: "damage-assessment", 
+    name: "Damage Assessment", 
+    description: "Focused analysis of visible damage with severity ratings" 
+  },
+  { 
+    id: "before-after", 
+    name: "Before/After Analysis", 
+    description: "Compare before and after photos to document repairs" 
+  },
+  { 
+    id: "quick-analysis", 
+    name: "Quick Summary", 
+    description: "Brief overview of damage for quick reference" 
+  },
+];
+
 export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }: PhotoReportDialogProps) {
   const [reportTitle, setReportTitle] = useState("");
   const [reportType, setReportType] = useState<"grid" | "before-after" | "detailed">("grid");
@@ -37,12 +61,16 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   const [includeDescriptions, setIncludeDescriptions] = useState(true);
   const [includeCategories, setIncludeCategories] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [activeTab, setActiveTab] = useState<"standard" | "ai">("ai");
+  const [aiReportType, setAiReportType] = useState("full-report");
+  const [aiReport, setAiReport] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     if (open) {
       setReportTitle(`Photo Report - ${claim?.policyholder_name || "Claim"} - ${new Date().toLocaleDateString()}`);
       setSelectedPhotos(photos.map(p => p.id));
+      setAiReport(null);
     }
   }, [open, claim, photos]);
 
@@ -57,7 +85,115 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   const selectAll = () => setSelectedPhotos(photos.map(p => p.id));
   const selectNone = () => setSelectedPhotos([]);
 
-  const generateReport = async () => {
+  const generateAIReport = async () => {
+    if (selectedPhotos.length === 0) {
+      toast({ title: "Please select at least one photo", variant: "destructive" });
+      return;
+    }
+
+    setGenerating(true);
+    setAiReport(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-photos", {
+        body: {
+          photoIds: selectedPhotos,
+          claimId,
+          reportType: aiReportType,
+        },
+      });
+
+      if (error) throw error;
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setAiReport(data.report);
+      toast({ title: "AI analysis complete" });
+    } catch (error: any) {
+      console.error("AI report error:", error);
+      toast({ 
+        title: "Error generating AI report", 
+        description: error.message || "Please try again",
+        variant: "destructive" 
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const saveAIReport = async () => {
+    if (!aiReport) return;
+    
+    try {
+      // Create HTML report with AI content
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${reportTitle}</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+    h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }
+    h2 { color: #2563eb; margin-top: 30px; }
+    h3 { color: #4b5563; }
+    .header { margin-bottom: 30px; }
+    .claim-info { background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .ai-badge { background: #8b5cf6; color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>${reportTitle}</h1>
+    <span class="ai-badge">AI Generated</span>
+    <p>Generated on ${new Date().toLocaleString()}</p>
+  </div>
+  <div class="claim-info">
+    <p><strong>Claim Number:</strong> ${claim?.claim_number || 'N/A'}</p>
+    <p><strong>Policyholder:</strong> ${claim?.policyholder_name || 'N/A'}</p>
+    <p><strong>Property:</strong> ${claim?.policyholder_address || 'N/A'}</p>
+    <p><strong>Loss Type:</strong> ${claim?.loss_type || 'N/A'}</p>
+  </div>
+  <div class="content">
+    ${aiReport.replace(/\n/g, '<br>').replace(/##\s(.*)/g, '<h2>$1</h2>').replace(/###\s(.*)/g, '<h3>$1</h3>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}
+  </div>
+</body>
+</html>`;
+
+      const blob = new Blob([html], { type: "text/html" });
+      const reportPath = `${claimId}/reports/ai_photo_report_${Date.now()}.html`;
+      
+      await supabase.storage.from("claim-files").upload(reportPath, blob);
+      
+      await supabase.from("claim_files").insert({
+        claim_id: claimId,
+        file_name: `AI Photo Report - ${new Date().toLocaleDateString()}.html`,
+        file_path: reportPath,
+        file_type: "text/html",
+        file_size: blob.size,
+      });
+
+      // Download the report
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${reportTitle.replace(/[^a-z0-9]/gi, "_")}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({ title: "Report saved to claim files and downloaded" });
+      onOpenChange(false);
+    } catch (error: any) {
+      toast({ title: "Error saving report", variant: "destructive" });
+    }
+  };
+
+  const generateStandardReport = async () => {
     if (selectedPhotos.length === 0) {
       toast({ title: "Please select at least one photo", variant: "destructive" });
       return;
@@ -67,24 +203,18 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     try {
       const selectedPhotoData = photos.filter(p => selectedPhotos.includes(p.id));
       
-      // Get signed URLs for all selected photos
       const photoUrls = await Promise.all(
         selectedPhotoData.map(async (photo) => {
           const path = photo.annotated_file_path || photo.file_path;
           const { data } = await supabase.storage
             .from("claim-files")
             .createSignedUrl(path, 3600);
-          return {
-            ...photo,
-            signedUrl: data?.signedUrl || "",
-          };
+          return { ...photo, signedUrl: data?.signedUrl || "" };
         })
       );
 
-      // Generate HTML report
       const html = generateReportHtml(photoUrls, reportTitle, reportType, includeDescriptions, includeCategories, claim);
       
-      // Create blob and download
       const blob = new Blob([html], { type: "text/html" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -95,11 +225,9 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      // Also save to claim files
       const reportPath = `${claimId}/reports/photo_report_${Date.now()}.html`;
       await supabase.storage.from("claim-files").upload(reportPath, blob);
       
-      // Create file record
       await supabase.from("claim_files").insert({
         claim_id: claimId,
         file_name: `${reportTitle}.html`,
@@ -118,115 +246,207 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     }
   };
 
-  const beforeAfterPairs = photos
-    .filter(p => p.before_after_pair_id && p.before_after_type === "before")
-    .map(beforePhoto => {
-      const afterPhoto = photos.find(
-        p => p.before_after_pair_id === beforePhoto.before_after_pair_id && p.before_after_type === "after"
-      );
-      return { before: beforePhoto, after: afterPhoto };
-    })
-    .filter(pair => pair.after);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
         <DialogHeader>
           <DialogTitle>Generate Photo Report</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div>
-            <Label>Report Title</Label>
-            <Input
-              value={reportTitle}
-              onChange={(e) => setReportTitle(e.target.value)}
-              className="mt-1"
-            />
-          </div>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="ai">
+              <Sparkles className="h-4 w-4 mr-2" />
+              AI Analysis
+            </TabsTrigger>
+            <TabsTrigger value="standard">
+              <FileText className="h-4 w-4 mr-2" />
+              Standard Report
+            </TabsTrigger>
+          </TabsList>
 
-          <div>
-            <Label>Report Layout</Label>
-            <Select value={reportType} onValueChange={(v: any) => setReportType(v)}>
-              <SelectTrigger className="mt-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="grid">
-                  <div className="flex items-center gap-2">
-                    <Grid className="h-4 w-4" />
-                    Photo Grid (3 per row)
-                  </div>
-                </SelectItem>
-                <SelectItem value="before-after">
-                  <div className="flex items-center gap-2">
-                    <Columns className="h-4 w-4" />
-                    Before/After Comparison
-                  </div>
-                </SelectItem>
-                <SelectItem value="detailed">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Detailed (1 per page)
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <Checkbox
-                checked={includeDescriptions}
-                onCheckedChange={(c) => setIncludeDescriptions(!!c)}
+          <TabsContent value="ai" className="space-y-4 mt-4">
+            <div>
+              <Label>Report Title</Label>
+              <Input
+                value={reportTitle}
+                onChange={(e) => setReportTitle(e.target.value)}
+                className="mt-1"
               />
-              Include Descriptions
-            </label>
-            <label className="flex items-center gap-2">
-              <Checkbox
-                checked={includeCategories}
-                onCheckedChange={(c) => setIncludeCategories(!!c)}
-              />
-              Include Categories
-            </label>
-          </div>
+            </div>
 
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <Label>Select Photos ({selectedPhotos.length} of {photos.length})</Label>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={selectAll}>Select All</Button>
-                <Button variant="outline" size="sm" onClick={selectNone}>Clear</Button>
+            <div>
+              <Label className="mb-2 block">AI Report Type</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {AI_REPORT_TYPES.map(type => (
+                  <Card 
+                    key={type.id}
+                    className={`cursor-pointer transition-all ${aiReportType === type.id ? "ring-2 ring-primary" : ""}`}
+                    onClick={() => setAiReportType(type.id)}
+                  >
+                    <CardHeader className="p-3">
+                      <CardTitle className="text-sm">{type.name}</CardTitle>
+                      <CardDescription className="text-xs">{type.description}</CardDescription>
+                    </CardHeader>
+                  </Card>
+                ))}
               </div>
             </div>
-            <div className="grid grid-cols-4 md:grid-cols-6 gap-2 max-h-64 overflow-auto p-2 border rounded">
-              {photos.map(photo => (
-                <PhotoThumbnail
-                  key={photo.id}
-                  photo={photo}
-                  selected={selectedPhotos.includes(photo.id)}
-                  onToggle={() => togglePhoto(photo.id)}
-                />
-              ))}
+
+            <PhotoSelector 
+              photos={photos} 
+              selectedPhotos={selectedPhotos} 
+              togglePhoto={togglePhoto}
+              selectAll={selectAll}
+              selectNone={selectNone}
+            />
+
+            {aiReport && (
+              <div className="bg-muted/50 rounded-lg p-4 max-h-64 overflow-auto">
+                <h4 className="font-medium mb-2 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  AI Analysis Result
+                </h4>
+                <div className="text-sm whitespace-pre-wrap">{aiReport}</div>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              {aiReport ? (
+                <Button onClick={saveAIReport}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Save & Download Report
+                </Button>
+              ) : (
+                <Button onClick={generateAIReport} disabled={generating || selectedPhotos.length === 0}>
+                  {generating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Analyzing Photos...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Generate AI Report
+                    </>
+                  )}
+                </Button>
+              )}
+            </DialogFooter>
+          </TabsContent>
+
+          <TabsContent value="standard" className="space-y-4 mt-4">
+            <div>
+              <Label>Report Title</Label>
+              <Input
+                value={reportTitle}
+                onChange={(e) => setReportTitle(e.target.value)}
+                className="mt-1"
+              />
             </div>
-          </div>
 
-          {reportType === "before-after" && beforeAfterPairs.length === 0 && (
-            <p className="text-sm text-amber-600">
-              Note: No before/after pairs found. Create pairs in the Photos tab first.
-            </p>
-          )}
-        </div>
+            <div>
+              <Label>Report Layout</Label>
+              <Select value={reportType} onValueChange={(v: any) => setReportType(v)}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="grid">
+                    <div className="flex items-center gap-2">
+                      <Grid className="h-4 w-4" />
+                      Photo Grid (3 per row)
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="before-after">
+                    <div className="flex items-center gap-2">
+                      <Columns className="h-4 w-4" />
+                      Before/After Comparison
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="detailed">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Detailed (1 per page)
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={generateReport} disabled={generating || selectedPhotos.length === 0}>
-            <Download className="h-4 w-4 mr-2" />
-            {generating ? "Generating..." : "Generate Report"}
-          </Button>
-        </DialogFooter>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2">
+                <Checkbox
+                  checked={includeDescriptions}
+                  onCheckedChange={(c) => setIncludeDescriptions(!!c)}
+                />
+                Include Descriptions
+              </label>
+              <label className="flex items-center gap-2">
+                <Checkbox
+                  checked={includeCategories}
+                  onCheckedChange={(c) => setIncludeCategories(!!c)}
+                />
+                Include Categories
+              </label>
+            </div>
+
+            <PhotoSelector 
+              photos={photos} 
+              selectedPhotos={selectedPhotos} 
+              togglePhoto={togglePhoto}
+              selectAll={selectAll}
+              selectNone={selectNone}
+            />
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button onClick={generateStandardReport} disabled={generating || selectedPhotos.length === 0}>
+                <Download className="h-4 w-4 mr-2" />
+                {generating ? "Generating..." : "Generate Report"}
+              </Button>
+            </DialogFooter>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PhotoSelector({ 
+  photos, 
+  selectedPhotos, 
+  togglePhoto,
+  selectAll,
+  selectNone 
+}: { 
+  photos: ClaimPhoto[]; 
+  selectedPhotos: string[];
+  togglePhoto: (id: string) => void;
+  selectAll: () => void;
+  selectNone: () => void;
+}) {
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-2">
+        <Label>Select Photos ({selectedPhotos.length} of {photos.length})</Label>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={selectAll}>Select All</Button>
+          <Button variant="outline" size="sm" onClick={selectNone}>Clear</Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-4 md:grid-cols-6 gap-2 max-h-48 overflow-auto p-2 border rounded">
+        {photos.map(photo => (
+          <PhotoThumbnail
+            key={photo.id}
+            photo={photo}
+            selected={selectedPhotos.includes(photo.id)}
+            onToggle={() => togglePhoto(photo.id)}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -333,7 +553,7 @@ function generateReportHtml(
       }))
       .filter(pair => pair.after);
 
-    content = pairs.map((pair, idx) => `
+    content = pairs.map((pair) => `
       <div class="before-after">
         <div>
           <h3>Before</h3>

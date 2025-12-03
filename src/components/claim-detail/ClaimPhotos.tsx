@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Camera, Upload, Pencil, Trash2, Link2, FileText, Grid, Columns, X, Download, Eye } from "lucide-react";
+import { Camera, Upload, Pencil, Trash2, Link2, FileText, Grid, Columns, X, Download, Eye, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PhotoAnnotationEditor } from "./PhotoAnnotationEditor";
@@ -84,6 +84,12 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
   const [uploadCategory, setUploadCategory] = useState("General");
   const [uploadDescription, setUploadDescription] = useState("");
   const [uploadBeforeAfter, setUploadBeforeAfter] = useState<string | null>(null);
+  
+  // Camera state
+  const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   
   // Edit form state
   const [editCategory, setEditCategory] = useState("");
@@ -228,6 +234,83 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
     }
   };
 
+  // Camera functions
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: "environment" } 
+      });
+      setCameraStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setCameraDialogOpen(true);
+    } catch (error) {
+      console.error("Camera error:", error);
+      toast({ 
+        title: "Camera access denied", 
+        description: "Please allow camera access to take photos.",
+        variant: "destructive" 
+      });
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setCameraDialogOpen(false);
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    
+    ctx.drawImage(video, 0, 0);
+    
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      
+      setUploading(true);
+      try {
+        const fileName = `camera_${Date.now()}.jpg`;
+        const filePath = `${claimId}/photos/${fileName}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from("claim-files")
+          .upload(filePath, blob);
+        
+        if (uploadError) throw uploadError;
+        
+        const { error: dbError } = await supabase.from("claim_photos").insert({
+          claim_id: claimId,
+          file_path: filePath,
+          file_name: fileName,
+          file_size: blob.size,
+          category: uploadCategory,
+          taken_at: new Date().toISOString(),
+        });
+        
+        if (dbError) throw dbError;
+        
+        toast({ title: "Photo captured successfully" });
+        fetchPhotos();
+      } catch (error: any) {
+        toast({ title: "Error saving photo", description: error.message, variant: "destructive" });
+      } finally {
+        setUploading(false);
+      }
+    }, "image/jpeg", 0.9);
+  };
+
   const openEditDialog = (photo: ClaimPhoto) => {
     setSelectedPhoto(photo);
     setEditCategory(photo.category);
@@ -307,6 +390,10 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
           <Button variant="outline" size="sm" onClick={() => setReportDialogOpen(true)}>
             <FileText className="h-4 w-4 mr-2" />
             Generate Report
+          </Button>
+          <Button variant="outline" size="sm" onClick={startCamera}>
+            <Camera className="h-4 w-4 mr-2" />
+            Take Photo
           </Button>
           <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
             <DialogTrigger asChild>
@@ -570,6 +657,47 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Camera Dialog */}
+      <Dialog open={cameraDialogOpen} onOpenChange={(open) => { if (!open) stopCamera(); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Take Photo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                muted 
+                className="w-full h-full object-cover"
+              />
+              <canvas ref={canvasRef} className="hidden" />
+            </div>
+            <div>
+              <Label>Category</Label>
+              <Select value={uploadCategory} onValueChange={setUploadCategory}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PHOTO_CATEGORIES.map(cat => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={stopCamera}>Close</Button>
+            <Button onClick={capturePhoto} disabled={uploading}>
+              <Camera className="h-4 w-4 mr-2" />
+              {uploading ? "Saving..." : "Capture"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
