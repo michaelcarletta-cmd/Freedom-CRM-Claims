@@ -15,16 +15,17 @@ interface LineItem {
   categoryCode: string;
   description: string;
   unit: string;
-  quantityMin: number;
-  quantityMax: number;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
   severity: string;
   notes: string;
-  photoReference?: string;
 }
 
 interface EstimateResult {
   summary: string;
   totalLineItems: number;
+  estimatedTotal: number;
   lineItems: LineItem[];
   additionalNotes?: string;
 }
@@ -110,10 +111,10 @@ const EstimateAssistant = ({ claimId, claim }: EstimateAssistantProps) => {
     if (!result) return;
     
     const text = result.lineItems.map((item, i) => 
-      `${i + 1}. [${item.categoryCode}] ${item.description}\n   Unit: ${item.unit} | Qty: ${item.quantityMin}-${item.quantityMax} | Severity: ${item.severity}\n   Notes: ${item.notes}`
+      `${i + 1}. [${item.categoryCode}] ${item.description}\n   Unit: ${item.unit} | Qty: ${item.quantity} | Unit Price: $${item.unitPrice?.toFixed(2) || '0.00'} | Total: $${item.totalPrice?.toFixed(2) || '0.00'}\n   Notes: ${item.notes}`
     ).join('\n\n');
 
-    const fullText = `ESTIMATE LINE ITEMS\n${'='.repeat(50)}\n\nSummary: ${result.summary}\n\n${text}\n\n${result.additionalNotes ? `Additional Notes: ${result.additionalNotes}` : ''}`;
+    const fullText = `ESTIMATE LINE ITEMS\n${'='.repeat(50)}\n\nSummary: ${result.summary}\n\nEstimated Total: $${result.estimatedTotal?.toLocaleString() || '0'}\n\n${text}\n\n${result.additionalNotes ? `Additional Notes: ${result.additionalNotes}` : ''}`;
     
     navigator.clipboard.writeText(fullText);
     toast.success("Copied to clipboard");
@@ -245,6 +246,20 @@ const EstimateAssistant = ({ claimId, claim }: EstimateAssistantProps) => {
                 </CardContent>
               </Card>
 
+              {/* Estimated Total */}
+              {result.estimatedTotal && (
+                <Card className="bg-primary/10 border-primary/20">
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Estimated Total</span>
+                      <span className="text-xl font-bold text-primary">
+                        ${result.estimatedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Line Items */}
               <ScrollArea className="h-[400px]">
                 <div className="space-y-3">
@@ -259,27 +274,23 @@ const EstimateAssistant = ({ claimId, claim }: EstimateAssistantProps) => {
                               </Badge>
                               <span className="font-medium text-sm">{item.category}</span>
                             </div>
-                            <Badge variant={getSeverityColor(item.severity)}>
-                              {item.severity}
-                            </Badge>
+                            <span className="font-semibold text-primary">
+                              ${item.totalPrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                            </span>
                           </div>
                           
                           <p className="text-sm">{item.description}</p>
                           
                           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                             <span className="bg-muted px-2 py-1 rounded">
-                              Unit: {item.unit}
+                              {item.quantity} {item.unit}
                             </span>
                             <span className="bg-muted px-2 py-1 rounded">
-                              Qty: {item.quantityMin === item.quantityMax 
-                                ? item.quantityMin 
-                                : `${item.quantityMin}-${item.quantityMax}`}
+                              @ ${item.unitPrice?.toFixed(2) || '0.00'}/{item.unit}
                             </span>
-                            {item.photoReference && (
-                              <span className="bg-muted px-2 py-1 rounded">
-                                Photo: {item.photoReference}
-                              </span>
-                            )}
+                            <Badge variant={getSeverityColor(item.severity)} className="text-xs">
+                              {item.severity}
+                            </Badge>
                           </div>
                           
                           {item.notes && (
