@@ -34,6 +34,8 @@ import { UserManagementSettings } from "@/components/settings/UserManagementSett
 import { ProfileSettings } from "@/components/settings/ProfileSettings";
 import { AIKnowledgeBaseSettings } from "@/components/settings/AIKnowledgeBaseSettings";
 import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
+import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings";
+import { useQuery } from "@tanstack/react-query";
 
 interface ClaimStatus {
   id: string;
@@ -110,6 +112,24 @@ export default function Settings() {
   const [newStatusName, setNewStatusName] = useState("");
   const [newStatusColor, setNewStatusColor] = useState("#3B82F6");
   const { toast } = useToast();
+
+  // Check if current user is admin
+  const { data: isAdmin } = useQuery({
+    queryKey: ["is-admin-settings"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+      
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .maybeSingle();
+      
+      return !!data;
+    },
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -292,6 +312,9 @@ export default function Settings() {
           <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
           <TabsTrigger value="ai-knowledge" className="w-full md:w-auto justify-start text-base font-medium px-4">AI Knowledge Base</TabsTrigger>
           <TabsTrigger value="integrations" className="w-full md:w-auto justify-start text-base font-medium px-4">Integrations</TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="backup" className="w-full md:w-auto justify-start text-base font-medium px-4">Backup Status</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="profile" className="w-full">
@@ -393,6 +416,12 @@ export default function Settings() {
         <TabsContent value="integrations" className="w-full">
           <QuickBooksSettings />
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="backup" className="w-full">
+            <BackupStatusSettings />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
