@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -460,8 +460,31 @@ function PhotoThumbnail({
   onToggle: () => void;
 }) {
   const [url, setUrl] = useState("");
+  const [isVisible, setIsVisible] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Lazy load: only fetch URL when thumbnail becomes visible
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "50px" }
+    );
+    
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
+    
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
+    if (!isVisible) return;
+    
     const loadUrl = async () => {
       const { data } = await supabase.storage
         .from("claim-files")
@@ -469,19 +492,20 @@ function PhotoThumbnail({
       if (data?.signedUrl) setUrl(data.signedUrl);
     };
     loadUrl();
-  }, [photo]);
+  }, [isVisible, photo]);
 
   return (
     <div
+      ref={ref}
       className={`relative aspect-square cursor-pointer rounded overflow-hidden border-2 ${
         selected ? "border-primary" : "border-transparent"
       }`}
       onClick={onToggle}
     >
       {url ? (
-        <img src={url} alt={photo.file_name} className="w-full h-full object-cover" />
+        <img src={url} alt={photo.file_name} className="w-full h-full object-cover" loading="lazy" />
       ) : (
-        <div className="w-full h-full bg-muted" />
+        <div className="w-full h-full bg-muted animate-pulse" />
       )}
       {selected && (
         <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
