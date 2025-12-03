@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 interface Inspection {
   id: string;
   inspection_date: string;
+  inspection_time: string | null;
   inspection_type: string | null;
   inspector_name: string | null;
   notes: string | null;
@@ -35,6 +36,7 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
 
   const [formData, setFormData] = useState({
     inspection_date: "",
+    inspection_time: "",
     inspection_type: "",
     inspector_name: "",
     notes: "",
@@ -100,6 +102,7 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
           .from("inspections")
           .update({
             inspection_date: formData.inspection_date,
+            inspection_time: formData.inspection_time || null,
             inspection_type: formData.inspection_type || null,
             inspector_name: formData.inspector_name || null,
             notes: formData.notes || null,
@@ -117,6 +120,7 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
         const { error } = await supabase.from("inspections").insert({
           claim_id: claimId,
           inspection_date: formData.inspection_date,
+          inspection_time: formData.inspection_time || null,
           inspection_type: formData.inspection_type || null,
           inspector_name: formData.inspector_name || null,
           notes: formData.notes || null,
@@ -135,6 +139,7 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
       setEditingInspection(null);
       setFormData({
         inspection_date: "",
+        inspection_time: "",
         inspection_type: "",
         inspector_name: "",
         notes: "",
@@ -154,6 +159,7 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
     setEditingInspection(inspection);
     setFormData({
       inspection_date: inspection.inspection_date,
+      inspection_time: inspection.inspection_time || "",
       inspection_type: inspection.inspection_type || "",
       inspector_name: inspection.inspector_name || "",
       notes: inspection.notes || "",
@@ -227,6 +233,7 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
             setEditingInspection(null);
             setFormData({
               inspection_date: "",
+              inspection_time: "",
               inspection_type: "",
               inspector_name: "",
               notes: "",
@@ -244,15 +251,26 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
               <DialogTitle>{editingInspection ? "Edit Inspection" : "Schedule New Inspection"}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="inspection_date">Inspection Date *</Label>
-                <Input
-                  id="inspection_date"
-                  type="date"
-                  required
-                  value={formData.inspection_date}
-                  onChange={(e) => setFormData({ ...formData, inspection_date: e.target.value })}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="inspection_date">Inspection Date *</Label>
+                  <Input
+                    id="inspection_date"
+                    type="date"
+                    required
+                    value={formData.inspection_date}
+                    onChange={(e) => setFormData({ ...formData, inspection_date: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="inspection_time">Inspection Time</Label>
+                  <Input
+                    id="inspection_time"
+                    type="time"
+                    value={formData.inspection_time}
+                    onChange={(e) => setFormData({ ...formData, inspection_time: e.target.value })}
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -336,6 +354,7 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
                         }`}
                       >
                         {format(inspectionDate, "MMMM d, yyyy")}
+                        {inspection.inspection_time && ` at ${inspection.inspection_time}`}
                       </span>
                       <Badge variant={getStatusColor(inspection.status) as any}>
                         {inspection.status.charAt(0).toUpperCase() + inspection.status.slice(1)}
