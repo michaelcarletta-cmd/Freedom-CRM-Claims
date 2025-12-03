@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Upload, Download, FileText, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Upload, Download, FileText, AlertCircle, CheckCircle2, File } from "lucide-react";
 import Papa from "papaparse";
 
 interface ImportResult {
@@ -47,6 +48,25 @@ export function ImportSettings() {
   const [progress, setProgress] = useState(0);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const { toast } = useToast();
+
+  // Estimate import state
+  const [selectedClaimId, setSelectedClaimId] = useState<string>("");
+  const [estimateFiles, setEstimateFiles] = useState<File[]>([]);
+  const [uploadingEstimates, setUploadingEstimates] = useState(false);
+  const [estimateProgress, setEstimateProgress] = useState(0);
+
+  // Fetch claims for dropdown
+  const { data: claims = [] } = useQuery({
+    queryKey: ["claims-for-import"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claims")
+        .select("id, claim_number, policyholder_name")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = e.target.files?.[0];
@@ -233,8 +253,187 @@ export function ImportSettings() {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleEstimateFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const validFiles = files.filter(f => 
+      f.name.toLowerCase().endsWith('.pdf') || 
+      f.name.toLowerCase().endsWith('.esx') ||
+      f.name.toLowerCase().endsWith('.xcm')
+    );
+    
+    if (validFiles.length !== files.length) {
+      toast({
+        title: "Some files skipped",
+        description: "Only PDF, ESX, and XCM files are accepted",
+        variant: "destructive",
+      });
+    }
+    
+    setEstimateFiles(validFiles);
+  };
+
+  const handleUploadEstimates = async () => {
+    if (!selectedClaimId || estimateFiles.length === 0) {
+      toast({
+        title: "Missing selection",
+        description: "Please select a claim and at least one file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploadingEstimates(true);
+    setEstimateProgress(0);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < estimateFiles.length; i++) {
+      const file = estimateFiles[i];
+      const filePath = `${selectedClaimId}/${Date.now()}-${file.name}`;
+
+      try {
+        // Upload to storage
+        const { error: uploadError } = await supabase.storage
+          .from("claim-files")
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        // Create file record
+        const { error: dbError } = await supabase.from("claim_files").insert({
+          claim_id: selectedClaimId,
+          file_name: file.name,
+          file_path: filePath,
+          file_type: file.type || "application/octet-stream",
+          file_size: file.size,
+        });
+
+        if (dbError) throw dbError;
+        successCount++;
+      } catch (error: any) {
+        console.error("Upload error:", error);
+        failCount++;
+      }
+
+      setEstimateProgress(Math.round(((i + 1) / estimateFiles.length) * 100));
+    }
+
+    setUploadingEstimates(false);
+    setEstimateFiles([]);
+    
+    // Reset file input
+    const input = document.getElementById("estimate-files") as HTMLInputElement;
+    if (input) input.value = "";
+
+    toast({
+      title: "Upload complete",
+      description: `${successCount} files uploaded successfully${failCount > 0 ? `, ${failCount} failed` : ""}`,
+      variant: failCount > 0 ? "destructive" : "default",
+    });
+  };
+
   return (
     <div className="space-y-6">
+      {/* Estimate Document Import */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <File className="h-5 w-5" />
+            Import Estimate Documents
+          </CardTitle>
+          <CardDescription>
+            Upload PDF or ESX/XCM estimate files directly to a specific claim
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Claim Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="claim-select">Select Claim</Label>
+              <Select value={selectedClaimId} onValueChange={setSelectedClaimId}>
+                <SelectTrigger id="claim-select">
+                  <SelectValue placeholder="Choose a claim..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {claims.map((claim) => (
+                    <SelectItem key={claim.id} value={claim.id}>
+                      {claim.claim_number || "No #"} - {claim.policyholder_name || "Unknown"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* File Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="estimate-files">Select Files</Label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="estimate-files"
+                  type="file"
+                  accept=".pdf,.esx,.xcm"
+                  multiple
+                  onChange={handleEstimateFilesSelect}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => document.getElementById("estimate-files")?.click()}
+                  disabled={uploadingEstimates}
+                  className="w-full"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {estimateFiles.length > 0 ? `${estimateFiles.length} files selected` : "Choose Files"}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Selected Files List */}
+          {estimateFiles.length > 0 && (
+            <div className="space-y-2">
+              <Label>Selected Files:</Label>
+              <div className="bg-muted/50 rounded-lg p-3 space-y-1 max-h-32 overflow-y-auto">
+                {estimateFiles.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span>{f.name}</span>
+                    <span className="text-muted-foreground">({(f.size / 1024).toFixed(1)} KB)</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Upload Progress */}
+          {uploadingEstimates && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Uploading files...</span>
+                <span>{estimateProgress}%</span>
+              </div>
+              <Progress value={estimateProgress} />
+            </div>
+          )}
+
+          {/* Upload Button */}
+          <div className="flex justify-end">
+            <Button
+              onClick={handleUploadEstimates}
+              disabled={!selectedClaimId || estimateFiles.length === 0 || uploadingEstimates}
+            >
+              {uploadingEstimates ? "Uploading..." : `Upload ${estimateFiles.length} File${estimateFiles.length !== 1 ? "s" : ""}`}
+            </Button>
+          </div>
+
+          {/* Tips */}
+          <div className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-3">
+            <strong>Supported formats:</strong> PDF, ESX (Xactimate), XCM files. Files will be saved to the claim's Documents folder.
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Import Claims from CSV</CardTitle>
