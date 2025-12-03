@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,6 +66,7 @@ const PHOTO_CATEGORIES = [
 
 export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
   const [photos, setPhotos] = useState<ClaimPhoto[]>([]);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -108,6 +109,26 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
     }
   }, [cameraDialogOpen, cameraStream]);
 
+  // Batch fetch all signed URLs when photos change
+  const fetchSignedUrls = useCallback(async (photosToFetch: ClaimPhoto[]) => {
+    if (photosToFetch.length === 0) return;
+    
+    const urlPromises = photosToFetch.map(async (photo) => {
+      const path = photo.annotated_file_path || photo.file_path;
+      const { data } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(path, 3600);
+      return { id: photo.id, url: data?.signedUrl || "" };
+    });
+    
+    const results = await Promise.all(urlPromises);
+    const urlMap: Record<string, string> = {};
+    results.forEach(({ id, url }) => {
+      if (url) urlMap[id] = url;
+    });
+    setPhotoUrls(urlMap);
+  }, []);
+
   const fetchPhotos = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -121,6 +142,8 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
       toast({ title: "Error loading photos", variant: "destructive" });
     } else {
       setPhotos(data || []);
+      // Batch fetch all signed URLs
+      await fetchSignedUrls(data || []);
     }
     setLoading(false);
   };
@@ -509,6 +532,7 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
             <PhotoCard
               key={photo.id}
               photo={photo}
+              imageUrl={photoUrls[photo.id] || ""}
               selected={selectedPhotos.includes(photo.id)}
               onSelect={() => togglePhotoSelection(photo.id)}
               onEdit={() => openEditDialog(photo)}
@@ -532,6 +556,7 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
                   <p className="text-sm font-medium mb-2 text-center">Before</p>
                   <PhotoCard
                     photo={pair.before}
+                    imageUrl={photoUrls[pair.before.id] || ""}
                     selected={false}
                     onSelect={() => {}}
                     onEdit={() => openEditDialog(pair.before)}
@@ -546,6 +571,7 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
                     <p className="text-sm font-medium mb-2 text-center">After</p>
                     <PhotoCard
                       photo={pair.after}
+                      imageUrl={photoUrls[pair.after.id] || ""}
                       selected={false}
                       onSelect={() => {}}
                       onEdit={() => openEditDialog(pair.after)}
@@ -651,7 +677,7 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
           </DialogHeader>
           {selectedPhoto && (
             <div className="space-y-4">
-              <PhotoPreview photo={selectedPhoto} />
+              <PhotoPreview photo={selectedPhoto} imageUrl={photoUrls[selectedPhoto.id] || ""} />
               <div className="flex justify-between items-start">
                 <div>
                   <Badge>{selectedPhoto.category}</Badge>
@@ -718,8 +744,9 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
   );
 }
 
-function PhotoCard({ 
+const PhotoCard = memo(function PhotoCard({ 
   photo, 
+  imageUrl,
   selected, 
   onSelect, 
   onEdit, 
@@ -729,6 +756,7 @@ function PhotoCard({
   compact = false 
 }: { 
   photo: ClaimPhoto; 
+  imageUrl: string;
   selected: boolean;
   onSelect: () => void;
   onEdit: () => void;
@@ -737,20 +765,6 @@ function PhotoCard({
   onPreview: () => void;
   compact?: boolean;
 }) {
-  const [imageUrl, setImageUrl] = useState<string>("");
-  
-  useEffect(() => {
-    const loadImage = async () => {
-      const { data } = await supabase.storage
-        .from("claim-files")
-        .createSignedUrl(photo.annotated_file_path || photo.file_path, 3600);
-      if (data?.signedUrl) {
-        setImageUrl(data.signedUrl);
-      }
-    };
-    loadImage();
-  }, [photo]);
-
   return (
     <Card 
       className={`overflow-hidden cursor-pointer transition-all ${selected ? "ring-2 ring-primary" : ""}`}
@@ -762,6 +776,7 @@ function PhotoCard({
             src={imageUrl}
             alt={photo.file_name}
             className="w-full h-full object-cover"
+            loading="lazy"
           />
         ) : (
           <div className="w-full h-full bg-muted flex items-center justify-center">
@@ -804,23 +819,9 @@ function PhotoCard({
       )}
     </Card>
   );
-}
+});
 
-function PhotoPreview({ photo }: { photo: ClaimPhoto }) {
-  const [imageUrl, setImageUrl] = useState<string>("");
-  
-  useEffect(() => {
-    const loadImage = async () => {
-      const { data } = await supabase.storage
-        .from("claim-files")
-        .createSignedUrl(photo.annotated_file_path || photo.file_path, 3600);
-      if (data?.signedUrl) {
-        setImageUrl(data.signedUrl);
-      }
-    };
-    loadImage();
-  }, [photo]);
-
+function PhotoPreview({ photo, imageUrl }: { photo: ClaimPhoto; imageUrl: string }) {
   return imageUrl ? (
     <img src={imageUrl} alt={photo.file_name} className="max-h-[60vh] mx-auto rounded" />
   ) : (
