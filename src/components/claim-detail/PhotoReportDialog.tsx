@@ -209,19 +209,20 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
         }
       }
 
-      // Build photos HTML with base64 images and photo numbers
+      // Build photos HTML with base64 images and photo numbers - each photo on its own page for clean breaks
       const photosHtml = photoBase64s.length > 0 ? `
-  <div style="margin-top: 40px; page-break-before: always;">
-    <h2 style="color: #1e3a5f; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; font-size: 24px;">EXHIBIT A: PHOTO DOCUMENTATION</h2>
-    <div style="margin-top: 20px;">
-      ${photoBase64s.map(photo => `
-        <div style="page-break-inside: avoid; margin-bottom: 30px;">
-          <p style="font-weight: bold; font-size: 14px; margin-bottom: 8px; color: #1f2937;">Photo ${photo.photoNumber}: ${photo.category}</p>
-          <img src="${photo.base64}" style="width: 100%; max-width: 600px; height: auto; border-radius: 8px; border: 1px solid #ddd;" />
-          ${photo.description ? `<p style="margin-top: 8px; font-size: 12px; color: #666; font-style: italic;">${photo.description}</p>` : ''}
+  <div style="page-break-before: always;">
+    <h2 style="color: #1e3a5f; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; font-size: 24px; margin-bottom: 30px;">EXHIBIT A: PHOTO DOCUMENTATION</h2>
+    ${photoBase64s.map((photo, index) => `
+      <div style="${index > 0 ? 'page-break-before: always;' : ''} padding-top: 20px;">
+        <div style="margin-bottom: 15px;">
+          <p style="font-weight: bold; font-size: 16px; margin-bottom: 5px; color: #1e3a5f;">Photo ${photo.photoNumber}</p>
+          <p style="font-size: 14px; color: #4b5563; margin-bottom: 15px;">${photo.category}</p>
         </div>
-      `).join('')}
-    </div>
+        <img src="${photo.base64}" style="width: 100%; max-width: 650px; height: auto; border-radius: 8px; border: 1px solid #ddd; display: block;" />
+        ${photo.description ? `<p style="margin-top: 15px; font-size: 13px; color: #374151; line-height: 1.6;">${photo.description}</p>` : ''}
+      </div>
+    `).join('')}
   </div>` : '';
 
       // Letterhead HTML
@@ -311,12 +312,18 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
         </div>
       ` : '';
 
-      // Format report content with proper styling
+      // Format report content with proper styling and page breaks for major sections
       const formattedReport = aiReport
         .replace(/\n/g, '<br>')
-        .replace(/##\s(.*)/g, '<h2 style="color: #1e3a5f; margin-top: 30px; font-size: 20px; border-bottom: 1px solid #ddd; padding-bottom: 8px;">$1</h2>')
-        .replace(/###\s(.*)/g, '<h3 style="color: #374151; margin-top: 20px; font-size: 16px;">$1</h3>')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        // Major sections get page breaks
+        .replace(/##\s+(I\.|II\.|III\.|IV\.|V\.|VI\.|VII\.|VIII\.)\s*(.*)/g, '<div style="page-break-before: always; padding-top: 20px;"><h2 style="color: #1e3a5f; margin-top: 0; font-size: 22px; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px;">$1 $2</h2></div>')
+        // Regular h2 headers
+        .replace(/##\s(.*)/g, '<h2 style="color: #1e3a5f; margin-top: 30px; font-size: 20px; border-bottom: 1px solid #ddd; padding-bottom: 8px; page-break-after: avoid;">$1</h2>')
+        // H3 headers should avoid breaking after
+        .replace(/###\s(.*)/g, '<h3 style="color: #374151; margin-top: 25px; font-size: 16px; page-break-after: avoid;">$1</h3>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        // Keep paragraphs together
+        .replace(/<br><br>/g, '</p><p style="margin-top: 12px; page-break-inside: avoid;">');
 
       // Create HTML content for PDF
       const html = `
@@ -352,8 +359,8 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     </div>
   `}
   
-  <div style="text-align: justify;">
-    ${formattedReport}
+  <div style="text-align: justify; orphans: 3; widows: 3;">
+    <p style="page-break-inside: avoid;">${formattedReport}</p>
   </div>
   ${photosHtml}
   ${weatherExhibitHtml}
@@ -365,11 +372,11 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       document.body.appendChild(container);
       
       const pdfBlob = await html2pdf().from(container).set({
-        margin: 10,
+        margin: [15, 15, 20, 15], // top, left, bottom, right - more margin for readability
         filename: `${reportTitle.replace(/[^a-z0-9]/gi, "_")}.pdf`,
-        html2canvas: { scale: 2, useCORS: true, allowTaint: true },
+        html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false },
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
-      }).outputPdf("blob");
+      } as any).outputPdf("blob");
       
       document.body.removeChild(container);
       

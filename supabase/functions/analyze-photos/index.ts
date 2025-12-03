@@ -309,15 +309,28 @@ Day After (${weatherData.daily.dates?.[2]}):
     }
 
     // Build prompt based on report type
-    let systemPrompt = `You are an expert forensic property damage analyst working for a public adjusting firm. Your role is to prepare detailed forensic analyses documenting damages and what is required to restore the property to pre-loss conditions. 
+    let systemPrompt = `You are an expert forensic property damage analyst and licensed public adjuster preparing detailed forensic analyses for insurance claims. Your reports must be thorough, persuasive, and provide strong supporting arguments for the claim.
 
 CRITICAL INSTRUCTIONS:
-- Reference photos by their number (Photo 1, Photo 2, etc.) so the reader can follow along with the photo documentation
-- Reference applicable manufacturer specifications, building codes, and industry-standard repair methods
-- For roofing damage: restoration requires FULL REPLACEMENT of each damaged slope/section - never recommend shingle repairs, only full slope replacement per manufacturer warranty requirements
-- Focus on factual observations from the photos
-- Do not include action items, document gathering suggestions, coverage advice, or specialist inspection recommendations
-- IMPORTANT: When referencing weather data, ALWAYS attribute it to "Visual Crossing Weather Services" as the data source - NEVER mention "Open-Meteo" or any other weather service`;
+- Reference photos by their number (Photo 1, Photo 2, etc.) throughout your analysis
+- For EACH photo, provide DETAILED forensic analysis including:
+  * Specific damage indicators visible (cracks, displacement, missing materials, staining, etc.)
+  * Measurements or size estimates when visible
+  * Damage severity assessment with justification
+  * How the visible damage connects to the reported loss event
+  * What this specific damage means for the integrity/function of the affected component
+- Reference applicable manufacturer specifications, building codes (IRC, IBC), and industry standards (ASTM, ARMA, NRCA)
+- For roofing damage: restoration requires FULL REPLACEMENT of each damaged slope/section per manufacturer warranty requirements - explain why repairs are insufficient (voided warranties, inability to match, compromised system integrity)
+- Provide SPECIFIC arguments for why the damage requires replacement vs repair
+- Explain the consequences of inadequate repairs (water intrusion, structural damage, mold growth, code violations)
+- Do NOT include: action items, document gathering suggestions, coverage advice, or specialist inspection recommendations
+- IMPORTANT: When referencing weather data, ALWAYS attribute it to "Visual Crossing Weather Services" as the data source
+
+WRITING STYLE:
+- Write in a professional, authoritative tone suitable for insurance claim documentation
+- Use technical terminology but explain implications
+- Be specific and detailed - avoid vague statements
+- Build a compelling narrative connecting the loss event to the observed damage`;
     
     let userPrompt = "";
     
@@ -637,49 +650,71 @@ We request immediate attention to this matter and resolution within the timefram
         break;
         
       default: // full-report
-        userPrompt = `Create a Forensic Photo Documentation Report analyzing all ${photos.length} provided photos.
+        userPrompt = `Create a comprehensive Forensic Photo Documentation Report with detailed analysis of each of the ${photos.length} provided photos.
 
 ${claimContext}
 
 Photo Information:
 ${photoDescriptions.join('\n')}
 
-IMPORTANT: Reference each photo by its number (Photo 1, Photo 2, etc.) throughout your analysis so the reader can follow along with the attached photo documentation.
+CRITICAL: This is a forensic report to support an insurance claim. You MUST provide DETAILED, SPECIFIC analysis of each photo with supporting arguments for the damage claim.
 
-Please provide a detailed forensic report including:
+## I. EXECUTIVE SUMMARY
+- Overview of the property and loss event
+- Summary of all damage documented across photos
+- Total scope of required restoration
 
-## 1. Property Overview
-- General condition of the property
-- Areas documented in the photos (reference photo numbers)
-- Overall scope of damage
+## II. DETAILED PHOTO-BY-PHOTO FORENSIC ANALYSIS
 
-## 2. Forensic Damage Assessment by Area
-For each distinct area shown in the photos:
-- Photo reference numbers showing this area
-- Location/area name
-- Type of damage observed
-- Severity (minor/moderate/severe/critical)
-- Forensic evidence and indicators of cause
-- Extent and measurements where estimable
+For EACH photo (Photo 1, Photo 2, etc.), provide a thorough analysis:
 
-## 3. Cause of Loss Analysis
-- How the damage relates to the reported loss event
-- Physical evidence supporting the cause of loss (reference specific photos)
-- Timeline indicators if visible
+**Photo [#]: [Component/Area Name]**
+- **Visible Damage Indicators**: Describe SPECIFICALLY what damage you observe (cracks, displacement, missing pieces, staining, deformation, etc.)
+- **Damage Characteristics**: Size, extent, pattern of damage
+- **Severity Assessment**: Minor/Moderate/Severe/Critical - with justification
+- **Causation Analysis**: How this damage connects to the reported loss event (${claimContext.includes('Loss Type:') ? 'the reported loss type' : 'the loss event'})
+- **Functional Impact**: What this damage means for the integrity/function of this component
+- **Why Repair is Insufficient**: For significant damage, explain why replacement is required (manufacturer specs, code requirements, system integrity)
 
-## 4. Restoration Requirements
-To return the property to pre-loss condition:
-- **Scope of Work** - For roofing: full replacement of each damaged slope (not repairs) per manufacturer warranty requirements; for other areas: specify replacement vs repair
-- **Manufacturer Specifications** - Applicable product/material specs for replacement items
-- **Building Code Requirements** - Relevant IRC, IBC, or local building codes that apply
-- **Materials & Components** - Specific materials needed per manufacturer installation requirements
-- **Sequence of Repairs** - Proper order of restoration work
+## III. CAUSE OF LOSS CORRELATION
+- Pattern analysis across all photos showing consistent damage from the loss event
+- Timeline indicators supporting the loss date
+- Evidence distinguishing event damage from pre-existing wear
 
-## 5. Summary
-- Overall forensic damage assessment
-- Key restoration requirements to achieve pre-loss condition
+## IV. RESTORATION REQUIREMENTS
 
-Base all observations on visible evidence in the photos.`;
+### A. Scope of Work
+For each damaged area, specify:
+- Required restoration method (replacement vs repair) with justification
+- Manufacturer warranty requirements that mandate replacement
+- Related/consequential repairs needed
+
+### B. Building Code Compliance
+- Applicable IRC/IBC requirements
+- Local code amendments
+- Permit requirements
+
+### C. Manufacturer Specifications
+- Product-specific installation requirements
+- Warranty compliance requirements
+- Material specifications
+
+### D. Industry Standards
+- ASTM standards applicable to repairs
+- ARMA/NRCA guidelines for roofing
+- Other applicable industry standards
+
+## V. CONSEQUENCES OF INADEQUATE RESTORATION
+- Risks if damage is not properly addressed
+- Potential for secondary damage (water intrusion, mold, structural issues)
+- Building code and safety implications
+
+## VI. CONCLUSION
+- Summary of forensic findings
+- Total restoration requirements
+- Statement supporting full claim payment
+
+REMEMBER: Be SPECIFIC and DETAILED. Each photo should have substantial analysis, not just a brief mention. Build a compelling case for the restoration requirements.`;
     }
 
     // Limit photos to prevent timeout (AI handles ~8-10 images most reliably)
