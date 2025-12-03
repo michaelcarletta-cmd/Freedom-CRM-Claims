@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { DollarSign, Trash2 } from "lucide-react";
+import { DollarSign, Trash2, CreditCard } from "lucide-react";
+import { QuickBooksPaymentDialog } from "@/components/QuickBooksPaymentDialog";
 
 interface ClaimPaymentsProps {
   claimId: string;
@@ -43,6 +44,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [qbPaymentOpen, setQbPaymentOpen] = useState(false);
+  const [selectedRecipient, setSelectedRecipient] = useState<{ name: string; email?: string; phone?: string } | null>(null);
   const [formData, setFormData] = useState({
     payment_date: new Date().toISOString().split("T")[0],
     amount: "",
@@ -186,6 +189,25 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   };
 
   const totalPayments = payments.reduce((sum, payment) => sum + payment.amount, 0);
+
+  const handleQuickBooksPayment = (recipientType: string, recipientId?: string) => {
+    let recipient: { name: string; email?: string; phone?: string } = { name: 'Client (Policyholder)' };
+    
+    if (recipientType === 'contractor' && recipientId) {
+      const contractor = contractors.find(c => c.id === recipientId);
+      if (contractor) {
+        recipient = { name: contractor.full_name || contractor.email, email: contractor.email };
+      }
+    } else if (recipientType === 'referrer' && recipientId) {
+      const referrer = referrers.find(r => r.id === recipientId);
+      if (referrer) {
+        recipient = { name: referrer.name };
+      }
+    }
+    
+    setSelectedRecipient(recipient);
+    setQbPaymentOpen(true);
+  };
 
   return (
     <Card>
@@ -338,6 +360,17 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           )}
         </div>
 
+        {isAdmin && (
+          <Button 
+            variant="outline" 
+            onClick={() => handleQuickBooksPayment('client')}
+            className="w-full"
+          >
+            <CreditCard className="h-4 w-4 mr-2" />
+            Pay via QuickBooks
+          </Button>
+        )}
+
         {payments.length === 0 ? (
           <p className="text-center text-muted-foreground py-4">No payments recorded</p>
         ) : (
@@ -367,17 +400,38 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                   )}
                 </div>
                 {isAdmin && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDelete(payment.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleQuickBooksPayment(payment.recipient_type, payment.recipient_id || undefined)}
+                      title="Pay via QuickBooks"
+                    >
+                      <CreditCard className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(payment.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}
           </div>
+        )}
+
+        {selectedRecipient && (
+          <QuickBooksPaymentDialog
+            open={qbPaymentOpen}
+            onOpenChange={setQbPaymentOpen}
+            recipientName={selectedRecipient.name}
+            recipientEmail={selectedRecipient.email}
+            recipientPhone={selectedRecipient.phone}
+            onSuccess={fetchPayments}
+          />
         )}
       </CardContent>
     </Card>
