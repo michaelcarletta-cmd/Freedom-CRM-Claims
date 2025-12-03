@@ -277,6 +277,8 @@ export const AutomationsSettings = () => {
         return config.task_title_pattern 
           ? `When task containing "${config.task_title_pattern}" is completed` 
           : 'When any task is completed';
+      case 'inspection_scheduled':
+        return 'When a new inspection is scheduled';
       default:
         return automation.trigger_type.replace('_', ' ');
     }
@@ -415,6 +417,7 @@ export const AutomationsSettings = () => {
                         <SelectItem value="inactivity">After Inactivity Period</SelectItem>
                         <SelectItem value="status_change">When Claim Status Changes</SelectItem>
                         <SelectItem value="task_completed">When Task is Completed</SelectItem>
+                        <SelectItem value="inspection_scheduled">When Inspection is Scheduled</SelectItem>
                         <SelectItem value="manual">Manual Trigger Only</SelectItem>
                       </SelectContent>
                     </Select>
@@ -713,6 +716,12 @@ export const AutomationsSettings = () => {
                           />
                           <p className="text-xs text-muted-foreground">
                             Available: {'{claim.policyholder_name}'}, {'{claim.claim_number}'}, {'{claim.status}'}, {'{claim.loss_type}'}
+                            {triggerType === 'inspection_scheduled' && (
+                              <>
+                                <br />
+                                Inspection: {'{inspection.date}'}, {'{inspection.time}'}, {'{inspection.type}'}, {'{inspection.inspector}'}
+                              </>
+                            )}
                           </p>
                         </div>
                         <div className="space-y-2">
@@ -808,7 +817,14 @@ export const AutomationsSettings = () => {
                               config: { ...currentAction.config, message: e.target.value }
                             })}
                           />
-                          <p className="text-xs text-muted-foreground">Keep under 160 characters for best delivery</p>
+                          <p className="text-xs text-muted-foreground">
+                            Keep under 160 characters for best delivery.
+                            {triggerType === 'inspection_scheduled' && (
+                              <>
+                                {' '}Use {'{inspection.date}'}, {'{inspection.time}'}, {'{inspection.type}'} for inspection details.
+                              </>
+                            )}
+                          </p>
                         </div>
                       </div>
                     )}

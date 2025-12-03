@@ -1054,6 +1054,7 @@ export type Database = {
           created_by: string | null
           id: string
           inspection_date: string
+          inspection_time: string | null
           inspection_type: string | null
           inspector_name: string | null
           notes: string | null
@@ -1066,6 +1067,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           inspection_date: string
+          inspection_time?: string | null
           inspection_type?: string | null
           inspector_name?: string | null
           notes?: string | null
@@ -1078,6 +1080,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           inspection_date?: string
+          inspection_time?: string | null
           inspection_type?: string | null
           inspector_name?: string | null
           notes?: string | null

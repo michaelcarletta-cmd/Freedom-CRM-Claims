@@ -478,9 +478,16 @@ function replaceVariables(template: string, claim: any, triggerData: any): strin
     result = result.replace(/\{claim\.(\w+)\}/g, (_, field) => claim[field] || '');
   }
   
-  // Replace trigger variables
+  // Replace trigger variables (including inspection data)
   if (triggerData) {
     result = result.replace(/\{trigger\.(\w+)\}/g, (_, field) => triggerData[field] || '');
+    
+    // Replace inspection-specific variables for inspection_scheduled triggers
+    result = result.replace(/\{inspection\.date\}/g, triggerData.inspection_date || '');
+    result = result.replace(/\{inspection\.time\}/g, triggerData.inspection_time || '');
+    result = result.replace(/\{inspection\.type\}/g, triggerData.inspection_type || '');
+    result = result.replace(/\{inspection\.inspector\}/g, triggerData.inspector_name || '');
+    result = result.replace(/\{inspection\.notes\}/g, triggerData.notes || '');
   }
   
   return result;
