@@ -213,7 +213,20 @@ For each distinct area shown in the photos:
 Format this as a professional report suitable for insurance documentation.`;
     }
 
-    console.log("Calling Lovable AI for photo analysis...");
+    // Limit photos to prevent timeout (AI can handle ~10-15 images reliably)
+    const maxPhotos = 15;
+    const limitedImageContents = imageContents.slice(0, maxPhotos);
+    const limitedDescriptions = photoDescriptions.slice(0, maxPhotos);
+    
+    if (imageContents.length > maxPhotos) {
+      console.log(`Limiting analysis to ${maxPhotos} photos (${imageContents.length} provided)`);
+      userPrompt = userPrompt.replace(
+        `${photos.length} photos`,
+        `${maxPhotos} photos (limited from ${photos.length} for optimal analysis)`
+      );
+    }
+
+    console.log(`Calling Lovable AI for photo analysis with ${limitedImageContents.length} images...`);
 
     // Call Lovable AI with images
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -230,7 +243,7 @@ Format this as a professional report suitable for insurance documentation.`;
             role: "user",
             content: [
               { type: "text", text: userPrompt },
-              ...imageContents
+              ...limitedImageContents
             ]
           }
         ],
@@ -238,9 +251,12 @@ Format this as a professional report suitable for insurance documentation.`;
       }),
     });
 
+    // Get raw response text first for better error handling
+    const responseText = await response.text();
+    console.log(`AI response status: ${response.status}, length: ${responseText.length}`);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI API error:", response.status, errorText);
+      console.error("AI API error:", response.status, responseText);
       
       if (response.status === 429) {
         return new Response(
@@ -256,12 +272,26 @@ Format this as a professional report suitable for insurance documentation.`;
       }
       
       return new Response(
-        JSON.stringify({ error: "AI analysis failed" }),
+        JSON.stringify({ error: "AI analysis failed: " + responseText.substring(0, 200) }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const aiResponse = await response.json();
+    // Parse JSON safely
+    let aiResponse;
+    try {
+      if (!responseText || responseText.trim() === "") {
+        throw new Error("Empty response from AI");
+      }
+      aiResponse = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error("Failed to parse AI response:", parseError, "Response:", responseText.substring(0, 500));
+      return new Response(
+        JSON.stringify({ error: "AI returned invalid response. Please try with fewer photos." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const reportContent = aiResponse.choices?.[0]?.message?.content || "Analysis could not be completed.";
 
     console.log("Photo analysis complete");
