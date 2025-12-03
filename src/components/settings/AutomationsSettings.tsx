@@ -36,6 +36,7 @@ interface ActionConfig {
     message?: string;
     // Email attachments
     attachment_folders?: string[]; // Folder names to pull files from
+    file_name_patterns?: string[]; // File name patterns to match (e.g., "Contract", "Estimate")
     // Task
     title?: string;
     description?: string;
@@ -583,7 +584,27 @@ export const AutomationsSettings = () => {
                             ))}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            All files from selected folders will be attached to the email
+                            Select folders to search for files
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>File Name Patterns (optional)</Label>
+                          <Input 
+                            placeholder="e.g., Contract, Estimate, Invoice"
+                            value={currentAction.config.file_name_patterns?.join(', ') || ''}
+                            onChange={(e) => {
+                              const patterns = e.target.value
+                                .split(',')
+                                .map(p => p.trim())
+                                .filter(p => p.length > 0);
+                              setCurrentAction({
+                                ...currentAction,
+                                config: { ...currentAction.config, file_name_patterns: patterns.length > 0 ? patterns : undefined }
+                              });
+                            }}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Comma-separated. Only files containing these words will be attached. Leave empty for all files.
                           </p>
                         </div>
                       </div>
