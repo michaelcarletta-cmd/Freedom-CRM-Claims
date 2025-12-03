@@ -32,14 +32,16 @@ interface Photo {
   id: string;
   file_name: string;
   category?: string;
+  url?: string;
 }
 
 interface EstimateAssistantProps {
   claimId: string;
   photos: Photo[];
+  photoUrls?: Record<string, string>;
 }
 
-const EstimateAssistant = ({ claimId, photos }: EstimateAssistantProps) => {
+const EstimateAssistant = ({ claimId, photos, photoUrls = {} }: EstimateAssistantProps) => {
   const [open, setOpen] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -145,24 +147,45 @@ const EstimateAssistant = ({ claimId, photos }: EstimateAssistantProps) => {
                 {photos.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No photos available. Upload photos first.</p>
                 ) : (
-                  <ScrollArea className="h-48">
-                    <div className="space-y-2">
-                      {photos.map(photo => (
-                        <div 
-                          key={photo.id} 
-                          className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
-                          onClick={() => togglePhoto(photo.id)}
-                        >
-                          <Checkbox 
-                            checked={selectedPhotos.includes(photo.id)}
-                            onCheckedChange={() => togglePhoto(photo.id)}
-                          />
-                          <span className="text-sm flex-1 truncate">{photo.file_name}</span>
-                          {photo.category && (
-                            <Badge variant="outline" className="text-xs">{photo.category}</Badge>
-                          )}
-                        </div>
-                      ))}
+                <ScrollArea className="h-64">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                      {photos.map(photo => {
+                        const imageUrl = photo.url || photoUrls[photo.id];
+                        const isSelected = selectedPhotos.includes(photo.id);
+                        return (
+                          <div 
+                            key={photo.id} 
+                            className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
+                              isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-transparent hover:border-muted-foreground/30'
+                            }`}
+                            onClick={() => togglePhoto(photo.id)}
+                          >
+                            {imageUrl ? (
+                              <img 
+                                src={imageUrl} 
+                                alt={photo.file_name}
+                                className="w-full h-20 object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-20 bg-muted flex items-center justify-center">
+                                <span className="text-xs text-muted-foreground">No preview</span>
+                              </div>
+                            )}
+                            <div className="absolute top-1 left-1">
+                              <Checkbox 
+                                checked={isSelected}
+                                onCheckedChange={() => togglePhoto(photo.id)}
+                                className="bg-background/80"
+                              />
+                            </div>
+                            {photo.category && (
+                              <div className="absolute bottom-0 left-0 right-0 bg-background/80 px-1 py-0.5">
+                                <span className="text-[10px] text-muted-foreground truncate block">{photo.category}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </ScrollArea>
                 )}
