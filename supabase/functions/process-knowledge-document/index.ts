@@ -42,6 +42,14 @@ function getMimeType(fileType: string, fileName: string): string {
   if (fileType.includes('audio') || fileName.match(/\.(mp3|wav|m4a)$/i)) {
     return 'audio/mpeg';
   }
+  // Image types
+  if (fileType.includes('image') || fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i)) {
+    if (fileName.match(/\.png$/i)) return 'image/png';
+    if (fileName.match(/\.gif$/i)) return 'image/gif';
+    if (fileName.match(/\.webp$/i)) return 'image/webp';
+    if (fileName.match(/\.bmp$/i)) return 'image/bmp';
+    return 'image/jpeg';
+  }
   return fileType || 'application/octet-stream';
 }
 
@@ -124,6 +132,66 @@ async function extractTextFromDocument(dataUrl: string, fileName: string): Promi
   const extractedText = data.choices?.[0]?.message?.content || '';
   console.log(`Extracted ${extractedText.length} characters`);
   return extractedText;
+}
+
+// Analyze image content using AI
+async function analyzeImage(dataUrl: string, fileName: string): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
+
+  console.log(`Analyzing image: ${fileName}`);
+
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Please analyze this image thoroughly and provide a detailed description. Include:
+1. Any visible text (OCR if present)
+2. What type of document or photo this appears to be
+3. Key visual elements, objects, or subjects shown
+4. Any relevant details that would be useful for insurance claims (damage assessment, property conditions, etc.)
+5. If this is a document, extract all readable content
+
+Provide your analysis in a clear, structured format that can be used as a knowledge reference.`
+            },
+            {
+              type: 'image_url',
+              image_url: { url: dataUrl }
+            }
+          ]
+        }
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Image analysis error:', errorText);
+    
+    if (response.status === 429) {
+      throw new Error('Rate limit exceeded. Please try again in a few minutes.');
+    }
+    if (response.status === 402) {
+      throw new Error('AI credits exhausted. Please add funds to continue processing.');
+    }
+    
+    throw new Error(`Failed to analyze image: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const analysisText = data.choices?.[0]?.message?.content || '';
+  console.log(`Analyzed image, got ${analysisText.length} characters`);
+  return `[Image: ${fileName}]\n\n${analysisText}`;
 }
 
 // Transcribe audio/video using base64 data
@@ -271,6 +339,11 @@ serve(async (req) => {
       document.file_name.match(/\.(docx|doc)$/i)
     ) {
       extractedText = await extractTextFromDocument(dataUrl, document.file_name);
+    } else if (
+      fileType.includes('image') ||
+      document.file_name.match(/\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i)
+    ) {
+      extractedText = await analyzeImage(dataUrl, document.file_name);
     } else {
       throw new Error(`Unsupported file type: ${fileType}`);
     }

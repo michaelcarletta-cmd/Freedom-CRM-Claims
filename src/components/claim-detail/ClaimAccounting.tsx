@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy } from "lucide-react";
+import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput } from "lucide-react";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ClaimPayments } from "./ClaimPayments";
+import { InvoiceDialog } from "@/components/InvoiceDialog";
 
 interface ClaimAccountingProps {
   claim: any;
@@ -23,6 +24,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
   const isAdmin = userRole === 'admin';
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
 
   // Fetch settlement data
   const { data: settlement } = useQuery({
@@ -91,6 +93,14 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
 
   return (
     <div className="space-y-6">
+      {/* Invoice Button */}
+      <div className="flex justify-end">
+        <Button onClick={() => setInvoiceOpen(true)} variant="outline">
+          <FileOutput className="h-4 w-4 mr-2" />
+          Create Invoice
+        </Button>
+      </div>
+
       {/* Financial Overview Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -163,6 +173,19 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
 
       {/* Payments Released */}
       <ClaimPayments claimId={claim.id} isAdmin={isAdmin} />
+
+      {/* Invoice Dialog */}
+      <InvoiceDialog
+        open={invoiceOpen}
+        onOpenChange={setInvoiceOpen}
+        claimId={claim.id}
+        claimNumber={claim.claim_number}
+        defaultRecipient={{
+          name: claim.policyholder_name || "",
+          email: claim.policyholder_email || "",
+          address: claim.policyholder_address || "",
+        }}
+      />
     </div>
   );
 }

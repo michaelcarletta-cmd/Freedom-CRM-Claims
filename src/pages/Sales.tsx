@@ -2,14 +2,16 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, DollarSign, TrendingUp, TrendingDown, Receipt, AlertCircle, CreditCard } from "lucide-react";
+import { Loader2, DollarSign, TrendingUp, TrendingDown, Receipt, AlertCircle, CreditCard, FileText } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useState } from "react";
 import { QuickBooksPaymentDialog } from "@/components/QuickBooksPaymentDialog";
+import { InvoiceDialog } from "@/components/InvoiceDialog";
 
 const Sales = () => {
   const { userRole } = useAuth();
   const [qbPaymentOpen, setQbPaymentOpen] = useState(false);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [paymentRecipient, setPaymentRecipient] = useState<{ name: string; email?: string } | null>(null);
 
   // Fetch all settlements
@@ -112,10 +114,16 @@ const Sales = () => {
             Track financial metrics and company performance
           </p>
         </div>
-        <Button onClick={handleOpenPayment}>
-          <CreditCard className="h-4 w-4 mr-2" />
-          Pay via QuickBooks
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setInvoiceOpen(true)}>
+            <FileText className="h-4 w-4 mr-2" />
+            Create Invoice
+          </Button>
+          <Button onClick={handleOpenPayment}>
+            <CreditCard className="h-4 w-4 mr-2" />
+            Pay via QuickBooks
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -272,6 +280,11 @@ const Sales = () => {
           recipientEmail={paymentRecipient.email}
         />
       )}
+
+      <InvoiceDialog
+        open={invoiceOpen}
+        onOpenChange={setInvoiceOpen}
+      />
     </div>
   );
 };
