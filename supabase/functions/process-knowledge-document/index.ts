@@ -6,9 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Maximum file size for processing (500KB to stay within memory limits)
-const MAX_FILE_SIZE_BYTES = 500 * 1024;
-
 // Split text into chunks for RAG
 function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[] {
   const chunks: string[] = [];
@@ -25,60 +22,12 @@ function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[
   return chunks;
 }
 
-// Download file with size check
-async function downloadFileWithSizeCheck(fileUrl: string): Promise<{ base64: string; mimeType: string }> {
-  console.log('Downloading file from URL...');
-  
-  // First, do a HEAD request to check file size
-  const headResponse = await fetch(fileUrl, { method: 'HEAD' });
-  const contentLength = headResponse.headers.get('content-length');
-  
-  if (contentLength && parseInt(contentLength) > MAX_FILE_SIZE_BYTES) {
-    throw new Error(`File too large (${Math.round(parseInt(contentLength) / 1024)}KB). Maximum supported size is ${MAX_FILE_SIZE_BYTES / 1024}KB. Please upload a smaller file or split the document into smaller parts.`);
-  }
-  
-  const response = await fetch(fileUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to download file: ${response.status}`);
-  }
-  
-  const arrayBuffer = await response.arrayBuffer();
-  
-  // Double-check actual size
-  if (arrayBuffer.byteLength > MAX_FILE_SIZE_BYTES) {
-    throw new Error(`File too large (${Math.round(arrayBuffer.byteLength / 1024)}KB). Maximum supported size is ${MAX_FILE_SIZE_BYTES / 1024}KB.`);
-  }
-  
-  const uint8Array = new Uint8Array(arrayBuffer);
-  
-  // Convert to base64 in chunks to reduce memory spikes
-  const chunkSize = 32768;
-  let binary = '';
-  for (let i = 0; i < uint8Array.length; i += chunkSize) {
-    const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
-    binary += String.fromCharCode(...chunk);
-  }
-  const base64 = btoa(binary);
-  
-  const mimeType = response.headers.get('content-type') || 'application/octet-stream';
-  console.log(`Downloaded file: ${uint8Array.length} bytes, mime: ${mimeType}`);
-  
-  return { base64, mimeType };
-}
-
-// Extract text from PDF using Lovable AI with base64 data
-async function extractTextFromDocument(base64Data: string, mimeType: string, fileName: string): Promise<string> {
+// Extract text from document using URL (no memory loading)
+async function extractTextFromDocumentUrl(fileUrl: string, fileName: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
-  console.log(`Extracting text from document: ${fileName} (${mimeType})`);
-
-  let aiMimeType = mimeType;
-  if (fileName.endsWith('.pdf') || mimeType.includes('pdf')) {
-    aiMimeType = 'application/pdf';
-  }
-
-  const dataUrl = `data:${aiMimeType};base64,${base64Data}`;
+  console.log(`Extracting text from document: ${fileName}`);
 
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
@@ -98,7 +47,7 @@ async function extractTextFromDocument(base64Data: string, mimeType: string, fil
             },
             {
               type: 'image_url',
-              image_url: { url: dataUrl }
+              image_url: { url: fileUrl }
             }
           ]
         }
@@ -109,6 +58,15 @@ async function extractTextFromDocument(base64Data: string, mimeType: string, fil
   if (!response.ok) {
     const errorText = await response.text();
     console.error('Document extraction error:', errorText);
+    
+    // Check for rate limit errors
+    if (response.status === 429) {
+      throw new Error('Rate limit exceeded. Please try again in a few minutes.');
+    }
+    if (response.status === 402) {
+      throw new Error('AI credits exhausted. Please add funds to continue processing.');
+    }
+    
     throw new Error(`Failed to extract document text: ${response.status} - ${errorText}`);
   }
 
@@ -118,14 +76,12 @@ async function extractTextFromDocument(base64Data: string, mimeType: string, fil
   return extractedText;
 }
 
-// Transcribe audio/video using Lovable AI with base64 data
-async function transcribeMedia(base64Data: string, mimeType: string, fileName: string): Promise<string> {
+// Transcribe audio/video using URL
+async function transcribeMediaUrl(fileUrl: string, fileName: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
-  console.log(`Transcribing media: ${fileName} (${mimeType})`);
-
-  const dataUrl = `data:${mimeType};base64,${base64Data}`;
+  console.log(`Transcribing media: ${fileName}`);
 
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
@@ -145,7 +101,7 @@ async function transcribeMedia(base64Data: string, mimeType: string, fileName: s
             },
             {
               type: 'image_url',
-              image_url: { url: dataUrl }
+              image_url: { url: fileUrl }
             }
           ]
         }
@@ -156,6 +112,14 @@ async function transcribeMedia(base64Data: string, mimeType: string, fileName: s
   if (!response.ok) {
     const errorText = await response.text();
     console.error('Transcription error:', errorText);
+    
+    if (response.status === 429) {
+      throw new Error('Rate limit exceeded. Please try again in a few minutes.');
+    }
+    if (response.status === 402) {
+      throw new Error('AI credits exhausted. Please add funds to continue processing.');
+    }
+    
     throw new Error(`Failed to transcribe media: ${response.status} - ${errorText}`);
   }
 
@@ -202,18 +166,13 @@ serve(async (req) => {
       });
     }
 
-    // Check file size before processing
-    if (document.file_size && document.file_size > MAX_FILE_SIZE_BYTES) {
-      throw new Error(`File too large (${Math.round(document.file_size / 1024)}KB). Maximum supported size is ${MAX_FILE_SIZE_BYTES / 1024}KB. Please upload smaller documents (under 500KB).`);
-    }
-
     // Update status to processing
     await supabase
       .from('ai_knowledge_documents')
       .update({ status: 'processing' })
       .eq('id', documentId);
 
-    // Get signed URL for the file
+    // Get signed URL for the file (1 hour validity)
     const { data: signedUrlData, error: urlError } = await supabase.storage
       .from('ai-knowledge-base')
       .createSignedUrl(document.file_path, 3600);
@@ -227,26 +186,23 @@ serve(async (req) => {
 
     console.log(`Processing document: ${document.file_name}, type: ${fileType}, size: ${document.file_size || 'unknown'}`);
 
-    // Download file with size check
-    const { base64, mimeType } = await downloadFileWithSizeCheck(fileUrl);
-    
     let extractedText = '';
 
-    // Process based on file type
+    // Process based on file type - pass URL directly to AI (no memory loading!)
     if (fileType === 'application/pdf' || document.file_name.endsWith('.pdf')) {
-      extractedText = await extractTextFromDocument(base64, 'application/pdf', document.file_name);
+      extractedText = await extractTextFromDocumentUrl(fileUrl, document.file_name);
     } else if (
       fileType.includes('video') || 
       fileType.includes('audio') ||
       document.file_name.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)
     ) {
-      extractedText = await transcribeMedia(base64, mimeType, document.file_name);
+      extractedText = await transcribeMediaUrl(fileUrl, document.file_name);
     } else if (
       fileType.includes('word') || 
       fileType.includes('document') ||
       document.file_name.match(/\.(docx|doc)$/i)
     ) {
-      extractedText = await extractTextFromDocument(base64, mimeType, document.file_name);
+      extractedText = await extractTextFromDocumentUrl(fileUrl, document.file_name);
     } else {
       throw new Error(`Unsupported file type: ${fileType}`);
     }
