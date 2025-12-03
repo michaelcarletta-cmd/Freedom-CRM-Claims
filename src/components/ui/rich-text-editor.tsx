@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Bold, Italic, Underline, Type, Palette } from "lucide-react";
 import {
@@ -26,12 +26,33 @@ const COLORS = [
 
 export function RichTextEditor({ value, onChange, placeholder, rows = 4 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const isInitialized = useRef(false);
 
-  const execCommand = useCallback((command: string, value?: string) => {
-    document.execCommand(command, false, value);
+  // Only set initial content once
+  useEffect(() => {
+    if (editorRef.current && !isInitialized.current) {
+      editorRef.current.innerHTML = value || '';
+      isInitialized.current = true;
+    }
+  }, []);
+
+  // Sync external value changes (e.g., when loading a template)
+  useEffect(() => {
+    if (editorRef.current && isInitialized.current) {
+      // Only update if the value is completely different (like loading a template)
+      const currentContent = editorRef.current.innerHTML;
+      if (value !== currentContent && (value === '' || !currentContent.includes(value.slice(0, 20)))) {
+        editorRef.current.innerHTML = value || '';
+      }
+    }
+  }, [value]);
+
+  const execCommand = useCallback((command: string, commandValue?: string) => {
+    document.execCommand(command, false, commandValue);
     if (editorRef.current) {
       onChange(editorRef.current.innerHTML);
     }
+    editorRef.current?.focus();
   }, [onChange]);
 
   const handleInput = useCallback(() => {
@@ -156,7 +177,6 @@ export function RichTextEditor({ value, onChange, placeholder, rows = 4 }: RichT
         style={{ minHeight: `${rows * 24}px` }}
         onInput={handleInput}
         onPaste={handlePaste}
-        dangerouslySetInnerHTML={{ __html: value || '' }}
         data-placeholder={placeholder}
       />
       <style>{`
