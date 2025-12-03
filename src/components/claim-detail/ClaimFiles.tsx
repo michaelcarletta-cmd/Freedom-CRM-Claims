@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ClaimTemplates } from "./ClaimTemplates";
+import EstimateAssistant from "./EstimateAssistant";
 
 interface ClaimFilesProps {
   claimId: string;
@@ -374,6 +375,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
               <ExternalLink className="h-4 w-4 mr-2" />
               Xactimate
             </Button>
+            <EstimateAssistant claimId={claimId} claim={claim} />
             <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">

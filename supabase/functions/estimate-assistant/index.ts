@@ -22,94 +22,57 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { photoIds, claimId } = await req.json();
-    console.log('Estimate assistant request:', { photoIds, claimId });
+    const { measurementPdf, measurementFileName, claimId, claimContext } = await req.json();
+    console.log('Estimate assistant request:', { 
+      hasPdf: !!measurementPdf, 
+      fileName: measurementFileName,
+      claimId 
+    });
 
-    if (!photoIds || photoIds.length === 0) {
-      throw new Error('No photos provided for analysis');
+    if (!measurementPdf) {
+      throw new Error('No measurement PDF provided');
     }
 
-    // Fetch claim details for context
-    const { data: claim, error: claimError } = await supabase
-      .from('claims')
-      .select('*')
-      .eq('id', claimId)
-      .single();
+    // Fetch claim details if not provided
+    let claimData = claimContext;
+    if (!claimData && claimId) {
+      const { data: claim, error: claimError } = await supabase
+        .from('claims')
+        .select('*')
+        .eq('id', claimId)
+        .single();
 
-    if (claimError) {
-      console.error('Error fetching claim:', claimError);
-      throw new Error('Failed to fetch claim details');
-    }
-
-    // Fetch photo metadata
-    const { data: photos, error: photosError } = await supabase
-      .from('claim_photos')
-      .select('*')
-      .in('id', photoIds);
-
-    if (photosError || !photos || photos.length === 0) {
-      console.error('Error fetching photos:', photosError);
-      throw new Error('Failed to fetch photos');
-    }
-
-    // Limit to 5 photos max to avoid memory issues
-    const photosToProcess = photos.slice(0, 5);
-    console.log(`Processing ${photosToProcess.length} of ${photos.length} photos for estimate suggestions`);
-
-    // Helper function to convert ArrayBuffer to base64 without stack overflow
-    function arrayBufferToBase64(buffer: ArrayBuffer): string {
-      const bytes = new Uint8Array(buffer);
-      let binary = '';
-      const chunkSize = 8192;
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-        binary += String.fromCharCode.apply(null, Array.from(chunk));
-      }
-      return btoa(binary);
-    }
-
-    // Download photos and convert to base64
-    const photoBase64s: string[] = [];
-    for (const photo of photosToProcess) {
-      try {
-        const { data: fileData, error: downloadError } = await supabase
-          .storage
-          .from('claim-files')
-          .download(photo.file_path);
-
-        if (downloadError || !fileData) {
-          console.error('Error downloading photo:', downloadError);
-          continue;
-        }
-
-        const arrayBuffer = await fileData.arrayBuffer();
-        const base64 = arrayBufferToBase64(arrayBuffer);
-        const mimeType = photo.file_name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-        photoBase64s.push(`data:${mimeType};base64,${base64}`);
-        console.log(`Processed photo ${photoBase64s.length}: ${photo.file_name}`);
-      } catch (err) {
-        console.error('Error processing photo:', err);
-        continue;
+      if (!claimError && claim) {
+        claimData = {
+          lossType: claim.loss_type,
+          lossDate: claim.loss_date,
+          lossDescription: claim.loss_description,
+          address: claim.policyholder_address
+        };
       }
     }
 
-    if (photoBase64s.length === 0) {
-      throw new Error('Could not process any photos');
-    }
+    const systemPrompt = `You are an expert insurance claims estimator and Xactimate specialist. Your role is to analyze roof measurement reports and property information to suggest appropriate Xactimate line items for repair estimates.
 
-    const systemPrompt = `You are an expert insurance claims estimator and Xactimate specialist. Your role is to analyze property damage photos and suggest appropriate Xactimate line items for the repair estimate.
+You will receive a PDF measurement report (typically from GAF QuickMeasure, EagleView, or similar services) containing detailed roof measurements including:
+- Total roof area (squares)
+- Individual facet/slope measurements
+- Ridge, hip, valley, and rake lengths
+- Pitch/slope information
+- Eave lengths
+- Waste factor calculations
 
-For each area of damage you identify, provide:
+For each repair area, provide:
 1. Category (e.g., Roofing, Siding, Interior, Flooring, Drywall, Windows, Gutters, Fencing, etc.)
 2. Xactimate Category Code (e.g., RFG for roofing, SDG for siding, DRY for drywall, etc.)
 3. Line Item Description (use standard Xactimate terminology)
 4. Unit of Measure (SF, LF, EA, SQ, etc.)
-5. Estimated Quantity Range (provide a range if exact measurement isn't visible)
-6. Damage Severity (Minor, Moderate, Severe)
+5. Estimated Quantity (use exact measurements from the report when available)
+6. Damage Severity (Minor, Moderate, Severe) - assume full replacement for roofing
 7. Notes/Justification for the line item
 
 Common Xactimate categories and codes:
-- RFG: Roofing (shingles, underlayment, flashing, vents)
+- RFG: Roofing (shingles, underlayment, flashing, vents, drip edge)
 - SDG: Siding (vinyl, wood, fiber cement)
 - DRY: Drywall (repair, replacement, texture)
 - PNT: Painting
@@ -123,19 +86,26 @@ Common Xactimate categories and codes:
 - CON: Contents
 - DEM: Demolition
 
-Be thorough but realistic. Only suggest line items for damage that is clearly visible in the photos.`;
+IMPORTANT: 
+- Use the exact measurements from the report
+- Standard repair scope for roofing is FULL REPLACEMENT of each damaged slope/section
+- Include tear-off, underlayment, shingles, and all related materials
+- Include drip edge, starter strip, and ridge cap
+- Account for waste factor (typically 10-15%)`;
 
-    const userPrompt = `Analyze these property damage photos and suggest Xactimate line items for the repair estimate.
+    const userPrompt = `Analyze this roof measurement report and generate Xactimate line items for a full roof replacement estimate.
 
 Claim Context:
-- Loss Type: ${claim.loss_type || 'Not specified'}
-- Loss Date: ${claim.loss_date || 'Not specified'}
-- Property Address: ${claim.policyholder_address || 'Not specified'}
-- Loss Description: ${claim.loss_description || 'Not provided'}
+- Loss Type: ${claimData?.lossType || 'Storm Damage'}
+- Loss Date: ${claimData?.lossDate || 'Not specified'}
+- Property Address: ${claimData?.address || 'Not specified'}
+- Loss Description: ${claimData?.lossDescription || 'Roof damage requiring replacement'}
+
+The measurement PDF file is: ${measurementFileName}
 
 Please provide your response in the following JSON format:
 {
-  "summary": "Brief overview of damage observed",
+  "summary": "Brief overview of the roof and recommended repairs",
   "totalLineItems": number,
   "lineItems": [
     {
@@ -146,19 +116,13 @@ Please provide your response in the following JSON format:
       "quantityMin": number,
       "quantityMax": number,
       "severity": "Minor|Moderate|Severe",
-      "notes": "Justification and observations",
-      "photoReference": "Which photo shows this damage"
+      "notes": "Justification and measurements used"
     }
   ],
   "additionalNotes": "Any other observations or recommendations"
 }`;
 
-    const imageContent = photoBase64s.map((dataUrl: string) => ({
-      type: "image_url" as const,
-      image_url: { url: dataUrl, detail: "high" as const }
-    }));
-
-    console.log('Calling OpenAI API for estimate analysis...');
+    console.log('Calling OpenAI API for measurement analysis...');
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -167,14 +131,20 @@ Please provide your response in the following JSON format:
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt },
           {
             role: 'user',
             content: [
               { type: 'text', text: userPrompt },
-              ...imageContent
+              {
+                type: 'image_url',
+                image_url: { 
+                  url: `data:application/pdf;base64,${measurementPdf}`,
+                  detail: 'high'
+                }
+              }
             ]
           }
         ],
@@ -224,8 +194,7 @@ Please provide your response in the following JSON format:
 
     return new Response(JSON.stringify({
       success: true,
-      estimate: parsedContent,
-      photosAnalyzed: photoBase64s.length
+      estimate: parsedContent
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

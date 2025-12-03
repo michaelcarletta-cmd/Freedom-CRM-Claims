@@ -13,7 +13,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PhotoAnnotationEditor } from "./PhotoAnnotationEditor";
 import { PhotoReportDialog } from "./PhotoReportDialog";
-import EstimateAssistant from "./EstimateAssistant";
 
 interface ClaimPhoto {
   id: string;
@@ -416,11 +415,6 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
               Clear ({selectedPhotos.length})
             </Button>
           )}
-          <EstimateAssistant 
-            claimId={claimId} 
-            photos={photos.map(p => ({ id: p.id, file_name: p.file_name, category: p.category }))}
-            photoUrls={photoUrls}
-          />
           <Button variant="outline" size="sm" onClick={() => setReportDialogOpen(true)}>
             <FileText className="h-4 w-4 mr-2" />
             Generate Report
