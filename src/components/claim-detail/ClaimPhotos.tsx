@@ -418,7 +418,8 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
           )}
           <EstimateAssistant 
             claimId={claimId} 
-            photos={photos.map(p => ({ id: p.id, file_name: p.file_name, category: p.category }))} 
+            photos={photos.map(p => ({ id: p.id, file_name: p.file_name, category: p.category }))}
+            photoUrls={photoUrls}
           />
           <Button variant="outline" size="sm" onClick={() => setReportDialogOpen(true)}>
             <FileText className="h-4 w-4 mr-2" />
