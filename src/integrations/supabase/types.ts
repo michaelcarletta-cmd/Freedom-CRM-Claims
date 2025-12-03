@@ -600,6 +600,68 @@ export type Database = {
           },
         ]
       }
+      claim_photos: {
+        Row: {
+          annotated_file_path: string | null
+          annotations: Json | null
+          before_after_pair_id: string | null
+          before_after_type: string | null
+          category: string | null
+          claim_id: string
+          created_at: string | null
+          description: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          taken_at: string | null
+          updated_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          annotated_file_path?: string | null
+          annotations?: Json | null
+          before_after_pair_id?: string | null
+          before_after_type?: string | null
+          category?: string | null
+          claim_id: string
+          created_at?: string | null
+          description?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          taken_at?: string | null
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          annotated_file_path?: string | null
+          annotations?: Json | null
+          before_after_pair_id?: string | null
+          before_after_type?: string | null
+          category?: string | null
+          claim_id?: string
+          created_at?: string | null
+          description?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          taken_at?: string | null
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_photos_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_settlements: {
         Row: {
           claim_id: string

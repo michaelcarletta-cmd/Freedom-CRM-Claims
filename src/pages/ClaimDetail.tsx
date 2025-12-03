@@ -13,6 +13,7 @@ import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
 import { ClaimAccessManagement } from "@/components/claim-detail/ClaimAccessManagement";
 import { ClaimAssigned } from "@/components/claim-detail/ClaimAssigned";
+import { ClaimPhotos } from "@/components/claim-detail/ClaimPhotos";
 import { EditClaimDialog } from "@/components/claim-detail/EditClaimDialog";
 import { DeleteClaimDialog } from "@/components/claim-detail/DeleteClaimDialog";
 import { NotifyPortalDialog } from "@/components/claim-detail/NotifyPortalDialog";
@@ -303,6 +304,9 @@ const ClaimDetail = () => {
           <TabsTrigger value="inspections" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Inspections
           </TabsTrigger>
+          <TabsTrigger value="photos" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+            Photos
+          </TabsTrigger>
           <TabsTrigger value="files" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Files
           </TabsTrigger>
@@ -349,6 +353,10 @@ const ClaimDetail = () => {
 
         <TabsContent value="inspections" className="mt-6">
           <ClaimInspections claimId={id || ""} />
+        </TabsContent>
+
+        <TabsContent value="photos" className="mt-6">
+          <ClaimPhotos claimId={id || ""} claim={claim} />
         </TabsContent>
 
         <TabsContent value="files" className="mt-6">
