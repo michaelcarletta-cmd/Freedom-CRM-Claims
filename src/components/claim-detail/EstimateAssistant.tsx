@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Calculator, Loader2, Copy, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Calculator, Loader2, Copy, AlertCircle, CheckCircle2, FileText, Upload, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -28,45 +29,36 @@ interface EstimateResult {
   additionalNotes?: string;
 }
 
-interface Photo {
-  id: string;
-  file_name: string;
-  category?: string;
-  url?: string;
-}
-
 interface EstimateAssistantProps {
   claimId: string;
-  photos: Photo[];
-  photoUrls?: Record<string, string>;
+  claim?: any;
 }
 
-const EstimateAssistant = ({ claimId, photos, photoUrls = {} }: EstimateAssistantProps) => {
+const EstimateAssistant = ({ claimId, claim }: EstimateAssistantProps) => {
   const [open, setOpen] = useState(false);
-  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EstimateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [measurementFile, setMeasurementFile] = useState<File | null>(null);
 
-  const togglePhoto = (photoId: string) => {
-    setSelectedPhotos(prev => 
-      prev.includes(photoId) 
-        ? prev.filter(id => id !== photoId)
-        : [...prev, photoId]
-    );
-  };
-
-  const selectAll = () => {
-    if (selectedPhotos.length === photos.length) {
-      setSelectedPhotos([]);
-    } else {
-      setSelectedPhotos(photos.map(p => p.id));
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        toast.error("Please upload a PDF file");
+        return;
+      }
+      setMeasurementFile(file);
     }
   };
 
+  const removeMeasurementFile = () => {
+    setMeasurementFile(null);
+  };
+
   const generateEstimate = async () => {
-    if (selectedPhotos.length === 0) {
-      toast.error("Please select at least one photo");
+    if (!measurementFile) {
+      toast.error("Please upload a measurement PDF");
       return;
     }
 
@@ -75,8 +67,29 @@ const EstimateAssistant = ({ claimId, photos, photoUrls = {} }: EstimateAssistan
     setResult(null);
 
     try {
+      // Convert PDF to base64
+      const arrayBuffer = await measurementFile.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+        binary += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+      const pdfBase64 = btoa(binary);
+
       const { data, error: fnError } = await supabase.functions.invoke('estimate-assistant', {
-        body: { photoIds: selectedPhotos, claimId }
+        body: { 
+          claimId,
+          measurementPdf: pdfBase64,
+          measurementFileName: measurementFile.name,
+          claimContext: {
+            lossType: claim?.loss_type,
+            lossDate: claim?.loss_date,
+            lossDescription: claim?.loss_description,
+            address: claim?.policyholder_address
+          }
+        }
       });
 
       if (fnError) throw fnError;
@@ -118,7 +131,7 @@ const EstimateAssistant = ({ claimId, photos, photoUrls = {} }: EstimateAssistan
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
+        <Button variant="outline" className="gap-2">
           <Calculator className="h-4 w-4" />
           Estimate Assistant
         </Button>
@@ -132,64 +145,46 @@ const EstimateAssistant = ({ claimId, photos, photoUrls = {} }: EstimateAssistan
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Photo Selection */}
+          {/* Measurement Upload */}
           {!result && (
             <Card>
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium">Select Photos to Analyze</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={selectAll}>
-                    {selectedPhotos.length === photos.length ? 'Deselect All' : 'Select All'}
-                  </Button>
-                </div>
+                <CardTitle className="text-sm font-medium">Upload Measurement PDF</CardTitle>
               </CardHeader>
-              <CardContent>
-                {photos.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No photos available. Upload photos first.</p>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Upload a roof measurement PDF (from GAF QuickMeasure, EagleView, etc.) to generate Xactimate line item suggestions.
+                </p>
+                
+                {!measurementFile ? (
+                  <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                    <FileText className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                    <Label htmlFor="measurement-upload" className="cursor-pointer">
+                      <span className="text-primary hover:underline">Click to upload</span>
+                      <span className="text-muted-foreground"> or drag and drop</span>
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-1">PDF files only</p>
+                    <Input
+                      id="measurement-upload"
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </div>
                 ) : (
-                <ScrollArea className="h-64">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                      {photos.map(photo => {
-                        const imageUrl = photo.url || photoUrls[photo.id];
-                        const isSelected = selectedPhotos.includes(photo.id);
-                        return (
-                          <div 
-                            key={photo.id} 
-                            className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
-                              isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-transparent hover:border-muted-foreground/30'
-                            }`}
-                            onClick={() => togglePhoto(photo.id)}
-                          >
-                            {imageUrl ? (
-                              <img 
-                                src={imageUrl} 
-                                alt={photo.file_name}
-                                loading="lazy"
-                                decoding="async"
-                                className="w-full h-20 object-cover bg-muted"
-                              />
-                            ) : (
-                              <div className="w-full h-20 bg-muted flex items-center justify-center">
-                                <span className="text-xs text-muted-foreground">No preview</span>
-                              </div>
-                            )}
-                            <div className="absolute top-1 left-1">
-                              <Checkbox 
-                                checked={isSelected}
-                                onCheckedChange={() => togglePhoto(photo.id)}
-                                className="bg-background/80"
-                              />
-                            </div>
-                            {photo.category && (
-                              <div className="absolute bottom-0 left-0 right-0 bg-background/80 px-1 py-0.5">
-                                <span className="text-[10px] text-muted-foreground truncate block">{photo.category}</span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <FileText className="h-8 w-8 text-primary" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{measurementFile.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(measurementFile.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
                     </div>
-                  </ScrollArea>
+                    <Button variant="ghost" size="icon" onClick={removeMeasurementFile}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -199,18 +194,18 @@ const EstimateAssistant = ({ claimId, photos, photoUrls = {} }: EstimateAssistan
           {!result && (
             <Button 
               onClick={generateEstimate} 
-              disabled={loading || selectedPhotos.length === 0}
+              disabled={loading || !measurementFile}
               className="w-full"
             >
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Analyzing {selectedPhotos.length} photo(s)...
+                  Analyzing measurement data...
                 </>
               ) : (
                 <>
                   <Calculator className="h-4 w-4 mr-2" />
-                  Generate Xactimate Line Items ({selectedPhotos.length} selected)
+                  Generate Xactimate Line Items
                 </>
               )}
             </Button>
@@ -313,7 +308,7 @@ const EstimateAssistant = ({ claimId, photos, photoUrls = {} }: EstimateAssistan
               {/* New Analysis Button */}
               <Button 
                 variant="outline" 
-                onClick={() => { setResult(null); setSelectedPhotos([]); }}
+                onClick={() => { setResult(null); setMeasurementFile(null); }}
                 className="w-full"
               >
                 Start New Analysis
