@@ -50,10 +50,53 @@ async function searchWeb(query: string): Promise<string> {
   }
 }
 
+// Helper function to get weather for a specific date and location
+async function getWeatherReport(location: string, date: string): Promise<string> {
+  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
+  if (!PERPLEXITY_API_KEY) {
+    return "Weather search unavailable: API key not configured";
+  }
+
+  try {
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-sonar-large-128k-online',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a weather research assistant. Provide detailed historical weather information including temperature, precipitation, wind speeds, and any severe weather events. Focus on facts from official weather records.'
+          },
+          {
+            role: 'user',
+            content: `What was the weather like in ${location} on ${date}? Include temperature, precipitation, wind conditions, and any severe weather events or storms that occurred. Search for historical weather data and news reports.`
+          }
+        ],
+        temperature: 0.2,
+        max_tokens: 1500,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Weather search error:", response.status);
+      return "Weather data temporarily unavailable";
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content;
+  } catch (error) {
+    console.error("Error in weather search:", error);
+    return "Weather search failed";
+  }
+}
+
 // Helper function to analyze document content
 async function analyzeDocument(fileUrl: string, fileName: string): Promise<string> {
   try {
-    // For now, return file metadata. In future, could integrate OCR/PDF parsing
     return `Document: ${fileName} (${fileUrl})`;
   } catch (error) {
     console.error("Error analyzing document:", error);
@@ -64,8 +107,6 @@ async function analyzeDocument(fileUrl: string, fileName: string): Promise<strin
 // Search knowledge base for relevant chunks
 async function searchKnowledgeBase(supabase: any, question: string, category?: string): Promise<string> {
   try {
-    // Get all chunks - simple text matching for now
-    // In production, you'd use vector embeddings for semantic search
     let query = supabase
       .from("ai_knowledge_chunks")
       .select(`
@@ -85,7 +126,6 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
       return "";
     }
 
-    // Simple keyword matching - find chunks that contain words from the question
     const questionWords = question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
     
     const scoredChunks = chunks.map((chunk: any) => {
@@ -114,22 +154,65 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
   }
 }
 
+// Report generation prompts
+const reportPrompts: Record<string, string> = {
+  weather: `Generate a comprehensive Weather Report for this insurance claim. Include:
+1. Historical weather conditions on the date of loss
+2. Any severe weather events (storms, hail, wind, flooding)
+3. Official weather records and measurements
+4. Comparison to typical weather patterns for the area
+5. How the weather conditions relate to the reported damage
+6. Citations or sources for the weather data
+
+Format this as a professional report that can be included in claim documentation.`,
+
+  damage: `Generate a detailed Damage Explanation Report for this insurance claim. Include:
+1. Summary of all reported damages
+2. Explanation of how each type of damage likely occurred based on the loss type
+3. Connection between the cause of loss and the resulting damage
+4. Industry standards for this type of damage assessment
+5. Potential hidden or secondary damages to look for
+6. Recommendations for proper documentation of damages
+
+Format this as a professional report suitable for presenting to the insurance carrier.`,
+
+  estimate: `Generate an Estimate Discussion Report for this insurance claim. Include:
+1. Overview of the claim valuation approach
+2. Explanation of replacement cost value vs actual cash value
+3. Discussion of depreciation factors
+4. Line items that may need additional justification
+5. Common carrier objections and how to address them
+6. Recommendations for maximizing the settlement
+7. Items that may be supplementable
+
+Format this as a professional analysis that helps understand and negotiate the estimate.`,
+
+  photos: `Generate a Photo Documentation Report for this insurance claim. Include:
+1. Recommended photos to capture for this type of loss
+2. Photo checklist organized by area/damage type
+3. Tips for capturing effective claim photos
+4. Metadata and documentation requirements
+5. Best practices for photo organization
+6. How to document before/after conditions
+
+Format this as a professional guide for photo documentation.`,
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { claimId, question, messages, mode } = await req.json();
+    const { claimId, question, messages, mode, reportType } = await req.json();
     
-    if (!question) {
+    if (!question && !reportType) {
       return new Response(
-        JSON.stringify({ error: "Missing question" }),
+        JSON.stringify({ error: "Missing question or reportType" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Initialize Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -138,7 +221,6 @@ serve(async (req) => {
     let claimsOverview = "";
     let knowledgeBaseContext = "";
 
-    // If in general mode, fetch overview of all claims
     if (mode === "general" || !claimId) {
       const { data: allClaims } = await supabase
         .from("claims")
@@ -164,7 +246,6 @@ serve(async (req) => {
         });
       }
 
-      // Also fetch pending tasks
       const { data: pendingTasks } = await supabase
         .from("tasks")
         .select(`
@@ -186,7 +267,6 @@ serve(async (req) => {
         });
       }
     } else if (claimId) {
-      // Fetch specific claim details
       const { data: claimData, error: claimError } = await supabase
         .from("claims")
         .select(`
@@ -233,7 +313,6 @@ serve(async (req) => {
     let contextContent = "";
     
     if (claim) {
-      // Specific claim context
       contextContent = `
 Claim Details:
 - Claim Number: ${claim.claim_number}
@@ -265,16 +344,31 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
 ` : ""}${filesContext}
       `.trim();
     } else {
-      // General mode context
       contextContent = `You are helping a public adjuster manage their claims workload.${claimsOverview}`;
     }
 
-    // Search the knowledge base for relevant information
-    knowledgeBaseContext = await searchKnowledgeBase(supabase, question);
+    // Handle report generation
+    let reportQuestion = question;
+    let additionalContext = "";
     
-    // Determine if web search is needed based on question content
+    if (reportType && claim) {
+      console.log(`Generating ${reportType} report for claim ${claimId}`);
+      
+      // Get weather data for weather reports
+      if (reportType === "weather" && claim.policyholder_address && claim.loss_date) {
+        const weatherData = await getWeatherReport(claim.policyholder_address, claim.loss_date);
+        additionalContext = `\n\nHistorical Weather Data:\n${weatherData}`;
+      }
+      
+      reportQuestion = reportPrompts[reportType] || question;
+    }
+
+    // Search the knowledge base for relevant information
+    knowledgeBaseContext = await searchKnowledgeBase(supabase, reportQuestion || question);
+    
+    // Determine if web search is needed
     let webSearchResults = "";
-    const needsWebSearch = /regulation|law|legal|code|requirement|guideline|best practice|industry standard/i.test(question);
+    const needsWebSearch = !reportType && /regulation|law|legal|code|requirement|guideline|best practice|industry standard/i.test(question);
     
     if (needsWebSearch) {
       console.log("Performing web search for:", question);
@@ -286,13 +380,21 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
       }
     }
 
-    // Call Lovable AI
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const systemPrompt = mode === "general" 
+    const systemPrompt = reportType
+      ? `You are an expert insurance claims report writer. Generate professional, detailed reports for property insurance claims. Your reports should be:
+- Well-structured with clear sections and headings
+- Factual and based on the claim information provided
+- Professional enough to be included in claim documentation
+- Actionable with specific recommendations
+- Written to support the policyholder's claim
+
+Use markdown formatting for better readability.`
+      : mode === "general" 
       ? `You are an expert AI assistant for public adjusters managing property insurance claims. You help with:
 - Drafting follow-up emails and communications
 - Summarizing claim statuses and next steps
@@ -313,10 +415,6 @@ You have deep knowledge of:
 - Proper claim valuation methodologies
 - When and how to escalate claims or file complaints
 
-You also have access to:
-- Current claim files and estimates uploaded by the user
-- Real-time web search results for regulations and best practices
-
 Always provide:
 - Clear, actionable advice
 - Specific strategies tailored to the claim situation
@@ -327,24 +425,20 @@ Always provide:
 
 Be professional, ethical, and focused on helping the user achieve a fair settlement. Never suggest fraudulent activities.`;
 
-    // Build conversation history with claim context
     const conversationMessages = [];
     
-    // Add system prompt with claim context
     conversationMessages.push({ 
       role: "system", 
-      content: `${systemPrompt}\n\nContext:\n${contextContent}${knowledgeBaseContext}${webSearchResults}`
+      content: `${systemPrompt}\n\nContext:\n${contextContent}${additionalContext}${knowledgeBaseContext}${webSearchResults}`
     });
     
-    // Add previous conversation history if provided
-    if (messages && messages.length > 0) {
+    if (messages && messages.length > 0 && !reportType) {
       conversationMessages.push(...messages);
     }
     
-    // Add current question
     conversationMessages.push({ 
       role: "user", 
-      content: question 
+      content: reportQuestion 
     });
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -356,8 +450,7 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: conversationMessages,
-        temperature: 0.7,
-        max_tokens: 1500,
+        max_tokens: reportType ? 3000 : 1500,
       }),
     });
 
@@ -386,7 +479,7 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
     const answer = aiData.choices[0].message.content;
 
     return new Response(
-      JSON.stringify({ answer }),
+      JSON.stringify({ answer, reportType }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
