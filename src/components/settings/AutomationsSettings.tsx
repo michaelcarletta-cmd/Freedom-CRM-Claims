@@ -36,6 +36,7 @@ interface ActionConfig {
     recipient_type?: 'policyholder' | 'adjuster' | 'referrer';
     subject?: string;
     message?: string;
+    email_template_id?: string; // Reference to email template
     // Email attachments
     attachment_folders?: string[]; // Folder names to pull files from
     file_name_patterns?: string[]; // File name patterns to match (parsed from text)
@@ -284,7 +285,10 @@ export const AutomationsSettings = () => {
         const attachmentInfo = action.config.attachment_folders?.length 
           ? ` (with ${action.config.attachment_folders.length} folder attachments)` 
           : '';
-        return `Email to ${action.config.recipient_type}: ${action.config.subject}${attachmentInfo}`;
+        const templateInfo = action.config.email_template_id 
+          ? emailTemplates?.find(t => t.id === action.config.email_template_id)?.name || 'Template'
+          : action.config.subject;
+        return `Email to ${action.config.recipient_type}: ${templateInfo}${attachmentInfo}`;
       case 'send_sms':
         return `SMS to ${action.config.recipient_type}`;
       case 'create_task':
@@ -587,13 +591,60 @@ export const AutomationsSettings = () => {
                           </Select>
                         </div>
                         <div className="space-y-2">
+                          <Label>Email Template (optional)</Label>
+                          <Select 
+                            value={currentAction.config.email_template_id || 'none'} 
+                            onValueChange={(value) => {
+                              if (value === 'none') {
+                                setCurrentAction({
+                                  ...currentAction,
+                                  config: { 
+                                    ...currentAction.config, 
+                                    email_template_id: undefined,
+                                    subject: '',
+                                    message: ''
+                                  }
+                                });
+                              } else {
+                                const template = emailTemplates?.find(t => t.id === value);
+                                if (template) {
+                                  setCurrentAction({
+                                    ...currentAction,
+                                    config: { 
+                                      ...currentAction.config, 
+                                      email_template_id: value,
+                                      subject: template.subject,
+                                      message: template.body
+                                    }
+                                  });
+                                }
+                              }
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a template or write custom" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">-- No template (custom) --</SelectItem>
+                              {emailTemplates?.map((template) => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  {template.name} {template.category && `(${template.category})`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Select a template to auto-fill subject and body, or write custom content below
+                          </p>
+                        </div>
+                        <div className="space-y-2">
                           <Label>Email Subject</Label>
                           <Input 
                             placeholder="e.g., Claim Status Update - {claim.claim_number}"
                             value={currentAction.config.subject || ''}
                             onChange={(e) => setCurrentAction({
                               ...currentAction,
-                              config: { ...currentAction.config, subject: e.target.value }
+                              config: { ...currentAction.config, subject: e.target.value, email_template_id: undefined }
                             })}
                           />
                         </div>
@@ -605,7 +656,7 @@ export const AutomationsSettings = () => {
                             value={currentAction.config.message || ''}
                             onChange={(e) => setCurrentAction({
                               ...currentAction,
-                              config: { ...currentAction.config, message: e.target.value }
+                              config: { ...currentAction.config, message: e.target.value, email_template_id: undefined }
                             })}
                           />
                           <p className="text-xs text-muted-foreground">
