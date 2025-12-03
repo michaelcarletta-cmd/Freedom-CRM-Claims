@@ -334,10 +334,10 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
 
   return (
     <Tabs defaultValue="files" className="w-full">
-      <TabsList>
-        <TabsTrigger value="files">Documents & Files</TabsTrigger>
+      <TabsList className="w-full justify-start gap-2 bg-muted/40 p-1">
+        <TabsTrigger value="files" className="px-4">Documents & Files</TabsTrigger>
         {isStaffOrAdmin && claim && (
-          <TabsTrigger value="templates">Templates & Signatures</TabsTrigger>
+          <TabsTrigger value="templates" className="px-4">Templates & Signatures</TabsTrigger>
         )}
       </TabsList>
 
