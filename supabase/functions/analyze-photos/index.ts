@@ -631,8 +631,8 @@ To return the property to pre-loss condition:
 Base all observations on visible evidence in the photos.`;
     }
 
-    // Limit photos to prevent timeout (AI can handle ~10-15 images reliably)
-    const maxPhotos = 15;
+    // Limit photos to prevent timeout (AI handles ~8-10 images most reliably)
+    const maxPhotos = 10;
     const limitedImageContents = imageContents.slice(0, maxPhotos);
     const limitedDescriptions = photoDescriptions.slice(0, maxPhotos);
     
@@ -646,32 +646,91 @@ Base all observations on visible evidence in the photos.`;
 
     console.log(`Calling Lovable AI for photo analysis with ${limitedImageContents.length} images...`);
 
-    // Call Lovable AI with images
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: userPrompt },
-              ...limitedImageContents
-            ]
-          }
-        ],
-        max_tokens: 4000,
-      }),
-    });
+    // Helper function to call AI with retry logic
+    const callAIWithRetry = async (maxRetries = 3): Promise<{ response: Response; responseText: string }> => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        console.log(`AI call attempt ${attempt}/${maxRetries}`);
+        
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-pro", // Use pro model for better reliability with images
+            messages: [
+              { role: "system", content: systemPrompt },
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: userPrompt },
+                  ...limitedImageContents
+                ]
+              }
+            ],
+            max_tokens: 4000,
+          }),
+        });
 
-    // Get raw response text first for better error handling
-    const responseText = await response.text();
-    console.log(`AI response status: ${response.status}, length: ${responseText.length}`);
+        const responseText = await response.text();
+        console.log(`AI response status: ${response.status}, length: ${responseText.length}`);
+        
+        // Check if response is valid (not just whitespace)
+        const trimmedResponse = responseText.trim();
+        if (response.ok && trimmedResponse && trimmedResponse.length > 100) {
+          // Try to parse to verify it's valid JSON
+          try {
+            const parsed = JSON.parse(trimmedResponse);
+            if (parsed.choices?.[0]?.message?.content) {
+              return { response, responseText: trimmedResponse };
+            }
+            console.log(`Attempt ${attempt}: Valid JSON but no content, retrying...`);
+          } catch {
+            console.log(`Attempt ${attempt}: Invalid JSON response, retrying...`);
+          }
+        } else if (!response.ok) {
+          // Don't retry on rate limits or payment issues
+          if (response.status === 429 || response.status === 402) {
+            return { response, responseText };
+          }
+          console.log(`Attempt ${attempt}: Non-OK status ${response.status}, retrying...`);
+        } else {
+          console.log(`Attempt ${attempt}: Empty/whitespace response, retrying...`);
+        }
+        
+        // Wait before retry (exponential backoff)
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+      
+      // Return last attempt result
+      const finalResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-pro",
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: userPrompt },
+                ...limitedImageContents
+              ]
+            }
+          ],
+          max_tokens: 4000,
+        }),
+      });
+      return { response: finalResponse, responseText: await finalResponse.text() };
+    };
+
+    const { response, responseText } = await callAIWithRetry();
 
     if (!response.ok) {
       console.error("AI API error:", response.status, responseText);
