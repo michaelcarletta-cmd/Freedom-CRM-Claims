@@ -105,13 +105,13 @@ Claim Information:
     }
 
     // Build prompt based on report type
-    let systemPrompt = `You are an expert property damage assessment specialist working for a public adjusting firm. Analyze property damage photos and provide professional observations. Focus only on what you can see in the photos - do not include action items, recommendations for gathering documents, suggestions for specialist inspections, or coverage advice since those are handled separately by the adjusters.`;
+    let systemPrompt = `You are an expert forensic property damage analyst working for a public adjusting firm. Your role is to prepare detailed forensic analyses documenting damages and what is required to restore the property to pre-loss conditions. Reference applicable manufacturer specifications, building codes, and industry-standard repair methods. Focus on factual observations from the photos - do not include action items, document gathering suggestions, coverage advice, or specialist inspection recommendations.`;
     
     let userPrompt = "";
     
     switch (reportType) {
       case "damage-assessment":
-        userPrompt = `Analyze these ${photos.length} photos and create a Damage Assessment Report.
+        userPrompt = `Analyze these ${photos.length} photos and create a Forensic Damage Assessment Report.
 
 ${claimContext}
 
@@ -119,20 +119,24 @@ Photo Information:
 ${photoDescriptions.join('\n')}
 
 Please provide:
-1. **Executive Summary** - Brief overview of all damage observed
-2. **Detailed Damage Analysis** - For each photo/area:
-   - Type of damage visible
-   - Severity assessment (minor/moderate/severe)
-   - Likely cause based on the loss type
-   - Estimated scope of repairs needed
-3. **Hidden Damage Concerns** - Potential secondary or hidden damage based on visible indicators
-4. **Repair Scope** - Suggested repairs and materials based on visible damage
+1. **Executive Summary** - Brief overview of all damage observed and restoration requirements
+2. **Forensic Damage Analysis** - For each photo/area:
+   - Type and extent of damage visible
+   - Severity assessment (minor/moderate/severe/critical)
+   - Cause of damage based on the loss type
+   - Evidence of how the damage occurred
+3. **Restoration Requirements** - To return the property to pre-loss condition:
+   - Applicable manufacturer specifications for materials/products
+   - Relevant building codes and standards (IRC, IBC, local codes)
+   - Industry-standard repair methods required
+   - Materials and components needed per manufacturer specs
+4. **Hidden/Secondary Damage** - Potential underlying damage based on visible indicators that would need to be addressed
 
-Keep observations factual and based on what's visible in the photos.`;
+Base all observations on what's visible in the photos.`;
         break;
         
       case "before-after":
-        userPrompt = `Analyze these before/after comparison photos and create a Progress Report.
+        userPrompt = `Analyze these before/after comparison photos and create a Forensic Progress Report.
 
 ${claimContext}
 
@@ -140,67 +144,72 @@ Photo Information:
 ${photoDescriptions.join('\n')}
 
 Please provide:
-1. **Condition Summary** - Overview of before vs after conditions
+1. **Condition Comparison** - Overview of pre-loss vs current conditions
 2. **Damage Documentation** - What damage is visible in the "before" photos
-3. **Repair Documentation** - What repairs are visible in the "after" photos
-4. **Quality Assessment** - Evaluation of repair quality and completeness
-5. **Outstanding Items** - Any remaining work visible
+3. **Repair Analysis** - What repairs are visible in the "after" photos
+4. **Code Compliance** - Whether visible repairs meet building codes and manufacturer specifications
+5. **Outstanding Restoration** - Any remaining work needed to achieve pre-loss condition
 
-Format this as a professional comparison report based on what's visible in the photos.`;
+Format this as a professional forensic comparison report.`;
         break;
         
       case "quick-analysis":
-        userPrompt = `Quickly analyze these ${photos.length} photos and provide a concise summary.
+        userPrompt = `Quickly analyze these ${photos.length} photos and provide a forensic summary.
 
 ${claimContext}
 
 Photo Information:
 ${photoDescriptions.join('\n')}
 
-Please provide a brief analysis including:
-- Main types of damage visible
-- Severity assessment
-- Key areas of concern
+Please provide a brief forensic analysis including:
+- Main types of damage visible and their severity
+- Key restoration requirements to return to pre-loss condition
+- Applicable building codes or manufacturer specs that apply
 
-Keep the response concise and factual based on what's visible.`;
+Keep the response concise and factual.`;
         break;
         
       default: // full-report
-        userPrompt = `Create a Photo Documentation Report analyzing all ${photos.length} provided photos.
+        userPrompt = `Create a Forensic Photo Documentation Report analyzing all ${photos.length} provided photos.
 
 ${claimContext}
 
 Photo Information:
 ${photoDescriptions.join('\n')}
 
-Please provide a detailed professional report including:
+Please provide a detailed forensic report including:
 
 ## 1. Property Overview
 - General condition of the property
 - Areas documented in the photos
+- Overall scope of damage
 
-## 2. Damage Assessment by Area
+## 2. Forensic Damage Assessment by Area
 For each distinct area shown in the photos:
 - Location/area name
 - Type of damage observed
 - Severity (minor/moderate/severe/critical)
-- Visible evidence and indicators
-- Estimated extent of damage
+- Forensic evidence and indicators of cause
+- Extent and measurements where estimable
 
-## 3. Cause Analysis
-- How the damage relates to the reported loss type
-- Evidence supporting the cause of loss
-- Any pre-existing vs. new damage observations
+## 3. Cause of Loss Analysis
+- How the damage relates to the reported loss event
+- Physical evidence supporting the cause of loss
+- Timeline indicators if visible
 
-## 4. Repair Scope
-- Repairs needed for each damaged area based on visible damage
-- Materials likely needed
-- Priority of repairs (safety, structural, cosmetic)
+## 4. Restoration Requirements
+To return the property to pre-loss condition:
+- **Repair Methods** - Industry-standard repair techniques required
+- **Manufacturer Specifications** - Applicable product/material specs for replacement items
+- **Building Code Requirements** - Relevant IRC, IBC, or local building codes that apply
+- **Materials & Components** - Specific materials needed per manufacturer installation requirements
+- **Sequence of Repairs** - Proper order of restoration work
 
 ## 5. Summary
-- Overall damage assessment summary
+- Overall forensic damage assessment
+- Key restoration requirements to achieve pre-loss condition
 
-Focus only on factual observations from the photos. Do not include action items, document gathering suggestions, specialist inspection recommendations, or coverage advice.`;
+Base all observations on visible evidence in the photos.`;
     }
 
     // Limit photos to prevent timeout (AI can handle ~10-15 images reliably)
