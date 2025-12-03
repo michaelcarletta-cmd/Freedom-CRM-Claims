@@ -699,20 +699,39 @@ Base all observations on visible evidence in the photos.`;
     let aiResponse;
     try {
       if (!responseText || responseText.trim() === "") {
-        throw new Error("Empty response from AI");
+        throw new Error("Empty response text from AI");
       }
       aiResponse = JSON.parse(responseText);
+      console.log("Parsed AI response structure:", Object.keys(aiResponse));
     } catch (parseError) {
-      console.error("Failed to parse AI response:", parseError, "Response:", responseText.substring(0, 500));
+      console.error("Failed to parse AI response:", parseError);
+      console.error("Raw response (first 1000 chars):", responseText.substring(0, 1000));
       return new Response(
-        JSON.stringify({ error: "AI returned invalid response. Please try with fewer photos." }),
+        JSON.stringify({ error: "AI returned invalid response format. Please try again with fewer photos." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const reportContent = aiResponse.choices?.[0]?.message?.content || "Analysis could not be completed.";
+    // Check if the response has an error field
+    if (aiResponse.error) {
+      console.error("AI returned error:", aiResponse.error);
+      return new Response(
+        JSON.stringify({ error: aiResponse.error.message || "AI service error. Please try again." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    console.log("Photo analysis complete");
+    const reportContent = aiResponse.choices?.[0]?.message?.content;
+    
+    if (!reportContent) {
+      console.error("No content in AI response. Full response:", JSON.stringify(aiResponse).substring(0, 1000));
+      return new Response(
+        JSON.stringify({ error: "AI did not generate content. Please try with fewer photos or a different report type." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("Photo analysis complete, report length:", reportContent.length);
 
     return new Response(
       JSON.stringify({ 
