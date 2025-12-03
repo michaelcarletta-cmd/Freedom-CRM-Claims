@@ -59,3 +59,6 @@ verify_jwt = true
 
 [functions.stripe-connect-payout]
 verify_jwt = true
+
+[functions.estimate-assistant]
+verify_jwt = true
