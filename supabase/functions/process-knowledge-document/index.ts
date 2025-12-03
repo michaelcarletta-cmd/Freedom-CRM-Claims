@@ -53,14 +53,23 @@ function getMimeType(fileType: string, fileName: string): string {
   return fileType || 'application/octet-stream';
 }
 
-// Download file and convert to base64 data URL
-async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize: number | null): Promise<string> {
-  // Check file size before downloading
+// For smaller files, download and convert to base64 data URL
+// For larger files (>4MB), return the URL directly for the AI to fetch
+const BASE64_SIZE_LIMIT = 4 * 1024 * 1024; // 4MB limit for base64 encoding
+
+async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize: number | null): Promise<{ url: string; isDirectUrl: boolean }> {
+  // Check file size before processing
   if (fileSize && fileSize > MAX_FILE_SIZE) {
     throw new Error(`File too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum supported size is 20MB. Please upload a smaller file.`);
   }
   
-  console.log(`Downloading file for processing...`);
+  // For larger files, pass URL directly to avoid memory issues
+  if (fileSize && fileSize > BASE64_SIZE_LIMIT) {
+    console.log(`Large file (${Math.round(fileSize / 1024 / 1024)}MB), using direct URL`);
+    return { url: fileUrl, isDirectUrl: true };
+  }
+  
+  console.log(`Downloading file for base64 encoding...`);
   
   const response = await fetch(fileUrl);
   if (!response.ok) {
@@ -70,15 +79,16 @@ async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize
   const arrayBuffer = await response.arrayBuffer();
   
   // Double-check size after download
-  if (arrayBuffer.byteLength > MAX_FILE_SIZE) {
-    throw new Error(`File too large (${Math.round(arrayBuffer.byteLength / 1024 / 1024)}MB). Maximum supported size is 20MB.`);
+  if (arrayBuffer.byteLength > BASE64_SIZE_LIMIT) {
+    console.log(`File larger than expected, using direct URL instead`);
+    return { url: fileUrl, isDirectUrl: true };
   }
   
   const base64 = base64Encode(arrayBuffer);
   
-  console.log(`Downloaded file: ${arrayBuffer.byteLength} bytes, mime: ${mimeType}`);
+  console.log(`Encoded file: ${arrayBuffer.byteLength} bytes as base64`);
   
-  return `data:${mimeType};base64,${base64}`;
+  return { url: `data:${mimeType};base64,${base64}`, isDirectUrl: false };
 }
 
 // Extract text from document using base64 data
@@ -319,31 +329,32 @@ serve(async (req) => {
 
     console.log(`Processing document: ${document.file_name}, type: ${fileType}, size: ${document.file_size || 'unknown'}`);
 
-    // Download and encode file as base64 data URL
-    const dataUrl = await downloadAndEncodeFile(fileUrl, mimeType, document.file_size);
+    // Get file URL (base64 data URL for small files, signed URL for large files)
+    const fileData = await downloadAndEncodeFile(fileUrl, mimeType, document.file_size);
+    const imageUrl = fileData.url;
 
     let extractedText = '';
 
     // Process based on file type
     if (fileType === 'application/pdf' || document.file_name.endsWith('.pdf')) {
-      extractedText = await extractTextFromDocument(dataUrl, document.file_name);
+      extractedText = await extractTextFromDocument(imageUrl, document.file_name);
     } else if (
       fileType.includes('video') || 
       fileType.includes('audio') ||
       document.file_name.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)
     ) {
-      extractedText = await transcribeMedia(dataUrl, document.file_name);
+      extractedText = await transcribeMedia(imageUrl, document.file_name);
     } else if (
       fileType.includes('word') || 
       fileType.includes('document') ||
       document.file_name.match(/\.(docx|doc)$/i)
     ) {
-      extractedText = await extractTextFromDocument(dataUrl, document.file_name);
+      extractedText = await extractTextFromDocument(imageUrl, document.file_name);
     } else if (
       fileType.includes('image') ||
       document.file_name.match(/\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i)
     ) {
-      extractedText = await analyzeImage(dataUrl, document.file_name);
+      extractedText = await analyzeImage(imageUrl, document.file_name);
     } else {
       throw new Error(`Unsupported file type: ${fileType}`);
     }
