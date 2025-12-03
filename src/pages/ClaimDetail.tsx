@@ -12,6 +12,7 @@ import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
 import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
 import { ClaimAccessManagement } from "@/components/claim-detail/ClaimAccessManagement";
+import { ClaimAssigned } from "@/components/claim-detail/ClaimAssigned";
 import { EditClaimDialog } from "@/components/claim-detail/EditClaimDialog";
 import { DeleteClaimDialog } from "@/components/claim-detail/DeleteClaimDialog";
 import { NotifyPortalDialog } from "@/components/claim-detail/NotifyPortalDialog";
@@ -283,6 +284,11 @@ const ClaimDetail = () => {
           <TabsTrigger value="overview" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Overview
           </TabsTrigger>
+          {isStaffOrAdmin && (
+            <TabsTrigger value="assigned" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+              Assigned
+            </TabsTrigger>
+          )}
           <TabsTrigger value="activity" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Notes & Activity
           </TabsTrigger>
@@ -317,6 +323,12 @@ const ClaimDetail = () => {
             onClaimUpdated={(updatedClaim) => setClaim(updatedClaim)}
           />
         </TabsContent>
+
+        {isStaffOrAdmin && (
+          <TabsContent value="assigned" className="mt-6">
+            <ClaimAssigned claim={claim} />
+          </TabsContent>
+        )}
 
         <TabsContent value="activity" className="mt-6">
           <ClaimActivity claimId={id || ""} />
