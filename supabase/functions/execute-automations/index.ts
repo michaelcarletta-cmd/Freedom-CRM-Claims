@@ -112,6 +112,9 @@ async function executeAction(supabase: any, action: any, execution: any) {
     case 'update_claim':
       return await updateClaim(supabase, config, execution);
     
+    case 'update_claim_status':
+      return await updateClaimStatus(supabase, config, execution);
+    
     case 'send_email':
       return await sendEmail(supabase, config, execution);
     
@@ -426,6 +429,23 @@ async function updateClaim(supabase: any, config: any, execution: any) {
 
   if (error) throw error;
   return data;
+}
+
+async function updateClaimStatus(supabase: any, config: any, execution: any) {
+  if (!config.new_status) {
+    throw new Error('No status specified for update_claim_status action');
+  }
+
+  const { data, error } = await supabase
+    .from('claims')
+    .update({ status: config.new_status })
+    .eq('id', execution.claim_id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  console.log('Updated claim status to:', config.new_status);
+  return { new_status: config.new_status, claim_id: execution.claim_id };
 }
 
 async function callWebhook(config: any, execution: any) {

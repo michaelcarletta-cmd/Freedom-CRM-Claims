@@ -25,10 +25,12 @@ interface TriggerConfig {
   inactivity_days?: number;
   // For status_change
   status?: string;
+  // For task_completed
+  task_title_pattern?: string;
 }
 
 interface ActionConfig {
-  type: 'send_email' | 'send_sms' | 'create_task' | 'send_notification';
+  type: 'send_email' | 'send_sms' | 'create_task' | 'send_notification' | 'update_claim_status';
   config: {
     // Email/SMS
     recipient_type?: 'policyholder' | 'adjuster' | 'referrer';
@@ -43,6 +45,8 @@ interface ActionConfig {
     description?: string;
     priority?: 'low' | 'medium' | 'high';
     due_date_offset?: number;
+    // Status change
+    new_status?: string;
   };
 }
 
@@ -254,6 +258,10 @@ export const AutomationsSettings = () => {
         return `After ${config.inactivity_days || 7} days of inactivity`;
       case 'status_change':
         return config.status ? `When status changes to ${config.status}` : 'On any status change';
+      case 'task_completed':
+        return config.task_title_pattern 
+          ? `When task containing "${config.task_title_pattern}" is completed` 
+          : 'When any task is completed';
       default:
         return automation.trigger_type.replace('_', ' ');
     }
@@ -265,6 +273,7 @@ export const AutomationsSettings = () => {
       case 'send_sms': return <MessageSquare className="h-4 w-4" />;
       case 'create_task': return <CheckSquare className="h-4 w-4" />;
       case 'send_notification': return <AlertCircle className="h-4 w-4" />;
+      case 'update_claim_status': return <Zap className="h-4 w-4" />;
       default: return null;
     }
   };
@@ -282,6 +291,8 @@ export const AutomationsSettings = () => {
         return `Create task: ${action.config.title}`;
       case 'send_notification':
         return `Send notification`;
+      case 'update_claim_status':
+        return `Change status to: ${action.config.new_status}`;
       default:
         return action.type;
     }
@@ -374,6 +385,7 @@ export const AutomationsSettings = () => {
                         <SelectItem value="scheduled">Scheduled (specific time after claim creation)</SelectItem>
                         <SelectItem value="inactivity">After Inactivity Period</SelectItem>
                         <SelectItem value="status_change">When Claim Status Changes</SelectItem>
+                        <SelectItem value="task_completed">When Task is Completed</SelectItem>
                         <SelectItem value="manual">Manual Trigger Only</SelectItem>
                       </SelectContent>
                     </Select>
@@ -491,6 +503,23 @@ export const AutomationsSettings = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* Task Completed Trigger Config */}
+                  {triggerType === 'task_completed' && (
+                    <div className="space-y-4 pl-4 border-l-2 border-muted">
+                      <div className="space-y-2">
+                        <Label>Task Title Contains (Optional)</Label>
+                        <Input 
+                          placeholder="e.g., Follow up, Inspection"
+                          value={triggerConfig.task_title_pattern || ''}
+                          onChange={(e) => setTriggerConfig({ ...triggerConfig, task_title_pattern: e.target.value })}
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Leave empty to trigger on any task completion, or enter text to match specific tasks
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions Configuration */}
@@ -530,6 +559,7 @@ export const AutomationsSettings = () => {
                           <SelectItem value="send_sms">Send SMS/Text</SelectItem>
                           <SelectItem value="create_task">Create Task</SelectItem>
                           <SelectItem value="send_notification">Send Portal Notification</SelectItem>
+                          <SelectItem value="update_claim_status">Change Claim Status</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -757,6 +787,33 @@ export const AutomationsSettings = () => {
                               config: { ...currentAction.config, message: e.target.value }
                             })}
                           />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Status Change Config */}
+                    {currentAction?.type === 'update_claim_status' && (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Change Status To</Label>
+                          <Select 
+                            value={currentAction.config.new_status || ''} 
+                            onValueChange={(value) => setCurrentAction({
+                              ...currentAction,
+                              config: { ...currentAction.config, new_status: value }
+                            })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select new status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {statuses?.map((status) => (
+                                <SelectItem key={status.id} value={status.name}>
+                                  {status.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                     )}
