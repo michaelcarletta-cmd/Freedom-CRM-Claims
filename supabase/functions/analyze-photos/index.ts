@@ -74,8 +74,9 @@ Claim Information:
     // Get signed URLs and build image content for AI
     const imageContents: any[] = [];
     const photoDescriptions: string[] = [];
-    const photoUrls: { url: string; fileName: string; category: string; description: string }[] = [];
+    const photoUrls: { url: string; fileName: string; category: string; description: string; photoNumber: number }[] = [];
     
+    let photoNumber = 1;
     for (const photo of photos) {
       const path = photo.annotated_file_path || photo.file_path;
       const { data: signedUrl } = await supabase.storage
@@ -87,13 +88,15 @@ Claim Information:
           type: "image_url",
           image_url: { url: signedUrl.signedUrl }
         });
-        photoDescriptions.push(`Photo: ${photo.file_name} | Category: ${photo.category} | Description: ${photo.description || 'No description'}`);
+        photoDescriptions.push(`Photo ${photoNumber}: ${photo.file_name} | Category: ${photo.category} | Description: ${photo.description || 'No description'}`);
         photoUrls.push({
           url: signedUrl.signedUrl,
           fileName: photo.file_name,
           category: photo.category || 'Uncategorized',
-          description: photo.description || ''
+          description: photo.description || '',
+          photoNumber: photoNumber
         });
+        photoNumber++;
       }
     }
 
@@ -105,7 +108,14 @@ Claim Information:
     }
 
     // Build prompt based on report type
-    let systemPrompt = `You are an expert forensic property damage analyst working for a public adjusting firm. Your role is to prepare detailed forensic analyses documenting damages and what is required to restore the property to pre-loss conditions. Reference applicable manufacturer specifications, building codes, and industry-standard repair methods. Focus on factual observations from the photos - do not include action items, document gathering suggestions, coverage advice, or specialist inspection recommendations.`;
+    let systemPrompt = `You are an expert forensic property damage analyst working for a public adjusting firm. Your role is to prepare detailed forensic analyses documenting damages and what is required to restore the property to pre-loss conditions. 
+
+CRITICAL INSTRUCTIONS:
+- Reference photos by their number (Photo 1, Photo 2, etc.) so the reader can follow along with the photo documentation
+- Reference applicable manufacturer specifications, building codes, and industry-standard repair methods
+- For roofing damage: restoration requires FULL REPLACEMENT of each damaged slope/section - never recommend shingle repairs, only full slope replacement per manufacturer warranty requirements
+- Focus on factual observations from the photos
+- Do not include action items, document gathering suggestions, coverage advice, or specialist inspection recommendations`;
     
     let userPrompt = "";
     
@@ -177,15 +187,18 @@ ${claimContext}
 Photo Information:
 ${photoDescriptions.join('\n')}
 
+IMPORTANT: Reference each photo by its number (Photo 1, Photo 2, etc.) throughout your analysis so the reader can follow along with the attached photo documentation.
+
 Please provide a detailed forensic report including:
 
 ## 1. Property Overview
 - General condition of the property
-- Areas documented in the photos
+- Areas documented in the photos (reference photo numbers)
 - Overall scope of damage
 
 ## 2. Forensic Damage Assessment by Area
 For each distinct area shown in the photos:
+- Photo reference numbers showing this area
 - Location/area name
 - Type of damage observed
 - Severity (minor/moderate/severe/critical)
@@ -194,12 +207,12 @@ For each distinct area shown in the photos:
 
 ## 3. Cause of Loss Analysis
 - How the damage relates to the reported loss event
-- Physical evidence supporting the cause of loss
+- Physical evidence supporting the cause of loss (reference specific photos)
 - Timeline indicators if visible
 
 ## 4. Restoration Requirements
 To return the property to pre-loss condition:
-- **Repair Methods** - Industry-standard repair techniques required
+- **Scope of Work** - For roofing: full replacement of each damaged slope (not repairs) per manufacturer warranty requirements; for other areas: specify replacement vs repair
 - **Manufacturer Specifications** - Applicable product/material specs for replacement items
 - **Building Code Requirements** - Relevant IRC, IBC, or local building codes that apply
 - **Materials & Components** - Specific materials needed per manufacturer installation requirements
