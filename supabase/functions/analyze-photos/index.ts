@@ -717,20 +717,8 @@ For each damaged area, specify:
 REMEMBER: Be SPECIFIC and DETAILED. Each photo should have substantial analysis, not just a brief mention. Build a compelling case for the restoration requirements.`;
     }
 
-    // Limit photos to prevent timeout (AI handles ~8-10 images most reliably)
-    const maxPhotos = 10;
-    const limitedImageContents = imageContents.slice(0, maxPhotos);
-    const limitedDescriptions = photoDescriptions.slice(0, maxPhotos);
-    
-    if (imageContents.length > maxPhotos) {
-      console.log(`Limiting analysis to ${maxPhotos} photos (${imageContents.length} provided)`);
-      userPrompt = userPrompt.replace(
-        `${photos.length} photos`,
-        `${maxPhotos} photos (limited from ${photos.length} for optimal analysis)`
-      );
-    }
-
-    console.log(`Calling Lovable AI for photo analysis with ${limitedImageContents.length} images...`);
+    // Process all photos - no limit
+    console.log(`Calling Lovable AI for photo analysis with ${imageContents.length} images...`);
 
     // Helper function to call AI with retry logic
     const callAIWithRetry = async (maxRetries = 3): Promise<{ response: Response; responseText: string }> => {
@@ -751,11 +739,11 @@ REMEMBER: Be SPECIFIC and DETAILED. Each photo should have substantial analysis,
                 role: "user",
                 content: [
                   { type: "text", text: userPrompt },
-                  ...limitedImageContents
+                  ...imageContents
                 ]
               }
             ],
-            max_tokens: 4000,
+            max_tokens: 8000, // Increased for detailed analysis of all photos
           }),
         });
 
@@ -806,11 +794,11 @@ REMEMBER: Be SPECIFIC and DETAILED. Each photo should have substantial analysis,
               role: "user",
               content: [
                 { type: "text", text: userPrompt },
-                ...limitedImageContents
+                ...imageContents
               ]
             }
           ],
-          max_tokens: 4000,
+          max_tokens: 8000,
         }),
       });
       return { response: finalResponse, responseText: await finalResponse.text() };
