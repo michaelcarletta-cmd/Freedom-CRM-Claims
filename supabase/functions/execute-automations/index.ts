@@ -136,9 +136,28 @@ async function createTask(supabase: any, config: any, execution: any) {
     .eq('id', execution.claim_id)
     .single();
 
-  const dueDate = config.due_date_offset 
-    ? new Date(Date.now() + config.due_date_offset * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    : null;
+  let dueDate = null;
+  if (config.due_date_offset) {
+    const offset = config.due_date_offset;
+    const isBusinessDays = config.due_date_type === 'business';
+    
+    if (isBusinessDays) {
+      // Calculate business days (Mon-Fri)
+      let date = new Date();
+      let daysAdded = 0;
+      while (daysAdded < offset) {
+        date.setDate(date.getDate() + 1);
+        const dayOfWeek = date.getDay();
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Skip Sunday (0) and Saturday (6)
+          daysAdded++;
+        }
+      }
+      dueDate = date.toISOString().split('T')[0];
+    } else {
+      // Calendar days
+      dueDate = new Date(Date.now() + offset * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    }
+  }
 
   const taskData = {
     claim_id: execution.claim_id,
