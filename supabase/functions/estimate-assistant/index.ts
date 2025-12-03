@@ -54,23 +54,33 @@ serve(async (req) => {
 
     console.log(`Processing ${photos.length} photos for estimate suggestions`);
 
-    // Generate signed URLs for photos
-    const photoUrls: string[] = [];
+    // Download photos and convert to base64 (OpenAI can't access signed URLs directly)
+    const photoBase64s: string[] = [];
     for (const photo of photos) {
-      const { data: signedUrlData, error: signedUrlError } = await supabase
-        .storage
-        .from('claim-files')
-        .createSignedUrl(photo.file_path, 3600);
+      try {
+        const { data: fileData, error: downloadError } = await supabase
+          .storage
+          .from('claim-files')
+          .download(photo.file_path);
 
-      if (signedUrlError || !signedUrlData?.signedUrl) {
-        console.error('Error generating signed URL:', signedUrlError);
+        if (downloadError || !fileData) {
+          console.error('Error downloading photo:', downloadError);
+          continue;
+        }
+
+        // Convert blob to base64
+        const arrayBuffer = await fileData.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        const mimeType = photo.file_name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+        photoBase64s.push(`data:${mimeType};base64,${base64}`);
+      } catch (err) {
+        console.error('Error processing photo:', err);
         continue;
       }
-      photoUrls.push(signedUrlData.signedUrl);
     }
 
-    if (photoUrls.length === 0) {
-      throw new Error('Could not generate URLs for any photos');
+    if (photoBase64s.length === 0) {
+      throw new Error('Could not process any photos');
     }
 
     const systemPrompt = `You are an expert insurance claims estimator and Xactimate specialist. Your role is to analyze property damage photos and suggest appropriate Xactimate line items for the repair estimate.
@@ -129,9 +139,9 @@ Please provide your response in the following JSON format:
   "additionalNotes": "Any other observations or recommendations"
 }`;
 
-    const imageContent = photoUrls.map((url, index) => ({
+    const imageContent = photoBase64s.map((dataUrl: string) => ({
       type: "image_url" as const,
-      image_url: { url, detail: "high" as const }
+      image_url: { url: dataUrl, detail: "high" as const }
     }));
 
     console.log('Calling OpenAI API for estimate analysis...');
@@ -201,7 +211,7 @@ Please provide your response in the following JSON format:
     return new Response(JSON.stringify({
       success: true,
       estimate: parsedContent,
-      photosAnalyzed: photoUrls.length
+      photosAnalyzed: photoBase64s.length
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
