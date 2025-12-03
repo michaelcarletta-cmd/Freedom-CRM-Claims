@@ -468,12 +468,12 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="ai">
+          <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1">
+            <TabsTrigger value="ai" className="flex-1 justify-center text-base font-medium px-4">
               <Sparkles className="h-4 w-4 mr-2" />
               AI Analysis
             </TabsTrigger>
-            <TabsTrigger value="standard">
+            <TabsTrigger value="standard" className="flex-1 justify-center text-base font-medium px-4">
               <FileText className="h-4 w-4 mr-2" />
               Standard Report
             </TabsTrigger>

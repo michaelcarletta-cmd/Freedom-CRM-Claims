@@ -165,9 +165,9 @@ export default function Auth() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="signin" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+            <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1">
+              <TabsTrigger value="signin" className="flex-1 justify-center text-base font-medium px-4">Sign In</TabsTrigger>
+              <TabsTrigger value="signup" className="flex-1 justify-center text-base font-medium px-4">Sign Up</TabsTrigger>
             </TabsList>
             
             <TabsContent value="signin">
