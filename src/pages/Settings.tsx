@@ -24,9 +24,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { InsuranceCompaniesSettings } from "@/components/settings/InsuranceCompaniesSettings";
 import { LossTypesSettings } from "@/components/settings/LossTypesSettings";
-import { ReferrersSettings } from "@/components/settings/ReferrersSettings";
 import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
 import { TemplatesSettings } from "@/components/settings/TemplatesSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
@@ -288,9 +286,7 @@ export default function Settings() {
         <TabsList className="flex flex-col md:flex-row md:flex-wrap h-auto w-full bg-muted/40 p-2 gap-1">
           <TabsTrigger value="profile" className="w-full md:w-auto justify-start text-base font-medium px-4">My Profile</TabsTrigger>
           <TabsTrigger value="statuses" className="w-full md:w-auto justify-start text-base font-medium px-4">Claim Statuses</TabsTrigger>
-          <TabsTrigger value="insurance" className="w-full md:w-auto justify-start text-base font-medium px-4">Insurance Companies</TabsTrigger>
           <TabsTrigger value="loss-types" className="w-full md:w-auto justify-start text-base font-medium px-4">Loss Types</TabsTrigger>
-          <TabsTrigger value="referrers" className="w-full md:w-auto justify-start text-base font-medium px-4">Referrers</TabsTrigger>
           <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium px-4">User Management</TabsTrigger>
           <TabsTrigger value="templates" className="w-full md:w-auto justify-start text-base font-medium px-4">Templates</TabsTrigger>
           <TabsTrigger value="custom-fields" className="w-full md:w-auto justify-start text-base font-medium px-4">Custom Fields</TabsTrigger>
@@ -369,16 +365,8 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="insurance" className="w-full">
-          <InsuranceCompaniesSettings />
-        </TabsContent>
-
         <TabsContent value="loss-types" className="w-full">
           <LossTypesSettings />
-        </TabsContent>
-
-        <TabsContent value="referrers" className="w-full">
-          <ReferrersSettings />
         </TabsContent>
 
         <TabsContent value="users" className="w-full">
