@@ -1,4 +1,3 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -13,9 +12,9 @@ serve(async (req) => {
   }
 
   try {
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY is not configured');
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      throw new Error('LOVABLE_API_KEY is not configured');
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -122,16 +121,16 @@ Please provide your response in the following JSON format:
   "additionalNotes": "Any other observations or recommendations"
 }`;
 
-    console.log('Calling OpenAI API for measurement analysis...');
+    console.log('Calling Lovable AI for measurement analysis...');
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
           {
@@ -141,21 +140,19 @@ Please provide your response in the following JSON format:
               {
                 type: 'image_url',
                 image_url: { 
-                  url: `data:application/pdf;base64,${measurementPdf}`,
-                  detail: 'high'
+                  url: `data:application/pdf;base64,${measurementPdf}`
                 }
               }
             ]
           }
         ],
-        max_tokens: 4000,
-        response_format: { type: "json_object" }
+        max_tokens: 4000
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenAI API error:', response.status, errorText);
+      console.error('Lovable AI error:', response.status, errorText);
       
       if (response.status === 429) {
         return new Response(JSON.stringify({ 
@@ -167,7 +164,17 @@ Please provide your response in the following JSON format:
         });
       }
       
-      throw new Error(`OpenAI API error: ${response.status}`);
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ 
+          error: 'Payment required. Please add funds to your Lovable AI workspace.',
+          retryable: false 
+        }), {
+          status: 402,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      throw new Error(`AI API error: ${response.status}`);
     }
 
     const data = await response.json();
@@ -181,7 +188,13 @@ Please provide your response in the following JSON format:
 
     let parsedContent;
     try {
-      parsedContent = JSON.parse(content);
+      // Try to extract JSON from the response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsedContent = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found');
+      }
     } catch (e) {
       console.error('Failed to parse JSON response:', e);
       parsedContent = { 
