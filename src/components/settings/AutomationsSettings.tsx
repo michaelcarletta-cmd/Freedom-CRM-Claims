@@ -36,7 +36,8 @@ interface ActionConfig {
     message?: string;
     // Email attachments
     attachment_folders?: string[]; // Folder names to pull files from
-    file_name_patterns?: string[]; // File name patterns to match (e.g., "Contract", "Estimate")
+    file_name_patterns?: string[]; // File name patterns to match (parsed from text)
+    file_name_patterns_text?: string; // Raw input text for editing
     // Task
     title?: string;
     description?: string;
@@ -186,7 +187,16 @@ export const AutomationsSettings = () => {
 
   const addAction = () => {
     if (currentAction) {
-      setActions([...actions, currentAction]);
+      // Parse file name patterns from text if present
+      const actionToAdd = { ...currentAction };
+      if (actionToAdd.type === 'send_email' && actionToAdd.config.file_name_patterns_text) {
+        const patterns = actionToAdd.config.file_name_patterns_text
+          .split(',')
+          .map(p => p.trim())
+          .filter(p => p.length > 0);
+        actionToAdd.config.file_name_patterns = patterns.length > 0 ? patterns : undefined;
+      }
+      setActions([...actions, actionToAdd]);
       setCurrentAction(null);
     }
   };
@@ -591,15 +601,25 @@ export const AutomationsSettings = () => {
                           <Label>File Name Patterns (optional)</Label>
                           <Input 
                             placeholder="e.g., Contract, Estimate, Invoice"
-                            value={currentAction.config.file_name_patterns?.join(', ') || ''}
+                            value={currentAction.config.file_name_patterns_text ?? currentAction.config.file_name_patterns?.join(', ') ?? ''}
                             onChange={(e) => {
+                              setCurrentAction({
+                                ...currentAction,
+                                config: { ...currentAction.config, file_name_patterns_text: e.target.value }
+                              });
+                            }}
+                            onBlur={(e) => {
                               const patterns = e.target.value
                                 .split(',')
                                 .map(p => p.trim())
                                 .filter(p => p.length > 0);
                               setCurrentAction({
                                 ...currentAction,
-                                config: { ...currentAction.config, file_name_patterns: patterns.length > 0 ? patterns : undefined }
+                                config: { 
+                                  ...currentAction.config, 
+                                  file_name_patterns: patterns.length > 0 ? patterns : undefined,
+                                  file_name_patterns_text: e.target.value
+                                }
                               });
                             }}
                           />
