@@ -97,7 +97,34 @@ serve(async (req) => {
   }
 
   try {
-    const { photoIds, claimId, reportType } = await req.json();
+    const { photoIds, claimId, reportType, weatherOnly } = await req.json();
+    
+    // Handle weather-only preview requests
+    if (weatherOnly && claimId) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      const { data: claim } = await supabase
+        .from("claims")
+        .select("policyholder_address, loss_date")
+        .eq("id", claimId)
+        .single();
+      
+      if (!claim || !claim.policyholder_address || !claim.loss_date) {
+        return new Response(
+          JSON.stringify({ error: "Claim missing address or loss date for weather lookup" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      const weatherData = await fetchWeatherData(claim.policyholder_address, claim.loss_date);
+      
+      return new Response(
+        JSON.stringify({ weatherData }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     if (!photoIds || !Array.isArray(photoIds) || photoIds.length === 0) {
       return new Response(
