@@ -7,8 +7,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Maximum file size: 5MB to avoid memory issues
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+// Maximum file size: 20MB (matches upload limit)
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 // Split text into chunks for RAG
 function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[] {
@@ -57,7 +57,7 @@ function getMimeType(fileType: string, fileName: string): string {
 async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize: number | null): Promise<string> {
   // Check file size before downloading
   if (fileSize && fileSize > MAX_FILE_SIZE) {
-    throw new Error(`File too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum supported size is 5MB. Please upload a smaller file.`);
+    throw new Error(`File too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum supported size is 20MB. Please upload a smaller file.`);
   }
   
   console.log(`Downloading file for processing...`);
@@ -71,7 +71,7 @@ async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize
   
   // Double-check size after download
   if (arrayBuffer.byteLength > MAX_FILE_SIZE) {
-    throw new Error(`File too large (${Math.round(arrayBuffer.byteLength / 1024 / 1024)}MB). Maximum supported size is 5MB.`);
+    throw new Error(`File too large (${Math.round(arrayBuffer.byteLength / 1024 / 1024)}MB). Maximum supported size is 20MB.`);
   }
   
   const base64 = base64Encode(arrayBuffer);
@@ -286,7 +286,7 @@ serve(async (req) => {
 
     // Check file size before processing
     if (document.file_size && document.file_size > MAX_FILE_SIZE) {
-      const errorMsg = `File too large (${Math.round(document.file_size / 1024 / 1024)}MB). Maximum supported size is 5MB. Please upload a smaller file.`;
+      const errorMsg = `File too large (${Math.round(document.file_size / 1024 / 1024)}MB). Maximum supported size is 20MB. Please upload a smaller file.`;
       await supabase
         .from('ai_knowledge_documents')
         .update({ status: 'failed', error_message: errorMsg })
