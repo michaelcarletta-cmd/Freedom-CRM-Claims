@@ -4,33 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, Building2, FileText, Loader2 } from "lucide-react";
 
-const US_STATES = [
-  "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut",
-  "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa",
-  "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan",
-  "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire",
-  "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio",
-  "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota",
-  "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia",
-  "Wisconsin", "Wyoming"
-];
-
 export function CompanyBrandingSettings() {
   const [companyName, setCompanyName] = useState("");
-  const [licenseNumber, setLicenseNumber] = useState("");
-  const [licenseState, setLicenseState] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
-  const [fax, setFax] = useState("");
   const [email, setEmail] = useState("");
   const [letterheadUrl, setLetterheadUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [brandingId, setBrandingId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -38,18 +24,20 @@ export function CompanyBrandingSettings() {
   }, []);
 
   const loadSettings = async () => {
-    // Load from localStorage for now (can be moved to DB later)
-    const saved = localStorage.getItem("company_branding");
-    if (saved) {
-      const data = JSON.parse(saved);
-      setCompanyName(data.companyName || "");
-      setLicenseNumber(data.licenseNumber || "");
-      setLicenseState(data.licenseState || "");
-      setAddress(data.address || "");
-      setPhone(data.phone || "");
-      setFax(data.fax || "");
-      setEmail(data.email || "");
-      setLetterheadUrl(data.letterheadUrl || null);
+    const { data, error } = await supabase
+      .from("company_branding" as any)
+      .select("*")
+      .limit(1)
+      .maybeSingle();
+    
+    if (data) {
+      const branding = data as any;
+      setBrandingId(branding.id);
+      setCompanyName(branding.company_name || "");
+      setAddress(branding.company_address || "");
+      setPhone(branding.company_phone || "");
+      setEmail(branding.company_email || "");
+      setLetterheadUrl(branding.letterhead_url || null);
     }
   };
 
@@ -64,14 +52,14 @@ export function CompanyBrandingSettings() {
 
     setUploading(true);
     try {
-      const path = `letterhead/company_letterhead_${Date.now()}.${file.name.split(".").pop()}`;
-      const { error } = await supabase.storage.from("document-templates").upload(path, file);
+      const path = `letterhead_${Date.now()}.${file.name.split(".").pop()}`;
+      const { error } = await supabase.storage.from("company-branding").upload(path, file);
       
       if (error) throw error;
 
-      const { data: urlData } = await supabase.storage.from("document-templates").createSignedUrl(path, 31536000); // 1 year
+      const { data: urlData } = supabase.storage.from("company-branding").getPublicUrl(path);
       
-      setLetterheadUrl(urlData?.signedUrl || null);
+      setLetterheadUrl(urlData?.publicUrl || null);
       toast({ title: "Letterhead uploaded successfully" });
     } catch (error: any) {
       toast({ title: "Upload failed", description: error.message, variant: "destructive" });
@@ -80,23 +68,38 @@ export function CompanyBrandingSettings() {
     }
   };
 
-  const saveSettings = () => {
+  const saveSettings = async () => {
     setSaving(true);
-    const data = {
-      companyName,
-      licenseNumber,
-      licenseState,
-      address,
-      phone,
-      fax,
-      email,
-      letterheadUrl
-    };
-    localStorage.setItem("company_branding", JSON.stringify(data));
-    setTimeout(() => {
-      setSaving(false);
+    try {
+      const brandingData = {
+        company_name: companyName,
+        company_address: address,
+        company_phone: phone,
+        company_email: email,
+        letterhead_url: letterheadUrl,
+        updated_at: new Date().toISOString()
+      };
+
+      if (brandingId) {
+        await supabase
+          .from("company_branding" as any)
+          .update(brandingData)
+          .eq("id", brandingId);
+      } else {
+        const { data } = await supabase
+          .from("company_branding" as any)
+          .insert(brandingData)
+          .select()
+          .single();
+        if (data) setBrandingId((data as any).id);
+      }
+
       toast({ title: "Company branding saved" });
-    }, 500);
+    } catch (error: any) {
+      toast({ title: "Error saving branding", description: error.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -112,37 +115,13 @@ export function CompanyBrandingSettings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Company Name</Label>
-              <Input
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Freedom Claims Adjusting"
-              />
-            </div>
-            <div>
-              <Label>License Number</Label>
-              <Input
-                value={licenseNumber}
-                onChange={(e) => setLicenseNumber(e.target.value)}
-                placeholder="PA-12345"
-              />
-            </div>
-          </div>
-
           <div>
-            <Label>Licensed State</Label>
-            <Select value={licenseState} onValueChange={setLicenseState}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select state" />
-              </SelectTrigger>
-              <SelectContent>
-                {US_STATES.map(state => (
-                  <SelectItem key={state} value={state}>{state}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Company Name</Label>
+            <Input
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder="Freedom Claims Adjusting"
+            />
           </div>
 
           <div>
@@ -155,21 +134,13 @@ export function CompanyBrandingSettings() {
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Phone</Label>
               <Input
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="(555) 123-4567"
-              />
-            </div>
-            <div>
-              <Label>Fax</Label>
-              <Input
-                value={fax}
-                onChange={(e) => setFax(e.target.value)}
-                placeholder="(555) 123-4568"
               />
             </div>
             <div>

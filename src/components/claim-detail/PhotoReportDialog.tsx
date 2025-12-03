@@ -34,6 +34,11 @@ interface PhotoReportDialogProps {
 
 const AI_REPORT_TYPES = [
   { 
+    id: "demand-package", 
+    name: "Complete Demand Package", 
+    description: "Full package with letterhead, table of contents, demand letter, valuation, and photo documentation" 
+  },
+  { 
     id: "full-report", 
     name: "Forensic Photo Report", 
     description: "Comprehensive forensic analysis with damage assessment and restoration requirements" 
@@ -73,7 +78,20 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   const [includeCategories, setIncludeCategories] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState<"standard" | "ai">("ai");
-  const [aiReportType, setAiReportType] = useState("full-report");
+  const [aiReportType, setAiReportType] = useState("demand-package");
+  const [companyBranding, setCompanyBranding] = useState<{ company_name?: string; letterhead_url?: string } | null>(null);
+
+  useEffect(() => {
+    const fetchBranding = async () => {
+      const { data } = await supabase
+        .from("company_branding" as any)
+        .select("company_name, letterhead_url")
+        .limit(1)
+        .maybeSingle();
+      if (data) setCompanyBranding(data as any);
+    };
+    fetchBranding();
+  }, []);
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [aiPhotoUrls, setAiPhotoUrls] = useState<{ url: string; fileName: string; category: string; description: string; photoNumber: number }[]>([]);
   const { toast } = useToast();
@@ -167,7 +185,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       // Build photos HTML with base64 images and photo numbers
       const photosHtml = photoBase64s.length > 0 ? `
   <div style="margin-top: 40px; page-break-before: always;">
-    <h2 style="color: #2563eb; border-bottom: 1px solid #ddd; padding-bottom: 10px;">Photo Documentation</h2>
+    <h2 style="color: #1e3a5f; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; font-size: 24px;">EXHIBIT A: PHOTO DOCUMENTATION</h2>
     <div style="margin-top: 20px;">
       ${photoBase64s.map(photo => `
         <div style="page-break-inside: avoid; margin-bottom: 30px;">
@@ -179,21 +197,80 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     </div>
   </div>` : '';
 
+      // Letterhead HTML
+      const letterheadHtml = companyBranding?.letterhead_url ? `
+        <div style="text-align: center; margin-bottom: 20px;">
+          <img src="${companyBranding.letterhead_url}" style="max-width: 100%; max-height: 150px; object-fit: contain;" />
+        </div>
+      ` : companyBranding?.company_name ? `
+        <div style="text-align: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 3px solid #1e3a5f;">
+          <h1 style="font-size: 28px; color: #1e3a5f; margin: 0;">${companyBranding.company_name}</h1>
+        </div>
+      ` : '';
+
+      // Check if this is a demand package - needs special formatting
+      const isDemandPackage = aiReportType === 'demand-package';
+      
+      // Table of Contents for demand package
+      const tocHtml = isDemandPackage ? `
+        <div style="page-break-after: always;">
+          <h2 style="color: #1e3a5f; font-size: 24px; text-align: center; margin-bottom: 30px;">TABLE OF CONTENTS</h2>
+          <div style="font-size: 14px; line-height: 2;">
+            <p><strong>I.</strong> Cover Letter / Final Demand ........................... 3</p>
+            <p><strong>II.</strong> Factual Background ........................... 4</p>
+            <p><strong>III.</strong> Damage Analysis ........................... 5</p>
+            <p><strong>IV.</strong> Proof of Loss / Valuation ........................... 6</p>
+            <p><strong>V.</strong> Restoration Requirements ........................... 8</p>
+            <p><strong>VI.</strong> Prospective Liability ........................... 10</p>
+            <p><strong>VII.</strong> Demand for Payment ........................... 11</p>
+            <p><strong>EXHIBIT A:</strong> Photo Documentation ........................... 12</p>
+          </div>
+        </div>
+      ` : '';
+
+      // Format report content with proper styling
+      const formattedReport = aiReport
+        .replace(/\n/g, '<br>')
+        .replace(/##\s(.*)/g, '<h2 style="color: #1e3a5f; margin-top: 30px; font-size: 20px; border-bottom: 1px solid #ddd; padding-bottom: 8px;">$1</h2>')
+        .replace(/###\s(.*)/g, '<h3 style="color: #374151; margin-top: 20px; font-size: 16px;">$1</h3>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
       // Create HTML content for PDF
       const html = `
-<div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6;">
-  <div style="margin-bottom: 30px;">
-    <h1 style="border-bottom: 2px solid #333; padding-bottom: 10px;">${reportTitle}</h1>
-    <p style="color: #666;">Generated on ${new Date().toLocaleString()}</p>
-  </div>
-  <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-    <p><strong>Claim Number:</strong> ${claim?.claim_number || 'N/A'}</p>
-    <p><strong>Policyholder:</strong> ${claim?.policyholder_name || 'N/A'}</p>
-    <p><strong>Property:</strong> ${claim?.policyholder_address || 'N/A'}</p>
-    <p><strong>Loss Type:</strong> ${claim?.loss_type || 'N/A'}</p>
-  </div>
-  <div>
-    ${aiReport.replace(/\n/g, '<br>').replace(/##\s(.*)/g, '<h2 style="color: #2563eb; margin-top: 30px;">$1</h2>').replace(/###\s(.*)/g, '<h3 style="color: #4b5563;">$1</h3>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}
+<div style="font-family: 'Times New Roman', Times, serif; max-width: 800px; margin: 0 auto; padding: 40px; line-height: 1.8; color: #1f2937;">
+  ${letterheadHtml}
+  
+  ${isDemandPackage ? `
+    <div style="text-align: center; margin: 60px 0; page-break-after: always;">
+      <h1 style="font-size: 32px; color: #1e3a5f; margin-bottom: 20px;">NOTICE OF FINAL DEMAND</h1>
+      <h2 style="font-size: 18px; color: #4b5563; font-weight: normal;">AND</h2>
+      <h2 style="font-size: 24px; color: #1e3a5f; margin-top: 20px;">COMPLETE DEMAND PACKAGE</h2>
+      <div style="margin-top: 60px; text-align: left; padding: 20px; background: #f8fafc; border-radius: 8px;">
+        <p><strong>RE:</strong> ${claim?.policyholder_name || 'Policyholder'}</p>
+        <p><strong>Property:</strong> ${claim?.policyholder_address || 'Property Address'}</p>
+        <p><strong>Claim No.:</strong> ${claim?.claim_number || 'N/A'}</p>
+        <p><strong>Policy No.:</strong> ${claim?.policy_number || 'N/A'}</p>
+        <p><strong>Date of Loss:</strong> ${claim?.loss_date || 'N/A'}</p>
+        <p><strong>Insurance Company:</strong> ${claim?.insurance_company || 'N/A'}</p>
+      </div>
+      <p style="margin-top: 40px; font-size: 14px; color: #6b7280;">Prepared: ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+    </div>
+    ${tocHtml}
+  ` : `
+    <div style="margin-bottom: 30px;">
+      <h1 style="border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; color: #1e3a5f;">${reportTitle}</h1>
+      <p style="color: #666;">Generated on ${new Date().toLocaleString()}</p>
+    </div>
+    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+      <p><strong>Claim Number:</strong> ${claim?.claim_number || 'N/A'}</p>
+      <p><strong>Policyholder:</strong> ${claim?.policyholder_name || 'N/A'}</p>
+      <p><strong>Property:</strong> ${claim?.policyholder_address || 'N/A'}</p>
+      <p><strong>Loss Type:</strong> ${claim?.loss_type || 'N/A'}</p>
+    </div>
+  `}
+  
+  <div style="text-align: justify;">
+    ${formattedReport}
   </div>
   ${photosHtml}
 </div>`;
