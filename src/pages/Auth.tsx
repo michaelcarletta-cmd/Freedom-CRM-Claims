@@ -7,12 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { Clock } from "lucide-react";
 
 export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -20,22 +22,60 @@ export default function Auth() {
     // Check if user is already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/");
+        checkApprovalAndNavigate(session.user.id);
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session) {
-        navigate("/");
+        checkApprovalAndNavigate(session.user.id);
       }
     });
 
     return () => subscription.unsubscribe();
   }, [navigate]);
 
+  const checkApprovalAndNavigate = async (userId: string) => {
+    // Check if user has staff role and is pending approval
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+
+    const isStaff = roles?.some(r => r.role === 'staff');
+    
+    if (isStaff) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("approval_status")
+        .eq("id", userId)
+        .single();
+
+      if (profile?.approval_status === 'pending') {
+        setPendingApproval(true);
+        // Sign them out since they can't access yet
+        await supabase.auth.signOut();
+        return;
+      }
+
+      if (profile?.approval_status === 'denied') {
+        toast({
+          title: "Access Denied",
+          description: "Your account request has been denied. Please contact an administrator.",
+          variant: "destructive",
+        });
+        await supabase.auth.signOut();
+        return;
+      }
+    }
+
+    navigate("/");
+  };
+
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setPendingApproval(false);
 
     const { error } = await supabase.auth.signUp({
       email,
@@ -56,9 +96,10 @@ export default function Auth() {
         variant: "destructive",
       });
     } else {
+      setPendingApproval(true);
       toast({
-        title: "Success",
-        description: "Account created successfully! You can now log in.",
+        title: "Account Created",
+        description: "Your account is pending approval. An administrator will review your request.",
       });
     }
 
@@ -68,8 +109,9 @@ export default function Auth() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setPendingApproval(false);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -80,10 +122,39 @@ export default function Auth() {
         description: error.message,
         variant: "destructive",
       });
+    } else if (data.user) {
+      // Check approval will happen in the auth state change handler
     }
 
     setLoading(false);
   };
+
+  if (pendingApproval) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-yellow-500/20 flex items-center justify-center">
+              <Clock className="h-6 w-6 text-yellow-500" />
+            </div>
+            <CardTitle>Pending Approval</CardTitle>
+            <CardDescription>
+              Your account is awaiting administrator approval. You'll be able to sign in once your access has been approved.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => setPendingApproval(false)}
+            >
+              Back to Sign In
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -163,6 +234,9 @@ export default function Auth() {
                     minLength={6}
                   />
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Staff accounts require administrator approval before access is granted.
+                </p>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Creating account..." : "Sign Up"}
                 </Button>
