@@ -51,7 +51,7 @@ serve(async (req) => {
       }
     }
 
-    const systemPrompt = `You are an expert insurance claims estimator and Xactimate specialist. Your role is to analyze roof measurement reports and property information to suggest appropriate Xactimate line items for repair estimates.
+    const systemPrompt = `You are an expert insurance claims estimator and Xactimate specialist. Your role is to analyze roof measurement reports and property information to suggest appropriate Xactimate line items for repair estimates WITH PRICING.
 
 You will receive a PDF measurement report (typically from GAF QuickMeasure, EagleView, or similar services) containing detailed roof measurements including:
 - Total roof area (squares)
@@ -67,30 +67,37 @@ For each repair area, provide:
 3. Line Item Description (use standard Xactimate terminology)
 4. Unit of Measure (SF, LF, EA, SQ, etc.)
 5. Estimated Quantity (use exact measurements from the report when available)
-6. Damage Severity (Minor, Moderate, Severe) - assume full replacement for roofing
-7. Notes/Justification for the line item
+6. Unit Price (typical Xactimate pricing for the region, use realistic current market rates)
+7. Total Price (quantity × unit price)
+8. Damage Severity (Minor, Moderate, Severe) - assume full replacement for roofing
+9. Notes/Justification for the line item
 
-Common Xactimate categories and codes:
-- RFG: Roofing (shingles, underlayment, flashing, vents, drip edge)
-- SDG: Siding (vinyl, wood, fiber cement)
-- DRY: Drywall (repair, replacement, texture)
-- PNT: Painting
-- FLR: Flooring
-- PLM: Plumbing
-- ELE: Electrical
-- WIN: Windows
+Common Xactimate categories and codes with typical pricing ranges:
+- RFG: Roofing
+  - Tear off shingles: $25-40/SQ
+  - Composition shingles (3-tab): $180-250/SQ
+  - Dimensional/architectural shingles: $250-350/SQ
+  - Underlayment (synthetic): $35-55/SQ
+  - Ice & water shield: $2.50-4.00/LF
+  - Drip edge: $3-6/LF
+  - Starter strip: $2-4/LF
+  - Ridge cap: $6-12/LF
+  - Step flashing: $8-15/LF
+  - Pipe boot: $35-75/EA
+  - Ridge vent: $8-15/LF
+- SDG: Siding
+- DRY: Drywall
 - GTR: Gutters
-- FNC: Fencing
-- CLN: Cleaning
-- CON: Contents
-- DEM: Demolition
+- CLN: Cleaning/Debris removal: $15-30/SQ
 
 IMPORTANT: 
 - Use the exact measurements from the report
 - Standard repair scope for roofing is FULL REPLACEMENT of each damaged slope/section
 - Include tear-off, underlayment, shingles, and all related materials
 - Include drip edge, starter strip, and ridge cap
-- Account for waste factor (typically 10-15%)`;
+- Account for waste factor (typically 10-15%)
+- Use mid-range pricing typical for most US markets
+- Provide realistic, defensible pricing that would be accepted by insurance carriers`;
 
     const userPrompt = `Analyze this roof measurement report and generate Xactimate line items for a full roof replacement estimate.
 
@@ -106,14 +113,16 @@ Please provide your response in the following JSON format:
 {
   "summary": "Brief overview of the roof and recommended repairs",
   "totalLineItems": number,
+  "estimatedTotal": number,
   "lineItems": [
     {
       "category": "Category name",
       "categoryCode": "XAC",
       "description": "Xactimate line item description",
       "unit": "Unit of measure",
-      "quantityMin": number,
-      "quantityMax": number,
+      "quantity": number,
+      "unitPrice": number,
+      "totalPrice": number,
       "severity": "Minor|Moderate|Severe",
       "notes": "Justification and measurements used"
     }
