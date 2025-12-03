@@ -35,6 +35,7 @@ import { ImportSettings } from "@/components/settings/ImportSettings";
 import { UserManagementSettings } from "@/components/settings/UserManagementSettings";
 import { ProfileSettings } from "@/components/settings/ProfileSettings";
 import { AIKnowledgeBaseSettings } from "@/components/settings/AIKnowledgeBaseSettings";
+import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
 
 interface ClaimStatus {
   id: string;
@@ -296,6 +297,7 @@ export default function Settings() {
           <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
           <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
           <TabsTrigger value="ai-knowledge" className="w-full md:w-auto justify-start text-base font-medium px-4">AI Knowledge Base</TabsTrigger>
+          <TabsTrigger value="integrations" className="w-full md:w-auto justify-start text-base font-medium px-4">Integrations</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="w-full">
@@ -401,6 +403,10 @@ export default function Settings() {
 
         <TabsContent value="ai-knowledge" className="w-full">
           <AIKnowledgeBaseSettings />
+        </TabsContent>
+
+        <TabsContent value="integrations" className="w-full">
+          <QuickBooksSettings />
         </TabsContent>
       </Tabs>
     </div>

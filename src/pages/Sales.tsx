@@ -1,11 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, DollarSign, TrendingUp, TrendingDown, Receipt, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, DollarSign, TrendingUp, TrendingDown, Receipt, AlertCircle, CreditCard } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useState } from "react";
+import { QuickBooksPaymentDialog } from "@/components/QuickBooksPaymentDialog";
 
 const Sales = () => {
   const { userRole } = useAuth();
+  const [qbPaymentOpen, setQbPaymentOpen] = useState(false);
+  const [paymentRecipient, setPaymentRecipient] = useState<{ name: string; email?: string } | null>(null);
 
   // Fetch all settlements
   const { data: settlements, isLoading: settlementsLoading } = useQuery({
@@ -85,6 +90,11 @@ const Sales = () => {
     }).format(amount);
   };
 
+  const handleOpenPayment = () => {
+    setPaymentRecipient({ name: '' });
+    setQbPaymentOpen(true);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -95,11 +105,17 @@ const Sales = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Sales Dashboard</h1>
-        <p className="text-muted-foreground mt-2">
-          Track financial metrics and company performance
-        </p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Sales Dashboard</h1>
+          <p className="text-muted-foreground mt-2">
+            Track financial metrics and company performance
+          </p>
+        </div>
+        <Button onClick={handleOpenPayment}>
+          <CreditCard className="h-4 w-4 mr-2" />
+          Pay via QuickBooks
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -247,6 +263,15 @@ const Sales = () => {
           </div>
         </CardContent>
       </Card>
+
+      {paymentRecipient && (
+        <QuickBooksPaymentDialog
+          open={qbPaymentOpen}
+          onOpenChange={setQbPaymentOpen}
+          recipientName={paymentRecipient.name}
+          recipientEmail={paymentRecipient.email}
+        />
+      )}
     </div>
   );
 };
