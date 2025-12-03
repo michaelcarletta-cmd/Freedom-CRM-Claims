@@ -316,7 +316,8 @@ CRITICAL INSTRUCTIONS:
 - Reference applicable manufacturer specifications, building codes, and industry-standard repair methods
 - For roofing damage: restoration requires FULL REPLACEMENT of each damaged slope/section - never recommend shingle repairs, only full slope replacement per manufacturer warranty requirements
 - Focus on factual observations from the photos
-- Do not include action items, document gathering suggestions, coverage advice, or specialist inspection recommendations`;
+- Do not include action items, document gathering suggestions, coverage advice, or specialist inspection recommendations
+- IMPORTANT: When referencing weather data, ALWAYS attribute it to "Visual Crossing Weather Services" as the data source - NEVER mention "Open-Meteo" or any other weather service`;
     
     let userPrompt = "";
     
