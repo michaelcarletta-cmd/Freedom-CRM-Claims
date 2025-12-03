@@ -35,6 +35,7 @@ import { ProfileSettings } from "@/components/settings/ProfileSettings";
 import { AIKnowledgeBaseSettings } from "@/components/settings/AIKnowledgeBaseSettings";
 import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
 import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings";
+import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { useQuery } from "@tanstack/react-query";
 
 interface ClaimStatus {
@@ -312,6 +313,7 @@ export default function Settings() {
           <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
           <TabsTrigger value="ai-knowledge" className="w-full md:w-auto justify-start text-base font-medium px-4">AI Knowledge Base</TabsTrigger>
           <TabsTrigger value="integrations" className="w-full md:w-auto justify-start text-base font-medium px-4">Integrations</TabsTrigger>
+          <TabsTrigger value="branding" className="w-full md:w-auto justify-start text-base font-medium px-4">Company Branding</TabsTrigger>
           {isAdmin && (
             <TabsTrigger value="backup" className="w-full md:w-auto justify-start text-base font-medium px-4">Backup Status</TabsTrigger>
           )}
@@ -415,6 +417,10 @@ export default function Settings() {
 
         <TabsContent value="integrations" className="w-full">
           <QuickBooksSettings />
+        </TabsContent>
+
+        <TabsContent value="branding" className="w-full">
+          <CompanyBrandingSettings />
         </TabsContent>
 
         {isAdmin && (
