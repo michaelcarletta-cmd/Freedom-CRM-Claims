@@ -23,6 +23,21 @@ function generateInvoiceHtml(data: any): string {
     </tr>
   `).join('');
 
+  // Freedom Claims logo as inline SVG (grayscale version)
+  const logoSvg = `<svg viewBox="153 184 400 80" width="200" height="40" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="grayscale" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
+      </filter>
+    </defs>
+    <g filter="url(#grayscale)">
+      <text x="153" y="240" font-family="Georgia, serif" font-size="42" font-weight="bold" fill="#333">
+        <tspan fill="#CCA55D">FREEDOM</tspan>
+        <tspan dx="8" fill="#333">CLAIMS</tspan>
+      </text>
+    </g>
+  </svg>`;
+
   return `
 <!DOCTYPE html>
 <html>
@@ -31,8 +46,9 @@ function generateInvoiceHtml(data: any): string {
   <title>Invoice ${invoiceNumber}</title>
   <style>
     body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; color: #1f2937; }
-    .invoice-header { display: flex; justify-content: space-between; margin-bottom: 40px; }
-    .company-info h1 { margin: 0 0 8px 0; color: #111827; font-size: 28px; }
+    .invoice-header { display: flex; justify-content: space-between; margin-bottom: 40px; align-items: flex-start; }
+    .company-info { display: flex; flex-direction: column; gap: 8px; }
+    .company-logo { margin-bottom: 8px; }
     .company-info p { margin: 4px 0; color: #6b7280; }
     .invoice-details { text-align: right; }
     .invoice-details h2 { margin: 0 0 12px 0; font-size: 32px; color: #111827; }
@@ -52,13 +68,13 @@ function generateInvoiceHtml(data: any): string {
     .notes h4 { margin: 0 0 8px 0; color: #92400e; }
     .notes p { margin: 0; color: #78350f; }
     .footer { margin-top: 60px; text-align: center; color: #9ca3af; font-size: 12px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
-    .claim-badge { display: inline-block; background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 20px; font-size: 12px; margin-top: 8px; }
+    .claim-badge { display: inline-block; background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 20px; font-size: 12px; }
   </style>
 </head>
 <body>
   <div class="invoice-header">
     <div class="company-info">
-      <h1>Freedom Claims</h1>
+      <div class="company-logo">${logoSvg}</div>
       <p>Public Adjusting Services</p>
       ${claimNumber ? `<span class="claim-badge">Claim #${claimNumber}</span>` : ''}
     </div>
