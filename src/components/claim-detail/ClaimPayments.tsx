@@ -9,8 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { DollarSign, Trash2, CreditCard } from "lucide-react";
+import { DollarSign, Trash2, CreditCard, Banknote } from "lucide-react";
 import { QuickBooksPaymentDialog } from "@/components/QuickBooksPaymentDialog";
+import { StripePaymentDialog } from "@/components/StripePaymentDialog";
 
 interface ClaimPaymentsProps {
   claimId: string;
@@ -32,11 +33,14 @@ interface Contractor {
   id: string;
   full_name: string | null;
   email: string;
+  stripe_account_id?: string | null;
 }
 
 interface Referrer {
   id: string;
   name: string;
+  email: string | null;
+  stripe_account_id?: string | null;
 }
 
 export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
@@ -45,7 +49,14 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [qbPaymentOpen, setQbPaymentOpen] = useState(false);
-  const [selectedRecipient, setSelectedRecipient] = useState<{ name: string; email?: string; phone?: string } | null>(null);
+  const [stripePaymentOpen, setStripePaymentOpen] = useState(false);
+  const [selectedRecipient, setSelectedRecipient] = useState<{ 
+    name: string; 
+    email?: string; 
+    phone?: string;
+    type: 'contractor' | 'client' | 'referrer';
+    stripeAccountId?: string;
+  } | null>(null);
   const [formData, setFormData] = useState({
     payment_date: new Date().toISOString().split("T")[0],
     amount: "",
@@ -87,7 +98,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
       const contractorIds = roleData.map((r) => r.user_id);
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("*")
+        .select("id, full_name, email, stripe_account_id")
         .in("id", contractorIds);
 
       setContractors(profileData || []);
@@ -97,7 +108,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const fetchReferrers = async () => {
     const { data } = await supabase
       .from("referrers")
-      .select("*")
+      .select("id, name, email, stripe_account_id")
       .eq("is_active", true)
       .order("name");
 
@@ -190,23 +201,90 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
 
   const totalPayments = payments.reduce((sum, payment) => sum + payment.amount, 0);
 
-  const handleQuickBooksPayment = (recipientType: string, recipientId?: string) => {
-    let recipient: { name: string; email?: string; phone?: string } = { name: 'Client (Policyholder)' };
+  const handleQuickBooksPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
+    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer'; stripeAccountId?: string } = { 
+      name: 'Client (Policyholder)', 
+      type: 'client' 
+    };
     
     if (recipientType === 'contractor' && recipientId) {
       const contractor = contractors.find(c => c.id === recipientId);
       if (contractor) {
-        recipient = { name: contractor.full_name || contractor.email, email: contractor.email };
+        recipient = { 
+          name: contractor.full_name || contractor.email, 
+          email: contractor.email,
+          type: 'contractor',
+          stripeAccountId: contractor.stripe_account_id || undefined,
+        };
       }
     } else if (recipientType === 'referrer' && recipientId) {
       const referrer = referrers.find(r => r.id === recipientId);
       if (referrer) {
-        recipient = { name: referrer.name };
+        recipient = { 
+          name: referrer.name,
+          email: referrer.email || undefined,
+          type: 'referrer',
+          stripeAccountId: referrer.stripe_account_id || undefined,
+        };
       }
     }
     
     setSelectedRecipient(recipient);
     setQbPaymentOpen(true);
+  };
+
+  const handleStripePayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
+    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer'; stripeAccountId?: string } = { 
+      name: 'Client (Policyholder)', 
+      type: 'client' 
+    };
+    
+    if (recipientType === 'contractor' && recipientId) {
+      const contractor = contractors.find(c => c.id === recipientId);
+      if (contractor) {
+        recipient = { 
+          name: contractor.full_name || contractor.email, 
+          email: contractor.email,
+          type: 'contractor',
+          stripeAccountId: contractor.stripe_account_id || undefined,
+        };
+      }
+    } else if (recipientType === 'referrer' && recipientId) {
+      const referrer = referrers.find(r => r.id === recipientId);
+      if (referrer) {
+        recipient = { 
+          name: referrer.name,
+          email: referrer.email || undefined,
+          type: 'referrer',
+          stripeAccountId: referrer.stripe_account_id || undefined,
+        };
+      }
+    }
+    
+    setSelectedRecipient(recipient);
+    setStripePaymentOpen(true);
+  };
+
+  const handleStripeAccountCreated = async (accountId: string) => {
+    if (!selectedRecipient) return;
+    
+    // Save the Stripe account ID to the appropriate table
+    if (selectedRecipient.type === 'contractor') {
+      const contractor = contractors.find(c => c.full_name === selectedRecipient.name || c.email === selectedRecipient.email);
+      if (contractor) {
+        await supabase.from('profiles').update({ stripe_account_id: accountId }).eq('id', contractor.id);
+        fetchContractors();
+      }
+    } else if (selectedRecipient.type === 'referrer') {
+      const referrer = referrers.find(r => r.name === selectedRecipient.name);
+      if (referrer) {
+        await supabase.from('referrers').update({ stripe_account_id: accountId }).eq('id', referrer.id);
+        fetchReferrers();
+      }
+    }
+    
+    // Update selected recipient with new account ID
+    setSelectedRecipient(prev => prev ? { ...prev, stripeAccountId: accountId } : null);
   };
 
   return (
@@ -361,14 +439,24 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
         </div>
 
         {isAdmin && (
-          <Button 
-            variant="outline" 
-            onClick={() => handleQuickBooksPayment('client')}
-            className="w-full"
-          >
-            <CreditCard className="h-4 w-4 mr-2" />
-            Pay via QuickBooks
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => handleQuickBooksPayment('client')}
+              className="flex-1"
+            >
+              <CreditCard className="h-4 w-4 mr-2" />
+              QuickBooks
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleStripePayment('client')}
+              className="flex-1"
+            >
+              <Banknote className="h-4 w-4 mr-2" />
+              Stripe (Direct ACH)
+            </Button>
+          </div>
         )}
 
         {payments.length === 0 ? (
@@ -404,10 +492,18 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleQuickBooksPayment(payment.recipient_type, payment.recipient_id || undefined)}
+                      onClick={() => handleQuickBooksPayment(payment.recipient_type as 'contractor' | 'client' | 'referrer', payment.recipient_id || undefined)}
                       title="Pay via QuickBooks"
                     >
                       <CreditCard className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleStripePayment(payment.recipient_type as 'contractor' | 'client' | 'referrer', payment.recipient_id || undefined)}
+                      title="Pay via Stripe"
+                    >
+                      <Banknote className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -424,14 +520,26 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
         )}
 
         {selectedRecipient && (
-          <QuickBooksPaymentDialog
-            open={qbPaymentOpen}
-            onOpenChange={setQbPaymentOpen}
-            recipientName={selectedRecipient.name}
-            recipientEmail={selectedRecipient.email}
-            recipientPhone={selectedRecipient.phone}
-            onSuccess={fetchPayments}
-          />
+          <>
+            <QuickBooksPaymentDialog
+              open={qbPaymentOpen}
+              onOpenChange={setQbPaymentOpen}
+              recipientName={selectedRecipient.name}
+              recipientEmail={selectedRecipient.email}
+              recipientPhone={selectedRecipient.phone}
+              onSuccess={fetchPayments}
+            />
+            <StripePaymentDialog
+              open={stripePaymentOpen}
+              onOpenChange={setStripePaymentOpen}
+              recipientName={selectedRecipient.name}
+              recipientEmail={selectedRecipient.email}
+              recipientType={selectedRecipient.type}
+              stripeAccountId={selectedRecipient.stripeAccountId}
+              onSuccess={fetchPayments}
+              onAccountCreated={handleStripeAccountCreated}
+            />
+          </>
         )}
       </CardContent>
     </Card>
