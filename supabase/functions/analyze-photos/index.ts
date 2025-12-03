@@ -6,6 +6,91 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Fetch historical weather data using Open-Meteo API
+async function fetchWeatherData(address: string, lossDate: string): Promise<any> {
+  try {
+    // First geocode the address using Nominatim (free, no API key)
+    const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+    const geoResponse = await fetch(geocodeUrl, {
+      headers: { 'User-Agent': 'FreedomClaimsCRM/1.0' }
+    });
+    const geoData = await geoResponse.json();
+    
+    if (!geoData || geoData.length === 0) {
+      console.log("Could not geocode address:", address);
+      return null;
+    }
+    
+    const lat = parseFloat(geoData[0].lat);
+    const lon = parseFloat(geoData[0].lon);
+    
+    // Parse the loss date
+    const date = new Date(lossDate);
+    const startDate = new Date(date);
+    startDate.setDate(date.getDate() - 1); // Day before
+    const endDate = new Date(date);
+    endDate.setDate(date.getDate() + 1); // Day after
+    
+    const formatDate = (d: Date) => d.toISOString().split('T')[0];
+    
+    // Fetch historical weather from Open-Meteo
+    const weatherUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,rain_sum,wind_speed_10m_max,wind_gusts_10m_max&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,weather_code&timezone=America/New_York`;
+    
+    console.log("Fetching weather from:", weatherUrl);
+    const weatherResponse = await fetch(weatherUrl);
+    const weatherData = await weatherResponse.json();
+    
+    if (weatherData.error) {
+      console.log("Weather API error:", weatherData.reason);
+      return null;
+    }
+    
+    // Weather code descriptions
+    const weatherCodes: Record<number, string> = {
+      0: "Clear sky",
+      1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+      45: "Fog", 48: "Depositing rime fog",
+      51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle",
+      56: "Light freezing drizzle", 57: "Dense freezing drizzle",
+      61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
+      66: "Light freezing rain", 67: "Heavy freezing rain",
+      71: "Slight snow fall", 73: "Moderate snow fall", 75: "Heavy snow fall",
+      77: "Snow grains",
+      80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
+      85: "Slight snow showers", 86: "Heavy snow showers",
+      95: "Thunderstorm", 96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail"
+    };
+    
+    // Find the loss date index in the daily data
+    const lossDateStr = formatDate(date);
+    const dayIndex = weatherData.daily?.time?.indexOf(lossDateStr) ?? -1;
+    
+    return {
+      location: geoData[0].display_name,
+      latitude: lat,
+      longitude: lon,
+      lossDate: lossDateStr,
+      daily: weatherData.daily ? {
+        dates: weatherData.daily.time,
+        maxTemp: weatherData.daily.temperature_2m_max,
+        minTemp: weatherData.daily.temperature_2m_min,
+        precipitation: weatherData.daily.precipitation_sum,
+        rain: weatherData.daily.rain_sum,
+        maxWindSpeed: weatherData.daily.wind_speed_10m_max,
+        maxWindGusts: weatherData.daily.wind_gusts_10m_max,
+        weatherCode: weatherData.daily.weather_code,
+        weatherDescription: weatherData.daily.weather_code?.map((c: number) => weatherCodes[c] || "Unknown")
+      } : null,
+      hourly: weatherData.hourly,
+      weatherCodes,
+      dayIndex
+    };
+  } catch (error) {
+    console.error("Error fetching weather data:", error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -35,6 +120,10 @@ serve(async (req) => {
 
     // Fetch claim details
     let claimContext = "";
+    let weatherData: any = null;
+    let weatherContext = "";
+    let claimData: any = null;
+    
     if (claimId) {
       const { data: claim } = await supabase
         .from("claims")
@@ -43,6 +132,7 @@ serve(async (req) => {
         .single();
       
       if (claim) {
+        claimData = claim;
         claimContext = `
 Claim Information:
 - Claim Number: ${claim.claim_number || 'N/A'}
@@ -53,6 +143,40 @@ Claim Information:
 - Loss Description: ${claim.loss_description || 'N/A'}
 - Insurance Company: ${claim.insurance_company || 'N/A'}
 `;
+
+        // Fetch weather data for demand packages
+        if (reportType === 'demand-package' && claim.policyholder_address && claim.loss_date) {
+          console.log("Fetching weather data for demand package...");
+          weatherData = await fetchWeatherData(claim.policyholder_address, claim.loss_date);
+          
+          if (weatherData && weatherData.daily) {
+            const idx = weatherData.dayIndex >= 0 ? weatherData.dayIndex : 1;
+            weatherContext = `
+
+HISTORICAL WEATHER DATA (Loss Date: ${weatherData.lossDate}):
+Location: ${weatherData.location}
+Coordinates: ${weatherData.latitude}, ${weatherData.longitude}
+
+Weather on Loss Date:
+- Conditions: ${weatherData.daily.weatherDescription?.[idx] || 'N/A'}
+- High Temperature: ${weatherData.daily.maxTemp?.[idx]}°F
+- Low Temperature: ${weatherData.daily.minTemp?.[idx]}°F
+- Precipitation: ${weatherData.daily.precipitation?.[idx]} mm
+- Max Wind Speed: ${weatherData.daily.maxWindSpeed?.[idx]} mph
+- Max Wind Gusts: ${weatherData.daily.maxWindGusts?.[idx]} mph
+
+Day Before (${weatherData.daily.dates?.[0]}):
+- Conditions: ${weatherData.daily.weatherDescription?.[0] || 'N/A'}
+- Max Wind Gusts: ${weatherData.daily.maxWindGusts?.[0]} mph
+- Precipitation: ${weatherData.daily.precipitation?.[0]} mm
+
+Day After (${weatherData.daily.dates?.[2]}):
+- Conditions: ${weatherData.daily.weatherDescription?.[2] || 'N/A'}
+- Max Wind Gusts: ${weatherData.daily.maxWindGusts?.[2]} mph
+`;
+            console.log("Weather data fetched successfully");
+          }
+        }
       }
     }
 
@@ -289,11 +413,13 @@ This letter is prepared based on visible evidence in the photo documentation.`;
         userPrompt = `Create a COMPLETE DEMAND PACKAGE based on these ${photos.length} photos documenting property damage.
 
 ${claimContext}
+${weatherContext}
 
 Photo Information:
 ${photoDescriptions.join('\n')}
 
 IMPORTANT: Reference each photo by its number (Photo 1, Photo 2, etc.) throughout all sections.
+${weatherData ? 'Include the weather data provided above in the Weather Report exhibit section.' : ''}
 
 Create a comprehensive demand package that combines all elements into one cohesive document. Structure it as follows:
 
@@ -425,7 +551,9 @@ Failure to respond appropriately will result in pursuit of all available legal r
 
 ## CONCLUSION
 
-This Complete Demand Package provides comprehensive documentation of the loss, damage assessment, valuation support, and legal basis for this claim. The attached photo documentation (Exhibit A) provides visual evidence supporting each element of this demand.
+This Complete Demand Package provides comprehensive documentation of the loss, damage assessment, valuation support, and legal basis for this claim. The attached exhibits provide supporting evidence:
+- **Exhibit A**: Photo Documentation
+- **Exhibit B**: Weather Report (Historical weather data for loss date)
 
 We request immediate attention to this matter and resolution within the timeframes required by state law.`;
         break;
@@ -564,7 +692,8 @@ Base all observations on visible evidence in the photos.`;
         report: reportContent,
         photoCount: photos.length,
         reportType,
-        photoUrls: photoUrls.slice(0, 15) // Include photo URLs for report
+        photoUrls: photoUrls.slice(0, 15),
+        weatherData: weatherData // Include weather data for PDF generation
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
