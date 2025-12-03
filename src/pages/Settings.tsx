@@ -282,14 +282,12 @@ export default function Settings() {
         <p className="text-muted-foreground">Manage your claim workflow and dropdown options</p>
       </div>
 
-      <Tabs defaultValue="statuses" className="space-y-6">
+      <Tabs defaultValue="workflow" className="space-y-6">
         <TabsList className="flex flex-col md:flex-row md:flex-wrap h-auto w-full bg-muted/40 p-2 gap-1">
           <TabsTrigger value="profile" className="w-full md:w-auto justify-start text-base font-medium px-4">My Profile</TabsTrigger>
-          <TabsTrigger value="statuses" className="w-full md:w-auto justify-start text-base font-medium px-4">Claim Statuses</TabsTrigger>
-          <TabsTrigger value="loss-types" className="w-full md:w-auto justify-start text-base font-medium px-4">Loss Types</TabsTrigger>
+          <TabsTrigger value="workflow" className="w-full md:w-auto justify-start text-base font-medium px-4">Workflow Management</TabsTrigger>
           <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium px-4">User Management</TabsTrigger>
           <TabsTrigger value="templates" className="w-full md:w-auto justify-start text-base font-medium px-4">Templates</TabsTrigger>
-          <TabsTrigger value="custom-fields" className="w-full md:w-auto justify-start text-base font-medium px-4">Custom Fields</TabsTrigger>
           <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
           <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
           <TabsTrigger value="ai-knowledge" className="w-full md:w-auto justify-start text-base font-medium px-4">AI Knowledge Base</TabsTrigger>
@@ -300,7 +298,8 @@ export default function Settings() {
           <ProfileSettings />
         </TabsContent>
 
-        <TabsContent value="statuses" className="w-full">
+        <TabsContent value="workflow" className="w-full space-y-6">
+          {/* Claim Statuses */}
           <Card>
             <CardHeader>
               <CardTitle>Claim Statuses</CardTitle>
@@ -363,10 +362,12 @@ export default function Settings() {
               </DndContext>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="loss-types" className="w-full">
+          {/* Loss Types */}
           <LossTypesSettings />
+
+          {/* Custom Fields */}
+          <CustomFieldsSettings />
         </TabsContent>
 
         <TabsContent value="users" className="w-full">
@@ -375,10 +376,6 @@ export default function Settings() {
 
         <TabsContent value="templates" className="w-full">
           <TemplatesSettings />
-        </TabsContent>
-
-        <TabsContent value="custom-fields" className="w-full">
-          <CustomFieldsSettings />
         </TabsContent>
 
         <TabsContent value="automations" className="w-full">
