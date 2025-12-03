@@ -178,6 +178,112 @@ Please provide a brief forensic analysis including:
 
 Keep the response concise and factual.`;
         break;
+
+      case "proof-of-loss":
+        userPrompt = `Create a detailed Proof of Loss / Valuation Report based on these ${photos.length} photos.
+
+${claimContext}
+
+Photo Information:
+${photoDescriptions.join('\n')}
+
+IMPORTANT: Reference each photo by its number (Photo 1, Photo 2, etc.) throughout your analysis.
+
+Please provide a comprehensive Proof of Loss document including:
+
+## SWORN STATEMENT IN PROOF OF LOSS
+
+### I. PROPERTY DESCRIPTION
+- Property location and type
+- Age and construction type (if visible)
+- Areas affected by the loss (with photo references)
+
+### II. DAMAGE DOCUMENTATION
+For each damaged area documented in the photos:
+- Photo reference numbers
+- Detailed description of damage observed
+- Forensic indicators of cause
+- Measurements/extent where estimable
+
+### III. SCOPE OF WORK REQUIRED
+To restore the property to pre-loss condition:
+- **Roof System** (if applicable): Full replacement of each damaged slope per manufacturer warranty requirements (not repairs)
+- **Exterior Components**: Siding, gutters, windows, etc.
+- **Interior Components**: Drywall, flooring, etc.
+- Include applicable IRC/IBC code requirements
+- Reference manufacturer installation specifications
+
+### IV. MATERIALS & SPECIFICATIONS
+- Specific materials required per manufacturer specs
+- Building code compliance requirements
+- Industry standard repair methods
+
+### V. VALUATION SUMMARY
+- Summary of all required work to achieve pre-loss condition
+- Note: Actual dollar amounts to be determined by estimate
+
+Base all observations on visible evidence in the photos. This document supports the insured's claim for damages.`;
+        break;
+
+      case "final-demand":
+        userPrompt = `Create a Final Demand Letter based on these ${photos.length} photos documenting property damage.
+
+${claimContext}
+
+Photo Information:
+${photoDescriptions.join('\n')}
+
+IMPORTANT: Reference each photo by its number (Photo 1, Photo 2, etc.) throughout.
+
+Please create a professional Final Demand Letter including:
+
+## NOTICE OF FINAL DEMAND
+
+### I. FACTUAL BACKGROUND
+- Property description and loss date
+- Summary of the loss event
+- Timeline of the claim (inspection dates, correspondence)
+- Documentation submitted (with photo references)
+
+### II. DAMAGE ANALYSIS
+Based on the photo documentation:
+- Summary of all damage observed (reference specific photos)
+- Forensic evidence supporting the cause of loss
+- Severity and extent of damage by area
+
+### III. RESTORATION REQUIREMENTS
+To return the property to pre-loss condition:
+- **Scope of Work**: Full replacement of damaged roofing slopes (not repairs), per manufacturer warranty requirements
+- **Building Code Compliance**: IRC, IBC, and local code requirements
+- **Manufacturer Specifications**: Required installation methods and materials
+- **Industry Standards**: ASTM, ARMA, and other applicable standards
+
+### IV. PROSPECTIVE LIABILITY
+
+**New Jersey Insurance Code References** (N.J.S.A. Title 17):
+- N.J.S.A. 17:29B-4: Unfair Claims Settlement Practices - prohibits misrepresenting pertinent facts or policy provisions
+- N.J.A.C. 11:2-17.6: Requires insurers to acknowledge claims within 10 working days
+- N.J.A.C. 11:2-17.7: Requires insurers to affirm or deny coverage within reasonable time
+- N.J.A.C. 11:2-17.8: Payment of claims must occur within 30 days of proof of loss
+
+**Pennsylvania Insurance Code References** (40 P.S.):
+- 40 P.S. § 1171.5: Unfair insurance practices - prohibits misrepresentation and unfair settlement practices
+- 31 Pa. Code § 146.5: Requires acknowledgment of claims within 10 working days
+- 31 Pa. Code § 146.6: Requires written denial with specific reasons if claim is denied
+- 31 Pa. Code § 146.7: Payment required within 15 days of settlement agreement
+
+### V. DEMAND FOR PAYMENT
+Based on the documented damage and required restoration work:
+- Summary of all repairs needed to achieve pre-loss condition
+- Statement that failure to properly adjust this claim may result in additional remedies
+
+### VI. CONCLUSION
+- Demand for full and fair settlement
+- Timeline for response
+- Notice that this documentation supports the claim
+
+This letter is prepared based on visible evidence in the photo documentation.`;
+        break;
         
       default: // full-report
         userPrompt = `Create a Forensic Photo Documentation Report analyzing all ${photos.length} provided photos.

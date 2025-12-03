@@ -35,13 +35,23 @@ interface PhotoReportDialogProps {
 const AI_REPORT_TYPES = [
   { 
     id: "full-report", 
-    name: "Full Photo Report", 
-    description: "Comprehensive analysis of all photos with damage assessment and recommendations" 
+    name: "Forensic Photo Report", 
+    description: "Comprehensive forensic analysis with damage assessment and restoration requirements" 
   },
   { 
     id: "damage-assessment", 
     name: "Damage Assessment", 
-    description: "Focused analysis of visible damage with severity ratings" 
+    description: "Focused analysis of visible damage with severity ratings and repair scope" 
+  },
+  { 
+    id: "proof-of-loss", 
+    name: "Proof of Loss Valuation", 
+    description: "Detailed scope of work with forensic documentation supporting claim value" 
+  },
+  { 
+    id: "final-demand", 
+    name: "Final Demand Letter", 
+    description: "Professional demand letter with state insurance code references and liability sections" 
   },
   { 
     id: "before-after", 
