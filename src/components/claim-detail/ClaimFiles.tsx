@@ -362,14 +362,14 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
             )}
             <Button
               variant="outline"
-              onClick={() => window.open("https://quickmeasure.gaf.com/", "_blank")}
+              onClick={() => window.open("https://ssoext.gaf.com/oauth2/ausclyogeZBNESNcI4x6/v1/authorize?client_id=0oaclwmauH1TXBDzU4x6&code_challenge=5w3eWPZzMixtrRpmMsiaB-kkOrB6f0iptcPGkKehUHU&code_challenge_method=S256&nonce=zCbdYnAIj7cBfgWxzMPjoxyi0ftuviGSK8qw3SiigZHS0KqaDOYVOei142d5znNF&redirect_uri=https%3A%2F%2Fquickmeasure.gaf.com%2Fcallback&response_type=code&state=thy7nldi3KrQQkvaxuvNMe92rjHE0kqxXKEOIjdVXDSOXrjW31jo58XUBnAtEOKi&scope=openid%20profile%20email%20openid%20email%20profile%20CheckCoverage%20IsServiceOpen%20SiteStatus%20SendErrorReport%20SearchOrders%20PlaceOrder%20InitiatePayment%20UpdatePayment%20IsValidPromoCode%20RedeemPromoCode%20SearchReceipts%20DownloadRoofReport%20GetUserProfile%20SaveUserProfile%20GetLookup%20User%3ASavePreferences%20User%3AGetPreferences%20User%3AGetAvailableAddresses%20User%3ASetNotificationLog%20User%3AGetReplenishmentPreferences%20User%3ASaveReplenishmentPreferences%20User%3AGetProductPreferences%20User%3ASaveProductPreferences%20User%3AAcceptTermsAndConditions%20User%3AGetAccountPreferences%20User%3ASaveAccountPreferences%20Track%20Guest%3AAcceptTermsAndConditions%20GetDistributorsForPostalCode%20UpdateOrderService%20DownloadFile%20BPFileupload%20Orders%3AShareOrder%20Orders%3AGetSharedOrder", "_blank")}
             >
               <ExternalLink className="h-4 w-4 mr-2" />
               GAF QuickMeasure
             </Button>
             <Button
               variant="outline"
-              onClick={() => window.open("https://www.xactware.com/en-us/solutions/xactimate/", "_blank")}
+              onClick={() => window.open("https://xactimate.com/xor/sign-in?utm_source=xactimate&utm_medium=referral&utm_campaign=login_page&utm_content=sign_in_btn", "_blank")}
             >
               <ExternalLink className="h-4 w-4 mr-2" />
               Xactimate
