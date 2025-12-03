@@ -94,6 +94,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   }, []);
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [aiPhotoUrls, setAiPhotoUrls] = useState<{ url: string; fileName: string; category: string; description: string; photoNumber: number }[]>([]);
+  const [weatherData, setWeatherData] = useState<any>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -102,6 +103,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       setSelectedPhotos(photos.map(p => p.id));
       setAiReport(null);
       setAiPhotoUrls([]);
+      setWeatherData(null);
     }
   }, [open, claim, photos]);
 
@@ -142,6 +144,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
 
       setAiReport(data.report);
       setAiPhotoUrls(data.photoUrls || []);
+      setWeatherData(data.weatherData || null);
       toast({ title: "Analysis complete" });
     } catch (error: any) {
       console.error("AI report error:", error);
@@ -211,6 +214,61 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       // Check if this is a demand package - needs special formatting
       const isDemandPackage = aiReportType === 'demand-package';
       
+      // Weather Report Exhibit HTML
+      const weatherExhibitHtml = (isDemandPackage && weatherData && weatherData.daily) ? `
+  <div style="margin-top: 40px; page-break-before: always;">
+    <h2 style="color: #1e3a5f; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; font-size: 24px;">EXHIBIT B: WEATHER REPORT</h2>
+    <p style="margin-top: 20px; font-size: 14px; color: #666;">Historical weather data retrieved from Open-Meteo Archive API</p>
+    
+    <div style="margin-top: 30px; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
+      <h3 style="color: #1e3a5f; margin-bottom: 15px;">Location Information</h3>
+      <p><strong>Property Address:</strong> ${weatherData.location || claim?.policyholder_address || 'N/A'}</p>
+      <p><strong>Coordinates:</strong> ${weatherData.latitude?.toFixed(4)}, ${weatherData.longitude?.toFixed(4)}</p>
+      <p><strong>Loss Date:</strong> ${weatherData.lossDate || claim?.loss_date || 'N/A'}</p>
+    </div>
+
+    <div style="margin-top: 30px;">
+      <h3 style="color: #1e3a5f; margin-bottom: 15px;">Weather Conditions Summary</h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <thead>
+          <tr style="background: #1e3a5f; color: white;">
+            <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Date</th>
+            <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Conditions</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">High / Low</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Precipitation</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Max Wind Speed</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Max Wind Gusts</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${weatherData.daily.dates?.map((date: string, i: number) => `
+            <tr style="background: ${i === weatherData.dayIndex ? '#fef3c7' : (i % 2 === 0 ? '#ffffff' : '#f8fafc')}; ${i === weatherData.dayIndex ? 'font-weight: bold;' : ''}">
+              <td style="padding: 12px; border: 1px solid #ddd;">
+                ${date}
+                ${i === weatherData.dayIndex ? '<br><span style="color: #d97706; font-size: 12px;">(Loss Date)</span>' : ''}
+              </td>
+              <td style="padding: 12px; border: 1px solid #ddd;">${weatherData.daily.weatherDescription?.[i] || 'N/A'}</td>
+              <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.maxTemp?.[i]}°F / ${weatherData.daily.minTemp?.[i]}°F</td>
+              <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.precipitation?.[i]} mm</td>
+              <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.maxWindSpeed?.[i]} mph</td>
+              <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.maxWindGusts?.[i]} mph</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top: 30px; padding: 15px; background: #eff6ff; border-left: 4px solid #1e3a5f; border-radius: 4px;">
+      <h4 style="color: #1e3a5f; margin-bottom: 10px;">Data Source</h4>
+      <p style="font-size: 13px; color: #374151;">
+        Weather data sourced from Open-Meteo Historical Weather API. Data includes temperature, precipitation, 
+        wind speed, and wind gusts recorded at the property location for the loss date and surrounding days.
+        This historical weather documentation supports the cause of loss analysis.
+      </p>
+    </div>
+  </div>
+      ` : '';
+      
       // Table of Contents for demand package
       const tocHtml = isDemandPackage ? `
         <div style="page-break-after: always;">
@@ -224,6 +282,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
             <p><strong>VI.</strong> Prospective Liability ........................... 10</p>
             <p><strong>VII.</strong> Demand for Payment ........................... 11</p>
             <p><strong>EXHIBIT A:</strong> Photo Documentation ........................... 12</p>
+            ${weatherData ? '<p><strong>EXHIBIT B:</strong> Weather Report ........................... 13</p>' : ''}
           </div>
         </div>
       ` : '';
@@ -273,6 +332,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     ${formattedReport}
   </div>
   ${photosHtml}
+  ${weatherExhibitHtml}
 </div>`;
 
       // Generate PDF
