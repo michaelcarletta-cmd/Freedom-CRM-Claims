@@ -231,6 +231,7 @@ async function sendEmail(supabase: any, config: any, execution: any) {
   
   if (config.attachment_folders && config.attachment_folders.length > 0) {
     console.log('Fetching files from folders:', config.attachment_folders);
+    console.log('File name patterns:', config.file_name_patterns || 'all files');
     
     // Get folder IDs for specified folder names
     const { data: folders } = await supabase
@@ -250,10 +251,20 @@ async function sendEmail(supabase: any, config: any, execution: any) {
         .in('folder_id', folderIds);
       
       if (files && files.length > 0) {
-        console.log(`Found ${files.length} files to attach`);
+        // Filter files by name patterns if specified
+        const patterns = config.file_name_patterns || [];
+        const filteredFiles = patterns.length > 0
+          ? files.filter((file: any) => 
+              patterns.some((pattern: string) => 
+                file.file_name.toLowerCase().includes(pattern.toLowerCase())
+              )
+            )
+          : files;
+        
+        console.log(`Found ${filteredFiles.length} files matching patterns (from ${files.length} total)`);
         
         // Download each file and convert to base64
-        for (const file of files) {
+        for (const file of filteredFiles) {
           try {
             const { data: fileData, error: downloadError } = await supabase
               .storage
