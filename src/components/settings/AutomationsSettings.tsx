@@ -95,6 +95,19 @@ export const AutomationsSettings = () => {
     },
   });
 
+  const { data: emailTemplates } = useQuery({
+    queryKey: ["email-templates"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("email_templates")
+        .select("id, name, subject, body, category")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const createMutation = useMutation({
     mutationFn: async (automation: any) => {
       const { error } = await supabase.from("automations").insert(automation);

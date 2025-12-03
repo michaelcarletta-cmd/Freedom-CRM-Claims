@@ -10,8 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Upload, FileText, Trash2, Download, Loader2, Info, Layout } from "lucide-react";
+import { Upload, FileText, Trash2, Download, Loader2, Info, Layout, Mail } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -23,6 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { EmailTemplatesSettings } from "./EmailTemplatesSettings";
 
 export const TemplatesSettings = () => {
   const queryClient = useQueryClient();
@@ -170,6 +172,19 @@ export const TemplatesSettings = () => {
 
   return (
     <div className="space-y-6">
+      <Tabs defaultValue="documents" className="space-y-6">
+        <TabsList className="bg-muted/40">
+          <TabsTrigger value="documents" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Document Templates
+          </TabsTrigger>
+          <TabsTrigger value="email" className="flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            Email Templates
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="documents" className="space-y-6">
       <Alert>
         <Info className="h-4 w-4" />
         <AlertTitle>Template Merge Fields</AlertTitle>
@@ -441,6 +456,12 @@ export const TemplatesSettings = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+        </TabsContent>
+
+        <TabsContent value="email">
+          <EmailTemplatesSettings />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
