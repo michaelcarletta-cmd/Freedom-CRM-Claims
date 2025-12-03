@@ -13,16 +13,47 @@ interface Attachment {
   fileType: string | null;
 }
 
+interface RecipientInfo {
+  email: string;
+  name: string;
+  type: string;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { to, subject, body, claimId, recipientName, recipientType, attachments } = await req.json();
+    const requestBody = await req.json();
+    
+    // Support both old single recipient format and new multiple recipients format
+    let recipients: RecipientInfo[] = [];
+    
+    if (requestBody.recipients && Array.isArray(requestBody.recipients)) {
+      // New format: multiple recipients
+      recipients = requestBody.recipients;
+    } else if (requestBody.to) {
+      // Old format: single recipient (backwards compatibility)
+      recipients = [{
+        email: requestBody.to,
+        name: requestBody.recipientName || requestBody.to,
+        type: requestBody.recipientType || 'manual'
+      }];
+    }
+    
+    const { subject, body, claimId, attachments } = requestBody;
 
-    if (!to || !subject || !body) {
-      throw new Error("Missing required fields");
+    if (recipients.length === 0 || !subject || !body) {
+      throw new Error("Missing required fields: recipients, subject, and body are required");
+    }
+
+    // Validate all emails
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    for (const recipient of recipients) {
+      if (!emailRegex.test(recipient.email)) {
+        throw new Error(`Invalid email address: ${recipient.email}`);
+      }
     }
 
     // Get authorization header
@@ -117,9 +148,12 @@ serve(async (req) => {
       }
     }
 
+    // Extract all email addresses for the 'to' field
+    const toEmails = recipients.map(r => r.email);
+
     const emailPayload: any = {
       from: "Freedom Claims <onboarding@resend.dev>",
-      to: [to],
+      to: toEmails,
       subject: subject,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -140,30 +174,36 @@ serve(async (req) => {
 
     const emailResponse = await resend.emails.send(emailPayload);
 
-    console.log(`Email sent to ${to}:`, emailResponse);
+    console.log(`Email sent to ${toEmails.join(', ')}:`, emailResponse);
 
-    // Log email to database if claimId provided
+    // Log email to database for each recipient if claimId provided
     if (claimId) {
-      const { error: dbError } = await supabase
-        .from('emails')
-        .insert({
-          claim_id: claimId,
-          sent_by: user.id,
-          recipient_email: to,
-          recipient_name: recipientName,
-          recipient_type: recipientType,
-          subject: subject,
-          body: body,
-        });
+      for (const recipient of recipients) {
+        const { error: dbError } = await supabase
+          .from('emails')
+          .insert({
+            claim_id: claimId,
+            sent_by: user.id,
+            recipient_email: recipient.email,
+            recipient_name: recipient.name,
+            recipient_type: recipient.type,
+            subject: subject,
+            body: body,
+          });
 
-      if (dbError) {
-        console.error('Failed to log email to database:', dbError);
-        // Don't throw error - email was sent successfully
+        if (dbError) {
+          console.error(`Failed to log email to database for ${recipient.email}:`, dbError);
+          // Don't throw error - email was sent successfully
+        }
       }
     }
 
     return new Response(
-      JSON.stringify({ success: true, attachmentCount: emailAttachments.length }),
+      JSON.stringify({ 
+        success: true, 
+        recipientCount: recipients.length,
+        attachmentCount: emailAttachments.length 
+      }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }

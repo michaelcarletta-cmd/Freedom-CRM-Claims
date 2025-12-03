@@ -32,8 +32,11 @@ interface TriggerConfig {
 interface ActionConfig {
   type: 'send_email' | 'send_sms' | 'create_task' | 'send_notification' | 'update_claim_status';
   config: {
-    // Email/SMS
-    recipient_type?: 'policyholder' | 'adjuster' | 'referrer';
+    // Email/SMS - support multiple recipients
+    recipient_types?: ('policyholder' | 'adjuster' | 'referrer' | 'contractors')[]; // Multiple recipient types
+    manual_emails?: string[]; // Manually entered email addresses
+    manual_emails_text?: string; // Raw input for editing
+    recipient_type?: 'policyholder' | 'adjuster' | 'referrer'; // Legacy support
     subject?: string;
     message?: string;
     email_template_id?: string; // Reference to email template
@@ -207,12 +210,23 @@ export const AutomationsSettings = () => {
     if (currentAction) {
       // Parse file name patterns from text if present
       const actionToAdd = { ...currentAction };
-      if (actionToAdd.type === 'send_email' && actionToAdd.config.file_name_patterns_text) {
-        const patterns = actionToAdd.config.file_name_patterns_text
-          .split(',')
-          .map(p => p.trim())
-          .filter(p => p.length > 0);
-        actionToAdd.config.file_name_patterns = patterns.length > 0 ? patterns : undefined;
+      if (actionToAdd.type === 'send_email') {
+        // Parse file name patterns
+        if (actionToAdd.config.file_name_patterns_text) {
+          const patterns = actionToAdd.config.file_name_patterns_text
+            .split(',')
+            .map(p => p.trim())
+            .filter(p => p.length > 0);
+          actionToAdd.config.file_name_patterns = patterns.length > 0 ? patterns : undefined;
+        }
+        // Parse manual emails
+        if (actionToAdd.config.manual_emails_text) {
+          const emails = actionToAdd.config.manual_emails_text
+            .split(',')
+            .map(e => e.trim())
+            .filter(e => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+          actionToAdd.config.manual_emails = emails.length > 0 ? emails : undefined;
+        }
       }
       setActions([...actions, actionToAdd]);
       setCurrentAction(null);
@@ -288,7 +302,18 @@ export const AutomationsSettings = () => {
         const templateInfo = action.config.email_template_id 
           ? emailTemplates?.find(t => t.id === action.config.email_template_id)?.name || 'Template'
           : action.config.subject;
-        return `Email to ${action.config.recipient_type}: ${templateInfo}${attachmentInfo}`;
+        // Build recipients description
+        const recipientParts: string[] = [];
+        if (action.config.recipient_types?.length) {
+          recipientParts.push(action.config.recipient_types.join(', '));
+        } else if (action.config.recipient_type) {
+          recipientParts.push(action.config.recipient_type);
+        }
+        if (action.config.manual_emails?.length) {
+          recipientParts.push(`+${action.config.manual_emails.length} manual`);
+        }
+        const recipientsStr = recipientParts.length > 0 ? recipientParts.join(' & ') : 'no recipients';
+        return `Email to ${recipientsStr}: ${templateInfo}${attachmentInfo}`;
       case 'send_sms':
         return `SMS to ${action.config.recipient_type}`;
       case 'create_task':
@@ -572,23 +597,50 @@ export const AutomationsSettings = () => {
                     {currentAction?.type === 'send_email' && (
                       <div className="space-y-4">
                         <div className="space-y-2">
-                          <Label>Send To</Label>
-                          <Select 
-                            value={currentAction.config.recipient_type || ''} 
-                            onValueChange={(value) => setCurrentAction({
-                              ...currentAction,
-                              config: { ...currentAction.config, recipient_type: value as any }
-                            })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select recipient" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="policyholder">Policyholder</SelectItem>
-                              <SelectItem value="adjuster">Insurance Adjuster</SelectItem>
-                              <SelectItem value="referrer">Referrer</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <Label>Send To (select multiple)</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {[
+                              { value: 'policyholder', label: 'Policyholder' },
+                              { value: 'adjuster', label: 'Insurance Adjuster' },
+                              { value: 'referrer', label: 'Referrer' },
+                              { value: 'contractors', label: 'Assigned Contractors' }
+                            ].map((recipientType) => (
+                              <label key={recipientType.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={currentAction.config.recipient_types?.includes(recipientType.value as any) || false}
+                                  onChange={(e) => {
+                                    const types = currentAction.config.recipient_types || [];
+                                    const updated = e.target.checked
+                                      ? [...types, recipientType.value as any]
+                                      : types.filter(t => t !== recipientType.value);
+                                    setCurrentAction({
+                                      ...currentAction,
+                                      config: { ...currentAction.config, recipient_types: updated }
+                                    });
+                                  }}
+                                  className="rounded border-input"
+                                />
+                                {recipientType.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Additional Email Addresses (optional)</Label>
+                          <Input 
+                            placeholder="e.g., manager@company.com, team@company.com"
+                            value={currentAction.config.manual_emails_text ?? currentAction.config.manual_emails?.join(', ') ?? ''}
+                            onChange={(e) => {
+                              setCurrentAction({
+                                ...currentAction,
+                                config: { ...currentAction.config, manual_emails_text: e.target.value }
+                              });
+                            }}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Enter comma-separated email addresses to always include
+                          </p>
                         </div>
                         <div className="space-y-2">
                           <Label>Email Template (optional)</Label>
