@@ -343,12 +343,12 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
   return (
     <>
       <Tabs defaultValue="notes" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-6">
-          <TabsTrigger value="notes" className="flex items-center gap-2">
+        <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1 overflow-x-auto scrollbar-hide mb-6">
+          <TabsTrigger value="notes" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap flex items-center gap-2">
             <MessageSquare className="h-4 w-4" />
             Notes & Updates
           </TabsTrigger>
-          <TabsTrigger value="ai" className="flex items-center gap-2">
+          <TabsTrigger value="ai" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap flex items-center gap-2">
             <Bot className="h-4 w-4" />
             AI Assistant
           </TabsTrigger>

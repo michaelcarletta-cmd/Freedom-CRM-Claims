@@ -14,10 +14,10 @@ export function ClaimCommunicationTab({
 }: { claimId: string; claim: any }) {
   return (
     <Tabs defaultValue="emails" className="w-full">
-      <TabsList className="bg-sidebar p-1 gap-1 rounded-none">
-        <TabsTrigger value="emails" className="text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">Emails</TabsTrigger>
-        <TabsTrigger value="sms" className="text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">SMS / Text</TabsTrigger>
-        <TabsTrigger value="phone" className="text-sidebar-foreground/70 data-[state=active]:bg-sidebar-accent data-[state=active]:text-sidebar-foreground rounded-sm">Phone Calls</TabsTrigger>
+      <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1 overflow-x-auto scrollbar-hide">
+        <TabsTrigger value="emails" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">Emails</TabsTrigger>
+        <TabsTrigger value="sms" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">SMS / Text</TabsTrigger>
+        <TabsTrigger value="phone" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">Phone Calls</TabsTrigger>
       </TabsList>
       <TabsContent value="emails" className="mt-6">
         <ClaimEmails claimId={claimId} claim={claim} />
