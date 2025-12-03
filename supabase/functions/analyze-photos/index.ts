@@ -6,25 +6,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Fetch historical weather data using Open-Meteo API
+// Fetch historical weather data using Visual Crossing API
 async function fetchWeatherData(address: string, lossDate: string): Promise<any> {
   try {
-    // First geocode the address using Nominatim (free, no API key)
-    const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
-    const geoResponse = await fetch(geocodeUrl, {
-      headers: { 'User-Agent': 'FreedomClaimsCRM/1.0' }
-    });
-    const geoData = await geoResponse.json();
+    const VISUAL_CROSSING_API_KEY = Deno.env.get("VISUAL_CROSSING_API_KEY");
     
-    if (!geoData || geoData.length === 0) {
-      console.log("Could not geocode address:", address);
+    if (!VISUAL_CROSSING_API_KEY) {
+      console.log("Visual Crossing API key not configured");
       return null;
     }
     
-    const lat = parseFloat(geoData[0].lat);
-    const lon = parseFloat(geoData[0].lon);
-    
-    // Parse the loss date
+    // Parse the loss date and get date range
     const date = new Date(lossDate);
     const startDate = new Date(date);
     startDate.setDate(date.getDate() - 1); // Day before
@@ -33,57 +25,91 @@ async function fetchWeatherData(address: string, lossDate: string): Promise<any>
     
     const formatDate = (d: Date) => d.toISOString().split('T')[0];
     
-    // Fetch historical weather from Open-Meteo
-    const weatherUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,rain_sum,wind_speed_10m_max,wind_gusts_10m_max&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,weather_code&timezone=America/New_York`;
+    // Visual Crossing Timeline API - supports address directly (no need for separate geocoding)
+    const weatherUrl = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${encodeURIComponent(address)}/${formatDate(startDate)}/${formatDate(endDate)}?unitGroup=us&include=days,hours,alerts&key=${VISUAL_CROSSING_API_KEY}&contentType=json`;
     
-    console.log("Fetching weather from:", weatherUrl);
+    console.log("Fetching weather from Visual Crossing for:", address);
     const weatherResponse = await fetch(weatherUrl);
-    const weatherData = await weatherResponse.json();
     
-    if (weatherData.error) {
-      console.log("Weather API error:", weatherData.reason);
+    if (!weatherResponse.ok) {
+      const errorText = await weatherResponse.text();
+      console.log("Visual Crossing API error:", weatherResponse.status, errorText);
       return null;
     }
     
-    // Weather code descriptions
-    const weatherCodes: Record<number, string> = {
-      0: "Clear sky",
-      1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
-      45: "Fog", 48: "Depositing rime fog",
-      51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle",
-      56: "Light freezing drizzle", 57: "Dense freezing drizzle",
-      61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
-      66: "Light freezing rain", 67: "Heavy freezing rain",
-      71: "Slight snow fall", 73: "Moderate snow fall", 75: "Heavy snow fall",
-      77: "Snow grains",
-      80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
-      85: "Slight snow showers", 86: "Heavy snow showers",
-      95: "Thunderstorm", 96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail"
-    };
+    const weatherData = await weatherResponse.json();
+    
+    if (!weatherData || !weatherData.days) {
+      console.log("No weather data returned from Visual Crossing");
+      return null;
+    }
     
     // Find the loss date index in the daily data
     const lossDateStr = formatDate(date);
-    const dayIndex = weatherData.daily?.time?.indexOf(lossDateStr) ?? -1;
+    const dayIndex = weatherData.days.findIndex((d: any) => d.datetime === lossDateStr);
+    
+    // Process daily data
+    const daily = {
+      dates: weatherData.days.map((d: any) => d.datetime),
+      maxTemp: weatherData.days.map((d: any) => d.tempmax),
+      minTemp: weatherData.days.map((d: any) => d.tempmin),
+      precipitation: weatherData.days.map((d: any) => d.precip || 0),
+      rain: weatherData.days.map((d: any) => d.precip || 0),
+      maxWindSpeed: weatherData.days.map((d: any) => d.windspeed || 0),
+      maxWindGusts: weatherData.days.map((d: any) => d.windgust || 0),
+      weatherDescription: weatherData.days.map((d: any) => d.conditions || 'Unknown'),
+      humidity: weatherData.days.map((d: any) => d.humidity || 0),
+      uvIndex: weatherData.days.map((d: any) => d.uvindex || 0),
+      visibility: weatherData.days.map((d: any) => d.visibility || 0),
+      pressure: weatherData.days.map((d: any) => d.pressure || 0),
+      cloudcover: weatherData.days.map((d: any) => d.cloudcover || 0),
+      severerisk: weatherData.days.map((d: any) => d.severerisk || 0),
+      description: weatherData.days.map((d: any) => d.description || ''),
+      icon: weatherData.days.map((d: any) => d.icon || ''),
+      source: weatherData.days.map((d: any) => d.source || 'Visual Crossing')
+    };
+    
+    // Process hourly data if available
+    const hourly: any = {
+      time: [],
+      temperature: [],
+      precipitation: [],
+      windSpeed: [],
+      windGusts: [],
+      conditions: [],
+      humidity: [],
+      cloudcover: []
+    };
+    
+    weatherData.days.forEach((day: any) => {
+      if (day.hours) {
+        day.hours.forEach((hour: any) => {
+          hourly.time.push(`${day.datetime}T${hour.datetime}`);
+          hourly.temperature.push(hour.temp);
+          hourly.precipitation.push(hour.precip || 0);
+          hourly.windSpeed.push(hour.windspeed || 0);
+          hourly.windGusts.push(hour.windgust || 0);
+          hourly.conditions.push(hour.conditions || '');
+          hourly.humidity.push(hour.humidity || 0);
+          hourly.cloudcover.push(hour.cloudcover || 0);
+        });
+      }
+    });
+    
+    // Include alerts if any
+    const alerts = weatherData.alerts || [];
     
     return {
-      location: geoData[0].display_name,
-      latitude: lat,
-      longitude: lon,
+      location: weatherData.resolvedAddress || address,
+      latitude: weatherData.latitude,
+      longitude: weatherData.longitude,
+      timezone: weatherData.timezone,
       lossDate: lossDateStr,
-      daily: weatherData.daily ? {
-        dates: weatherData.daily.time,
-        maxTemp: weatherData.daily.temperature_2m_max,
-        minTemp: weatherData.daily.temperature_2m_min,
-        precipitation: weatherData.daily.precipitation_sum,
-        rain: weatherData.daily.rain_sum,
-        maxWindSpeed: weatherData.daily.wind_speed_10m_max,
-        maxWindGusts: weatherData.daily.wind_gusts_10m_max,
-        weatherCode: weatherData.daily.weather_code,
-        weatherDescription: weatherData.daily.weather_code?.map((c: number) => weatherCodes[c] || "Unknown")
-      } : null,
-      hourly: weatherData.hourly,
-      weatherCodes,
-      dayIndex
+      daily,
+      hourly,
+      alerts,
+      dayIndex: dayIndex >= 0 ? dayIndex : 1,
+      source: 'Visual Crossing'
     };
   } catch (error) {
     console.error("Error fetching weather data:", error);
@@ -178,30 +204,54 @@ Claim Information:
           
           if (weatherData && weatherData.daily) {
             const idx = weatherData.dayIndex >= 0 ? weatherData.dayIndex : 1;
+            
+            // Build alerts context if any severe weather alerts exist
+            let alertsContext = "";
+            if (weatherData.alerts && weatherData.alerts.length > 0) {
+              alertsContext = `
+Weather Alerts Active During Loss Period:
+${weatherData.alerts.map((a: any) => `- ${a.event || 'Alert'}: ${a.headline || a.description || 'Weather alert issued'}`).join('\n')}
+`;
+            }
+            
             weatherContext = `
 
 HISTORICAL WEATHER DATA (Loss Date: ${weatherData.lossDate}):
+Data Source: Visual Crossing Weather Services
 Location: ${weatherData.location}
 Coordinates: ${weatherData.latitude}, ${weatherData.longitude}
-
-Weather on Loss Date:
+Timezone: ${weatherData.timezone || 'N/A'}
+${alertsContext}
+Weather on Loss Date (${weatherData.daily.dates?.[idx]}):
 - Conditions: ${weatherData.daily.weatherDescription?.[idx] || 'N/A'}
+- Description: ${weatherData.daily.description?.[idx] || 'N/A'}
 - High Temperature: ${weatherData.daily.maxTemp?.[idx]}°F
 - Low Temperature: ${weatherData.daily.minTemp?.[idx]}°F
-- Precipitation: ${weatherData.daily.precipitation?.[idx]} mm
+- Precipitation: ${weatherData.daily.precipitation?.[idx]} inches
 - Max Wind Speed: ${weatherData.daily.maxWindSpeed?.[idx]} mph
 - Max Wind Gusts: ${weatherData.daily.maxWindGusts?.[idx]} mph
+- Humidity: ${weatherData.daily.humidity?.[idx]}%
+- Cloud Cover: ${weatherData.daily.cloudcover?.[idx]}%
+- UV Index: ${weatherData.daily.uvIndex?.[idx]}
+- Visibility: ${weatherData.daily.visibility?.[idx]} miles
+- Severe Risk: ${weatherData.daily.severerisk?.[idx]}%
 
 Day Before (${weatherData.daily.dates?.[0]}):
 - Conditions: ${weatherData.daily.weatherDescription?.[0] || 'N/A'}
+- Description: ${weatherData.daily.description?.[0] || 'N/A'}
+- Max Wind Speed: ${weatherData.daily.maxWindSpeed?.[0]} mph
 - Max Wind Gusts: ${weatherData.daily.maxWindGusts?.[0]} mph
-- Precipitation: ${weatherData.daily.precipitation?.[0]} mm
+- Precipitation: ${weatherData.daily.precipitation?.[0]} inches
+- Severe Risk: ${weatherData.daily.severerisk?.[0]}%
 
 Day After (${weatherData.daily.dates?.[2]}):
 - Conditions: ${weatherData.daily.weatherDescription?.[2] || 'N/A'}
+- Description: ${weatherData.daily.description?.[2] || 'N/A'}
+- Max Wind Speed: ${weatherData.daily.maxWindSpeed?.[2]} mph
 - Max Wind Gusts: ${weatherData.daily.maxWindGusts?.[2]} mph
+- Precipitation: ${weatherData.daily.precipitation?.[2]} inches
 `;
-            console.log("Weather data fetched successfully");
+            console.log("Weather data fetched successfully from Visual Crossing");
           }
         }
       }
