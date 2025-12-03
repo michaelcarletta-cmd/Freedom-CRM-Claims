@@ -7,13 +7,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface Attachment {
+  filePath: string;
+  fileName: string;
+  fileType: string | null;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { to, subject, body, claimId, recipientName, recipientType } = await req.json();
+    const { to, subject, body, claimId, recipientName, recipientType, attachments } = await req.json();
 
     if (!to || !subject || !body) {
       throw new Error("Missing required fields");
@@ -25,7 +31,18 @@ serve(async (req) => {
       throw new Error('No authorization header');
     }
 
-    // Create Supabase client with user's auth token
+    // Create Supabase client with service role for storage access
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      {
+        auth: {
+          persistSession: false,
+        },
+      }
+    );
+
+    // Create Supabase client with user's auth token for user data
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -64,7 +81,43 @@ serve(async (req) => {
       ? `${body}\n\n--\n${emailSignature}`
       : body;
 
-    const emailResponse = await resend.emails.send({
+    // Process attachments if provided
+    const emailAttachments: { filename: string; content: string }[] = [];
+    
+    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+      console.log(`Processing ${attachments.length} attachments`);
+      
+      for (const attachment of attachments as Attachment[]) {
+        try {
+          // Download file from storage
+          const { data: fileData, error: downloadError } = await supabaseAdmin.storage
+            .from('claim-files')
+            .download(attachment.filePath);
+          
+          if (downloadError) {
+            console.error(`Failed to download file ${attachment.fileName}:`, downloadError);
+            continue;
+          }
+          
+          // Convert to base64
+          const arrayBuffer = await fileData.arrayBuffer();
+          const base64Content = btoa(
+            new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+          );
+          
+          emailAttachments.push({
+            filename: attachment.fileName,
+            content: base64Content,
+          });
+          
+          console.log(`Successfully processed attachment: ${attachment.fileName}`);
+        } catch (err) {
+          console.error(`Error processing attachment ${attachment.fileName}:`, err);
+        }
+      }
+    }
+
+    const emailPayload: any = {
       from: "Freedom Claims <onboarding@resend.dev>",
       to: [to],
       subject: subject,
@@ -77,7 +130,15 @@ serve(async (req) => {
           </p>
         </div>
       `,
-    });
+    };
+
+    // Add attachments if any were processed
+    if (emailAttachments.length > 0) {
+      emailPayload.attachments = emailAttachments;
+      console.log(`Sending email with ${emailAttachments.length} attachments`);
+    }
+
+    const emailResponse = await resend.emails.send(emailPayload);
 
     console.log(`Email sent to ${to}:`, emailResponse);
 
@@ -102,7 +163,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true }),
+      JSON.stringify({ success: true, attachmentCount: emailAttachments.length }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
