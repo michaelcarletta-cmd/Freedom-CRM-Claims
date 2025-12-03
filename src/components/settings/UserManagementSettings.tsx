@@ -92,12 +92,22 @@ export function UserManagementSettings() {
           roles: (roles || []).filter((role) => role.user_id === profile.id),
         }));
 
+      // Filter to only show staff/admin users (exclude clients, contractors, referrers)
+      const staffAdminUsers = usersWithRoles.filter(u => {
+        const hasPortalRole = u.roles.some(r => 
+          r.role === 'client' || r.role === 'contractor' || r.role === 'referrer'
+        );
+        const hasStaffRole = u.roles.some(r => r.role === 'staff' || r.role === 'admin');
+        // Show if has staff/admin role OR has no roles (new user) OR is pending
+        return !hasPortalRole && (hasStaffRole || u.roles.length === 0 || u.approval_status === 'pending');
+      });
+
       // Separate pending staff users from approved users
-      const pending = usersWithRoles.filter(
-        u => u.approval_status === 'pending' && u.roles.some(r => r.role === 'staff')
+      const pending = staffAdminUsers.filter(
+        u => u.approval_status === 'pending'
       );
-      const approved = usersWithRoles.filter(
-        u => u.approval_status !== 'pending' || !u.roles.some(r => r.role === 'staff')
+      const approved = staffAdminUsers.filter(
+        u => u.approval_status !== 'pending'
       );
 
       setPendingUsers(pending);
@@ -444,24 +454,6 @@ export function UserManagementSettings() {
                         Staff
                       </div>
                     </SelectItem>
-                    <SelectItem value="client">
-                      <div className="flex items-center gap-2">
-                        <UserPlus className="h-4 w-4" />
-                        Client
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="contractor">
-                      <div className="flex items-center gap-2">
-                        <UserPlus className="h-4 w-4" />
-                        Contractor
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="referrer">
-                      <div className="flex items-center gap-2">
-                        <UserPlus className="h-4 w-4" />
-                        Referrer
-                      </div>
-                    </SelectItem>
                   </SelectContent>
                 </Select>
                 
@@ -503,11 +495,11 @@ export function UserManagementSettings() {
             <p className="font-medium text-foreground">Role Descriptions</p>
             <ul className="text-muted-foreground space-y-1 list-disc list-inside">
               <li><strong>Admin:</strong> Full system access, can manage all settings and users</li>
-              <li><strong>Staff:</strong> Can manage claims, clients, and tasks (requires approval)</li>
-              <li><strong>Client:</strong> Can only view claims they're assigned to via portal</li>
-              <li><strong>Contractor:</strong> Can view claims they're assigned to work on</li>
-              <li><strong>Referrer:</strong> Can view claims they've referred</li>
+              <li><strong>Staff:</strong> Can manage claims, clients, and tasks (requires approval on signup)</li>
             </ul>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Clients, contractors, and referrers are managed on their respective pages.
+            </p>
           </div>
         </div>
       </Card>
