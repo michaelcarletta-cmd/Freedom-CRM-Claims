@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2 } from "lucide-react";
+import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -342,9 +342,16 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       </TabsList>
 
       <TabsContent value="files" className="space-y-4 mt-4">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center flex-wrap gap-2">
           <h3 className="text-lg font-semibold">Documents & Files</h3>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => window.open("https://quickmeasure.gaf.com/", "_blank")}
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              GAF QuickMeasure
+            </Button>
             <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">
