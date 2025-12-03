@@ -8,9 +8,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ClaimTemplates } from "./ClaimTemplates";
+
+interface ClaimFilesProps {
+  claimId: string;
+  claim?: any;
+  isStaffOrAdmin?: boolean;
+}
 
 const getFileIcon = (type: string) => {
   if (type?.includes("image")) return Image;
@@ -26,7 +34,7 @@ const formatFileSize = (bytes: number) => {
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i];
 };
 
-export const ClaimFiles = ({ claimId }: { claimId: string }) => {
+export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFilesProps) => {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
@@ -325,43 +333,51 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Documents & Files</h3>
-        <div className="flex gap-2">
-          <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <FolderPlus className="h-4 w-4 mr-2" />
-                New Folder
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Folder</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="folderName">Folder Name</Label>
-                  <Input
-                    id="folderName"
-                    value={newFolderName}
-                    onChange={(e) => setNewFolderName(e.target.value)}
-                    placeholder="Enter folder name"
-                  />
-                </div>
-                <Button
-                  onClick={() => createFolderMutation.mutate(newFolderName)}
-                  disabled={!newFolderName.trim() || createFolderMutation.isPending}
-                  className="w-full"
-                >
-                  Create Folder
+    <Tabs defaultValue="files" className="w-full">
+      <TabsList>
+        <TabsTrigger value="files">Documents & Files</TabsTrigger>
+        {isStaffOrAdmin && claim && (
+          <TabsTrigger value="templates">Templates & Signatures</TabsTrigger>
+        )}
+      </TabsList>
+
+      <TabsContent value="files" className="space-y-4 mt-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-semibold">Documents & Files</h3>
+          <div className="flex gap-2">
+            <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  New Folder
                 </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create New Folder</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="folderName">Folder Name</Label>
+                    <Input
+                      id="folderName"
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      placeholder="Enter folder name"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => createFolderMutation.mutate(newFolderName)}
+                    disabled={!newFolderName.trim() || createFolderMutation.isPending}
+                    className="w-full"
+                  >
+                    Create Folder
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
-      </div>
 
       <Accordion type="multiple" className="w-full space-y-2">
         {folders?.map((folder) => {
@@ -598,6 +614,13 @@ export const ClaimFiles = ({ claimId }: { claimId: string }) => {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+      </TabsContent>
+
+      {isStaffOrAdmin && claim && (
+        <TabsContent value="templates" className="mt-4">
+          <ClaimTemplates claimId={claimId} claim={claim} />
+        </TabsContent>
+      )}
+    </Tabs>
   );
 };
