@@ -226,18 +226,82 @@ async function sendEmail(supabase: any, config: any, execution: any) {
     throw new Error('RESEND_API_KEY not configured');
   }
 
+  // Build attachments if folders are specified
+  const attachments: { filename: string; content: string }[] = [];
+  
+  if (config.attachment_folders && config.attachment_folders.length > 0) {
+    console.log('Fetching files from folders:', config.attachment_folders);
+    
+    // Get folder IDs for specified folder names
+    const { data: folders } = await supabase
+      .from('claim_folders')
+      .select('id, name')
+      .eq('claim_id', execution.claim_id)
+      .in('name', config.attachment_folders);
+    
+    if (folders && folders.length > 0) {
+      const folderIds = folders.map((f: any) => f.id);
+      
+      // Get files from those folders
+      const { data: files } = await supabase
+        .from('claim_files')
+        .select('file_name, file_path')
+        .eq('claim_id', execution.claim_id)
+        .in('folder_id', folderIds);
+      
+      if (files && files.length > 0) {
+        console.log(`Found ${files.length} files to attach`);
+        
+        // Download each file and convert to base64
+        for (const file of files) {
+          try {
+            const { data: fileData, error: downloadError } = await supabase
+              .storage
+              .from('claim-files')
+              .download(file.file_path);
+            
+            if (downloadError) {
+              console.error(`Error downloading file ${file.file_name}:`, downloadError);
+              continue;
+            }
+            
+            // Convert to base64
+            const arrayBuffer = await fileData.arrayBuffer();
+            const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+            
+            attachments.push({
+              filename: file.file_name,
+              content: base64,
+            });
+            
+            console.log(`Attached file: ${file.file_name}`);
+          } catch (fileError) {
+            console.error(`Error processing file ${file.file_name}:`, fileError);
+          }
+        }
+      }
+    }
+  }
+
+  const emailPayload: any = {
+    from: 'Freedom Claims <noreply@claims.freedom.com>',
+    to: [recipientEmail],
+    subject: subject,
+    html: `<div style="font-family: sans-serif;">${body.replace(/\n/g, '<br>')}</div>`,
+  };
+
+  // Add attachments if any
+  if (attachments.length > 0) {
+    emailPayload.attachments = attachments;
+  }
+
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${resendApiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      from: 'Freedom Claims <noreply@claims.freedom.com>',
-      to: [recipientEmail],
-      subject: subject,
-      html: `<div style="font-family: sans-serif;">${body.replace(/\n/g, '<br>')}</div>`,
-    }),
+    body: JSON.stringify(emailPayload),
   });
 
   if (!response.ok) {
@@ -255,8 +319,8 @@ async function sendEmail(supabase: any, config: any, execution: any) {
     body: body,
   });
 
-  console.log('Sent email to:', recipientEmail);
-  return { sent_to: recipientEmail };
+  console.log('Sent email to:', recipientEmail, 'with', attachments.length, 'attachments');
+  return { sent_to: recipientEmail, attachments_count: attachments.length };
 }
 
 async function sendSms(supabase: any, config: any, execution: any) {

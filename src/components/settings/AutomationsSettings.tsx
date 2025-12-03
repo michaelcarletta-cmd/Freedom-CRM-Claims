@@ -34,6 +34,8 @@ interface ActionConfig {
     recipient_type?: 'policyholder' | 'adjuster' | 'referrer';
     subject?: string;
     message?: string;
+    // Email attachments
+    attachment_folders?: string[]; // Folder names to pull files from
     // Task
     title?: string;
     description?: string;
@@ -212,7 +214,10 @@ export const AutomationsSettings = () => {
   const getActionDescription = (action: ActionConfig) => {
     switch (action.type) {
       case 'send_email':
-        return `Email to ${action.config.recipient_type}: ${action.config.subject}`;
+        const attachmentInfo = action.config.attachment_folders?.length 
+          ? ` (with ${action.config.attachment_folders.length} folder attachments)` 
+          : '';
+        return `Email to ${action.config.recipient_type}: ${action.config.subject}${attachmentInfo}`;
       case 'send_sms':
         return `SMS to ${action.config.recipient_type}`;
       case 'create_task':
@@ -506,6 +511,34 @@ export const AutomationsSettings = () => {
                           />
                           <p className="text-xs text-muted-foreground">
                             Available: {'{claim.policyholder_name}'}, {'{claim.claim_number}'}, {'{claim.status}'}, {'{claim.loss_type}'}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Attach Files From Folders</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {['Carrier Documents', 'Freedom Adjustment Documents', 'Invoicing', 'Certificate of Completion', 'Supporting Evidence', 'Mortgage Documents'].map((folder) => (
+                              <label key={folder} className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={currentAction.config.attachment_folders?.includes(folder) || false}
+                                  onChange={(e) => {
+                                    const folders = currentAction.config.attachment_folders || [];
+                                    const updated = e.target.checked
+                                      ? [...folders, folder]
+                                      : folders.filter(f => f !== folder);
+                                    setCurrentAction({
+                                      ...currentAction,
+                                      config: { ...currentAction.config, attachment_folders: updated }
+                                    });
+                                  }}
+                                  className="rounded border-input"
+                                />
+                                {folder}
+                              </label>
+                            ))}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            All files from selected folders will be attached to the email
                           </p>
                         </div>
                       </div>
