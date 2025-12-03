@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
-import { Plus, Send, Bot, MessageSquare, Loader2, Edit, Trash2 } from "lucide-react";
+import { Plus, Send, Bot, MessageSquare, Loader2, Edit, Trash2, FileText, Cloud, Camera, Calculator } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -59,6 +59,7 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [reportLoading, setReportLoading] = useState<string | null>(null);
   const { user, userRole } = useAuth();
   const isStaff = userRole === "admin" || userRole === "staff";
 
@@ -240,6 +241,43 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
       toast.error(error.message || "Failed to get AI response");
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const handleGenerateReport = async (reportType: string) => {
+    setReportLoading(reportType);
+
+    const reportNames: Record<string, string> = {
+      weather: "Weather Report",
+      damage: "Damage Explanation",
+      estimate: "Estimate Discussion",
+      photos: "Photo Documentation Guide",
+    };
+
+    try {
+      const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
+        body: {
+          claimId,
+          question: "",
+          reportType,
+        },
+      });
+
+      if (error) throw error;
+
+      const reportMessage: AiMessage = {
+        role: "assistant",
+        content: `## ${reportNames[reportType]}\n\n${data.answer}`,
+        timestamp: new Date(),
+      };
+
+      setAiMessages((prev) => [...prev, reportMessage]);
+      toast.success(`${reportNames[reportType]} generated`);
+    } catch (error: any) {
+      console.error("Error generating report:", error);
+      toast.error(error.message || "Failed to generate report");
+    } finally {
+      setReportLoading(null);
     }
   };
 
@@ -484,6 +522,69 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
               </div>
             </div>
           </Card>
+
+          {/* Report Generation Buttons */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Generate Reports</Label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleGenerateReport("weather")}
+                disabled={!!reportLoading || aiLoading}
+                className="flex items-center gap-2"
+              >
+                {reportLoading === "weather" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Cloud className="h-4 w-4" />
+                )}
+                Weather
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleGenerateReport("damage")}
+                disabled={!!reportLoading || aiLoading}
+                className="flex items-center gap-2"
+              >
+                {reportLoading === "damage" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4" />
+                )}
+                Damage
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleGenerateReport("estimate")}
+                disabled={!!reportLoading || aiLoading}
+                className="flex items-center gap-2"
+              >
+                {reportLoading === "estimate" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Calculator className="h-4 w-4" />
+                )}
+                Estimate
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleGenerateReport("photos")}
+                disabled={!!reportLoading || aiLoading}
+                className="flex items-center gap-2"
+              >
+                {reportLoading === "photos" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Camera className="h-4 w-4" />
+                )}
+                Photos
+              </Button>
+            </div>
+          </div>
 
           <div className="space-y-4 max-h-[400px] overflow-y-auto">
             {aiMessages.map((message, index) => (
