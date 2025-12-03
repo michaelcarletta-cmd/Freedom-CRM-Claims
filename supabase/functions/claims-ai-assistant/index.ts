@@ -198,6 +198,189 @@ Format this as a professional analysis that helps understand and negotiate the e
 Format this as a professional guide for photo documentation.`,
 };
 
+// Helper function to create a Word document (simplified DOCX format)
+function createWordDocument(title: string, content: string, claim: any): Uint8Array {
+  const claimInfo = claim ? `
+Claim Number: ${claim.claim_number || 'N/A'}
+Policyholder: ${claim.policyholder_name || 'N/A'}
+Property Address: ${claim.policyholder_address || 'N/A'}
+Loss Date: ${claim.loss_date || 'N/A'}
+Loss Type: ${claim.loss_type || 'N/A'}
+` : '';
+
+  // Convert markdown to simple text for Word
+  const plainContent = content
+    .replace(/#{1,6}\s/g, '')
+    .replace(/\*\*/g, '')
+    .replace(/\*/g, '')
+    .replace(/`/g, '');
+
+  // Create document.xml content
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+      <w:r><w:t>${escapeXml(title)}</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>Generated: ${new Date().toLocaleDateString()}</w:t></w:r>
+    </w:p>
+    <w:p><w:r><w:t></w:t></w:r></w:p>
+    ${claimInfo ? `<w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Claim Information</w:t></w:r>
+    </w:p>
+    ${claimInfo.split('\n').filter(l => l.trim()).map(line => `<w:p><w:r><w:t>${escapeXml(line)}</w:t></w:r></w:p>`).join('\n')}
+    <w:p><w:r><w:t></w:t></w:r></w:p>` : ''}
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Report</w:t></w:r>
+    </w:p>
+    ${plainContent.split('\n').map(line => `<w:p><w:r><w:t>${escapeXml(line)}</w:t></w:r></w:p>`).join('\n')}
+  </w:body>
+</w:document>`;
+
+  // Create content types
+  const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+
+  // Create relationships
+  const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+  // Build a minimal ZIP file manually (simplified approach)
+  const encoder = new TextEncoder();
+  const files: { name: string; content: Uint8Array }[] = [
+    { name: '[Content_Types].xml', content: encoder.encode(contentTypesXml) },
+    { name: '_rels/.rels', content: encoder.encode(relsXml) },
+    { name: 'word/document.xml', content: encoder.encode(documentXml) },
+  ];
+
+  return createZip(files);
+}
+
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+// Simple ZIP file creator
+function createZip(files: { name: string; content: Uint8Array }[]): Uint8Array {
+  const chunks: number[] = [];
+  const centralDirectory: number[] = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const nameBytes = new TextEncoder().encode(file.name);
+    
+    // Local file header
+    const localHeader = [
+      0x50, 0x4b, 0x03, 0x04, // signature
+      0x14, 0x00, // version needed
+      0x00, 0x00, // flags
+      0x00, 0x00, // compression (store)
+      0x00, 0x00, // mod time
+      0x00, 0x00, // mod date
+      0x00, 0x00, 0x00, 0x00, // crc32 (will be calculated)
+      ...numberToBytes(file.content.length, 4), // compressed size
+      ...numberToBytes(file.content.length, 4), // uncompressed size
+      ...numberToBytes(nameBytes.length, 2), // name length
+      0x00, 0x00, // extra field length
+    ];
+
+    // Calculate CRC32
+    const crc = crc32(file.content);
+    localHeader[14] = crc & 0xff;
+    localHeader[15] = (crc >> 8) & 0xff;
+    localHeader[16] = (crc >> 16) & 0xff;
+    localHeader[17] = (crc >> 24) & 0xff;
+
+    chunks.push(...localHeader, ...nameBytes, ...file.content);
+
+    // Central directory entry
+    const cdEntry = [
+      0x50, 0x4b, 0x01, 0x02, // signature
+      0x14, 0x00, // version made by
+      0x14, 0x00, // version needed
+      0x00, 0x00, // flags
+      0x00, 0x00, // compression
+      0x00, 0x00, // mod time
+      0x00, 0x00, // mod date
+      ...numberToBytes(crc, 4), // crc32
+      ...numberToBytes(file.content.length, 4), // compressed size
+      ...numberToBytes(file.content.length, 4), // uncompressed size
+      ...numberToBytes(nameBytes.length, 2), // name length
+      0x00, 0x00, // extra field length
+      0x00, 0x00, // comment length
+      0x00, 0x00, // disk start
+      0x00, 0x00, // internal attrs
+      0x00, 0x00, 0x00, 0x00, // external attrs
+      ...numberToBytes(offset, 4), // local header offset
+      ...nameBytes,
+    ];
+
+    centralDirectory.push(...cdEntry);
+    offset += localHeader.length + nameBytes.length + file.content.length;
+  }
+
+  const cdOffset = offset;
+  const cdSize = centralDirectory.length;
+
+  // End of central directory
+  const eocd = [
+    0x50, 0x4b, 0x05, 0x06, // signature
+    0x00, 0x00, // disk number
+    0x00, 0x00, // disk with cd
+    ...numberToBytes(files.length, 2), // entries on disk
+    ...numberToBytes(files.length, 2), // total entries
+    ...numberToBytes(cdSize, 4), // cd size
+    ...numberToBytes(cdOffset, 4), // cd offset
+    0x00, 0x00, // comment length
+  ];
+
+  return new Uint8Array([...chunks, ...centralDirectory, ...eocd]);
+}
+
+function numberToBytes(n: number, bytes: number): number[] {
+  const result: number[] = [];
+  for (let i = 0; i < bytes; i++) {
+    result.push((n >> (8 * i)) & 0xff);
+  }
+  return result;
+}
+
+function crc32(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  const table = getCrc32Table();
+  for (const byte of data) {
+    crc = (crc >>> 8) ^ table[(crc ^ byte) & 0xff];
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function getCrc32Table(): number[] {
+  const table: number[] = [];
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table.push(c >>> 0);
+  }
+  return table;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -478,8 +661,77 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
     const aiData = await aiResponse.json();
     const answer = aiData.choices[0].message.content;
 
+    // If this is a report, save it as a Word document
+    let savedFile = null;
+    if (reportType && claimId) {
+      try {
+        // Get the AI Assistant Reports folder
+        const { data: folder } = await supabase
+          .from("claim_folders")
+          .select("id")
+          .eq("claim_id", claimId)
+          .eq("name", "AI Assistant Reports")
+          .single();
+
+        if (folder) {
+          const reportNames: Record<string, string> = {
+            weather: "Weather Report",
+            damage: "Damage Explanation",
+            estimate: "Estimate Discussion",
+            photos: "Photo Documentation Guide",
+          };
+
+          const timestamp = new Date().toISOString().split("T")[0];
+          const fileName = `${reportNames[reportType] || "AI Report"} - ${timestamp}.docx`;
+          const filePath = `${claimId}/${folder.id}/${crypto.randomUUID()}.docx`;
+
+          // Create a simple Word document (using Office Open XML format)
+          const docContent = createWordDocument(reportNames[reportType] || "AI Report", answer, claim);
+          
+          // Upload to storage
+          const { data: uploadData, error: uploadError } = await supabase
+            .storage
+            .from("claim-files")
+            .upload(filePath, docContent, {
+              contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              upsert: false,
+            });
+
+          if (uploadError) {
+            console.error("Error uploading report:", uploadError);
+          } else {
+            // Create file record
+            const { data: fileRecord, error: fileError } = await supabase
+              .from("claim_files")
+              .insert({
+                claim_id: claimId,
+                folder_id: folder.id,
+                file_name: fileName,
+                file_path: filePath,
+                file_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              })
+              .select()
+              .single();
+
+            if (fileError) {
+              console.error("Error creating file record:", fileError);
+            } else {
+              savedFile = {
+                id: fileRecord.id,
+                fileName: fileName,
+                folderId: folder.id,
+              };
+              console.log(`Saved report: ${fileName}`);
+            }
+          }
+        }
+      } catch (saveError) {
+        console.error("Error saving report:", saveError);
+      }
+    }
+
     return new Response(
-      JSON.stringify({ answer, reportType }),
+      JSON.stringify({ answer, reportType, savedFile }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
