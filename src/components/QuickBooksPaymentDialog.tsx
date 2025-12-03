@@ -78,6 +78,7 @@ export function QuickBooksPaymentDialog({
           action: 'get-accounts',
           accessToken: conn.accessToken,
           realmId: conn.realmId,
+          isSandbox: true, // Using sandbox for testing
         },
       });
 
@@ -121,6 +122,7 @@ export function QuickBooksPaymentDialog({
           action: 'search-vendor',
           accessToken: conn.accessToken,
           realmId: conn.realmId,
+          isSandbox: true,
           vendorData: { name: recipientName },
         },
       });
@@ -134,6 +136,7 @@ export function QuickBooksPaymentDialog({
             action: 'create-vendor',
             accessToken: conn.accessToken,
             realmId: conn.realmId,
+            isSandbox: true,
             vendorData: {
               name: recipientName,
               email: recipientEmail,
@@ -152,6 +155,7 @@ export function QuickBooksPaymentDialog({
           action: 'create-check',
           accessToken: conn.accessToken,
           realmId: conn.realmId,
+          isSandbox: true,
           paymentData: {
             vendorId,
             amount: parseFloat(formData.amount),

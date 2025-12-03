@@ -12,10 +12,14 @@ serve(async (req) => {
   }
 
   try {
-    const { action, accessToken, realmId, paymentData, vendorData } = await req.json();
-    console.log('QuickBooks payment action:', action);
+    const { action, accessToken, realmId, paymentData, vendorData, isSandbox = true } = await req.json();
+    console.log('QuickBooks payment action:', action, 'sandbox:', isSandbox);
 
-    const baseUrl = `https://quickbooks.api.intuit.com/v3/company/${realmId}`;
+    // Use sandbox URL for testing, production URL for live
+    const apiHost = isSandbox 
+      ? 'https://sandbox-quickbooks.api.intuit.com' 
+      : 'https://quickbooks.api.intuit.com';
+    const baseUrl = `${apiHost}/v3/company/${realmId}`;
 
     if (action === 'create-vendor') {
       // Create a vendor in QuickBooks
