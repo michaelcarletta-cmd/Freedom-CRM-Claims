@@ -59,7 +59,7 @@ serve(async (req) => {
     for (const photo of photos) {
       const { data: signedUrlData, error: signedUrlError } = await supabase
         .storage
-        .from('claim-photos')
+        .from('claim-files')
         .createSignedUrl(photo.file_path, 3600);
 
       if (signedUrlError || !signedUrlData?.signedUrl) {
