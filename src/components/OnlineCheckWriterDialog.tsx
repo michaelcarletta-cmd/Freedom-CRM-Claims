@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, AlertCircle, Printer, Mail, Send } from "lucide-react";
+import { Loader2, Printer, Mail, Send, ExternalLink } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface OnlineCheckWriterDialogProps {
@@ -20,12 +20,6 @@ interface OnlineCheckWriterDialogProps {
   onSuccess?: () => void;
 }
 
-interface BankAccount {
-  id: string;
-  name: string;
-  account_number_last4?: string;
-}
-
 export function OnlineCheckWriterDialog({
   open,
   onOpenChange,
@@ -36,8 +30,6 @@ export function OnlineCheckWriterDialog({
   onSuccess,
 }: OnlineCheckWriterDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [deliveryMethod, setDeliveryMethod] = useState<'print' | 'mail' | 'email'>('print');
   const [formData, setFormData] = useState({
     amount: defaultAmount?.toString() || "",
@@ -56,12 +48,8 @@ export function OnlineCheckWriterDialog({
   });
 
   useEffect(() => {
-    if (open) {
-      fetchBankAccounts();
-      // Parse address if provided
-      if (recipientAddress) {
-        parseAddress(recipientAddress);
-      }
+    if (open && recipientAddress) {
+      parseAddress(recipientAddress);
     }
   }, [open, recipientAddress]);
 
@@ -78,13 +66,11 @@ export function OnlineCheckWriterDialog({
   }, [recipientEmail]);
 
   const parseAddress = (address: string) => {
-    // Simple address parser - can be enhanced
     const parts = address.split(',').map(p => p.trim());
     if (parts.length >= 1) {
       setFormData(prev => ({ ...prev, address1: parts[0] }));
     }
     if (parts.length >= 2) {
-      // Try to parse city, state zip from second part
       const cityStateZip = parts[1];
       const match = cityStateZip.match(/^(.+?)\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/i);
       if (match) {
@@ -100,34 +86,14 @@ export function OnlineCheckWriterDialog({
     }
   };
 
-  const fetchBankAccounts = async () => {
-    setLoadingAccounts(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('online-check-writer', {
-        body: { action: 'get-bank-accounts' },
-      });
-
-      if (error) throw error;
-      setBankAccounts(data.accounts || []);
-      if (data.accounts?.length > 0) {
-        setFormData(prev => ({ ...prev, bankAccountId: data.accounts[0].id }));
-      }
-    } catch (err) {
-      console.error('Failed to fetch bank accounts:', err);
-      // Don't show error on initial load - API might just need configuration
-    } finally {
-      setLoadingAccounts(false);
-    }
-  };
-
   const handleSubmit = async () => {
     if (!formData.amount || parseFloat(formData.amount) <= 0) {
       toast.error('Please enter a valid amount');
       return;
     }
 
-    if (!formData.bankAccountId) {
-      toast.error('Please select a bank account');
+    if (!formData.bankAccountId.trim()) {
+      toast.error('Please enter your bank account ID from Online Check Writer');
       return;
     }
 
@@ -145,104 +111,41 @@ export function OnlineCheckWriterDialog({
 
     setIsLoading(true);
     try {
-      // First, search for or create the payee
-      let payeeId: string | null = null;
+      let action = 'create-check';
+      if (deliveryMethod === 'mail') action = 'mail-check';
+      if (deliveryMethod === 'email') action = 'email-check';
+      if (deliveryMethod === 'print') action = 'print-check';
 
-      const { data: searchData } = await supabase.functions.invoke('online-check-writer', {
-        body: {
-          action: 'search-payee',
-          payeeData: { name: recipientName },
-        },
+      const checkData = {
+        bankAccountId: formData.bankAccountId.trim(),
+        payeeName: recipientName,
+        amount: parseFloat(formData.amount),
+        memo: formData.memo,
+        date: new Date().toISOString().split('T')[0],
+        // Address fields for mail
+        address1: formData.address1,
+        address2: formData.address2,
+        city: formData.city,
+        state: formData.state,
+        zip: formData.zip,
+        shippingMethod: formData.shippingMethod,
+        // Email fields
+        email: formData.email,
+        message: formData.emailMessage,
+      };
+
+      const { data, error } = await supabase.functions.invoke('online-check-writer', {
+        body: { action, checkData },
       });
 
-      if (searchData?.payees?.length > 0) {
-        payeeId = searchData.payees[0].id;
-      } else {
-        // Create payee
-        const { data: createData, error: createError } = await supabase.functions.invoke('online-check-writer', {
-          body: {
-            action: 'create-payee',
-            payeeData: {
-              name: recipientName,
-              email: formData.email,
-              address: formData.address1,
-              city: formData.city,
-              state: formData.state,
-              zip: formData.zip,
-            },
-          },
-        });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
 
-        if (createError) throw createError;
-        payeeId = createData.payee?.id;
-      }
-
-      // Create the check
-      const { data: checkData, error: checkError } = await supabase.functions.invoke('online-check-writer', {
-        body: {
-          action: 'create-check',
-          checkData: {
-            bankAccountId: formData.bankAccountId,
-            payeeId,
-            payeeName: recipientName,
-            amount: parseFloat(formData.amount),
-            memo: formData.memo,
-          },
-        },
-      });
-
-      if (checkError) throw checkError;
-      const checkId = checkData.check?.id;
-
-      // Handle delivery method
       if (deliveryMethod === 'print') {
-        const { data: printData, error: printError } = await supabase.functions.invoke('online-check-writer', {
-          body: {
-            action: 'print-check',
-            checkData: { checkId },
-          },
-        });
-
-        if (printError) throw printError;
-        
-        if (printData.printUrl) {
-          window.open(printData.printUrl, '_blank');
-          toast.success('Check ready for printing - opening PDF...');
-        } else {
-          toast.success('Check created - ready for printing in Online Check Writer');
-        }
+        toast.success(`Check #${data.checkId || 'created'} - ready for printing in Online Check Writer`);
       } else if (deliveryMethod === 'mail') {
-        const { error: mailError } = await supabase.functions.invoke('online-check-writer', {
-          body: {
-            action: 'mail-check',
-            checkData: {
-              checkId,
-              shippingMethod: formData.shippingMethod,
-              recipientName,
-              address1: formData.address1,
-              address2: formData.address2,
-              city: formData.city,
-              state: formData.state,
-              zip: formData.zip,
-            },
-          },
-        });
-
-        if (mailError) throw mailError;
-        toast.success('Check queued for mailing');
+        toast.success('Check created and queued for mailing');
       } else if (deliveryMethod === 'email') {
-        const { error: emailError } = await supabase.functions.invoke('online-check-writer', {
-          body: {
-            action: 'email-check',
-            checkData: {
-              checkId,
-              email: formData.email,
-              message: formData.emailMessage,
-            },
-          },
-        });
-
-        if (emailError) throw emailError;
         toast.success('eCheck sent via email');
       }
 
@@ -252,7 +155,7 @@ export function OnlineCheckWriterDialog({
       // Reset form
       setFormData({
         amount: "",
-        bankAccountId: bankAccounts[0]?.id || "",
+        bankAccountId: formData.bankAccountId, // Keep bank account ID
         memo: "",
         address1: "",
         address2: "",
@@ -276,6 +179,9 @@ export function OnlineCheckWriterDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Online Check Writer</DialogTitle>
+          <DialogDescription>
+            Create and send checks via Online Check Writer
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div>
@@ -295,34 +201,24 @@ export function OnlineCheckWriterDialog({
           </div>
 
           <div>
-            <Label>Bank Account *</Label>
-            {loadingAccounts ? (
-              <div className="flex items-center gap-2 p-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm text-muted-foreground">Loading accounts...</span>
-              </div>
-            ) : bankAccounts.length === 0 ? (
-              <div className="flex items-center gap-2 p-2 text-yellow-500">
-                <AlertCircle className="h-4 w-4" />
-                <span className="text-sm">No bank accounts found. Configure in Online Check Writer.</span>
-              </div>
-            ) : (
-              <Select
-                value={formData.bankAccountId}
-                onValueChange={(value) => setFormData({ ...formData, bankAccountId: value })}
+            <Label>Bank Account ID *</Label>
+            <Input
+              placeholder="Enter your bank account ID"
+              value={formData.bankAccountId}
+              onChange={(e) => setFormData({ ...formData, bankAccountId: e.target.value })}
+            />
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              Find your account ID in{" "}
+              <a 
+                href="https://live.onlinecheckwriter.com/manage/developer/index" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-0.5"
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select bank account" />
-                </SelectTrigger>
-                <SelectContent>
-                  {bankAccounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      {account.name} {account.account_number_last4 && `(****${account.account_number_last4})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+                Online Check Writer dashboard
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </p>
           </div>
 
           <div>
@@ -354,7 +250,7 @@ export function OnlineCheckWriterDialog({
 
               <TabsContent value="print" className="mt-4">
                 <p className="text-sm text-muted-foreground">
-                  A printable PDF will be generated. Print on blank check stock paper.
+                  Check will be created and ready for printing in Online Check Writer on blank check stock.
                 </p>
               </TabsContent>
 
@@ -444,7 +340,7 @@ export function OnlineCheckWriterDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={isLoading || bankAccounts.length === 0} className="flex-1">
+            <Button onClick={handleSubmit} disabled={isLoading} className="flex-1">
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -452,7 +348,7 @@ export function OnlineCheckWriterDialog({
                 </>
               ) : (
                 <>
-                  {deliveryMethod === 'print' && 'Create & Print'}
+                  {deliveryMethod === 'print' && 'Create Check'}
                   {deliveryMethod === 'mail' && 'Create & Mail'}
                   {deliveryMethod === 'email' && 'Create & Email'}
                 </>
