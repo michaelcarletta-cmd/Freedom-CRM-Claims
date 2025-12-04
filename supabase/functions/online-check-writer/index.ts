@@ -128,8 +128,10 @@ serve(async (req) => {
     }
 
     if (action === 'email-check') {
-      // Email a digital check using QuickPay Email Check API
-      const response = await fetch(`${API_BASE_URL}/quickpay/emailcheck`, {
+      // Email check: First create the check, then send it via email
+      // Step 1: Create the check
+      console.log('Creating check for email delivery...');
+      const createResponse = await fetch(`${API_BASE_URL}/quickpay/check`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -139,7 +141,14 @@ serve(async (req) => {
           },
           destination: {
             name: checkData.payeeName,
+            company: checkData.company || '',
             email: checkData.email,
+            phone: checkData.phone || '',
+            address1: checkData.address1 || '',
+            address2: checkData.address2 || '',
+            city: checkData.city || '',
+            state: checkData.state || '',
+            zip: checkData.zip || '',
           },
           payment_details: {
             amount: checkData.amount,
@@ -147,24 +156,51 @@ serve(async (req) => {
             note: checkData.note || '',
             issueDate: checkData.date || new Date().toISOString().split('T')[0],
           },
-          email_options: {
-            message: checkData.message || 'Please find your check attached.',
-          },
         }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Email check error:', errorText);
-        throw new Error(`Failed to email check: ${errorText}`);
+      if (!createResponse.ok) {
+        const errorText = await createResponse.text();
+        console.error('Create check for email error:', errorText);
+        throw new Error(`Failed to create check: ${errorText}`);
       }
 
-      const result = await response.json();
-      console.log('Check emailed:', result);
+      const createResult = await createResponse.json();
+      const checkId = createResult.data?.checkId || createResult.checkId;
+      console.log('Check created with ID:', checkId);
+
+      // Step 2: Send the check via email using the check's email endpoint
+      const emailResponse = await fetch(`${API_BASE_URL}/check/${checkId}/email`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          email: checkData.email,
+          message: checkData.message || 'Please find your check attached.',
+        }),
+      });
+
+      if (!emailResponse.ok) {
+        const errorText = await emailResponse.text();
+        console.error('Email check delivery error:', errorText);
+        // Check was created but email failed - return partial success
+        return new Response(JSON.stringify({ 
+          success: true,
+          partial: true,
+          checkId: checkId,
+          message: `Check created (ID: ${checkId}) but email delivery failed. Please send manually from Online Check Writer dashboard.`,
+          data: createResult 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const emailResult = await emailResponse.json();
+      console.log('Check emailed successfully:', emailResult);
 
       return new Response(JSON.stringify({ 
         success: true, 
-        data: result 
+        checkId: checkId,
+        data: emailResult 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

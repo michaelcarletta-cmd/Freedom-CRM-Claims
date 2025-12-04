@@ -193,7 +193,12 @@ export function OnlineCheckWriterDialog({
       } else if (deliveryMethod === 'mail') {
         toast.success('Check created and queued for mailing');
       } else if (deliveryMethod === 'email') {
-        toast.success('eCheck sent via email');
+        if (data.partial) {
+          // Check created but email delivery failed
+          toast.warning(data.message || `Check created (ID: ${data.checkId}) - please send manually from Online Check Writer dashboard`);
+        } else {
+          toast.success('eCheck sent via email');
+        }
       }
 
       onOpenChange(false);
