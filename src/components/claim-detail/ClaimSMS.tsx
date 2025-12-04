@@ -4,9 +4,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { MessageSquare, Send, Phone } from "lucide-react";
+import { MessageSquare, Send, Phone, X, Plus, Users } from "lucide-react";
 import { format } from "date-fns";
 
 interface SMSMessage {
@@ -20,6 +22,12 @@ interface SMSMessage {
   user_id: string;
 }
 
+interface Contact {
+  label: string;
+  phone: string;
+  type: string;
+}
+
 interface ClaimSMSProps {
   claimId: string;
   policyholderPhone?: string;
@@ -28,13 +36,16 @@ interface ClaimSMSProps {
 export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
   const [messages, setMessages] = useState<SMSMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState(policyholderPhone || "");
+  const [manualPhone, setManualPhone] = useState("");
+  const [selectedRecipients, setSelectedRecipients] = useState<Contact[]>([]);
+  const [availableContacts, setAvailableContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchMessages();
+    fetchClaimContacts();
     
     // Subscribe to new SMS messages
     const channel = supabase
@@ -57,6 +68,110 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
       supabase.removeChannel(channel);
     };
   }, [claimId]);
+
+  const fetchClaimContacts = async () => {
+    try {
+      // Fetch claim with related data
+      const { data: claim, error: claimError } = await supabase
+        .from("claims")
+        .select(`
+          policyholder_name,
+          policyholder_phone,
+          adjuster_name,
+          adjuster_phone,
+          referrer_id
+        `)
+        .eq("id", claimId)
+        .single();
+
+      if (claimError) throw claimError;
+
+      const contacts: Contact[] = [];
+
+      // Add policyholder
+      if (claim?.policyholder_phone) {
+        contacts.push({
+          label: claim.policyholder_name || "Policyholder",
+          phone: claim.policyholder_phone,
+          type: "policyholder"
+        });
+      }
+
+      // Add adjuster
+      if (claim?.adjuster_phone) {
+        contacts.push({
+          label: claim.adjuster_name || "Adjuster",
+          phone: claim.adjuster_phone,
+          type: "adjuster"
+        });
+      }
+
+      // Fetch multiple adjusters
+      const { data: adjusters } = await supabase
+        .from("claim_adjusters")
+        .select("adjuster_name, adjuster_phone")
+        .eq("claim_id", claimId);
+
+      if (adjusters) {
+        adjusters.forEach(adj => {
+          if (adj.adjuster_phone && !contacts.some(c => c.phone === adj.adjuster_phone)) {
+            contacts.push({
+              label: adj.adjuster_name || "Adjuster",
+              phone: adj.adjuster_phone,
+              type: "adjuster"
+            });
+          }
+        });
+      }
+
+      // Fetch referrer
+      if (claim?.referrer_id) {
+        const { data: referrer } = await supabase
+          .from("referrers")
+          .select("name, phone")
+          .eq("id", claim.referrer_id)
+          .single();
+
+        if (referrer?.phone) {
+          contacts.push({
+            label: referrer.name || "Referrer",
+            phone: referrer.phone,
+            type: "referrer"
+          });
+        }
+      }
+
+      // Fetch contractors assigned to claim
+      const { data: claimContractors } = await supabase
+        .from("claim_contractors")
+        .select("contractor_id")
+        .eq("claim_id", claimId);
+
+      if (claimContractors && claimContractors.length > 0) {
+        const contractorIds = claimContractors.map(cc => cc.contractor_id);
+        const { data: contractors } = await supabase
+          .from("profiles")
+          .select("id, full_name, phone")
+          .in("id", contractorIds);
+
+        if (contractors) {
+          contractors.forEach(contractor => {
+            if (contractor.phone) {
+              contacts.push({
+                label: contractor.full_name || "Contractor",
+                phone: contractor.phone,
+                type: "contractor"
+              });
+            }
+          });
+        }
+      }
+
+      setAvailableContacts(contacts);
+    } catch (error) {
+      console.error("Error fetching contacts:", error);
+    }
+  };
 
   const fetchMessages = async () => {
     setLoading(true);
@@ -81,11 +196,45 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
     }
   };
 
+  const toggleContact = (contact: Contact) => {
+    setSelectedRecipients(prev => {
+      const exists = prev.some(r => r.phone === contact.phone);
+      if (exists) {
+        return prev.filter(r => r.phone !== contact.phone);
+      } else {
+        return [...prev, contact];
+      }
+    });
+  };
+
+  const addManualNumber = () => {
+    if (!manualPhone.trim()) return;
+    
+    // Check if already added
+    if (selectedRecipients.some(r => r.phone === manualPhone.trim())) {
+      toast({
+        title: "Already added",
+        description: "This number is already in the recipients list",
+      });
+      return;
+    }
+
+    setSelectedRecipients(prev => [
+      ...prev,
+      { label: manualPhone.trim(), phone: manualPhone.trim(), type: "manual" }
+    ]);
+    setManualPhone("");
+  };
+
+  const removeRecipient = (phone: string) => {
+    setSelectedRecipients(prev => prev.filter(r => r.phone !== phone));
+  };
+
   const handleSendSMS = async () => {
-    if (!newMessage.trim() || !phoneNumber.trim()) {
+    if (!newMessage.trim() || selectedRecipients.length === 0) {
       toast({
         title: "Error",
-        description: "Please enter both phone number and message",
+        description: "Please select at least one recipient and enter a message",
         variant: "destructive",
       });
       return;
@@ -93,22 +242,35 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
 
     setSending(true);
     try {
-      const { data, error } = await supabase.functions.invoke("send-sms", {
-        body: {
-          claimId,
-          toNumber: phoneNumber,
-          messageBody: newMessage,
-        },
-      });
+      // Send to all selected recipients
+      const sendPromises = selectedRecipients.map(recipient =>
+        supabase.functions.invoke("send-sms", {
+          body: {
+            claimId,
+            toNumber: recipient.phone,
+            messageBody: newMessage,
+          },
+        })
+      );
 
-      if (error) throw error;
+      const results = await Promise.all(sendPromises);
+      const errors = results.filter(r => r.error);
 
-      toast({
-        title: "Success",
-        description: "SMS sent successfully",
-      });
+      if (errors.length > 0) {
+        toast({
+          title: "Partial Success",
+          description: `Sent to ${results.length - errors.length} of ${results.length} recipients`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: `SMS sent to ${selectedRecipients.length} recipient${selectedRecipients.length > 1 ? 's' : ''}`,
+        });
+      }
 
       setNewMessage("");
+      setSelectedRecipients([]);
     } catch (error: any) {
       console.error("Error sending SMS:", error);
       toast({
@@ -118,6 +280,16 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
       });
     } finally {
       setSending(false);
+    }
+  };
+
+  const getContactTypeColor = (type: string) => {
+    switch (type) {
+      case "policyholder": return "bg-blue-500/10 text-blue-500 border-blue-500/20";
+      case "adjuster": return "bg-purple-500/10 text-purple-500 border-purple-500/20";
+      case "referrer": return "bg-green-500/10 text-green-500 border-green-500/20";
+      case "contractor": return "bg-orange-500/10 text-orange-500 border-orange-500/20";
+      default: return "bg-muted text-muted-foreground border-border";
     }
   };
 
@@ -131,20 +303,96 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
             <h3 className="text-lg font-semibold text-foreground">Send Text Message</h3>
           </div>
           
+          {/* Contact Selection */}
+          {availableContacts.length > 0 && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Select Recipients
+              </Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {availableContacts.map((contact) => {
+                  const isSelected = selectedRecipients.some(r => r.phone === contact.phone);
+                  return (
+                    <div
+                      key={contact.phone}
+                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        isSelected 
+                          ? "bg-primary/10 border-primary" 
+                          : "bg-muted/30 border-border hover:bg-muted/50"
+                      }`}
+                      onClick={() => toggleContact(contact)}
+                    >
+                      <Checkbox checked={isSelected} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {contact.label}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {contact.phone}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={`text-xs ${getContactTypeColor(contact.type)}`}>
+                        {contact.type}
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Manual Phone Entry */}
           <div className="space-y-2">
-            <Label htmlFor="phone">Phone Number</Label>
+            <Label htmlFor="phone">Add Phone Number</Label>
             <div className="flex gap-2">
               <Phone className="h-4 w-4 mt-3 text-muted-foreground" />
               <Input
                 id="phone"
                 type="tel"
                 placeholder="+1 (555) 123-4567"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
+                value={manualPhone}
+                onChange={(e) => setManualPhone(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addManualNumber()}
                 className="flex-1"
               />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addManualNumber}
+                disabled={!manualPhone.trim()}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
             </div>
           </div>
+
+          {/* Selected Recipients */}
+          {selectedRecipients.length > 0 && (
+            <div className="space-y-2">
+              <Label>Recipients ({selectedRecipients.length})</Label>
+              <div className="flex flex-wrap gap-2">
+                {selectedRecipients.map((recipient) => (
+                  <Badge
+                    key={recipient.phone}
+                    variant="secondary"
+                    className="flex items-center gap-1 pr-1"
+                  >
+                    <span className="truncate max-w-[150px]">
+                      {recipient.label}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeRecipient(recipient.phone)}
+                      className="ml-1 hover:bg-muted rounded p-0.5"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="message">Message</Label>
@@ -160,11 +408,11 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
 
           <Button
             onClick={handleSendSMS}
-            disabled={sending || !newMessage.trim() || !phoneNumber.trim()}
+            disabled={sending || !newMessage.trim() || selectedRecipients.length === 0}
             className="w-full"
           >
             <Send className="h-4 w-4 mr-2" />
-            {sending ? "Sending..." : "Send SMS"}
+            {sending ? "Sending..." : `Send SMS${selectedRecipients.length > 1 ? ` to ${selectedRecipients.length} recipients` : ''}`}
           </Button>
         </div>
       </Card>
