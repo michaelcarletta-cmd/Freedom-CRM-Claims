@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface ClaimStatus {
   id: string;
@@ -24,6 +25,7 @@ interface ClaimStatusSelectProps {
 export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: ClaimStatusSelectProps) {
   const [statuses, setStatuses] = useState<ClaimStatus[]>([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -42,6 +44,8 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
       setStatuses(data || []);
     } catch (error: any) {
       console.error("Error fetching statuses:", error);
+    } finally {
+      setInitialLoading(false);
     }
   };
 
@@ -71,6 +75,10 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
       setLoading(false);
     }
   };
+
+  if (initialLoading) {
+    return <Skeleton className="h-10 w-[180px]" />;
+  }
 
   return (
     <Select value={currentStatus} onValueChange={handleStatusChange} disabled={loading}>
