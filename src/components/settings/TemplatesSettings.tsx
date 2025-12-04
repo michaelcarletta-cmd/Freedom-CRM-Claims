@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Upload, FileText, Trash2, Download, Loader2, Info, Layout, Mail } from "lucide-react";
+import { Upload, FileText, Trash2, Download, Loader2, Info, Layout, Mail, MessageSquare } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { EmailTemplatesSettings } from "./EmailTemplatesSettings";
+import SMSTemplatesSettings from "./SMSTemplatesSettings";
 
 export const TemplatesSettings = () => {
   const queryClient = useQueryClient();
@@ -181,6 +182,10 @@ export const TemplatesSettings = () => {
           <TabsTrigger value="email" className="w-full md:w-auto justify-start text-base font-medium px-4 flex items-center gap-2">
             <Mail className="h-4 w-4" />
             Email Templates
+          </TabsTrigger>
+          <TabsTrigger value="sms" className="w-full md:w-auto justify-start text-base font-medium px-4 flex items-center gap-2">
+            <MessageSquare className="h-4 w-4" />
+            SMS Templates
           </TabsTrigger>
         </TabsList>
 
@@ -460,6 +465,10 @@ export const TemplatesSettings = () => {
 
         <TabsContent value="email">
           <EmailTemplatesSettings />
+        </TabsContent>
+
+        <TabsContent value="sms">
+          <SMSTemplatesSettings />
         </TabsContent>
       </Tabs>
     </div>
