@@ -24,6 +24,9 @@ verify_jwt = false
 [functions.get-signature-document]
 verify_jwt = false
 
+[functions.submit-signature]
+verify_jwt = false
+
 [functions.create-portal-user]
 verify_jwt = true
 

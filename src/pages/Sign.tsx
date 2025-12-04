@@ -130,38 +130,18 @@ export default function Sign() {
     
     setSigning(true);
     try {
-      const { error } = await supabase
-        .from("signature_signers")
-        .update({
-          status: "signed",
-          signed_at: new Date().toISOString(),
-          field_values: collectedValues,
-        })
-        .eq("id", signer.id);
+      // Use edge function to submit signature (bypasses RLS securely)
+      const { data, error } = await supabase.functions.invoke(
+        "submit-signature",
+        { body: { token, fieldValues: collectedValues } }
+      );
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(error.message || "Failed to submit signature");
+      }
 
-      // Check if all signers have signed
-      const { data: allSigners } = await supabase
-        .from("signature_signers")
-        .select("status")
-        .eq("signature_request_id", request.id);
-
-      const allSigned = allSigners?.every((s) => s.status === "signed");
-
-      if (allSigned) {
-        await supabase
-          .from("signature_requests")
-          .update({
-            status: "completed",
-            completed_at: new Date().toISOString(),
-          })
-          .eq("id", request.id);
-      } else {
-        await supabase
-          .from("signature_requests")
-          .update({ status: "in_progress" })
-          .eq("id", request.id);
+      if (data?.error) {
+        throw new Error(data.error);
       }
 
       setSigned(true);
