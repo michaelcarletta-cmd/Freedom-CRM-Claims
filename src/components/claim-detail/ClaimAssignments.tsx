@@ -64,6 +64,8 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
   const [selectedMortgageCompany, setSelectedMortgageCompany] = useState<string>(currentMortgageCompanyId || "none");
   const [editLoanNumber, setEditLoanNumber] = useState<string>(loanNumber || "");
   const [editSsnLastFour, setEditSsnLastFour] = useState<string>(ssnLastFour || "");
+  const [addMortgageOpen, setAddMortgageOpen] = useState(false);
+  const [newMortgageName, setNewMortgageName] = useState("");
 
   useEffect(() => {
     fetchData();
@@ -335,6 +337,29 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
     toast.success("Mortgage details updated");
   };
 
+  const handleAddMortgageCompany = async () => {
+    if (!newMortgageName.trim()) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("mortgage_companies")
+        .insert({ name: newMortgageName.trim() })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      setMortgageCompanies([...mortgageCompanies, data]);
+      setSelectedMortgageCompany(data.id);
+      await handleUpdateMortgageCompany(data.id);
+      setNewMortgageName("");
+      setAddMortgageOpen(false);
+      toast.success("Mortgage company added");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to add mortgage company");
+    }
+  };
+
   return (
     <div className="grid gap-6">
       {/* Staff Assignments */}
@@ -467,19 +492,44 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Select value={selectedMortgageCompany} onValueChange={handleUpdateMortgageCompany}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select a mortgage company" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {mortgageCompanies.map((company) => (
-                <SelectItem key={company.id} value={company.id}>
-                  {company.name} {company.contact_name && `(${company.contact_name})`}
+          {addMortgageOpen ? (
+            <div className="flex gap-2">
+              <Input
+                placeholder="New mortgage company name"
+                value={newMortgageName}
+                onChange={(e) => setNewMortgageName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddMortgageCompany()}
+              />
+              <Button size="sm" onClick={handleAddMortgageCompany}>Add</Button>
+              <Button size="sm" variant="ghost" onClick={() => setAddMortgageOpen(false)}>Cancel</Button>
+            </div>
+          ) : (
+            <Select 
+              value={selectedMortgageCompany} 
+              onValueChange={(value) => {
+                if (value === "__add_new__") {
+                  setAddMortgageOpen(true);
+                } else {
+                  handleUpdateMortgageCompany(value);
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a mortgage company" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__add_new__" className="text-primary font-medium">
+                  + Add New Mortgage Company
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                <SelectItem value="none">None</SelectItem>
+                {mortgageCompanies.map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name} {company.contact_name && `(${company.contact_name})`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           
           {selectedMortgageCompany !== "none" && (
             <>
