@@ -441,34 +441,95 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
         </div>
 
         {isAdmin && (
-          <div className="flex gap-2 flex-wrap">
-            <Button 
-              variant="outline" 
-              onClick={() => handleQuickBooksPayment('client')}
-              className="flex-1 min-w-[140px]"
-            >
-              <CreditCard className="h-4 w-4 mr-2" />
-              QuickBooks
-            </Button>
-            <Button 
-              variant="outline" 
-              onClick={() => handleStripePayment('client')}
-              className="flex-1 min-w-[140px]"
-            >
-              <Banknote className="h-4 w-4 mr-2" />
-              Stripe ACH
-            </Button>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setSelectedRecipient({ name: 'Client (Policyholder)', type: 'client' });
-                setOcwPaymentOpen(true);
-              }}
-              className="flex-1 min-w-[140px]"
-            >
-              <FileCheck className="h-4 w-4 mr-2" />
-              Check Writer
-            </Button>
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-muted-foreground">Quick Payment Options</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              <Select onValueChange={(value) => {
+                if (value === 'client') {
+                  handleQuickBooksPayment('client');
+                } else if (value.startsWith('contractor-')) {
+                  handleQuickBooksPayment('contractor', value.replace('contractor-', ''));
+                } else if (value.startsWith('referrer-')) {
+                  handleQuickBooksPayment('referrer', value.replace('referrer-', ''));
+                }
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder={<span className="flex items-center gap-2"><CreditCard className="h-4 w-4" /> QuickBooks</span>} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="client">Client (Policyholder)</SelectItem>
+                  {contractors.map(c => (
+                    <SelectItem key={c.id} value={`contractor-${c.id}`}>{c.full_name || c.email}</SelectItem>
+                  ))}
+                  {referrers.map(r => (
+                    <SelectItem key={r.id} value={`referrer-${r.id}`}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select onValueChange={(value) => {
+                if (value === 'client') {
+                  handleStripePayment('client');
+                } else if (value.startsWith('contractor-')) {
+                  handleStripePayment('contractor', value.replace('contractor-', ''));
+                } else if (value.startsWith('referrer-')) {
+                  handleStripePayment('referrer', value.replace('referrer-', ''));
+                }
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder={<span className="flex items-center gap-2"><Banknote className="h-4 w-4" /> Stripe ACH</span>} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="client">Client (Policyholder)</SelectItem>
+                  {contractors.map(c => (
+                    <SelectItem key={c.id} value={`contractor-${c.id}`}>{c.full_name || c.email}</SelectItem>
+                  ))}
+                  {referrers.map(r => (
+                    <SelectItem key={r.id} value={`referrer-${r.id}`}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select onValueChange={(value) => {
+                if (value === 'client') {
+                  setSelectedRecipient({ name: 'Client (Policyholder)', type: 'client' });
+                  setOcwPaymentOpen(true);
+                } else if (value.startsWith('contractor-')) {
+                  const contractorId = value.replace('contractor-', '');
+                  const contractor = contractors.find(c => c.id === contractorId);
+                  if (contractor) {
+                    setSelectedRecipient({ 
+                      name: contractor.full_name || contractor.email, 
+                      email: contractor.email,
+                      type: 'contractor' 
+                    });
+                    setOcwPaymentOpen(true);
+                  }
+                } else if (value.startsWith('referrer-')) {
+                  const referrerId = value.replace('referrer-', '');
+                  const referrer = referrers.find(r => r.id === referrerId);
+                  if (referrer) {
+                    setSelectedRecipient({ 
+                      name: referrer.name, 
+                      email: referrer.email || undefined,
+                      type: 'referrer' 
+                    });
+                    setOcwPaymentOpen(true);
+                  }
+                }
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder={<span className="flex items-center gap-2"><FileCheck className="h-4 w-4" /> Check Writer</span>} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="client">Client (Policyholder)</SelectItem>
+                  {contractors.map(c => (
+                    <SelectItem key={c.id} value={`contractor-${c.id}`}>{c.full_name || c.email}</SelectItem>
+                  ))}
+                  {referrers.map(r => (
+                    <SelectItem key={r.id} value={`referrer-${r.id}`}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
 
