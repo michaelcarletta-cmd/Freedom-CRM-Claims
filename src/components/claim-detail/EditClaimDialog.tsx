@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatPhoneNumber } from "@/lib/utils";
+import { Plus } from "lucide-react";
 
 interface EditClaimDialogProps {
   open: boolean;
@@ -22,6 +23,8 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
   const [loading, setLoading] = useState(false);
   const [lossTypes, setLossTypes] = useState<any[]>([]);
   const [insuranceCompanies, setInsuranceCompanies] = useState<any[]>([]);
+  const [addInsuranceOpen, setAddInsuranceOpen] = useState(false);
+  const [newInsuranceName, setNewInsuranceName] = useState("");
   const [formData, setFormData] = useState({
     claim_number: claim?.claim_number || "",
     policyholder_name: claim?.policyholder_name || "",
@@ -131,6 +134,28 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
       insurance_phone: selectedCompany?.phone || "",
       insurance_email: selectedCompany?.email || "",
     }));
+  };
+
+  const handleAddInsuranceCompany = async () => {
+    if (!newInsuranceName.trim()) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("insurance_companies")
+        .insert({ name: newInsuranceName.trim() })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      setInsuranceCompanies([...insuranceCompanies, data]);
+      handleInsuranceCompanyChange(data.id);
+      setNewInsuranceName("");
+      setAddInsuranceOpen(false);
+      toast.success("Insurance company added");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to add insurance company");
+    }
   };
 
   const handleSubmit = async () => {
@@ -324,18 +349,43 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="insurance_company">Company Name</Label>
-                <Select value={formData.insurance_company_id} onValueChange={handleInsuranceCompanyChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select insurance company" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {insuranceCompanies.map((ic) => (
-                      <SelectItem key={ic.id} value={ic.id}>
-                        {ic.name}
+                {addInsuranceOpen ? (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="New insurance company name"
+                      value={newInsuranceName}
+                      onChange={(e) => setNewInsuranceName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAddInsuranceCompany()}
+                    />
+                    <Button type="button" size="sm" onClick={handleAddInsuranceCompany}>Add</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setAddInsuranceOpen(false)}>Cancel</Button>
+                  </div>
+                ) : (
+                  <Select 
+                    value={formData.insurance_company_id} 
+                    onValueChange={(value) => {
+                      if (value === "__add_new__") {
+                        setAddInsuranceOpen(true);
+                      } else {
+                        handleInsuranceCompanyChange(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select insurance company" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__add_new__" className="text-primary font-medium">
+                        <span className="flex items-center gap-1"><Plus className="h-4 w-4" /> Add New Insurance Company</span>
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      {insuranceCompanies.map((ic) => (
+                        <SelectItem key={ic.id} value={ic.id}>
+                          {ic.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div>
                 <Label htmlFor="insurance_phone">Phone</Label>

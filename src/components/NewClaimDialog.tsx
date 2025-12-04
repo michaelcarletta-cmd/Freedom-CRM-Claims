@@ -40,6 +40,11 @@ interface Client {
   zip_code: string | null;
 }
 
+interface MortgageCompany {
+  id: string;
+  name: string;
+}
+
 export function NewClaimDialog() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -47,7 +52,12 @@ export function NewClaimDialog() {
   const [lossTypes, setLossTypes] = useState<LossType[]>([]);
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [mortgageCompanies, setMortgageCompanies] = useState<MortgageCompany[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [addInsuranceOpen, setAddInsuranceOpen] = useState(false);
+  const [addMortgageOpen, setAddMortgageOpen] = useState(false);
+  const [newInsuranceName, setNewInsuranceName] = useState("");
+  const [newMortgageName, setNewMortgageName] = useState("");
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -71,6 +81,7 @@ export function NewClaimDialog() {
     lossDate: "",
     lossDescription: "",
     referrerId: "",
+    mortgageCompanyId: "",
   });
 
   useEffect(() => {
@@ -81,22 +92,25 @@ export function NewClaimDialog() {
 
   const fetchDropdownData = async () => {
     try {
-      const [insuranceRes, lossTypesRes, referrersRes, clientsRes] = await Promise.all([
+      const [insuranceRes, lossTypesRes, referrersRes, clientsRes, mortgageRes] = await Promise.all([
         supabase.from("insurance_companies").select("id, name, phone, email").eq("is_active", true).order("name"),
         supabase.from("loss_types").select("id, name").eq("is_active", true).order("name"),
         supabase.from("referrers").select("id, name, company").eq("is_active", true).order("name"),
         supabase.from("clients").select("id, name, email, phone, street, city, state, zip_code").order("name"),
+        supabase.from("mortgage_companies").select("id, name").eq("is_active", true).order("name"),
       ]);
 
       if (insuranceRes.error) throw insuranceRes.error;
       if (lossTypesRes.error) throw lossTypesRes.error;
       if (referrersRes.error) throw referrersRes.error;
       if (clientsRes.error) throw clientsRes.error;
+      if (mortgageRes.error) throw mortgageRes.error;
 
       setInsuranceCompanies(insuranceRes.data || []);
       setLossTypes(lossTypesRes.data || []);
       setReferrers(referrersRes.data || []);
       setClients(clientsRes.data || []);
+      setMortgageCompanies(mortgageRes.data || []);
     } catch (error: any) {
       console.error("Error fetching dropdown data:", error);
       toast({
@@ -104,6 +118,50 @@ export function NewClaimDialog() {
         description: "Failed to load form data",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleAddInsuranceCompany = async () => {
+    if (!newInsuranceName.trim()) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("insurance_companies")
+        .insert({ name: newInsuranceName.trim() })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      setInsuranceCompanies([...insuranceCompanies, data]);
+      setFormData({ ...formData, insuranceCompanyId: data.id });
+      setNewInsuranceName("");
+      setAddInsuranceOpen(false);
+      toast({ title: "Insurance company added" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleAddMortgageCompany = async () => {
+    if (!newMortgageName.trim()) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("mortgage_companies")
+        .insert({ name: newMortgageName.trim() })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      setMortgageCompanies([...mortgageCompanies, data]);
+      setFormData({ ...formData, mortgageCompanyId: data.id });
+      setNewMortgageName("");
+      setAddMortgageOpen(false);
+      toast({ title: "Mortgage company added" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
 
@@ -304,6 +362,7 @@ export function NewClaimDialog() {
         lossDate: "",
         lossDescription: "",
         referrerId: "",
+        mortgageCompanyId: "",
       });
 
       // Navigate to the new claim
@@ -453,21 +512,43 @@ export function NewClaimDialog() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="insuranceCompany">Insurance Company</Label>
-                <Select
-                  value={formData.insuranceCompanyId}
-                  onValueChange={handleInsuranceCompanyChange}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select insurance company" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {insuranceCompanies.map((company) => (
-                      <SelectItem key={company.id} value={company.id}>
-                        {company.name}
+                {addInsuranceOpen ? (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="New insurance company name"
+                      value={newInsuranceName}
+                      onChange={(e) => setNewInsuranceName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddInsuranceCompany())}
+                    />
+                    <Button type="button" size="sm" onClick={handleAddInsuranceCompany}>Add</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setAddInsuranceOpen(false)}>Cancel</Button>
+                  </div>
+                ) : (
+                  <Select
+                    value={formData.insuranceCompanyId}
+                    onValueChange={(value) => {
+                      if (value === "__add_new__") {
+                        setAddInsuranceOpen(true);
+                      } else {
+                        handleInsuranceCompanyChange(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select insurance company" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__add_new__" className="text-primary font-medium">
+                        <span className="flex items-center gap-1"><Plus className="h-4 w-4" /> Add New Insurance Company</span>
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      {insuranceCompanies.map((company) => (
+                        <SelectItem key={company.id} value={company.id}>
+                          {company.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="lossType">Type of Loss</Label>
@@ -513,6 +594,46 @@ export function NewClaimDialog() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mortgageCompany">Mortgage Company</Label>
+                {addMortgageOpen ? (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="New mortgage company name"
+                      value={newMortgageName}
+                      onChange={(e) => setNewMortgageName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddMortgageCompany())}
+                    />
+                    <Button type="button" size="sm" onClick={handleAddMortgageCompany}>Add</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setAddMortgageOpen(false)}>Cancel</Button>
+                  </div>
+                ) : (
+                  <Select
+                    value={formData.mortgageCompanyId}
+                    onValueChange={(value) => {
+                      if (value === "__add_new__") {
+                        setAddMortgageOpen(true);
+                      } else {
+                        setFormData({ ...formData, mortgageCompanyId: value });
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select mortgage company" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__add_new__" className="text-primary font-medium">
+                        <span className="flex items-center gap-1"><Plus className="h-4 w-4" /> Add New Mortgage Company</span>
+                      </SelectItem>
+                      {mortgageCompanies.map((company) => (
+                        <SelectItem key={company.id} value={company.id}>
+                          {company.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-2 col-span-2">
                 <Label htmlFor="lossDescription">Loss Description</Label>
