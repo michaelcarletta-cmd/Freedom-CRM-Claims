@@ -206,14 +206,14 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
                       className={`text-xs px-2 py-1 rounded ${
                         message.status === "delivered"
                           ? "bg-green-500/10 text-green-600"
-                          : message.status === "sent"
+                          : message.status === "sent" || message.status === "queued"
                           ? "bg-blue-500/10 text-blue-600"
                           : message.status === "failed"
                           ? "bg-red-500/10 text-red-600"
                           : "bg-gray-500/10 text-gray-600"
                       }`}
                     >
-                      {message.status}
+                      {message.status === "queued" ? "Sent" : message.status}
                     </span>
                   </div>
                 </div>
