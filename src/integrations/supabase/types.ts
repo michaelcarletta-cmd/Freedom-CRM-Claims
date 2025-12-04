@@ -418,10 +418,14 @@ export type Database = {
           claim_id: string
           company_fee_amount: number
           company_fee_percentage: number
+          contractor_fee_amount: number
+          contractor_fee_percentage: number
           created_at: string | null
           created_by: string | null
           id: string
           notes: string | null
+          referrer_fee_amount: number
+          referrer_fee_percentage: number
           updated_at: string | null
         }
         Insert: {
@@ -430,10 +434,14 @@ export type Database = {
           claim_id: string
           company_fee_amount?: number
           company_fee_percentage?: number
+          contractor_fee_amount?: number
+          contractor_fee_percentage?: number
           created_at?: string | null
           created_by?: string | null
           id?: string
           notes?: string | null
+          referrer_fee_amount?: number
+          referrer_fee_percentage?: number
           updated_at?: string | null
         }
         Update: {
@@ -442,10 +450,14 @@ export type Database = {
           claim_id?: string
           company_fee_amount?: number
           company_fee_percentage?: number
+          contractor_fee_amount?: number
+          contractor_fee_percentage?: number
           created_at?: string | null
           created_by?: string | null
           id?: string
           notes?: string | null
+          referrer_fee_amount?: number
+          referrer_fee_percentage?: number
           updated_at?: string | null
         }
         Relationships: [
