@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -6,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { MessageSquare, Send, Phone, X, Plus, Users } from "lucide-react";
+import { MessageSquare, Send, Phone, X, Plus, Users, FileText } from "lucide-react";
 import { format } from "date-fns";
 
 interface SMSMessage {
@@ -28,6 +30,13 @@ interface Contact {
   type: string;
 }
 
+interface SMSTemplate {
+  id: string;
+  name: string;
+  body: string;
+  category: string | null;
+}
+
 interface ClaimSMSProps {
   claimId: string;
   policyholderPhone?: string;
@@ -39,9 +48,25 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
   const [manualPhone, setManualPhone] = useState("");
   const [selectedRecipients, setSelectedRecipients] = useState<Contact[]>([]);
   const [availableContacts, setAvailableContacts] = useState<Contact[]>([]);
+  const [claimData, setClaimData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const { toast } = useToast();
+
+  // Fetch SMS templates
+  const { data: templates } = useQuery({
+    queryKey: ["sms-templates"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sms_templates")
+        .select("id, name, body, category")
+        .eq("is_active", true)
+        .order("category")
+        .order("name");
+      if (error) throw error;
+      return data as SMSTemplate[];
+    },
+  });
 
   useEffect(() => {
     fetchMessages();
@@ -79,12 +104,15 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
           policyholder_phone,
           adjuster_name,
           adjuster_phone,
-          referrer_id
+          referrer_id,
+          claim_number,
+          policy_number
         `)
         .eq("id", claimId)
         .single();
 
       if (claimError) throw claimError;
+      setClaimData(claim);
 
       const contacts: Contact[] = [];
 
@@ -171,6 +199,25 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
     } catch (error) {
       console.error("Error fetching contacts:", error);
     }
+  };
+
+  const applyTemplate = (templateId: string) => {
+    const template = templates?.find(t => t.id === templateId);
+    if (!template) return;
+
+    // Replace merge fields with claim data
+    let body = template.body;
+    if (claimData) {
+      body = body.replace(/{claim\.policyholder_name}/g, claimData.policyholder_name || "");
+      body = body.replace(/{claim\.claim_number}/g, claimData.claim_number || "");
+      body = body.replace(/{claim\.policy_number}/g, claimData.policy_number || "");
+    }
+    // Leave inspection fields as placeholders since we don't have that context
+    body = body.replace(/{inspection\.date}/g, "[date]");
+    body = body.replace(/{inspection\.time}/g, "[time]");
+    body = body.replace(/{inspection\.inspector}/g, "[inspector]");
+
+    setNewMessage(body);
   };
 
   const fetchMessages = async () => {
@@ -394,8 +441,40 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
             </div>
           )}
 
+          {/* Template Selection */}
+          {templates && templates.length > 0 && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Use Template
+              </Label>
+              <Select onValueChange={applyTemplate}>
+                <SelectTrigger className="bg-muted/30">
+                  <SelectValue placeholder="Select a template..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{template.name}</span>
+                        {template.category && (
+                          <span className="text-xs text-muted-foreground">({template.category})</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label htmlFor="message">Message</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="message">Message</Label>
+              <span className="text-xs text-muted-foreground">
+                {newMessage.length} characters
+              </span>
+            </div>
             <Textarea
               id="message"
               placeholder="Type your message here..."
