@@ -12,22 +12,28 @@ serve(async (req) => {
   }
 
   try {
-    // Resend sends inbound emails as JSON via webhook
+    // Mailjet sends inbound emails via Parse API webhook
     const payload = await req.json();
     
     console.log("Received inbound email payload:", JSON.stringify(payload, null, 2));
 
-    // Handle Resend webhook format - the actual email data is in payload.data for email.received events
-    const emailData = payload.type === 'email.received' ? payload.data : payload;
-
-    // Extract email details
+    // Handle Mailjet Parse API format
+    // Mailjet fields: Sender, Recipient, From, Subject, Text-part, Html-part, Date, Headers
     const {
-      from,
-      to,
-      subject,
-      text,
-      html,
-    } = emailData;
+      Sender,
+      Recipient,
+      From,
+      Subject,
+      "Text-part": textPart,
+      "Html-part": htmlPart,
+    } = payload;
+
+    // Also support Resend format for backwards compatibility
+    const from = From || payload.from;
+    const to = Recipient || payload.to;
+    const subject = Subject || payload.subject;
+    const text = textPart || payload.text;
+    const html = htmlPart || payload.html;
 
     // Parse the "to" address to find the claim identifier
     // Expected formats: 
@@ -116,9 +122,30 @@ serve(async (req) => {
       );
     }
 
-    // Extract sender info
-    const senderEmail = typeof from === 'string' ? from : from?.email || from;
-    const senderName = typeof from === 'string' ? from.split('@')[0] : (from?.name || from?.email || 'Unknown');
+    // Extract sender info - handle both Mailjet and Resend formats
+    let senderEmail = '';
+    let senderName = '';
+
+    if (Sender) {
+      // Mailjet format: just email
+      senderEmail = Sender;
+      // Parse name from "From" field if available (e.g., "Name <email@domain.com>")
+      if (From) {
+        const fromMatch = From.match(/^(.+?)\s*<(.+)>$/);
+        if (fromMatch) {
+          senderName = fromMatch[1].trim();
+          senderEmail = fromMatch[2];
+        } else {
+          senderName = From.split('@')[0];
+        }
+      } else {
+        senderName = Sender.split('@')[0];
+      }
+    } else if (from) {
+      // Resend format
+      senderEmail = typeof from === 'string' ? from : from?.email || from;
+      senderName = typeof from === 'string' ? from.split('@')[0] : (from?.name || from?.email || 'Unknown');
+    }
 
     // Log the email to the emails table
     const { error: insertError } = await supabase
