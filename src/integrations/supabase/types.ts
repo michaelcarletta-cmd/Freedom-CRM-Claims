@@ -1001,6 +1001,7 @@ export type Database = {
           created_at: string
           id: string
           letterhead_url: string | null
+          online_check_writer_bank_account_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1011,6 +1012,7 @@ export type Database = {
           created_at?: string
           id?: string
           letterhead_url?: string | null
+          online_check_writer_bank_account_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1021,6 +1023,7 @@ export type Database = {
           created_at?: string
           id?: string
           letterhead_url?: string | null
+          online_check_writer_bank_account_id?: string | null
           updated_at?: string
         }
         Relationships: []
