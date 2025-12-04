@@ -7,7 +7,9 @@ const corsHeaders = {
 };
 
 const API_KEY = Deno.env.get('ONLINE_CHECK_WRITER_API_KEY');
-const API_BASE_URL = 'https://apiv3.onlinecheckwriter.com';
+// Production: https://app.onlinecheckwriter.com/api/v3
+// Sandbox: https://test.onlinecheckwriter.com/api/v3
+const API_BASE_URL = 'https://app.onlinecheckwriter.com/api/v3';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -15,7 +17,7 @@ serve(async (req) => {
   }
 
   try {
-    const { action, checkData, payeeData } = await req.json();
+    const { action, checkData } = await req.json();
     console.log('Online Check Writer action:', action);
 
     if (!API_KEY) {
@@ -28,99 +30,34 @@ serve(async (req) => {
       'Accept': 'application/json',
     };
 
-    if (action === 'get-bank-accounts') {
-      // Get list of bank accounts configured in Online Check Writer
-      const response = await fetch(`${API_BASE_URL}/bank-accounts`, {
-        method: 'GET',
-        headers,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Get bank accounts error:', errorText);
-        throw new Error(`Failed to get bank accounts: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('Bank accounts fetched:', result);
-
-      return new Response(JSON.stringify({ 
-        success: true, 
-        accounts: result.data || result 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (action === 'create-payee') {
-      // Create a payee in Online Check Writer
-      const response = await fetch(`${API_BASE_URL}/payees`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          name: payeeData.name,
-          email: payeeData.email || null,
-          phone: payeeData.phone || null,
-          address: payeeData.address || null,
-          city: payeeData.city || null,
-          state: payeeData.state || null,
-          zip: payeeData.zip || null,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Create payee error:', errorText);
-        throw new Error(`Failed to create payee: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('Payee created:', result);
-
-      return new Response(JSON.stringify({ 
-        success: true, 
-        payee: result.data || result 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (action === 'search-payee') {
-      // Search for existing payee
-      const response = await fetch(`${API_BASE_URL}/payees?search=${encodeURIComponent(payeeData.name)}`, {
-        method: 'GET',
-        headers,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Search payee error:', errorText);
-        throw new Error(`Failed to search payee: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('Payee search results:', result);
-
-      return new Response(JSON.stringify({ 
-        success: true, 
-        payees: result.data || result 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     if (action === 'create-check') {
-      // Create a check that can be printed, mailed, or emailed
-      const response = await fetch(`${API_BASE_URL}/checks`, {
+      // Create a check using QuickPay API
+      const response = await fetch(`${API_BASE_URL}/quickpay/check`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          bank_account_id: checkData.bankAccountId,
-          payee_id: checkData.payeeId,
-          payee_name: checkData.payeeName,
-          amount: checkData.amount,
-          memo: checkData.memo || '',
-          date: checkData.date || new Date().toISOString().split('T')[0],
+          source: {
+            accountType: 'bankaccount',
+            accountId: checkData.bankAccountId,
+          },
+          destination: {
+            name: checkData.payeeName,
+            company: checkData.company || '',
+            email: checkData.email || '',
+            phone: checkData.phone || '',
+            address1: checkData.address1 || '',
+            address2: checkData.address2 || '',
+            city: checkData.city || '',
+            state: checkData.state || '',
+            zip: checkData.zip || '',
+          },
+          payment_details: {
+            amount: checkData.amount,
+            memo: checkData.memo || '',
+            note: checkData.note || '',
+            issueDate: checkData.date || new Date().toISOString().split('T')[0],
+            referenceID: checkData.referenceId || '',
+          },
         }),
       });
 
@@ -135,50 +72,40 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({ 
         success: true, 
-        check: result.data || result 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (action === 'print-check') {
-      // Generate printable PDF of check
-      const response = await fetch(`${API_BASE_URL}/checks/${checkData.checkId}/print`, {
-        method: 'GET',
-        headers,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Print check error:', errorText);
-        throw new Error(`Failed to get printable check: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('Print check URL:', result);
-
-      return new Response(JSON.stringify({ 
-        success: true, 
-        printUrl: result.url || result.data?.url 
+        checkId: result.data?.checkId || result.checkId,
+        data: result 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (action === 'mail-check') {
-      // Mail a physical check via USPS/FedEx
-      const response = await fetch(`${API_BASE_URL}/checks/${checkData.checkId}/mail`, {
+      // Mail a physical check using QuickPay Mail Check API
+      const response = await fetch(`${API_BASE_URL}/quickpay/mailcheck`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          shipping_method: checkData.shippingMethod || 'usps_first_class',
-          address: {
-            name: checkData.recipientName,
+          source: {
+            accountType: 'bankaccount',
+            accountId: checkData.bankAccountId,
+          },
+          destination: {
+            name: checkData.payeeName,
+            company: checkData.company || '',
             address1: checkData.address1,
             address2: checkData.address2 || '',
             city: checkData.city,
             state: checkData.state,
             zip: checkData.zip,
+          },
+          payment_details: {
+            amount: checkData.amount,
+            memo: checkData.memo || '',
+            note: checkData.note || '',
+            issueDate: checkData.date || new Date().toISOString().split('T')[0],
+          },
+          shipping: {
+            method: checkData.shippingMethod || 'usps_first_class',
           },
         }),
       });
@@ -194,20 +121,35 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({ 
         success: true, 
-        mailResult: result.data || result 
+        data: result 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (action === 'email-check') {
-      // Email a digital check (eCheck)
-      const response = await fetch(`${API_BASE_URL}/checks/${checkData.checkId}/email`, {
+      // Email a digital check using QuickPay Email Check API
+      const response = await fetch(`${API_BASE_URL}/quickpay/emailcheck`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          email: checkData.email,
-          message: checkData.message || 'Please find your check attached.',
+          source: {
+            accountType: 'bankaccount',
+            accountId: checkData.bankAccountId,
+          },
+          destination: {
+            name: checkData.payeeName,
+            email: checkData.email,
+          },
+          payment_details: {
+            amount: checkData.amount,
+            memo: checkData.memo || '',
+            note: checkData.note || '',
+            issueDate: checkData.date || new Date().toISOString().split('T')[0],
+          },
+          email_options: {
+            message: checkData.message || 'Please find your check attached.',
+          },
         }),
       });
 
@@ -222,13 +164,53 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({ 
         success: true, 
-        emailResult: result.data || result 
+        data: result 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    throw new Error('Invalid action');
+    if (action === 'print-check') {
+      // Create a printable check (same as create-check, returns check data for printing)
+      const response = await fetch(`${API_BASE_URL}/quickpay/check`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          source: {
+            accountType: 'bankaccount',
+            accountId: checkData.bankAccountId,
+          },
+          destination: {
+            name: checkData.payeeName,
+            company: checkData.company || '',
+          },
+          payment_details: {
+            amount: checkData.amount,
+            memo: checkData.memo || '',
+            issueDate: checkData.date || new Date().toISOString().split('T')[0],
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Print check error:', errorText);
+        throw new Error(`Failed to create printable check: ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('Printable check created:', result);
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        checkId: result.data?.checkId || result.checkId,
+        data: result
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    throw new Error('Invalid action. Supported actions: create-check, mail-check, email-check, print-check');
   } catch (error: unknown) {
     console.error('Online Check Writer error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
