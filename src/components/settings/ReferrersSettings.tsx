@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
+import { formatPhoneNumber } from "@/lib/utils";
 
 interface Referrer {
   id: string;
@@ -294,8 +295,8 @@ export function ReferrersSettings() {
                   id="phone"
                   type="tel"
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="+1 (555) 123-4567"
+                  onChange={(e) => setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) })}
+                  placeholder="123-456-7890"
                 />
               </div>
               <div className="space-y-2">

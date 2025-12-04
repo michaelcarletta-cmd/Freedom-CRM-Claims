@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { UserPlus, Mail, Phone, Building, Search } from "lucide-react";
+import { formatPhoneNumber } from "@/lib/utils";
 
 interface Referrer {
   id: string;
@@ -151,9 +152,10 @@ export const ReferrersTab = () => {
               <div>
                 <Label>Phone</Label>
                 <Input
+                  type="tel"
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="Enter phone number"
+                  onChange={(e) => setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) })}
+                  placeholder="123-456-7890"
                 />
               </div>
               <div>

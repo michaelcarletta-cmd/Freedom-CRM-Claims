@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Building, Mail, Phone, Plus, Search } from "lucide-react";
+import { formatPhoneNumber } from "@/lib/utils";
 
 interface InsuranceCompany {
   id: string;
@@ -119,9 +120,10 @@ export const InsuranceCompaniesTab = () => {
               <div>
                 <Label>Phone</Label>
                 <Input
+                  type="tel"
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="Enter phone number"
+                  onChange={(e) => setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) })}
+                  placeholder="123-456-7890"
                 />
               </div>
               <Button onClick={handleAddCompany} className="w-full">

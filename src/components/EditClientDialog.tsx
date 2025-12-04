@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
+import { formatPhoneNumber } from "@/lib/utils";
 
 interface Client {
   id: string;
@@ -162,8 +163,10 @@ export const EditClientDialog = ({
               <Label htmlFor="phone">Phone</Label>
               <Input
                 id="phone"
+                type="tel"
                 value={formData.phone}
-                onChange={(e) => handleChange("phone", e.target.value)}
+                onChange={(e) => handleChange("phone", formatPhoneNumber(e.target.value))}
+                placeholder="123-456-7890"
               />
             </div>
           </div>

@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Save, User } from "lucide-react";
+import { formatPhoneNumber } from "@/lib/utils";
 
 interface ProfileData {
   full_name: string | null;
@@ -144,9 +145,10 @@ export function ProfileSettings() {
               <Label htmlFor="phone">Phone Number</Label>
               <Input
                 id="phone"
+                type="tel"
                 value={profile.phone || ""}
-                onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                placeholder="(555) 123-4567"
+                onChange={(e) => setProfile({ ...profile, phone: formatPhoneNumber(e.target.value) })}
+                placeholder="123-456-7890"
               />
             </div>
           </div>

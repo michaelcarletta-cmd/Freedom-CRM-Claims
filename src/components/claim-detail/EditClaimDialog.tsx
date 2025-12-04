@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { formatPhoneNumber } from "@/lib/utils";
 
 interface EditClaimDialogProps {
   open: boolean;
@@ -260,8 +261,10 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
                 <Label htmlFor="policyholder_phone">Phone</Label>
                 <Input
                   id="policyholder_phone"
+                  type="tel"
                   value={formData.policyholder_phone}
-                  onChange={(e) => handleChange("policyholder_phone", e.target.value)}
+                  onChange={(e) => handleChange("policyholder_phone", formatPhoneNumber(e.target.value))}
+                  placeholder="123-456-7890"
                 />
               </div>
               <div className="col-span-2">
@@ -338,8 +341,10 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
                 <Label htmlFor="insurance_phone">Phone</Label>
                 <Input
                   id="insurance_phone"
+                  type="tel"
                   value={formData.insurance_phone}
-                  onChange={(e) => handleChange("insurance_phone", e.target.value)}
+                  onChange={(e) => handleChange("insurance_phone", formatPhoneNumber(e.target.value))}
+                  placeholder="123-456-7890"
                 />
               </div>
               <div>
@@ -370,8 +375,10 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
                 <Label htmlFor="adjuster_phone">Phone</Label>
                 <Input
                   id="adjuster_phone"
+                  type="tel"
                   value={formData.adjuster_phone}
-                  onChange={(e) => handleChange("adjuster_phone", e.target.value)}
+                  onChange={(e) => handleChange("adjuster_phone", formatPhoneNumber(e.target.value))}
+                  placeholder="123-456-7890"
                 />
               </div>
               <div>
