@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +16,57 @@ interface RecipientInfo {
   email: string;
   name: string;
   type: string;
+}
+
+interface MailjetAttachment {
+  ContentType: string;
+  Filename: string;
+  Base64Content: string;
+}
+
+async function sendMailjetEmail(
+  toEmails: string[], 
+  subject: string, 
+  htmlContent: string,
+  attachments?: MailjetAttachment[]
+) {
+  const apiKey = Deno.env.get("MAILJET_API_KEY");
+  const secretKey = Deno.env.get("MAILJET_SECRET_KEY");
+  
+  const toRecipients = toEmails.map(email => ({ Email: email }));
+  
+  const message: any = {
+    From: {
+      Email: "noreply@freedomclaims.com",
+      Name: "Freedom Claims"
+    },
+    To: toRecipients,
+    Subject: subject,
+    HTMLPart: htmlContent
+  };
+
+  if (attachments && attachments.length > 0) {
+    message.Attachments = attachments;
+  }
+
+  const response = await fetch("https://api.mailjet.com/v3.1/send", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Basic ${btoa(`${apiKey}:${secretKey}`)}`,
+    },
+    body: JSON.stringify({
+      Messages: [message]
+    }),
+  });
+
+  const result = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(`Mailjet error: ${JSON.stringify(result)}`);
+  }
+  
+  return result;
 }
 
 serve(async (req) => {
@@ -105,15 +155,13 @@ serve(async (req) => {
 
     const emailSignature = (profile as any)?.email_signature || '';
 
-    const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
-
     // Append signature if available
     const fullBody = emailSignature 
       ? `${body}\n\n--\n${emailSignature}`
       : body;
 
     // Process attachments if provided
-    const emailAttachments: { filename: string; content: string }[] = [];
+    const emailAttachments: MailjetAttachment[] = [];
     
     if (attachments && Array.isArray(attachments) && attachments.length > 0) {
       console.log(`Processing ${attachments.length} attachments`);
@@ -137,8 +185,9 @@ serve(async (req) => {
           );
           
           emailAttachments.push({
-            filename: attachment.fileName,
-            content: base64Content,
+            ContentType: attachment.fileType || 'application/octet-stream',
+            Filename: attachment.fileName,
+            Base64Content: base64Content,
           });
           
           console.log(`Successfully processed attachment: ${attachment.fileName}`);
@@ -151,30 +200,26 @@ serve(async (req) => {
     // Extract all email addresses for the 'to' field
     const toEmails = recipients.map(r => r.email);
 
-    const emailPayload: any = {
-      from: "Freedom Claims <onboarding@resend.dev>",
-      to: toEmails,
-      subject: subject,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="white-space: pre-wrap;">${fullBody}</div>
-          <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-          <p style="color: #999; font-size: 11px;">
-            This email was sent from Freedom Claims CRM.
-          </p>
-        </div>
-      `,
-    };
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="white-space: pre-wrap;">${fullBody}</div>
+        <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+        <p style="color: #999; font-size: 11px;">
+          This email was sent from Freedom Claims CRM.
+        </p>
+      </div>
+    `;
 
-    // Add attachments if any were processed
-    if (emailAttachments.length > 0) {
-      emailPayload.attachments = emailAttachments;
-      console.log(`Sending email with ${emailAttachments.length} attachments`);
-    }
+    console.log(`Sending email to ${toEmails.join(', ')} with ${emailAttachments.length} attachments`);
 
-    const emailResponse = await resend.emails.send(emailPayload);
+    const emailResponse = await sendMailjetEmail(
+      toEmails,
+      subject,
+      htmlContent,
+      emailAttachments.length > 0 ? emailAttachments : undefined
+    );
 
-    console.log(`Email sent to ${toEmails.join(', ')}:`, emailResponse);
+    console.log(`Email sent:`, emailResponse);
 
     // Log email to database for each recipient if claimId provided
     if (claimId) {
