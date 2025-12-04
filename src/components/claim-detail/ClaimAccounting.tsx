@@ -815,7 +815,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
   const [open, setOpen] = useState(false);
   
   // Calculate company fee based on percentage of each check
-  const calculateCompanyFee = (percentage: number) => {
+  const calculateFeeFromChecks = (percentage: number) => {
     return checks.reduce((sum: number, check: any) => {
       return sum + (Number(check.amount) * percentage / 100);
     }, 0);
@@ -824,11 +824,6 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
   // Calculate adjuster fee as percentage of company fee
   const calculateAdjusterFee = (companyFeeAmount: number, adjusterPercentage: number) => {
     return companyFeeAmount * adjusterPercentage / 100;
-  };
-
-  // Calculate contractor/referrer fee as percentage of company fee
-  const calculateFeeFromCompany = (companyFeeAmount: number, percentage: number) => {
-    return companyFeeAmount * percentage / 100;
   };
   
   const [formData, setFormData] = useState({
@@ -883,19 +878,15 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
   const totalFees = companyFee + adjusterFee + contractorFee + referrerFee;
   const netProfit = grossProfit - totalFees;
 
-  // Recalculate all dependent fees when company fee changes
+  // Recalculate adjuster fee when company fee changes (contractor/referrer are independent)
   const handleCompanyFeeChange = (percentage: number) => {
-    const companyAmount = calculateCompanyFee(percentage);
+    const companyAmount = calculateFeeFromChecks(percentage);
     const adjusterAmount = calculateAdjusterFee(companyAmount, formData.adjuster_fee_percentage);
-    const contractorAmount = calculateFeeFromCompany(companyAmount, formData.contractor_fee_percentage);
-    const referrerAmount = calculateFeeFromCompany(companyAmount, formData.referrer_fee_percentage);
     setFormData({ 
       ...formData, 
       company_fee_percentage: percentage,
       company_fee_amount: companyAmount,
       adjuster_fee_amount: adjusterAmount,
-      contractor_fee_amount: contractorAmount,
-      referrer_fee_amount: referrerAmount,
     });
   };
 
@@ -988,7 +979,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Contractor Fee (% of company fee)</Label>
+                  <Label>Contractor Fee (% of each check)</Label>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Label className="text-xs text-muted-foreground">Percentage</Label>
@@ -998,7 +989,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                         value={formData.contractor_fee_percentage}
                         onChange={(e) => {
                           const percentage = parseFloat(e.target.value) || 0;
-                          const amount = calculateFeeFromCompany(formData.company_fee_amount, percentage);
+                          const amount = calculateFeeFromChecks(percentage);
                           setFormData({ 
                             ...formData, 
                             contractor_fee_percentage: percentage,
@@ -1020,7 +1011,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Referrer Fee (% of company fee)</Label>
+                  <Label>Referrer Fee (% of each check)</Label>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Label className="text-xs text-muted-foreground">Percentage</Label>
@@ -1030,7 +1021,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                         value={formData.referrer_fee_percentage}
                         onChange={(e) => {
                           const percentage = parseFloat(e.target.value) || 0;
-                          const amount = calculateFeeFromCompany(formData.company_fee_amount, percentage);
+                          const amount = calculateFeeFromChecks(percentage);
                           setFormData({ 
                             ...formData, 
                             referrer_fee_percentage: percentage,
