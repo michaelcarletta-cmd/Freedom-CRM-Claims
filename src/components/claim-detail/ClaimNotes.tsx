@@ -36,6 +36,7 @@ interface Claim {
 }
 
 interface AiMessage {
+  id?: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
@@ -66,6 +67,7 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
   useEffect(() => {
     fetchUpdates();
     fetchClaim();
+    fetchAiConversations();
 
     const channel = supabase
       .channel("claim-updates-changes")
@@ -87,6 +89,44 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
       supabase.removeChannel(channel);
     };
   }, [claimId]);
+
+  const fetchAiConversations = async () => {
+    const { data } = await supabase
+      .from("claim_ai_conversations")
+      .select("id, role, content, created_at")
+      .eq("claim_id", claimId)
+      .order("created_at", { ascending: true });
+
+    if (data) {
+      setAiMessages(
+        data.map((msg) => ({
+          id: msg.id,
+          role: msg.role as "user" | "assistant",
+          content: msg.content,
+          timestamp: new Date(msg.created_at),
+        }))
+      );
+    }
+  };
+
+  const saveAiMessage = async (role: "user" | "assistant", content: string): Promise<string | null> => {
+    const { data, error } = await supabase
+      .from("claim_ai_conversations")
+      .insert({
+        claim_id: claimId,
+        role,
+        content,
+        user_id: user?.id,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error("Error saving AI message:", error);
+      return null;
+    }
+    return data?.id || null;
+  };
 
   const fetchClaim = async () => {
     const { data } = await supabase
@@ -209,6 +249,10 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
       timestamp: new Date(),
     };
 
+    // Save user message to database
+    const userMsgId = await saveAiMessage("user", aiQuestion);
+    userMessage.id = userMsgId || undefined;
+
     setAiMessages((prev) => [...prev, userMessage]);
     setAiQuestion("");
     setAiLoading(true);
@@ -229,7 +273,11 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
 
       if (error) throw error;
 
+      // Save assistant message to database
+      const assistantMsgId = await saveAiMessage("assistant", data.answer);
+
       const assistantMessage: AiMessage = {
+        id: assistantMsgId || undefined,
         role: "assistant",
         content: data.answer,
         timestamp: new Date(),
@@ -265,9 +313,15 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
 
       if (error) throw error;
 
+      const reportContent = `## ${reportNames[reportType]}\n\n${data.answer}`;
+      
+      // Save report message to database
+      const reportMsgId = await saveAiMessage("assistant", reportContent);
+
       const reportMessage: AiMessage = {
+        id: reportMsgId || undefined,
         role: "assistant",
-        content: `## ${reportNames[reportType]}\n\n${data.answer}`,
+        content: reportContent,
         timestamp: new Date(),
       };
 
