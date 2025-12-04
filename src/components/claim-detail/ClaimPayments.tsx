@@ -9,9 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { DollarSign, Trash2, CreditCard, Banknote } from "lucide-react";
+import { DollarSign, Trash2, CreditCard, Banknote, FileCheck } from "lucide-react";
 import { QuickBooksPaymentDialog } from "@/components/QuickBooksPaymentDialog";
 import { StripePaymentDialog } from "@/components/StripePaymentDialog";
+import { OnlineCheckWriterDialog } from "@/components/OnlineCheckWriterDialog";
 
 interface ClaimPaymentsProps {
   claimId: string;
@@ -50,6 +51,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [qbPaymentOpen, setQbPaymentOpen] = useState(false);
   const [stripePaymentOpen, setStripePaymentOpen] = useState(false);
+  const [ocwPaymentOpen, setOcwPaymentOpen] = useState(false);
   const [selectedRecipient, setSelectedRecipient] = useState<{ 
     name: string; 
     email?: string; 
@@ -439,11 +441,11 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
         </div>
 
         {isAdmin && (
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button 
               variant="outline" 
               onClick={() => handleQuickBooksPayment('client')}
-              className="flex-1"
+              className="flex-1 min-w-[140px]"
             >
               <CreditCard className="h-4 w-4 mr-2" />
               QuickBooks
@@ -451,10 +453,21 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
             <Button 
               variant="outline" 
               onClick={() => handleStripePayment('client')}
-              className="flex-1"
+              className="flex-1 min-w-[140px]"
             >
               <Banknote className="h-4 w-4 mr-2" />
-              Stripe (Direct ACH)
+              Stripe ACH
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setSelectedRecipient({ name: 'Client (Policyholder)', type: 'client' });
+                setOcwPaymentOpen(true);
+              }}
+              className="flex-1 min-w-[140px]"
+            >
+              <FileCheck className="h-4 w-4 mr-2" />
+              Check Writer
             </Button>
           </div>
         )}
@@ -538,6 +551,13 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
               stripeAccountId={selectedRecipient.stripeAccountId}
               onSuccess={fetchPayments}
               onAccountCreated={handleStripeAccountCreated}
+            />
+            <OnlineCheckWriterDialog
+              open={ocwPaymentOpen}
+              onOpenChange={setOcwPaymentOpen}
+              recipientName={selectedRecipient.name}
+              recipientEmail={selectedRecipient.email}
+              onSuccess={fetchPayments}
             />
           </>
         )}

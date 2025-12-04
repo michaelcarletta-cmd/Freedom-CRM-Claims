@@ -65,3 +65,6 @@ verify_jwt = true
 
 [functions.estimate-assistant]
 verify_jwt = true
+
+[functions.online-check-writer]
+verify_jwt = true
