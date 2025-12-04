@@ -80,17 +80,30 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
     return <Skeleton className="h-10 w-[180px]" />;
   }
 
+  // Find the current status in the list
+  const currentStatusObj = statuses.find(s => s.name === currentStatus);
+
   return (
-    <Select value={currentStatus} onValueChange={handleStatusChange} disabled={loading}>
+    <Select value={currentStatus || ""} onValueChange={handleStatusChange} disabled={loading || statuses.length === 0}>
       <SelectTrigger className="w-[180px] rounded-none">
-        <SelectValue placeholder="Select status" />
+        {currentStatusObj ? (
+          <div className="flex items-center gap-2">
+            <div
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: currentStatusObj.color }}
+            />
+            <span className="truncate">{currentStatusObj.name}</span>
+          </div>
+        ) : (
+          <SelectValue placeholder="Select status" />
+        )}
       </SelectTrigger>
       <SelectContent>
         {statuses.map((status) => (
           <SelectItem key={status.id} value={status.name}>
             <div className="flex items-center gap-2">
               <div
-                className="w-2 h-2"
+                className="w-2 h-2 rounded-full"
                 style={{ backgroundColor: status.color }}
               />
               {status.name}
