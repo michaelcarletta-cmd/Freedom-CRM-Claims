@@ -47,11 +47,54 @@ export function OnlineCheckWriterDialog({
     emailMessage: "Please find your check attached.",
   });
 
+  // Load saved bank account ID from company branding
   useEffect(() => {
-    if (open && recipientAddress) {
-      parseAddress(recipientAddress);
+    if (open) {
+      loadSavedBankAccountId();
+      if (recipientAddress) {
+        parseAddress(recipientAddress);
+      }
     }
   }, [open, recipientAddress]);
+
+  const loadSavedBankAccountId = async () => {
+    try {
+      const { data } = await supabase
+        .from('company_branding')
+        .select('online_check_writer_bank_account_id')
+        .limit(1)
+        .single();
+      
+      if (data?.online_check_writer_bank_account_id) {
+        setFormData(prev => ({ ...prev, bankAccountId: data.online_check_writer_bank_account_id }));
+      }
+    } catch (err) {
+      // No saved bank account ID, that's fine
+    }
+  };
+
+  const saveBankAccountId = async (bankAccountId: string) => {
+    try {
+      const { data: existing } = await supabase
+        .from('company_branding')
+        .select('id')
+        .limit(1)
+        .single();
+      
+      if (existing) {
+        await supabase
+          .from('company_branding')
+          .update({ online_check_writer_bank_account_id: bankAccountId })
+          .eq('id', existing.id);
+      } else {
+        await supabase
+          .from('company_branding')
+          .insert({ online_check_writer_bank_account_id: bankAccountId });
+      }
+    } catch (err) {
+      console.error('Failed to save bank account ID:', err);
+    }
+  };
 
   useEffect(() => {
     if (defaultAmount) {
@@ -110,6 +153,10 @@ export function OnlineCheckWriterDialog({
     }
 
     setIsLoading(true);
+    
+    // Save bank account ID for future use
+    await saveBankAccountId(formData.bankAccountId.trim());
+    
     try {
       let action = 'create-check';
       if (deliveryMethod === 'mail') action = 'mail-check';
@@ -208,14 +255,14 @@ export function OnlineCheckWriterDialog({
               onChange={(e) => setFormData({ ...formData, bankAccountId: e.target.value })}
             />
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              Find your account ID in{" "}
+              Will be saved for future use. Find your ID in{" "}
               <a 
                 href="https://live.onlinecheckwriter.com/manage/developer/index" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-primary hover:underline inline-flex items-center gap-0.5"
               >
-                Online Check Writer dashboard
+                Online Check Writer
                 <ExternalLink className="h-3 w-3" />
               </a>
             </p>
