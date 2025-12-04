@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { formatPhoneNumber } from "@/lib/utils";
 
 interface InsuranceCompany {
   id: string;
@@ -373,8 +374,8 @@ export function NewClaimDialog() {
                   id="policyholderPhone"
                   type="tel"
                   value={formData.policyholderPhone}
-                  onChange={(e) => setFormData({ ...formData, policyholderPhone: e.target.value })}
-                  placeholder="+1 (555) 123-4567"
+                  onChange={(e) => setFormData({ ...formData, policyholderPhone: formatPhoneNumber(e.target.value) })}
+                  placeholder="123-456-7890"
                 />
               </div>
               <div className="space-y-2 col-span-2">

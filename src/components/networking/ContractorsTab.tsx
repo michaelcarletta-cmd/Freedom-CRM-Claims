@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { UserPlus, Mail, Phone, Search, Trash2, Settings, Link2 } from "lucide-react";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { Switch } from "@/components/ui/switch";
+import { formatPhoneNumber } from "@/lib/utils";
 
 interface Contractor {
   id: string;
@@ -225,9 +226,10 @@ export const ContractorsTab = () => {
               <div>
                 <Label>Phone</Label>
                 <Input
+                  type="tel"
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="Enter phone number"
+                  onChange={(e) => setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) })}
+                  placeholder="123-456-7890"
                 />
               </div>
               <Button onClick={handleAddContractor} className="w-full">

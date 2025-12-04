@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { MessageSquare, Send, Phone, X, Plus, Users, FileText } from "lucide-react";
 import { format } from "date-fns";
+import { formatPhoneNumber } from "@/lib/utils";
 
 interface SMSMessage {
   id: string;
@@ -397,9 +398,9 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
               <Input
                 id="phone"
                 type="tel"
-                placeholder="+1 (555) 123-4567"
+                placeholder="123-456-7890"
                 value={manualPhone}
-                onChange={(e) => setManualPhone(e.target.value)}
+                onChange={(e) => setManualPhone(formatPhoneNumber(e.target.value))}
                 onKeyDown={(e) => e.key === 'Enter' && addManualNumber()}
                 className="flex-1"
               />

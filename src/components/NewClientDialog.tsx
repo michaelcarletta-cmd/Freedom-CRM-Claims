@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
+import { formatPhoneNumber } from "@/lib/utils";
 
 interface NewClientDialogProps {
   isOpen: boolean;
@@ -132,8 +133,10 @@ export const NewClientDialog = ({
                 <Label htmlFor="phone">Phone</Label>
                 <Input
                   id="phone"
+                  type="tel"
                   value={formData.phone}
-                  onChange={(e) => handleChange("phone", e.target.value)}
+                  onChange={(e) => handleChange("phone", formatPhoneNumber(e.target.value))}
+                  placeholder="123-456-7890"
                 />
               </div>
             </div>
