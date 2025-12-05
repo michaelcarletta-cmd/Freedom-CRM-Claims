@@ -409,7 +409,8 @@ serve(async (req) => {
 
     let extractedText = '';
 
-    // Process based on file type
+    // Process based on file type - ORDER MATTERS!
+    // PowerPoint must be checked before Word docs since both contain "document" in MIME type
     if (fileType === 'application/pdf' || document.file_name.endsWith('.pdf')) {
       extractedText = await extractTextFromDocument(imageUrl, document.file_name);
     } else if (
@@ -419,18 +420,18 @@ serve(async (req) => {
     ) {
       extractedText = await transcribeMedia(imageUrl, document.file_name);
     } else if (
-      fileType.includes('word') || 
-      fileType.includes('document') ||
-      document.file_name.match(/\.(docx|doc)$/i)
-    ) {
-      extractedText = await extractTextFromDocument(imageUrl, document.file_name);
-    } else if (
       fileType.includes('powerpoint') || 
       fileType.includes('presentation') ||
       document.file_name.match(/\.(pptx|ppt)$/i)
     ) {
       // PowerPoint files need direct XML extraction, not AI processing
       extractedText = await extractTextFromPowerPoint(fileUrl, document.file_name);
+    } else if (
+      fileType.includes('word') || 
+      fileType.includes('wordprocessingml') ||
+      document.file_name.match(/\.(docx|doc)$/i)
+    ) {
+      extractedText = await extractTextFromDocument(imageUrl, document.file_name);
     } else if (
       fileType.includes('image') ||
       document.file_name.match(/\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i)
