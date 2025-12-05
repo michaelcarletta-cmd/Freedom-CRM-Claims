@@ -381,22 +381,58 @@ function getCrc32Table(): number[] {
   return table;
 }
 
-// Helper function to find claim by client/policyholder name
-async function findClaimByClientName(supabase: any, clientName: string): Promise<{ id: string; claim_number: string; policyholder_name: string } | null> {
+// Helper function to find claim by client/policyholder name or claim number
+async function findClaimByClientName(supabase: any, searchTerm: string): Promise<{ id: string; claim_number: string; policyholder_name: string } | null> {
   try {
-    // Search for claims matching the client name (case-insensitive partial match)
-    const { data: claims, error } = await supabase
+    console.log("Searching for claim with term:", searchTerm);
+    
+    // First try exact match on policyholder_name
+    let { data: claims, error } = await supabase
       .from("claims")
       .select("id, claim_number, policyholder_name")
-      .ilike("policyholder_name", `%${clientName}%`)
+      .ilike("policyholder_name", `%${searchTerm}%`)
       .eq("is_closed", false)
       .limit(1);
 
-    if (error || !claims || claims.length === 0) {
-      return null;
+    if (!error && claims && claims.length > 0) {
+      console.log("Found claim by policyholder name:", claims[0]);
+      return claims[0];
     }
 
-    return claims[0];
+    // If not found, try searching by claim number
+    const { data: claimsByNumber, error: numError } = await supabase
+      .from("claims")
+      .select("id, claim_number, policyholder_name")
+      .ilike("claim_number", `%${searchTerm}%`)
+      .eq("is_closed", false)
+      .limit(1);
+
+    if (!numError && claimsByNumber && claimsByNumber.length > 0) {
+      console.log("Found claim by claim number:", claimsByNumber[0]);
+      return claimsByNumber[0];
+    }
+
+    // Try a more flexible search - split search term and try first/last name
+    const nameParts = searchTerm.trim().split(/\s+/);
+    if (nameParts.length > 0) {
+      for (const part of nameParts) {
+        if (part.length < 2) continue;
+        const { data: partialMatch, error: partialError } = await supabase
+          .from("claims")
+          .select("id, claim_number, policyholder_name")
+          .ilike("policyholder_name", `%${part}%`)
+          .eq("is_closed", false)
+          .limit(1);
+
+        if (!partialError && partialMatch && partialMatch.length > 0) {
+          console.log("Found claim by partial name match:", partialMatch[0]);
+          return partialMatch[0];
+        }
+      }
+    }
+
+    console.log("No claim found for search term:", searchTerm);
+    return null;
   } catch (err) {
     console.error("Error finding claim by client name:", err);
     return null;
