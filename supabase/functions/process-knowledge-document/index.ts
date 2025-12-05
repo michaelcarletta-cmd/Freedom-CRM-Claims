@@ -36,6 +36,11 @@ function getMimeType(fileType: string, fileName: string): string {
       ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
       : 'application/msword';
   }
+  if (fileType.includes('powerpoint') || fileType.includes('presentation') || fileName.match(/\.pptx?$/i)) {
+    return fileName.match(/\.pptx$/i) 
+      ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation' 
+      : 'application/vnd.ms-powerpoint';
+  }
   if (fileType.includes('video') || fileName.match(/\.(mp4|mov|avi|mkv|webm)$/i)) {
     return 'video/mp4';
   }
@@ -348,6 +353,12 @@ serve(async (req) => {
       fileType.includes('word') || 
       fileType.includes('document') ||
       document.file_name.match(/\.(docx|doc)$/i)
+    ) {
+      extractedText = await extractTextFromDocument(imageUrl, document.file_name);
+    } else if (
+      fileType.includes('powerpoint') || 
+      fileType.includes('presentation') ||
+      document.file_name.match(/\.(pptx|ppt)$/i)
     ) {
       extractedText = await extractTextFromDocument(imageUrl, document.file_name);
     } else if (
