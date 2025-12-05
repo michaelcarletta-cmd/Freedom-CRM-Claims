@@ -32,7 +32,7 @@ const CATEGORIES = [
   { value: "other", label: "Other" },
 ];
 
-const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a,.webm,.jpg,.jpeg,.png,.gif,.webp,.bmp";
+const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a,.webm,.jpg,.jpeg,.png,.gif,.webp,.bmp";
 
 export const AIKnowledgeBaseSettings = () => {
   const queryClient = useQueryClient();
@@ -204,6 +204,9 @@ export const AIKnowledgeBaseSettings = () => {
     if (fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i)) {
       return <Image className="h-5 w-5 text-green-400" />;
     }
+    if (fileName.match(/\.(ppt|pptx)$/i)) {
+      return <FileText className="h-5 w-5 text-orange-400" />;
+    }
     return <FileText className="h-5 w-5 text-blue-400" />;
   };
 
@@ -220,7 +223,7 @@ export const AIKnowledgeBaseSettings = () => {
             AI Knowledge Base
           </CardTitle>
           <CardDescription>
-            Upload documents, images, and videos to train the AI assistant. Supported formats: PDF, Word docs, images (JPG, PNG), and video/audio files.
+            Upload documents, images, and videos to train the AI assistant. Supported formats: PDF, Word docs, PowerPoint, images (JPG, PNG), and video/audio files.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
