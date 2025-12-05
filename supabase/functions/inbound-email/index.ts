@@ -12,33 +12,51 @@ serve(async (req) => {
   }
 
   try {
-    // Mailjet sends inbound emails via Parse API webhook
     const payload = await req.json();
     
     console.log("Received inbound email payload:", JSON.stringify(payload, null, 2));
 
-    // Handle Mailjet Parse API format
-    // Mailjet fields: Sender, Recipient, From, Subject, Text-part, Html-part, Date, Headers
-    const {
-      Sender,
-      Recipient,
-      From,
-      Subject,
-      "Text-part": textPart,
-      "Html-part": htmlPart,
-    } = payload;
+    // Support multiple formats:
+    // 1. Cloudflare Email Workers format (preferred)
+    // 2. Mailjet Parse API format (legacy)
+    // 3. Resend format (legacy)
+    
+    let from: string = '';
+    let to: string = '';
+    let subject: string = '';
+    let text: string = '';
+    let html: string = '';
 
-    // Also support Resend format for backwards compatibility
-    const from = From || payload.from;
-    const to = Recipient || payload.to;
-    const subject = Subject || payload.subject;
-    const text = textPart || payload.text;
-    const html = htmlPart || payload.html;
+    // Cloudflare Email Workers format
+    if (payload.from && payload.to && payload.source === 'cloudflare') {
+      from = payload.from;
+      to = payload.to;
+      subject = payload.subject || '(No Subject)';
+      text = payload.text || '';
+      html = payload.html || '';
+      console.log("Processing Cloudflare Email Worker payload");
+    }
+    // Mailjet Parse API format
+    else if (payload.Sender || payload.Recipient) {
+      from = payload.From || payload.Sender || '';
+      to = payload.Recipient || '';
+      subject = payload.Subject || '(No Subject)';
+      text = payload["Text-part"] || '';
+      html = payload["Html-part"] || '';
+      console.log("Processing Mailjet payload");
+    }
+    // Resend/generic format
+    else {
+      from = typeof payload.from === 'string' ? payload.from : payload.from?.email || '';
+      to = typeof payload.to === 'string' ? payload.to : (Array.isArray(payload.to) ? payload.to[0] : payload.to?.email || '');
+      subject = payload.subject || '(No Subject)';
+      text = payload.text || '';
+      html = payload.html || '';
+      console.log("Processing generic payload");
+    }
 
     // Parse the "to" address to find the claim identifier
-    // Expected formats: 
-    //   claim-{policy_number}@domain (new format with policy number)
-    //   claim-{claim_email_id}@domain (fallback format)
+    // Expected format: claim-{policy_number}@claims.freedomadj.com
     const toAddresses = Array.isArray(to) ? to : [to];
     let claimIdentifier: string | null = null;
 
@@ -71,12 +89,10 @@ serve(async (req) => {
     );
 
     // Try to find the claim by policy_number first (new format)
-    // The identifier might be a sanitized policy number, so we need to match loosely
     let claim = null;
-    let claimError = null;
 
     // First, try exact match on claim_email_id (legacy format)
-    const { data: claimById, error: errorById } = await supabase
+    const { data: claimById } = await supabase
       .from('claims')
       .select('id, claim_number, policy_number')
       .eq('claim_email_id', claimIdentifier)
@@ -86,16 +102,12 @@ serve(async (req) => {
       claim = claimById;
     } else {
       // Try to match by sanitized policy number
-      // Get all claims and check if their sanitized policy number matches
-      const { data: allClaims, error: allError } = await supabase
+      const { data: allClaims } = await supabase
         .from('claims')
         .select('id, claim_number, policy_number, claim_email_id')
         .not('policy_number', 'is', null);
 
-      if (allError) {
-        console.error("Error fetching claims:", allError);
-        claimError = allError;
-      } else if (allClaims) {
+      if (allClaims) {
         // Find claim with matching sanitized policy number
         for (const c of allClaims) {
           if (c.policy_number) {
@@ -115,36 +127,25 @@ serve(async (req) => {
     }
 
     if (!claim) {
-      console.error("Claim not found for identifier:", claimIdentifier, claimError);
+      console.error("Claim not found for identifier:", claimIdentifier);
       return new Response(
         JSON.stringify({ error: "Claim not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Extract sender info - handle both Mailjet and Resend formats
+    // Extract sender info
     let senderEmail = '';
     let senderName = '';
 
-    if (Sender) {
-      // Mailjet format: just email
-      senderEmail = Sender;
-      // Parse name from "From" field if available (e.g., "Name <email@domain.com>")
-      if (From) {
-        const fromMatch = From.match(/^(.+?)\s*<(.+)>$/);
-        if (fromMatch) {
-          senderName = fromMatch[1].trim();
-          senderEmail = fromMatch[2];
-        } else {
-          senderName = From.split('@')[0];
-        }
-      } else {
-        senderName = Sender.split('@')[0];
-      }
-    } else if (from) {
-      // Resend format
-      senderEmail = typeof from === 'string' ? from : from?.email || from;
-      senderName = typeof from === 'string' ? from.split('@')[0] : (from?.name || from?.email || 'Unknown');
+    // Parse "Name <email>" format
+    const fromMatch = from.match(/^(.+?)\s*<(.+)>$/);
+    if (fromMatch) {
+      senderName = fromMatch[1].trim().replace(/^["']|["']$/g, '');
+      senderEmail = fromMatch[2];
+    } else {
+      senderEmail = from;
+      senderName = from.split('@')[0];
     }
 
     // Log the email to the emails table
@@ -155,7 +156,7 @@ serve(async (req) => {
         recipient_email: senderEmail, // Store sender as "recipient" for inbound
         recipient_name: senderName,
         recipient_type: 'inbound',
-        subject: subject || '(No Subject)',
+        subject: subject,
         body: text || html || '(No Content)',
         sent_by: null, // Inbound emails have no internal sender
       });
