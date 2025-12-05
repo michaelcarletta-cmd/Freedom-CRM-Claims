@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -209,6 +210,74 @@ Provide your analysis in a clear, structured format that can be used as a knowle
   return `[Image: ${fileName}]\n\n${analysisText}`;
 }
 
+// Extract text from PowerPoint files (PPTX is a ZIP containing XML)
+async function extractTextFromPowerPoint(fileUrl: string, fileName: string): Promise<string> {
+  console.log(`Extracting text from PowerPoint: ${fileName}`);
+  
+  const response = await fetch(fileUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download PowerPoint file: ${response.status}`);
+  }
+  
+  const arrayBuffer = await response.arrayBuffer();
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  
+  const textParts: string[] = [];
+  
+  // Extract text from slide XML files
+  const slideFiles = Object.keys(zip.files)
+    .filter(name => name.match(/^ppt\/slides\/slide\d+\.xml$/))
+    .sort((a, b) => {
+      const numA = parseInt(a.match(/slide(\d+)/)?.[1] || '0');
+      const numB = parseInt(b.match(/slide(\d+)/)?.[1] || '0');
+      return numA - numB;
+    });
+  
+  for (const slidePath of slideFiles) {
+    const slideNum = slidePath.match(/slide(\d+)/)?.[1] || '?';
+    const content = await zip.files[slidePath].async('string');
+    
+    // Extract text from XML tags like <a:t>text</a:t>
+    const textMatches = content.match(/<a:t>([^<]*)<\/a:t>/g) || [];
+    const slideText = textMatches
+      .map(match => match.replace(/<\/?a:t>/g, '').trim())
+      .filter(text => text.length > 0)
+      .join(' ');
+    
+    if (slideText) {
+      textParts.push(`[Slide ${slideNum}]\n${slideText}`);
+    }
+  }
+  
+  // Also extract from notes if present
+  const notesFiles = Object.keys(zip.files)
+    .filter(name => name.match(/^ppt\/notesSlides\/notesSlide\d+\.xml$/));
+  
+  for (const notePath of notesFiles) {
+    const slideNum = notePath.match(/notesSlide(\d+)/)?.[1] || '?';
+    const content = await zip.files[notePath].async('string');
+    
+    const textMatches = content.match(/<a:t>([^<]*)<\/a:t>/g) || [];
+    const noteText = textMatches
+      .map(match => match.replace(/<\/?a:t>/g, '').trim())
+      .filter(text => text.length > 0)
+      .join(' ');
+    
+    if (noteText) {
+      textParts.push(`[Slide ${slideNum} Notes]\n${noteText}`);
+    }
+  }
+  
+  const extractedText = textParts.join('\n\n');
+  console.log(`Extracted ${extractedText.length} characters from PowerPoint`);
+  
+  if (!extractedText || extractedText.trim().length === 0) {
+    throw new Error('No text content found in PowerPoint file');
+  }
+  
+  return extractedText;
+}
+
 // Transcribe audio/video using base64 data
 async function transcribeMedia(dataUrl: string, fileName: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -360,7 +429,8 @@ serve(async (req) => {
       fileType.includes('presentation') ||
       document.file_name.match(/\.(pptx|ppt)$/i)
     ) {
-      extractedText = await extractTextFromDocument(imageUrl, document.file_name);
+      // PowerPoint files need direct XML extraction, not AI processing
+      extractedText = await extractTextFromPowerPoint(fileUrl, document.file_name);
     } else if (
       fileType.includes('image') ||
       document.file_name.match(/\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i)
