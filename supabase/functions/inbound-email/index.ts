@@ -56,7 +56,7 @@ serve(async (req) => {
     }
 
     // Parse the "to" address to find the claim identifier
-    // Expected format: claim-{policy_number}@claims.freedomadj.com
+    // Expected format: claim-{policy_number}@claims.freedomclaims.work
     const toAddresses = Array.isArray(to) ? to : [to];
     let claimIdentifier: string | null = null;
 

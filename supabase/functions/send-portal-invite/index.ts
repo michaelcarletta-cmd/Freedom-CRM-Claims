@@ -28,7 +28,7 @@ async function sendMailjetEmail(to: string, subject: string, htmlContent: string
       Messages: [
         {
           From: {
-            Email: "claims@freedomadj.com",
+            Email: "claims@freedomclaims.work",
             Name: "Freedom Claims"
           },
           To: [

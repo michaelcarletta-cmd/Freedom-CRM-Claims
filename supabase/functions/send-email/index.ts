@@ -37,7 +37,7 @@ async function sendMailjetEmail(
   
   const message: any = {
     From: {
-      Email: "claims@freedomadj.com",
+      Email: "claims@freedomclaims.work",
       Name: "Freedom Claims"
     },
     To: toRecipients,
