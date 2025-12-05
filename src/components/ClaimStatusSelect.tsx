@@ -85,14 +85,14 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
 
   return (
     <Select value={currentStatus || ""} onValueChange={handleStatusChange} disabled={loading || statuses.length === 0}>
-      <SelectTrigger className="w-[180px] rounded-none">
+      <SelectTrigger className="min-w-[180px] max-w-[280px] w-auto rounded-none">
         {currentStatusObj ? (
           <div className="flex items-center gap-2">
             <div
-              className="w-2 h-2 rounded-full"
+              className="w-2 h-2 rounded-full flex-shrink-0"
               style={{ backgroundColor: currentStatusObj.color }}
             />
-            <span className="truncate">{currentStatusObj.name}</span>
+            <span className="text-left">{currentStatusObj.name}</span>
           </div>
         ) : (
           <SelectValue placeholder="Select status" />
