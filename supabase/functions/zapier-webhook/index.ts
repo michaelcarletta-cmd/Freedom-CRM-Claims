@@ -6,6 +6,28 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
 };
 
+// Parse multipart form data to extract JSON
+function parseMultipartFormData(body: string): Record<string, any> | null {
+  try {
+    // Look for JSON content in the multipart data
+    const jsonMatch = body.match(/Content-Type: application\/json[^\n]*\n\n({[^}]+})/);
+    if (jsonMatch && jsonMatch[1]) {
+      return JSON.parse(jsonMatch[1]);
+    }
+    
+    // Alternative: look for the data field content
+    const dataMatch = body.match(/name="data"[^{]*({[\s\S]*?})\s*---/);
+    if (dataMatch && dataMatch[1]) {
+      return JSON.parse(dataMatch[1].trim());
+    }
+    
+    return null;
+  } catch (e) {
+    console.error('Error parsing multipart form data:', e);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -18,31 +40,46 @@ serve(async (req) => {
 
     // Get raw body text first for logging
     const rawBody = await req.text();
-    console.log('Zapier webhook raw body:', rawBody);
+    console.log('Zapier webhook raw body length:', rawBody.length);
     
-    // Handle empty or non-JSON requests (like health checks)
-    if (!rawBody || rawBody.trim() === '' || rawBody.startsWith('-')) {
+    // Handle empty requests (like health checks)
+    if (!rawBody || rawBody.trim() === '') {
       return new Response(JSON.stringify({ status: 'ok', message: 'Webhook endpoint ready' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     let body;
-    try {
-      body = JSON.parse(rawBody);
-    } catch (parseError) {
-      console.error('JSON parse error:', parseError, 'Raw body:', rawBody);
-      return new Response(JSON.stringify({ error: 'Invalid JSON', received: rawBody.substring(0, 100) }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    
+    // Check if it's multipart form data
+    if (rawBody.includes('Content-Disposition: form-data')) {
+      console.log('Detected multipart form data');
+      body = parseMultipartFormData(rawBody);
+      if (!body) {
+        console.error('Failed to parse multipart form data');
+        return new Response(JSON.stringify({ error: 'Failed to parse multipart form data' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    } else {
+      // Try regular JSON parse
+      try {
+        body = JSON.parse(rawBody);
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError, 'Raw body preview:', rawBody.substring(0, 200));
+        return new Response(JSON.stringify({ error: 'Invalid JSON', received: rawBody.substring(0, 100) }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // Handle both nested (data.field) and flat (field) payload structures from Zapier
     const action = body.action;
-    const data = body.data || body; // Use body.data if exists, otherwise treat body as flat structure
+    const data = body.data || body;
 
-    console.log('Zapier webhook parsed:', { action, body: JSON.stringify(body) });
+    console.log('Zapier webhook parsed:', JSON.stringify(body));
 
     switch (action) {
       case 'import_photo': {
@@ -50,50 +87,101 @@ serve(async (req) => {
         // Support both nested and flat field names
         const claim_id = data.claim_id || body.claim_id;
         const policy_number = data.policy_number || body.policy_number;
-        const photo_url = data.photo_url || body.photo_url;
-        const photo_name = data.photo_name || body.photo_name;
+        // Company Cam URLs - try multiple possible field names
+        let photo_url = data.photo_url || body.photo_url || data.uri || body.uri || data.public_url || body.public_url;
+        const photo_name = data.photo_name || body.photo_name || data.project_name || body.project_name;
         const category = data.category || body.category;
         const description = data.description || body.description;
+        
+        console.log('Processing import_photo:', { claim_id, policy_number, photo_url, photo_name, category });
+        
+        // Company Cam timeline URLs need to be converted to actual image URLs
+        // Timeline URL: https://app.companycam.com/timeline/B1wecKk8eRkUgaSc
+        // We need the actual image URL from Company Cam's API
+        // For now, check if this is a timeline URL and log a warning
+        if (photo_url && photo_url.includes('/timeline/')) {
+          console.log('Warning: Received timeline URL instead of direct image URL');
+          // Try to use the photo without downloading (store as external URL reference)
+        }
         
         // Find claim by ID or policy number
         let claimId = claim_id;
         if (!claimId && policy_number) {
-          const { data: claim } = await supabase
+          const { data: claim, error: claimError } = await supabase
             .from('claims')
             .select('id')
             .eq('policy_number', policy_number)
             .single();
+          
+          if (claimError) {
+            console.log('Claim lookup error:', claimError);
+          }
           claimId = claim?.id;
         }
 
         if (!claimId) {
-          return new Response(JSON.stringify({ error: 'Claim not found' }), {
+          console.log('Claim not found for policy_number:', policy_number);
+          return new Response(JSON.stringify({ error: 'Claim not found', policy_number }), {
             status: 404,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
 
-        // Download photo from URL
-        const photoResponse = await fetch(photo_url);
-        if (!photoResponse.ok) {
-          throw new Error(`Failed to fetch photo: ${photoResponse.status}`);
+        console.log('Found claim:', claimId);
+
+        if (!photo_url) {
+          return new Response(JSON.stringify({ error: 'No photo URL provided' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
+
+        // Try to download photo from URL
+        let photoBlob: Blob | null = null;
+        let contentType = 'image/jpeg';
         
-        const photoBlob = await photoResponse.blob();
-        const fileName = photo_name || `companycam_${Date.now()}.jpg`;
+        try {
+          console.log('Fetching photo from:', photo_url);
+          const photoResponse = await fetch(photo_url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; FreedomClaims/1.0)',
+            }
+          });
+          
+          if (!photoResponse.ok) {
+            console.log('Photo fetch failed:', photoResponse.status, photoResponse.statusText);
+            // If we can't download, store as external reference
+          } else {
+            contentType = photoResponse.headers.get('content-type') || 'image/jpeg';
+            // Check if response is actually an image
+            if (contentType.startsWith('image/')) {
+              photoBlob = await photoResponse.blob();
+              console.log('Photo downloaded, size:', photoBlob.size, 'type:', contentType);
+            } else {
+              console.log('Response is not an image, content-type:', contentType);
+            }
+          }
+        } catch (fetchError) {
+          console.error('Error fetching photo:', fetchError);
+        }
+
+        const fileName = photo_name ? `${photo_name}_${Date.now()}.jpg` : `companycam_${Date.now()}.jpg`;
         const filePath = `${claimId}/${fileName}`;
 
-        // Upload to Supabase storage
-        const { error: uploadError } = await supabase.storage
-          .from('claim-files')
-          .upload(filePath, photoBlob, {
-            contentType: photoBlob.type || 'image/jpeg',
-            upsert: true,
-          });
+        if (photoBlob && photoBlob.size > 0) {
+          // Upload to Supabase storage
+          const { error: uploadError } = await supabase.storage
+            .from('claim-files')
+            .upload(filePath, photoBlob, {
+              contentType: contentType,
+              upsert: true,
+            });
 
-        if (uploadError) {
-          console.error('Upload error:', uploadError);
-          throw uploadError;
+          if (uploadError) {
+            console.error('Upload error:', uploadError);
+            throw uploadError;
+          }
+          console.log('Photo uploaded to storage:', filePath);
         }
 
         // Create claim_photos record
@@ -102,10 +190,10 @@ serve(async (req) => {
           .insert({
             claim_id: claimId,
             file_name: fileName,
-            file_path: filePath,
-            file_size: photoBlob.size,
+            file_path: photoBlob && photoBlob.size > 0 ? filePath : photo_url, // Store path or external URL
+            file_size: photoBlob?.size || 0,
             category: category || 'Company Cam',
-            description: description || 'Imported from Company Cam via Zapier',
+            description: description || `Imported from Company Cam via Zapier`,
           })
           .select()
           .single();
@@ -115,11 +203,12 @@ serve(async (req) => {
           throw photoError;
         }
 
-        console.log('Photo imported successfully:', photo.id);
+        console.log('Photo record created:', photo.id);
 
         return new Response(JSON.stringify({ 
           success: true, 
           photo_id: photo.id,
+          claim_id: claimId,
           message: 'Photo imported successfully' 
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -184,7 +273,7 @@ serve(async (req) => {
       }
 
       default:
-        return new Response(JSON.stringify({ error: 'Unknown action' }), {
+        return new Response(JSON.stringify({ error: 'Unknown action', received_action: action }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
