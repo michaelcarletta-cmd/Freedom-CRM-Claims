@@ -102,33 +102,21 @@ serve(async (req) => {
         const photo_name = data.photo_name || body.photo_name || data.project_name || body.project_name;
         const category = data.category || body.category || data.photo_label || body.photo_label;
         const description = data.description || body.description;
+        const photo_id_external = data.photo_id || body.photo_id;
+        
+        // Check if this is a Company Cam timeline/webpage URL (not a direct image)
+        const isCompanyCamWebpage = photo_url && (photo_url.includes('/timeline/') || photo_url.includes('app.companycam.com'));
         
         console.log('Processing import_photo:', { 
           claim_id, 
           policy_number, 
           photo_url: photo_url?.substring(0, 80),
           hasDirectUrl: !!directImageUrl,
+          isCompanyCamWebpage,
           photo_name, 
           category,
           all_fields: Object.keys(data)
         });
-        
-        // Company Cam timeline URLs are NOT direct image URLs
-        if (photo_url && (photo_url.includes('/timeline/') || photo_url.includes('app.companycam.com'))) {
-          console.error('ERROR: Received Company Cam webpage URL instead of direct image URL');
-          console.error('The photo_url/public_url field contains a webpage, not an image.');
-          console.error('In Zapier, you must use the "URI" field from Company Cam trigger.');
-          
-          return new Response(JSON.stringify({ 
-            error: 'Invalid photo URL - received webpage instead of image', 
-            hint: 'In Zapier, use the "URI" field from Company Cam (the direct image URL), NOT "Public URL"',
-            received_url: photo_url,
-            policy_number
-          }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
         
         // Find claim by ID or policy number
         let claimId = claim_id;
@@ -162,52 +150,48 @@ serve(async (req) => {
           });
         }
 
-        // Try to download photo from URL
-        let photoBlob: Blob | null = null;
-        let contentType = 'image/jpeg';
-        
-        try {
-          console.log('Fetching photo from:', photo_url);
-          const photoResponse = await fetch(photo_url, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (compatible; FreedomClaims/1.0)',
-            }
-          });
-          
-          if (!photoResponse.ok) {
-            console.log('Photo fetch failed:', photoResponse.status, photoResponse.statusText);
-            // If we can't download, store as external reference
-          } else {
-            contentType = photoResponse.headers.get('content-type') || 'image/jpeg';
-            // Check if response is actually an image
-            if (contentType.startsWith('image/')) {
-              photoBlob = await photoResponse.blob();
-              console.log('Photo downloaded, size:', photoBlob.size, 'type:', contentType);
-            } else {
-              console.log('Response is not an image, content-type:', contentType);
-            }
-          }
-        } catch (fetchError) {
-          console.error('Error fetching photo:', fetchError);
-        }
-
         const fileName = photo_name ? `${photo_name}_${Date.now()}.jpg` : `companycam_${Date.now()}.jpg`;
         const filePath = `${claimId}/${fileName}`;
+        let uploadedToStorage = false;
 
-        if (photoBlob && photoBlob.size > 0) {
-          // Upload to Supabase storage
-          const { error: uploadError } = await supabase.storage
-            .from('claim-files')
-            .upload(filePath, photoBlob, {
-              contentType: contentType,
-              upsert: true,
+        // Only try to download if it's a direct image URL (not a Company Cam webpage)
+        if (!isCompanyCamWebpage) {
+          try {
+            console.log('Fetching photo from:', photo_url);
+            const photoResponse = await fetch(photo_url, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; FreedomClaims/1.0)',
+              }
             });
+            
+            if (photoResponse.ok) {
+              const contentType = photoResponse.headers.get('content-type') || 'image/jpeg';
+              if (contentType.startsWith('image/')) {
+                const photoBlob = await photoResponse.blob();
+                console.log('Photo downloaded, size:', photoBlob.size, 'type:', contentType);
+                
+                if (photoBlob.size > 0) {
+                  const { error: uploadError } = await supabase.storage
+                    .from('claim-files')
+                    .upload(filePath, photoBlob, {
+                      contentType: contentType,
+                      upsert: true,
+                    });
 
-          if (uploadError) {
-            console.error('Upload error:', uploadError);
-            throw uploadError;
+                  if (uploadError) {
+                    console.error('Upload error:', uploadError);
+                  } else {
+                    uploadedToStorage = true;
+                    console.log('Photo uploaded to storage:', filePath);
+                  }
+                }
+              }
+            }
+          } catch (fetchError) {
+            console.error('Error fetching photo:', fetchError);
           }
-          console.log('Photo uploaded to storage:', filePath);
+        } else {
+          console.log('Company Cam webpage URL detected - storing as external reference');
         }
 
         // Create claim_photos record
@@ -216,10 +200,12 @@ serve(async (req) => {
           .insert({
             claim_id: claimId,
             file_name: fileName,
-            file_path: photoBlob && photoBlob.size > 0 ? filePath : photo_url, // Store path or external URL
-            file_size: photoBlob?.size || 0,
+            file_path: uploadedToStorage ? filePath : photo_url, // Store path or external URL
+            file_size: 0,
             category: category || 'Company Cam',
-            description: description || `Imported from Company Cam via Zapier`,
+            description: isCompanyCamWebpage 
+              ? `Company Cam photo (external link) - ${description || photo_id_external || ''}`
+              : (description || `Imported from Company Cam via Zapier`),
           })
           .select()
           .single();
@@ -229,13 +215,16 @@ serve(async (req) => {
           throw photoError;
         }
 
-        console.log('Photo record created:', photo.id);
+        console.log('Photo record created:', photo.id, uploadedToStorage ? '(uploaded)' : '(external link)');
 
         return new Response(JSON.stringify({ 
           success: true, 
           photo_id: photo.id,
           claim_id: claimId,
-          message: 'Photo imported successfully' 
+          stored_locally: uploadedToStorage,
+          message: uploadedToStorage 
+            ? 'Photo imported and stored successfully' 
+            : 'Photo reference saved (Company Cam link stored)'
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
