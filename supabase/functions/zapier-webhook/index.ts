@@ -9,16 +9,20 @@ const corsHeaders = {
 // Parse multipart form data to extract JSON
 function parseMultipartFormData(body: string): Record<string, any> | null {
   try {
-    // Look for JSON content in the multipart data
-    const jsonMatch = body.match(/Content-Type: application\/json[^\n]*\n\n({[^}]+})/);
+    // Look for JSON content in the multipart data - more robust regex
+    // Pattern: after "name="data"" and Content-Type line, capture JSON object
+    const jsonMatch = body.match(/name="data"[\s\S]*?Content-Type:[^\n]*\n\n([\s\S]*?)\n---/);
     if (jsonMatch && jsonMatch[1]) {
-      return JSON.parse(jsonMatch[1]);
+      const jsonStr = jsonMatch[1].trim();
+      console.log('Extracted JSON from multipart:', jsonStr);
+      return JSON.parse(jsonStr);
     }
     
-    // Alternative: look for the data field content
-    const dataMatch = body.match(/name="data"[^{]*({[\s\S]*?})\s*---/);
-    if (dataMatch && dataMatch[1]) {
-      return JSON.parse(dataMatch[1].trim());
+    // Alternative: simpler pattern
+    const simpleMatch = body.match(/\{[^{}]*"action"[^{}]*\}/);
+    if (simpleMatch) {
+      console.log('Extracted JSON via simple match:', simpleMatch[0]);
+      return JSON.parse(simpleMatch[0]);
     }
     
     return null;
@@ -86,22 +90,44 @@ serve(async (req) => {
         // Import photo from Company Cam via Zapier
         // Support both nested and flat field names
         const claim_id = data.claim_id || body.claim_id;
-        const policy_number = data.policy_number || body.policy_number;
-        // Company Cam URLs - try multiple possible field names
-        let photo_url = data.photo_url || body.photo_url || data.uri || body.uri || data.public_url || body.public_url;
+        const policy_number = data.policy_number || body.policy_number || data.project_name || body.project_name;
+        
+        // Company Cam URLs - IMPORTANT: 'uri' is the direct image URL, 'public_url' is just a webpage
+        // Priority order: uri (direct image) > other direct URLs > public_url (last resort)
+        const directImageUrl = data.uri || body.uri || data.image_url || body.image_url || 
+                               data.original_url || body.original_url || data.download_url || body.download_url;
+        const fallbackUrl = data.photo_url || body.photo_url || data.public_url || body.public_url;
+        
+        let photo_url = directImageUrl || fallbackUrl;
         const photo_name = data.photo_name || body.photo_name || data.project_name || body.project_name;
-        const category = data.category || body.category;
+        const category = data.category || body.category || data.photo_label || body.photo_label;
         const description = data.description || body.description;
         
-        console.log('Processing import_photo:', { claim_id, policy_number, photo_url, photo_name, category });
+        console.log('Processing import_photo:', { 
+          claim_id, 
+          policy_number, 
+          photo_url: photo_url?.substring(0, 80),
+          hasDirectUrl: !!directImageUrl,
+          photo_name, 
+          category,
+          all_fields: Object.keys(data)
+        });
         
-        // Company Cam timeline URLs need to be converted to actual image URLs
-        // Timeline URL: https://app.companycam.com/timeline/B1wecKk8eRkUgaSc
-        // We need the actual image URL from Company Cam's API
-        // For now, check if this is a timeline URL and log a warning
-        if (photo_url && photo_url.includes('/timeline/')) {
-          console.log('Warning: Received timeline URL instead of direct image URL');
-          // Try to use the photo without downloading (store as external URL reference)
+        // Company Cam timeline URLs are NOT direct image URLs
+        if (photo_url && (photo_url.includes('/timeline/') || photo_url.includes('app.companycam.com'))) {
+          console.error('ERROR: Received Company Cam webpage URL instead of direct image URL');
+          console.error('The photo_url/public_url field contains a webpage, not an image.');
+          console.error('In Zapier, you must use the "URI" field from Company Cam trigger.');
+          
+          return new Response(JSON.stringify({ 
+            error: 'Invalid photo URL - received webpage instead of image', 
+            hint: 'In Zapier, use the "URI" field from Company Cam (the direct image URL), NOT "Public URL"',
+            received_url: photo_url,
+            policy_number
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
         
         // Find claim by ID or policy number
