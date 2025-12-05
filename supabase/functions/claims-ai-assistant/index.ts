@@ -381,19 +381,45 @@ function getCrc32Table(): number[] {
   return table;
 }
 
+// Helper function to find claim by client/policyholder name
+async function findClaimByClientName(supabase: any, clientName: string): Promise<{ id: string; claim_number: string; policyholder_name: string } | null> {
+  try {
+    // Search for claims matching the client name (case-insensitive partial match)
+    const { data: claims, error } = await supabase
+      .from("claims")
+      .select("id, claim_number, policyholder_name")
+      .ilike("policyholder_name", `%${clientName}%`)
+      .eq("is_closed", false)
+      .limit(1);
+
+    if (error || !claims || claims.length === 0) {
+      return null;
+    }
+
+    return claims[0];
+  } catch (err) {
+    console.error("Error finding claim by client name:", err);
+    return null;
+  }
+}
+
 // Tool definitions for AI assistant
 const tools = [
   {
     type: "function",
     function: {
       name: "create_task",
-      description: "Create a new task for a claim. Use this when the user asks to create a task, reminder, or to-do item.",
+      description: "Create a new task for a claim. Use this when the user asks to create a task, reminder, or to-do item. You can identify the claim by either claim_id (UUID) OR client_name (policyholder name).",
       parameters: {
         type: "object",
         properties: {
           claim_id: {
             type: "string",
-            description: "The UUID of the claim to create the task for"
+            description: "The UUID of the claim to create the task for. Use this if you know the exact claim ID."
+          },
+          client_name: {
+            type: "string",
+            description: "The policyholder/client name to find the claim. Use this when the user refers to a claim by client name instead of ID."
           },
           title: {
             type: "string",
@@ -417,7 +443,7 @@ const tools = [
             description: "UUID of the staff member to assign the task to"
           }
         },
-        required: ["claim_id", "title"]
+        required: ["title"]
       }
     }
   }
@@ -536,7 +562,7 @@ serve(async (req) => {
       if (allClaims && allClaims.length > 0) {
         claimsOverview = `\n\nRecent Active Claims (${allClaims.length}):\n`;
         allClaims.forEach((c, i) => {
-          claimsOverview += `${i + 1}. ${c.claim_number || 'No #'} - ${c.policyholder_name} | ${c.status || 'Unknown'} | ${c.loss_type || 'Unknown loss'} | ${c.insurance_company || 'Unknown carrier'}\n`;
+          claimsOverview += `${i + 1}. ${c.claim_number || 'No #'} - ${c.policyholder_name} (ID: ${c.id}) | ${c.status || 'Unknown'} | ${c.loss_type || 'Unknown loss'} | ${c.insurance_company || 'Unknown carrier'}\n`;
         });
       }
 
@@ -689,11 +715,14 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
 
 IMPORTANT: You have the ability to CREATE TASKS. When the user asks you to create a task, reminder, follow-up, or to-do item:
 1. Use the create_task function with appropriate parameters
-2. Always include a clear title
-3. Set a due date if the user specifies one or if it makes sense
-4. Set priority based on urgency (low, medium, high)
-5. Assign to a staff member if requested (use their ID from the staff list)
-6. If no specific claim is mentioned and you're in general mode, ask which claim the task should be for`;
+2. You can identify the claim by EITHER:
+   - claim_id: The UUID of the claim (use if available in context)
+   - client_name: The policyholder's name (you can use this to look up the claim)
+3. Always include a clear title
+4. Set a due date if the user specifies one or if it makes sense
+5. Set priority based on urgency (low, medium, high)
+6. Assign to a staff member if requested (use their ID from the staff list)
+7. Prefer using client_name when the user refers to a claim by the client's name`;
 
     const systemPrompt = reportType
       ? `You are an expert insurance claims report writer. Generate professional, detailed reports for property insurance claims. Your reports should be:
@@ -809,7 +838,32 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
             const params = JSON.parse(toolCall.function.arguments);
             console.log("Creating task with params:", params);
             
-            const result = await createTask(supabase, params);
+            // Resolve claim_id from client_name if needed
+            let resolvedClaimId = params.claim_id;
+            let resolvedClientName = "";
+            
+            if (!resolvedClaimId && params.client_name) {
+              console.log("Looking up claim by client name:", params.client_name);
+              const foundClaim = await findClaimByClientName(supabase, params.client_name);
+              if (foundClaim) {
+                resolvedClaimId = foundClaim.id;
+                resolvedClientName = foundClaim.policyholder_name;
+                console.log("Found claim:", foundClaim.claim_number, "for client:", foundClaim.policyholder_name);
+              } else {
+                answer += `\n\n❌ **Could not find a claim for client "${params.client_name}".** Please check the name and try again.`;
+                continue;
+              }
+            }
+            
+            if (!resolvedClaimId) {
+              answer += `\n\n❌ **No claim specified.** Please provide either a claim ID or client name.`;
+              continue;
+            }
+            
+            const result = await createTask(supabase, {
+              ...params,
+              claim_id: resolvedClaimId
+            });
             
             if (result.success && result.task) {
               tasksCreated.push({
@@ -823,7 +877,8 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
               // Add confirmation to the answer
               const dueInfo = result.task.due_date ? ` due on ${result.task.due_date}` : "";
               const priorityInfo = result.task.priority ? ` (${result.task.priority} priority)` : "";
-              answer += `\n\n✅ **Task Created:** "${result.task.title}"${dueInfo}${priorityInfo}`;
+              const clientInfo = resolvedClientName ? ` for ${resolvedClientName}` : "";
+              answer += `\n\n✅ **Task Created:** "${result.task.title}"${clientInfo}${dueInfo}${priorityInfo}`;
             } else {
               answer += `\n\n❌ **Failed to create task:** ${result.error}`;
             }
