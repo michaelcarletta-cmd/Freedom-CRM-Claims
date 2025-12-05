@@ -381,6 +381,113 @@ function getCrc32Table(): number[] {
   return table;
 }
 
+// Tool definitions for AI assistant
+const tools = [
+  {
+    type: "function",
+    function: {
+      name: "create_task",
+      description: "Create a new task for a claim. Use this when the user asks to create a task, reminder, or to-do item.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_id: {
+            type: "string",
+            description: "The UUID of the claim to create the task for"
+          },
+          title: {
+            type: "string",
+            description: "The title/name of the task"
+          },
+          description: {
+            type: "string",
+            description: "Optional detailed description of the task"
+          },
+          due_date: {
+            type: "string",
+            description: "Due date in YYYY-MM-DD format"
+          },
+          priority: {
+            type: "string",
+            enum: ["low", "medium", "high"],
+            description: "Priority level of the task"
+          },
+          assigned_to: {
+            type: "string",
+            description: "UUID of the staff member to assign the task to"
+          }
+        },
+        required: ["claim_id", "title"]
+      }
+    }
+  }
+];
+
+// Helper function to create a task
+async function createTask(supabase: any, params: {
+  claim_id: string;
+  title: string;
+  description?: string;
+  due_date?: string;
+  priority?: string;
+  assigned_to?: string;
+}): Promise<{ success: boolean; task?: any; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert({
+        claim_id: params.claim_id,
+        title: params.title,
+        description: params.description || null,
+        due_date: params.due_date || null,
+        priority: params.priority || "medium",
+        assigned_to: params.assigned_to || null,
+        status: "pending"
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating task:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, task: data };
+  } catch (err) {
+    console.error("Exception creating task:", err);
+    return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+// Helper function to get staff members for assignment
+async function getStaffMembers(supabase: any): Promise<{ id: string; name: string; email: string }[]> {
+  try {
+    const { data: staffRoles } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .in("role", ["staff", "admin"]);
+
+    if (!staffRoles || staffRoles.length === 0) return [];
+
+    const staffIds = staffRoles.map((r: any) => r.user_id);
+
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", staffIds)
+      .eq("approval_status", "approved");
+
+    return (profiles || []).map((p: any) => ({
+      id: p.id,
+      name: p.full_name || p.email,
+      email: p.email
+    }));
+  } catch (err) {
+    console.error("Error fetching staff:", err);
+    return [];
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -403,6 +510,10 @@ serve(async (req) => {
     let claim = null;
     let claimsOverview = "";
     let knowledgeBaseContext = "";
+    let staffMembers: { id: string; name: string; email: string }[] = [];
+
+    // Get staff members for task assignment
+    staffMembers = await getStaffMembers(supabase);
 
     if (mode === "general" || !claimId) {
       const { data: allClaims } = await supabase
@@ -568,6 +679,22 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    // Build staff list context
+    let staffListContext = "";
+    if (staffMembers.length > 0) {
+      staffListContext = `\n\nAvailable Staff Members for Task Assignment:\n${staffMembers.map(s => `- ${s.name} (ID: ${s.id})`).join("\n")}`;
+    }
+
+    const toolInstructions = `
+
+IMPORTANT: You have the ability to CREATE TASKS. When the user asks you to create a task, reminder, follow-up, or to-do item:
+1. Use the create_task function with appropriate parameters
+2. Always include a clear title
+3. Set a due date if the user specifies one or if it makes sense
+4. Set priority based on urgency (low, medium, high)
+5. Assign to a staff member if requested (use their ID from the staff list)
+6. If no specific claim is mentioned and you're in general mode, ask which claim the task should be for`;
+
     const systemPrompt = reportType
       ? `You are an expert insurance claims report writer. Generate professional, detailed reports for property insurance claims. Your reports should be:
 - Well-structured with clear sections and headings
@@ -582,10 +709,11 @@ Use markdown formatting for better readability.`
 - Drafting follow-up emails and communications
 - Summarizing claim statuses and next steps
 - Prioritizing tasks and workload management
+- Creating tasks and reminders
 - Explaining insurance regulations and best practices
 - Suggesting negotiation strategies with carriers
 - Identifying claims that need attention
-
+${toolInstructions}
 You have access to the user's active claims and pending tasks. Provide practical, actionable advice. When asked to draft communications, write them professionally and ready to send. Be concise but thorough.`
       : `You are an expert insurance claims adjuster and consultant specializing in property damage claims. Your role is to provide strategic advice, best practices, and actionable guidance to help maximize claim settlements while maintaining ethical standards.
 
@@ -597,7 +725,7 @@ You have deep knowledge of:
 - Depreciation calculations and replacement cost value
 - Proper claim valuation methodologies
 - When and how to escalate claims or file complaints
-
+${toolInstructions}
 Always provide:
 - Clear, actionable advice
 - Specific strategies tailored to the claim situation
@@ -612,7 +740,7 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
     
     conversationMessages.push({ 
       role: "system", 
-      content: `${systemPrompt}\n\nContext:\n${contextContent}${additionalContext}${knowledgeBaseContext}${webSearchResults}`
+      content: `${systemPrompt}\n\nContext:\n${contextContent}${additionalContext}${knowledgeBaseContext}${webSearchResults}${staffListContext}`
     });
     
     if (messages && messages.length > 0 && !reportType) {
@@ -624,17 +752,25 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
       content: reportQuestion 
     });
 
+    // Include tools only for non-report requests
+    const requestBody: any = {
+      model: "google/gemini-2.5-flash",
+      messages: conversationMessages,
+      max_tokens: reportType ? 3000 : 1500,
+    };
+
+    if (!reportType) {
+      requestBody.tools = tools;
+      requestBody.tool_choice = "auto";
+    }
+
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: conversationMessages,
-        max_tokens: reportType ? 3000 : 1500,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!aiResponse.ok) {
@@ -659,7 +795,45 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
     }
 
     const aiData = await aiResponse.json();
-    const answer = aiData.choices[0].message.content;
+    const firstChoice = aiData.choices[0];
+    let answer = firstChoice.message.content || "";
+    let tasksCreated: any[] = [];
+
+    // Handle tool calls if present
+    if (firstChoice.message.tool_calls && firstChoice.message.tool_calls.length > 0) {
+      console.log("Processing tool calls:", firstChoice.message.tool_calls.length);
+      
+      for (const toolCall of firstChoice.message.tool_calls) {
+        if (toolCall.function.name === "create_task") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Creating task with params:", params);
+            
+            const result = await createTask(supabase, params);
+            
+            if (result.success && result.task) {
+              tasksCreated.push({
+                id: result.task.id,
+                title: result.task.title,
+                due_date: result.task.due_date,
+                priority: result.task.priority,
+                claim_id: result.task.claim_id
+              });
+              
+              // Add confirmation to the answer
+              const dueInfo = result.task.due_date ? ` due on ${result.task.due_date}` : "";
+              const priorityInfo = result.task.priority ? ` (${result.task.priority} priority)` : "";
+              answer += `\n\n✅ **Task Created:** "${result.task.title}"${dueInfo}${priorityInfo}`;
+            } else {
+              answer += `\n\n❌ **Failed to create task:** ${result.error}`;
+            }
+          } catch (parseErr) {
+            console.error("Error parsing tool call arguments:", parseErr);
+            answer += `\n\n❌ **Error creating task:** Invalid parameters`;
+          }
+        }
+      }
+    }
 
     // If this is a report, save it as a Word document
     let savedFile = null;
@@ -731,7 +905,7 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
     }
 
     return new Response(
-      JSON.stringify({ answer, reportType, savedFile }),
+      JSON.stringify({ answer, reportType, savedFile, tasksCreated }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
