@@ -317,7 +317,7 @@ async function sendEmail(supabase: any, config: any, execution: any) {
   }
 
   const emailPayload: any = {
-    from: 'Freedom Claims <claims@freedomadj.com>',
+    from: 'Freedom Claims <claims@freedomclaims.work>',
     to: [recipientEmail],
     subject: subject,
     html: `<div style="font-family: sans-serif;">${body.replace(/\n/g, '<br>')}</div>`,
