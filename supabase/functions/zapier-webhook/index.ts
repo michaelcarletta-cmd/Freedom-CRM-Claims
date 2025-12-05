@@ -16,12 +16,33 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const body = await req.json();
+    // Get raw body text first for logging
+    const rawBody = await req.text();
+    console.log('Zapier webhook raw body:', rawBody);
+    
+    // Handle empty or non-JSON requests (like health checks)
+    if (!rawBody || rawBody.trim() === '' || rawBody.startsWith('-')) {
+      return new Response(JSON.stringify({ status: 'ok', message: 'Webhook endpoint ready' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    let body;
+    try {
+      body = JSON.parse(rawBody);
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError, 'Raw body:', rawBody);
+      return new Response(JSON.stringify({ error: 'Invalid JSON', received: rawBody.substring(0, 100) }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Handle both nested (data.field) and flat (field) payload structures from Zapier
     const action = body.action;
     const data = body.data || body; // Use body.data if exists, otherwise treat body as flat structure
 
-    console.log('Zapier webhook received:', { action, body: JSON.stringify(body) });
+    console.log('Zapier webhook parsed:', { action, body: JSON.stringify(body) });
 
     switch (action) {
       case 'import_photo': {
