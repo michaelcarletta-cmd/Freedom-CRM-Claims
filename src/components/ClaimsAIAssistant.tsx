@@ -50,6 +50,12 @@ export const ClaimsAIAssistant = () => {
 
       if (error) throw error;
 
+      // Show toast for created tasks
+      if (data.tasksCreated && data.tasksCreated.length > 0) {
+        const taskCount = data.tasksCreated.length;
+        toast.success(`${taskCount} task${taskCount > 1 ? 's' : ''} created successfully`);
+      }
+
       const assistantMessage: AiMessage = {
         role: "assistant",
         content: data.answer,
@@ -114,9 +120,9 @@ export const ClaimsAIAssistant = () => {
                   <ul className="text-sm text-muted-foreground space-y-1 text-left">
                     <li>• Draft follow-up communications</li>
                     <li>• Summarize claim statuses</li>
+                    <li>• <strong>Create tasks with due dates</strong></li>
                     <li>• Suggest next steps for claims</li>
                     <li>• Explain insurance terms & regulations</li>
-                    <li>• Help with adjuster negotiations</li>
                   </ul>
                 </div>
               </Card>
