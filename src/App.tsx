@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -5,31 +6,40 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "./components/AppLayout";
 import { useAuth } from "./hooks/useAuth";
-import Index from "./pages/Index";
-import Claims from "./pages/Claims";
-import ClaimDetail from "./pages/ClaimDetail";
-import Tasks from "./pages/Tasks";
-import Inbox from "./pages/Inbox";
-import Clients from "./pages/Clients";
-import ClientDetail from "./pages/ClientDetail";
-import Settings from "./pages/Settings";
-import Networking from "./pages/Networking";
-import Templates from "./pages/Templates";
-import Sales from "./pages/Sales";
-import Auth from "./pages/Auth";
-import ClientPortal from "./pages/ClientPortal";
-import ContractorPortal from "./pages/ContractorPortal";
-import ReferrerPortal from "./pages/ReferrerPortal";
-import Sign from "./pages/Sign";
-import NotFound from "./pages/NotFound";
+
+// Lazy load all page components for code splitting
+const Index = lazy(() => import("./pages/Index"));
+const Claims = lazy(() => import("./pages/Claims"));
+const ClaimDetail = lazy(() => import("./pages/ClaimDetail"));
+const Tasks = lazy(() => import("./pages/Tasks"));
+const Inbox = lazy(() => import("./pages/Inbox"));
+const Clients = lazy(() => import("./pages/Clients"));
+const ClientDetail = lazy(() => import("./pages/ClientDetail"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Networking = lazy(() => import("./pages/Networking"));
+const Templates = lazy(() => import("./pages/Templates"));
+const Sales = lazy(() => import("./pages/Sales"));
+const Auth = lazy(() => import("./pages/Auth"));
+const ClientPortal = lazy(() => import("./pages/ClientPortal"));
+const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
+const ReferrerPortal = lazy(() => import("./pages/ReferrerPortal"));
+const Sign = lazy(() => import("./pages/Sign"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
+
+// Loading fallback component
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+  </div>
+);
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { user, userRole, loading } = useAuth();
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+    return <PageLoader />;
   }
 
   if (!user) {
@@ -47,14 +57,14 @@ function AppRoutes() {
   const { user, userRole, loading } = useAuth();
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+    return <PageLoader />;
   }
 
   // Public routes that don't require authentication
   const publicRoutes = (
     <>
-      <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
-      <Route path="/sign" element={<Sign />} />
+      <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Suspense fallback={<PageLoader />}><Auth /></Suspense>} />
+      <Route path="/sign" element={<Suspense fallback={<PageLoader />}><Sign /></Suspense>} />
     </>
   );
 
@@ -63,7 +73,7 @@ function AppRoutes() {
     return (
       <Routes>
         {publicRoutes}
-        <Route path="/client-portal" element={<ClientPortal />} />
+        <Route path="/client-portal" element={<Suspense fallback={<PageLoader />}><ClientPortal /></Suspense>} />
         <Route path="*" element={<Navigate to="/client-portal" replace />} />
       </Routes>
     );
@@ -73,7 +83,7 @@ function AppRoutes() {
     return (
       <Routes>
         {publicRoutes}
-        <Route path="/contractor-portal" element={<ContractorPortal />} />
+        <Route path="/contractor-portal" element={<Suspense fallback={<PageLoader />}><ContractorPortal /></Suspense>} />
         <Route path="*" element={<Navigate to="/contractor-portal" replace />} />
       </Routes>
     );
@@ -83,8 +93,8 @@ function AppRoutes() {
     return (
       <Routes>
         {publicRoutes}
-        <Route path="/referrer-portal" element={<ReferrerPortal />} />
-        <Route path="/claims/:id" element={<ClaimDetail />} />
+        <Route path="/referrer-portal" element={<Suspense fallback={<PageLoader />}><ReferrerPortal /></Suspense>} />
+        <Route path="/claims/:id" element={<Suspense fallback={<PageLoader />}><ClaimDetail /></Suspense>} />
         <Route path="*" element={<Navigate to="/referrer-portal" replace />} />
       </Routes>
     );
@@ -94,18 +104,18 @@ function AppRoutes() {
   return (
     <Routes>
       {publicRoutes}
-      <Route path="/" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Index /></AppLayout></ProtectedRoute>} />
-      <Route path="/claims" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Claims /></AppLayout></ProtectedRoute>} />
-      <Route path="/claims/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><ClaimDetail /></AppLayout></ProtectedRoute>} />
-      <Route path="/tasks" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Tasks /></AppLayout></ProtectedRoute>} />
-      <Route path="/inbox" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Inbox /></AppLayout></ProtectedRoute>} />
-      <Route path="/clients" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
-      <Route path="/clients/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><ClientDetail /></AppLayout></ProtectedRoute>} />
-      <Route path="/networking" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Networking /></AppLayout></ProtectedRoute>} />
-      <Route path="/sales" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
-      <Route path="/templates" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Templates /></AppLayout></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Settings /></AppLayout></ProtectedRoute>} />
-      <Route path="*" element={<NotFound />} />
+      <Route path="/" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Index /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/claims" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Claims /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/claims/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><ClaimDetail /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/tasks" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Tasks /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/inbox" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Inbox /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/clients" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Clients /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/clients/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><ClientDetail /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/networking" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Networking /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/sales" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Sales /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/templates" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Templates /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Settings /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
     </Routes>
   );
 }
