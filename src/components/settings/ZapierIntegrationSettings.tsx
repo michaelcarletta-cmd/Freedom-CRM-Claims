@@ -160,21 +160,36 @@ export function ZapierIntegrationSettings() {
               <li><strong>Action:</strong> Webhooks by Zapier → "POST"</li>
               <li>Set URL to your webhook URL above</li>
               <li>Set Payload Type to "JSON"</li>
-              <li>Configure the data fields:</li>
+              <li>Configure the data fields (see below)</li>
             </ol>
+            
+            {/* Critical Warning */}
+            <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-lg ml-4">
+              <h5 className="font-medium text-destructive flex items-center gap-2 mb-2">
+                ⚠️ CRITICAL: Use "URI" NOT "Public URL"
+              </h5>
+              <p className="text-sm text-muted-foreground">
+                Company Cam has multiple URL fields. You <strong>MUST</strong> use the <strong>"URI"</strong> field 
+                (the direct image URL) for <code className="bg-muted px-1 rounded">photo_url</code>. 
+                Do NOT use "Public URL" - that's just a webpage link, not the actual image.
+              </p>
+            </div>
             
             <div className="bg-muted p-4 rounded-lg font-mono text-sm ml-4 overflow-x-auto">
               <pre>{`{
   "action": "import_photo",
   "data": {
     "policy_number": "{{Project Name}}",
-    "photo_url": "{{Photo URL}}",
+    "photo_url": "{{URI}}",
     "photo_name": "{{Photo Filename}}",
     "category": "Company Cam",
     "description": "{{Photo Notes}}"
   }
 }`}</pre>
             </div>
+            <p className="text-xs text-muted-foreground ml-4">
+              <strong>Field mapping:</strong> URI = direct image URL, Project Name = policy number for claim matching
+            </p>
           </div>
 
           {/* Export Claims */}
