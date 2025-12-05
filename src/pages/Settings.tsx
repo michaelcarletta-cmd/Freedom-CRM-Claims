@@ -36,6 +36,7 @@ import { AIKnowledgeBaseSettings } from "@/components/settings/AIKnowledgeBaseSe
 import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
 import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
+import { ZapierIntegrationSettings } from "@/components/settings/ZapierIntegrationSettings";
 import { useQuery } from "@tanstack/react-query";
 
 interface ClaimStatus {
@@ -415,7 +416,8 @@ export default function Settings() {
           <AIKnowledgeBaseSettings />
         </TabsContent>
 
-        <TabsContent value="integrations" className="w-full">
+        <TabsContent value="integrations" className="w-full space-y-6">
+          <ZapierIntegrationSettings />
           <QuickBooksSettings />
         </TabsContent>
 
