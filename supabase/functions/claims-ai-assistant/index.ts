@@ -409,17 +409,17 @@ const tools = [
     type: "function",
     function: {
       name: "create_task",
-      description: "Create a new task for a claim. Use this when the user asks to create a task, reminder, or to-do item. You can identify the claim by either claim_id (UUID) OR client_name (policyholder name).",
+      description: "Create a new task for a claim. When the user mentions a client/policyholder name (like 'James Hanlon' or 'Smith'), use the client_name parameter - DO NOT put names in claim_id.",
       parameters: {
         type: "object",
         properties: {
-          claim_id: {
-            type: "string",
-            description: "The UUID of the claim to create the task for. Use this if you know the exact claim ID."
-          },
           client_name: {
             type: "string",
-            description: "The policyholder/client name to find the claim. Use this when the user refers to a claim by client name instead of ID."
+            description: "REQUIRED when user refers to a claim by person's name. Put the client/policyholder name here (e.g., 'James Hanlon', 'Smith'). The system will look up the claim."
+          },
+          claim_id: {
+            type: "string",
+            description: "Only use this if you have an actual UUID from the context. Never put names or placeholders here."
           },
           title: {
             type: "string",
@@ -714,15 +714,15 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
     const toolInstructions = `
 
 IMPORTANT: You have the ability to CREATE TASKS. When the user asks you to create a task, reminder, follow-up, or to-do item:
-1. Use the create_task function with appropriate parameters
-2. You can identify the claim by EITHER:
-   - claim_id: The UUID of the claim (use if available in context)
-   - client_name: The policyholder's name (you can use this to look up the claim)
+1. Use the create_task function
+2. CRITICAL - To identify the claim:
+   - If user mentions a person's name (e.g., "James Hanlon", "Smith claim"), use client_name parameter with that name
+   - NEVER put names or placeholders like "[CLAIM ID]" in claim_id - that field only accepts UUIDs
+   - Only use claim_id if you have an actual UUID from the claims list context
 3. Always include a clear title
-4. Set a due date if the user specifies one or if it makes sense
+4. Set a due date if the user specifies one (use YYYY-MM-DD format with actual dates, not "XX")
 5. Set priority based on urgency (low, medium, high)
-6. Assign to a staff member if requested (use their ID from the staff list)
-7. Prefer using client_name when the user refers to a claim by the client's name`;
+6. Assign to a staff member if requested (use their ID from the staff list)`;
 
     const systemPrompt = reportType
       ? `You are an expert insurance claims report writer. Generate professional, detailed reports for property insurance claims. Your reports should be:
