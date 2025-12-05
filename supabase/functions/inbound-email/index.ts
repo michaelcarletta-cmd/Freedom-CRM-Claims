@@ -6,6 +6,95 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Decode quoted-printable encoding
+function decodeQuotedPrintable(str: string): string {
+  return str
+    .replace(/=\r?\n/g, '') // Remove soft line breaks
+    .replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
+// Extract clean text from raw MIME email
+function extractEmailBody(rawContent: string): { text: string; html: string } {
+  let text = '';
+  let html = '';
+
+  // Check if it's a multipart message
+  const boundaryMatch = rawContent.match(/boundary="?([^"\s;]+)"?/i);
+  
+  if (boundaryMatch) {
+    const boundary = boundaryMatch[1];
+    const parts = rawContent.split(new RegExp(`--${boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    
+    for (const part of parts) {
+      if (part.includes('Content-Type: text/plain')) {
+        // Extract plain text content
+        const contentMatch = part.match(/Content-Transfer-Encoding:\s*(\S+)/i);
+        const encoding = contentMatch ? contentMatch[1].toLowerCase() : '';
+        
+        // Find the actual content (after the headers, separated by double newline)
+        const bodyMatch = part.split(/\r?\n\r?\n/);
+        if (bodyMatch.length > 1) {
+          let content = bodyMatch.slice(1).join('\n\n').trim();
+          
+          // Remove trailing boundary markers
+          content = content.replace(/--$/, '').trim();
+          
+          if (encoding === 'quoted-printable') {
+            content = decodeQuotedPrintable(content);
+          }
+          text = content;
+        }
+      } else if (part.includes('Content-Type: text/html')) {
+        // Extract HTML content
+        const contentMatch = part.match(/Content-Transfer-Encoding:\s*(\S+)/i);
+        const encoding = contentMatch ? contentMatch[1].toLowerCase() : '';
+        
+        const bodyMatch = part.split(/\r?\n\r?\n/);
+        if (bodyMatch.length > 1) {
+          let content = bodyMatch.slice(1).join('\n\n').trim();
+          content = content.replace(/--$/, '').trim();
+          
+          if (encoding === 'quoted-printable') {
+            content = decodeQuotedPrintable(content);
+          }
+          
+          // Strip HTML tags to get plain text version if needed
+          html = content;
+        }
+      }
+    }
+  } else {
+    // Single part message - check if it needs decoding
+    if (rawContent.includes('Content-Transfer-Encoding: quoted-printable')) {
+      const bodyMatch = rawContent.split(/\r?\n\r?\n/);
+      if (bodyMatch.length > 1) {
+        text = decodeQuotedPrintable(bodyMatch.slice(1).join('\n\n'));
+      }
+    } else {
+      text = rawContent;
+    }
+  }
+
+  return { text, html };
+}
+
+// Strip HTML tags to get plain text
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -14,7 +103,7 @@ serve(async (req) => {
   try {
     const payload = await req.json();
     
-    console.log("Received inbound email payload:", JSON.stringify(payload, null, 2));
+    console.log("Received inbound email payload:", JSON.stringify(payload, null, 2).substring(0, 2000));
 
     // Support multiple formats:
     // 1. Cloudflare Email Workers format (preferred)
@@ -26,6 +115,7 @@ serve(async (req) => {
     let subject: string = '';
     let text: string = '';
     let html: string = '';
+    let rawContent: string = '';
 
     // Cloudflare Email Workers format
     if (payload.from && payload.to && payload.source === 'cloudflare') {
@@ -34,6 +124,7 @@ serve(async (req) => {
       subject = payload.subject || '(No Subject)';
       text = payload.text || '';
       html = payload.html || '';
+      rawContent = payload.raw || '';
       console.log("Processing Cloudflare Email Worker payload");
     }
     // Mailjet Parse API format
@@ -52,8 +143,41 @@ serve(async (req) => {
       subject = payload.subject || '(No Subject)';
       text = payload.text || '';
       html = payload.html || '';
+      rawContent = payload.raw || '';
       console.log("Processing generic payload");
     }
+
+    // If we have raw content but no clean text/html, parse it
+    if (rawContent && (!text || text.includes('Content-Type:') || text.includes('--_'))) {
+      console.log("Parsing raw MIME content...");
+      const extracted = extractEmailBody(rawContent);
+      if (extracted.text) text = extracted.text;
+      if (extracted.html) html = extracted.html;
+    }
+
+    // If text still looks like raw MIME, try to extract it
+    if (text && (text.includes('Content-Type:') || text.includes('--_') || text.includes('boundary='))) {
+      console.log("Text appears to be raw MIME, extracting...");
+      const extracted = extractEmailBody(text);
+      if (extracted.text) {
+        text = extracted.text;
+      } else if (extracted.html) {
+        text = stripHtml(extracted.html);
+      }
+    }
+
+    // If we only have HTML, convert to plain text for display
+    if (!text && html) {
+      text = stripHtml(html);
+    }
+
+    // Final cleanup - remove any remaining MIME artifacts
+    text = text
+      .replace(/^[\s\S]*?Content-Transfer-Encoding:[^\n]*\n\n/i, '')
+      .replace(/--_[^\s]+--?\s*$/g, '')
+      .trim();
+
+    console.log("Final cleaned text:", text.substring(0, 500));
 
     // Parse the "to" address to find the claim identifier
     // Expected format: claim-{policy_number}@claims.freedomclaims.work
@@ -157,7 +281,7 @@ serve(async (req) => {
         recipient_name: senderName,
         recipient_type: 'inbound',
         subject: subject,
-        body: text || html || '(No Content)',
+        body: text || '(No Content)',
         sent_by: null, // Inbound emails have no internal sender
       });
 
