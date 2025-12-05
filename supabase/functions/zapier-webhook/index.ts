@@ -17,14 +17,22 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json();
-    const { action, data } = body;
+    // Handle both nested (data.field) and flat (field) payload structures from Zapier
+    const action = body.action;
+    const data = body.data || body; // Use body.data if exists, otherwise treat body as flat structure
 
-    console.log('Zapier webhook received:', { action, dataKeys: Object.keys(data || {}) });
+    console.log('Zapier webhook received:', { action, body: JSON.stringify(body) });
 
     switch (action) {
       case 'import_photo': {
         // Import photo from Company Cam via Zapier
-        const { claim_id, policy_number, photo_url, photo_name, category, description } = data;
+        // Support both nested and flat field names
+        const claim_id = data.claim_id || body.claim_id;
+        const policy_number = data.policy_number || body.policy_number;
+        const photo_url = data.photo_url || body.photo_url;
+        const photo_name = data.photo_name || body.photo_name;
+        const category = data.category || body.category;
+        const description = data.description || body.description;
         
         // Find claim by ID or policy number
         let claimId = claim_id;
