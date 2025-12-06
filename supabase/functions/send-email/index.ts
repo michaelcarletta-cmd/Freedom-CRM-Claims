@@ -18,54 +18,44 @@ interface RecipientInfo {
   type: string;
 }
 
-interface MailjetAttachment {
-  ContentType: string;
-  Filename: string;
-  Base64Content: string;
+interface ResendAttachment {
+  filename: string;
+  content: string; // base64
 }
 
-async function sendMailjetEmail(
-  toEmails: string[], 
-  subject: string, 
+async function sendResendEmail(
+  apiKey: string,
+  toEmails: string[],
+  subject: string,
   htmlContent: string,
-  attachments?: MailjetAttachment[]
+  attachments?: ResendAttachment[]
 ) {
-  const apiKey = Deno.env.get("MAILJET_API_KEY");
-  const secretKey = Deno.env.get("MAILJET_SECRET_KEY");
-  
-  const toRecipients = toEmails.map(email => ({ Email: email }));
-  
-  const message: any = {
-    From: {
-      Email: "claims@freedomclaims.work",
-      Name: "Freedom Claims"
-    },
-    To: toRecipients,
-    Subject: subject,
-    HTMLPart: htmlContent
+  const payload: any = {
+    from: "Freedom Claims <claims@freedomclaims.work>",
+    to: toEmails,
+    subject: subject,
+    html: htmlContent,
   };
 
   if (attachments && attachments.length > 0) {
-    message.Attachments = attachments;
+    payload.attachments = attachments;
   }
 
-  const response = await fetch("https://api.mailjet.com/v3.1/send", {
+  const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Basic ${btoa(`${apiKey}:${secretKey}`)}`,
+      "Authorization": `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      Messages: [message]
-    }),
+    body: JSON.stringify(payload),
   });
 
   const result = await response.json();
-  
+
   if (!response.ok) {
-    throw new Error(`Mailjet error: ${JSON.stringify(result)}`);
+    throw new Error(`Resend error: ${JSON.stringify(result)}`);
   }
-  
+
   return result;
 }
 
@@ -75,6 +65,11 @@ serve(async (req) => {
   }
 
   try {
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    if (!resendApiKey) {
+      throw new Error("RESEND_API_KEY not configured");
+    }
+    
     const requestBody = await req.json();
     
     // Support both old single recipient format and new multiple recipients format
@@ -161,7 +156,7 @@ serve(async (req) => {
       : body;
 
     // Process attachments if provided
-    const emailAttachments: MailjetAttachment[] = [];
+    const emailAttachments: ResendAttachment[] = [];
     
     if (attachments && Array.isArray(attachments) && attachments.length > 0) {
       console.log(`Processing ${attachments.length} attachments`);
@@ -185,9 +180,8 @@ serve(async (req) => {
           );
           
           emailAttachments.push({
-            ContentType: attachment.fileType || 'application/octet-stream',
-            Filename: attachment.fileName,
-            Base64Content: base64Content,
+            filename: attachment.fileName,
+            content: base64Content,
           });
           
           console.log(`Successfully processed attachment: ${attachment.fileName}`);
@@ -210,16 +204,18 @@ serve(async (req) => {
       </div>
     `;
 
-    console.log(`Sending email to ${toEmails.join(', ')} with ${emailAttachments.length} attachments`);
+    console.log(`Sending email via Resend to ${toEmails.join(', ')} with ${emailAttachments.length} attachments`);
 
-    const emailResponse = await sendMailjetEmail(
+    // Send via Resend
+    const emailResponse = await sendResendEmail(
+      resendApiKey,
       toEmails,
       subject,
       htmlContent,
       emailAttachments.length > 0 ? emailAttachments : undefined
     );
 
-    console.log(`Email sent:`, emailResponse);
+    console.log(`Email sent via Resend:`, emailResponse);
 
     // Log email to database for each recipient if claimId provided
     if (claimId) {
@@ -238,7 +234,6 @@ serve(async (req) => {
 
         if (dbError) {
           console.error(`Failed to log email to database for ${recipient.email}:`, dbError);
-          // Don't throw error - email was sent successfully
         }
       }
     }
@@ -247,7 +242,8 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         recipientCount: recipients.length,
-        attachmentCount: emailAttachments.length 
+        attachmentCount: emailAttachments.length,
+        messageId: emailResponse.id
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
