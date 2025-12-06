@@ -28,14 +28,19 @@ async function sendResendEmail(
   toEmails: string[],
   subject: string,
   htmlContent: string,
-  attachments?: ResendAttachment[]
+  attachments?: ResendAttachment[],
+  ccEmails?: string[]
 ) {
-  const payload: any = {
+const payload: any = {
     from: "Freedom Claims <claims@freedomclaims.work>",
     to: toEmails,
     subject: subject,
     html: htmlContent,
   };
+
+  if (ccEmails && ccEmails.length > 0) {
+    payload.cc = ccEmails;
+  }
 
   if (attachments && attachments.length > 0) {
     payload.attachments = attachments;
@@ -87,7 +92,7 @@ serve(async (req) => {
       }];
     }
     
-    const { subject, body, claimId, attachments } = requestBody;
+    const { subject, body, claimId, attachments, claimEmailCc } = requestBody;
 
     if (recipients.length === 0 || !subject || !body) {
       throw new Error("Missing required fields: recipients, subject, and body are required");
@@ -204,7 +209,13 @@ serve(async (req) => {
       </div>
     `;
 
-    console.log(`Sending email via Resend to ${toEmails.join(', ')} with ${emailAttachments.length} attachments`);
+    // Build CC list with claim email if provided
+    const ccList: string[] = [];
+    if (claimEmailCc) {
+      ccList.push(claimEmailCc);
+    }
+
+    console.log(`Sending email via Resend to ${toEmails.join(', ')}${ccList.length > 0 ? ` (CC: ${ccList.join(', ')})` : ''} with ${emailAttachments.length} attachments`);
 
     // Send via Resend
     const emailResponse = await sendResendEmail(
@@ -212,7 +223,8 @@ serve(async (req) => {
       toEmails,
       subject,
       htmlContent,
-      emailAttachments.length > 0 ? emailAttachments : undefined
+      emailAttachments.length > 0 ? emailAttachments : undefined,
+      ccList.length > 0 ? ccList : undefined
     );
 
     console.log(`Email sent via Resend:`, emailResponse);

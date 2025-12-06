@@ -333,12 +333,26 @@ GUIDELINES:
       if (pendingAction.action_type === 'email_response') {
         const draft = pendingAction.draft_content as any;
         
+        // Fetch claim to get policy number for CC email
+        const { data: claim } = await supabase
+          .from('claims')
+          .select('policy_number, id')
+          .eq('id', pendingAction.claim_id)
+          .single();
+
+        // Build claim-specific email for CC
+        const sanitizedPolicyNumber = claim?.policy_number 
+          ? claim.policy_number.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+          : pendingAction.claim_id.slice(0, 8);
+        const claimEmail = `claim-${sanitizedPolicyNumber}@claims.freedomclaims.work`;
+        
         // Send the email via send-email function
         const emailPayload = {
           recipients: [{ email: draft.to_email, name: draft.to_name }],
           subject: draft.subject,
           body: draft.body,
           claimId: pendingAction.claim_id,
+          claimEmailCc: claimEmail,
         };
 
         const sendResponse = await fetch(

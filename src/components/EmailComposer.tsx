@@ -249,6 +249,12 @@ export function EmailComposer({
 
     setSending(true);
     try {
+      // Build the claim-specific email address for CC
+      const sanitizedPolicyNumber = claim.policy_number 
+        ? claim.policy_number.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+        : claim.id.slice(0, 8);
+      const claimEmail = `claim-${sanitizedPolicyNumber}@claims.freedomclaims.work`;
+
       const { error } = await supabase.functions.invoke("send-email", {
         body: {
           recipients: selectedRecipients.map(r => ({
@@ -259,6 +265,7 @@ export function EmailComposer({
           subject: emailSubject,
           body,
           claimId,
+          claimEmailCc: claimEmail,
           attachments: selectedFiles.map(f => ({
             filePath: f.file_path,
             fileName: f.file_name,
