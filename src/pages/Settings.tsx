@@ -37,6 +37,7 @@ import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
 import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { ZapierIntegrationSettings } from "@/components/settings/ZapierIntegrationSettings";
+import NotificationPreferencesSettings from "@/components/settings/NotificationPreferencesSettings";
 import { useQuery } from "@tanstack/react-query";
 
 interface ClaimStatus {
@@ -307,6 +308,7 @@ export default function Settings() {
       <Tabs defaultValue="workflow" className="space-y-6">
         <TabsList className="flex flex-col md:flex-row md:flex-wrap h-auto w-full bg-muted/40 p-2 gap-1">
           <TabsTrigger value="profile" className="w-full md:w-auto justify-start text-base font-medium px-4">My Profile</TabsTrigger>
+          <TabsTrigger value="notifications" className="w-full md:w-auto justify-start text-base font-medium px-4">Notifications</TabsTrigger>
           <TabsTrigger value="workflow" className="w-full md:w-auto justify-start text-base font-medium px-4">Workflow Management</TabsTrigger>
           <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium px-4">User Management</TabsTrigger>
           <TabsTrigger value="templates" className="w-full md:w-auto justify-start text-base font-medium px-4">Templates</TabsTrigger>
@@ -322,6 +324,10 @@ export default function Settings() {
 
         <TabsContent value="profile" className="w-full">
           <ProfileSettings />
+        </TabsContent>
+
+        <TabsContent value="notifications" className="w-full">
+          <NotificationPreferencesSettings />
         </TabsContent>
 
         <TabsContent value="workflow" className="w-full space-y-6">
