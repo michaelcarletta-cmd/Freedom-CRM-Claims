@@ -5,8 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Bot, Mail, MessageSquare, FileText, Sparkles, Send } from "lucide-react";
+import { Loader2, Bot, Mail, MessageSquare, FileText, Sparkles, Send, Clock, RefreshCw, CheckCircle, XCircle } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -14,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
 interface ClaimAutomationSettingsProps {
   claimId: string;
@@ -23,6 +25,21 @@ interface AutomationSettings {
   auto_respond_emails: boolean;
   auto_update_notes: boolean;
   auto_send_sms: boolean;
+}
+
+interface ClaimAutomation {
+  id: string;
+  claim_id: string;
+  is_enabled: boolean;
+  settings: AutomationSettings;
+  follow_up_enabled: boolean;
+  follow_up_interval_days: number;
+  follow_up_max_count: number;
+  follow_up_current_count: number;
+  follow_up_last_sent_at: string | null;
+  follow_up_next_at: string | null;
+  follow_up_stopped_at: string | null;
+  follow_up_stop_reason: string | null;
 }
 
 export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProps) => {
@@ -40,7 +57,12 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
         .maybeSingle();
 
       if (error) throw error;
-      return data;
+      if (!data) return null;
+      
+      return {
+        ...data,
+        settings: data.settings as unknown as AutomationSettings,
+      } as ClaimAutomation;
     },
   });
 
@@ -55,7 +77,10 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
             auto_respond_emails: true,
             auto_update_notes: true,
             auto_send_sms: false,
-          },
+          } as any,
+          follow_up_enabled: false,
+          follow_up_interval_days: 3,
+          follow_up_max_count: 3,
         })
         .select()
         .single();
@@ -73,7 +98,7 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (updates: { is_enabled?: boolean; settings?: Record<string, boolean> }) => {
+    mutationFn: async (updates: Record<string, any>) => {
       const { error } = await supabase
         .from("claim_automations")
         .update(updates)
@@ -122,12 +147,70 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
 
   const handleSettingChange = (key: keyof AutomationSettings, value: boolean) => {
     if (automation) {
-      const currentSettings = (automation.settings || {}) as Record<string, boolean>;
+      const currentSettings = automation.settings || {};
       updateMutation.mutate({
         settings: {
           ...currentSettings,
           [key]: value,
         },
+      });
+    }
+  };
+
+  const handleEnableFollowUp = () => {
+    if (automation) {
+      const nextAt = new Date();
+      nextAt.setDate(nextAt.getDate() + (automation.follow_up_interval_days || 3));
+      
+      updateMutation.mutate({
+        follow_up_enabled: true,
+        follow_up_current_count: 0,
+        follow_up_next_at: nextAt.toISOString(),
+        follow_up_stopped_at: null,
+        follow_up_stop_reason: null,
+      });
+      
+      toast({
+        title: "Follow-ups Enabled",
+        description: `First follow-up will be sent in ${automation.follow_up_interval_days || 3} days if no response.`,
+      });
+    }
+  };
+
+  const handleDisableFollowUp = () => {
+    if (automation) {
+      updateMutation.mutate({
+        follow_up_enabled: false,
+        follow_up_stopped_at: new Date().toISOString(),
+        follow_up_stop_reason: 'manual',
+      });
+    }
+  };
+
+  const handleResetFollowUp = () => {
+    if (automation) {
+      const nextAt = new Date();
+      nextAt.setDate(nextAt.getDate() + (automation.follow_up_interval_days || 3));
+      
+      updateMutation.mutate({
+        follow_up_enabled: true,
+        follow_up_current_count: 0,
+        follow_up_next_at: nextAt.toISOString(),
+        follow_up_stopped_at: null,
+        follow_up_stop_reason: null,
+      });
+      
+      toast({
+        title: "Follow-ups Reset",
+        description: "Follow-up counter has been reset and re-enabled.",
+      });
+    }
+  };
+
+  const handleUpdateFollowUpSettings = (field: string, value: number) => {
+    if (automation) {
+      updateMutation.mutate({
+        [field]: value,
       });
     }
   };
@@ -142,7 +225,7 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
     );
   }
 
-  const settings = automation?.settings as unknown as AutomationSettings | undefined;
+  const settings = automation?.settings;
 
   return (
     <Card className="bg-card border-border">
@@ -255,6 +338,125 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
                     checked={settings?.auto_send_sms ?? false}
                     onCheckedChange={(v) => handleSettingChange("auto_send_sms", v)}
                   />
+                </div>
+
+                {/* Automated Follow-ups Section */}
+                <div className="pt-4 border-t border-border">
+                  <h4 className="text-sm font-medium text-muted-foreground mb-3">Automated Follow-ups</h4>
+                  
+                  <div className="p-3 bg-muted/30 rounded-lg space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Clock className="h-5 w-5 text-primary" />
+                        <div>
+                          <Label className="text-sm font-medium">Auto Follow-up Emails</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Send follow-up emails if no response is received
+                          </p>
+                        </div>
+                      </div>
+                      {!automation.follow_up_enabled ? (
+                        <Button
+                          size="sm"
+                          onClick={handleEnableFollowUp}
+                          disabled={updateMutation.isPending}
+                        >
+                          Enable
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleDisableFollowUp}
+                          disabled={updateMutation.isPending}
+                        >
+                          Disable
+                        </Button>
+                      )}
+                    </div>
+
+                    {automation.follow_up_enabled && (
+                      <div className="space-y-3 pt-3 border-t border-border/50">
+                        {/* Follow-up Status */}
+                        <div className="flex items-center gap-2">
+                          {automation.follow_up_stopped_at ? (
+                            <Badge variant="secondary" className="flex items-center gap-1">
+                              <XCircle className="h-3 w-3" />
+                              Stopped: {automation.follow_up_stop_reason === 'response_received' 
+                                ? 'Response Received' 
+                                : automation.follow_up_stop_reason === 'max_count_reached'
+                                ? 'Max Reached'
+                                : 'Manually Stopped'}
+                            </Badge>
+                          ) : (
+                            <Badge className="flex items-center gap-1 bg-green-500/20 text-green-500 hover:bg-green-500/30">
+                              <CheckCircle className="h-3 w-3" />
+                              Active - {automation.follow_up_current_count}/{automation.follow_up_max_count} sent
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Settings */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Send every</Label>
+                            <Select 
+                              value={automation.follow_up_interval_days?.toString() || "3"}
+                              onValueChange={(v) => handleUpdateFollowUpSettings('follow_up_interval_days', parseInt(v))}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1">1 day</SelectItem>
+                                <SelectItem value="2">2 days</SelectItem>
+                                <SelectItem value="3">3 days</SelectItem>
+                                <SelectItem value="5">5 days</SelectItem>
+                                <SelectItem value="7">1 week</SelectItem>
+                                <SelectItem value="14">2 weeks</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Max follow-ups</Label>
+                            <Select 
+                              value={automation.follow_up_max_count?.toString() || "3"}
+                              onValueChange={(v) => handleUpdateFollowUpSettings('follow_up_max_count', parseInt(v))}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1">1</SelectItem>
+                                <SelectItem value="2">2</SelectItem>
+                                <SelectItem value="3">3</SelectItem>
+                                <SelectItem value="5">5</SelectItem>
+                                <SelectItem value="10">10</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        {/* Next follow-up or reset button */}
+                        {automation.follow_up_stopped_at ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full"
+                            onClick={handleResetFollowUp}
+                            disabled={updateMutation.isPending}
+                          >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Reset & Re-enable
+                          </Button>
+                        ) : automation.follow_up_next_at && (
+                          <p className="text-xs text-muted-foreground">
+                            Next follow-up: {new Date(automation.follow_up_next_at).toLocaleDateString()} at {new Date(automation.follow_up_next_at).toLocaleTimeString()}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-border">

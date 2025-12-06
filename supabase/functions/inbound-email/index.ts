@@ -306,7 +306,20 @@ serve(async (req) => {
       .maybeSingle();
 
     if (automation) {
-      const settings = automation.settings as { auto_respond_emails?: boolean } | null;
+      const settings = automation.settings as { auto_respond_emails?: boolean; auto_update_notes?: boolean } | null;
+      
+      // IMPORTANT: Stop follow-ups when a response is received
+      if (automation.follow_up_enabled && !automation.follow_up_stopped_at) {
+        console.log(`Stopping follow-ups for claim ${claim.claim_number} - response received`);
+        
+        await supabase
+          .from('claim_automations')
+          .update({
+            follow_up_stopped_at: new Date().toISOString(),
+            follow_up_stop_reason: 'response_received',
+          })
+          .eq('id', automation.id);
+      }
       
       if (settings?.auto_respond_emails) {
         console.log(`Triggering AI response draft for claim ${claim.claim_number}`);
@@ -324,17 +337,17 @@ serve(async (req) => {
             emailId: insertedEmail.id,
           }),
         }).catch(err => console.error('Failed to trigger AI draft:', err));
+      }
 
-        // Also add a note if auto_update_notes is enabled
-        if ((settings as any)?.auto_update_notes) {
-          await supabase
-            .from('claim_updates')
-            .insert({
-              claim_id: claim.id,
-              content: `📧 Inbound email received from ${senderName} (${senderEmail}): "${subject}"`,
-              update_type: 'inbound_email',
-            });
-        }
+      // Add a note if auto_update_notes is enabled
+      if (settings?.auto_update_notes) {
+        await supabase
+          .from('claim_updates')
+          .insert({
+            claim_id: claim.id,
+            content: `📧 Inbound email received from ${senderName} (${senderEmail}): "${subject}"`,
+            update_type: 'inbound_email',
+          });
       }
     }
 

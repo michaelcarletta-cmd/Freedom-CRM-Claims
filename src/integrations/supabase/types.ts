@@ -334,6 +334,14 @@ export type Database = {
           claim_id: string
           created_at: string
           created_by: string | null
+          follow_up_current_count: number
+          follow_up_enabled: boolean
+          follow_up_interval_days: number
+          follow_up_last_sent_at: string | null
+          follow_up_max_count: number
+          follow_up_next_at: string | null
+          follow_up_stop_reason: string | null
+          follow_up_stopped_at: string | null
           id: string
           is_enabled: boolean
           settings: Json
@@ -343,6 +351,14 @@ export type Database = {
           claim_id: string
           created_at?: string
           created_by?: string | null
+          follow_up_current_count?: number
+          follow_up_enabled?: boolean
+          follow_up_interval_days?: number
+          follow_up_last_sent_at?: string | null
+          follow_up_max_count?: number
+          follow_up_next_at?: string | null
+          follow_up_stop_reason?: string | null
+          follow_up_stopped_at?: string | null
           id?: string
           is_enabled?: boolean
           settings?: Json
@@ -352,6 +368,14 @@ export type Database = {
           claim_id?: string
           created_at?: string
           created_by?: string | null
+          follow_up_current_count?: number
+          follow_up_enabled?: boolean
+          follow_up_interval_days?: number
+          follow_up_last_sent_at?: string | null
+          follow_up_max_count?: number
+          follow_up_next_at?: string | null
+          follow_up_stop_reason?: string | null
+          follow_up_stopped_at?: string | null
           id?: string
           is_enabled?: boolean
           settings?: Json
