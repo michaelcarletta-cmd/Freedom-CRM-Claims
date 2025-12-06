@@ -231,6 +231,12 @@ export const PendingApprovals = () => {
                         <span>To: {action.draft_content.to_email}</span>
                       </>
                     )}
+                    {action.draft_content.to_number && (
+                      <>
+                        <span>•</span>
+                        <span>To: {action.draft_content.to_number}</span>
+                      </>
+                    )}
                   </div>
                 </div>
                 {action.claims && (
@@ -254,6 +260,12 @@ export const PendingApprovals = () => {
                 <div className="text-sm text-muted-foreground mt-1">
                   <span className="font-medium text-foreground">Subject: </span>
                   {action.draft_content.subject}
+                </div>
+              )}
+              {action.draft_content.message && (
+                <div className="text-sm text-muted-foreground mt-1 truncate max-w-md">
+                  <span className="font-medium text-foreground">Message: </span>
+                  {action.draft_content.message}
                 </div>
               )}
             </CardContent>

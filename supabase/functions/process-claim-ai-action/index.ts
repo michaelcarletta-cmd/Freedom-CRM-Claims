@@ -186,6 +186,136 @@ Draft a clear, professional response addressing their inquiry. The response shou
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
 
+    } else if (action === 'draft_sms') {
+      // Draft an SMS message based on claim context
+      const { recipientType, recipientPhone } = await req.json();
+      
+      // Fetch claim data for context
+      const { data: claim, error: claimError } = await supabase
+        .from('claims')
+        .select('*')
+        .eq('id', claimId)
+        .single();
+
+      if (claimError || !claim) {
+        throw new Error('Claim not found');
+      }
+
+      // Get recent activity for context
+      const { data: notes } = await supabase
+        .from('claim_updates')
+        .select('content, created_at')
+        .eq('claim_id', claimId)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      // Get recent emails
+      const { data: recentEmails } = await supabase
+        .from('emails')
+        .select('subject, body, sent_at')
+        .eq('claim_id', claimId)
+        .order('sent_at', { ascending: false })
+        .limit(3);
+
+      const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+      if (!openaiApiKey) {
+        throw new Error('OPENAI_API_KEY not configured');
+      }
+
+      const systemPrompt = `You are a professional public adjuster assistant for Freedom Claims. Draft a brief, professional SMS message.
+
+CLAIM CONTEXT:
+- Claim Number: ${claim.claim_number || 'N/A'}
+- Policyholder: ${claim.policyholder_name || 'N/A'}
+- Loss Type: ${claim.loss_type || 'N/A'}
+- Loss Date: ${claim.loss_date || 'N/A'}
+- Current Status: ${claim.status || 'N/A'}
+
+RECENT ACTIVITY:
+${notes?.map(n => `- ${n.content}`).join('\n') || 'No recent notes'}
+
+RECENT EMAILS:
+${recentEmails?.map(e => `- ${e.subject}`).join('\n') || 'No recent emails'}
+
+GUIDELINES:
+1. Keep SMS under 160 characters when possible
+2. Be professional but friendly
+3. Include relevant claim updates
+4. End with "- Freedom Claims" signature
+5. No URLs or special characters that may not render properly`;
+
+      const userPrompt = `Draft a brief SMS update for the ${recipientType || 'policyholder'} about this claim. Provide a helpful status update or next steps based on recent activity.`;
+
+      const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.7,
+        }),
+      });
+
+      const aiData = await aiResponse.json();
+      
+      if (!aiResponse.ok) {
+        console.error('OpenAI error:', aiData);
+        throw new Error('Failed to generate AI response');
+      }
+
+      const draftMessage = aiData.choices[0].message.content;
+
+      // Determine phone number
+      let toNumber = recipientPhone;
+      if (!toNumber) {
+        if (recipientType === 'adjuster') {
+          toNumber = claim.adjuster_phone;
+        } else {
+          toNumber = claim.policyholder_phone;
+        }
+      }
+
+      // Create pending action for approval
+      const { data: pendingAction, error: insertError } = await supabase
+        .from('claim_ai_pending_actions')
+        .insert({
+          claim_id: claimId,
+          action_type: 'sms',
+          draft_content: {
+            to_number: toNumber,
+            recipient_type: recipientType || 'policyholder',
+            message: draftMessage,
+          },
+          ai_reasoning: `Drafted SMS update for ${recipientType || 'policyholder'} based on recent claim activity.`,
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Failed to create pending action:', insertError);
+        throw new Error('Failed to save SMS draft');
+      }
+
+      // Add activity note
+      await supabase
+        .from('claim_updates')
+        .insert({
+          claim_id: claimId,
+          content: `🤖 AI Assistant drafted an SMS for ${recipientType || 'policyholder'}. Awaiting approval in Inbox.`,
+          update_type: 'ai_action',
+        });
+
+      return new Response(
+        JSON.stringify({ success: true, pendingActionId: pendingAction.id }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+
     } else if (action === 'approve_and_send') {
       // Fetch the pending action
       const { data: pendingAction, error: fetchError } = await supabase
