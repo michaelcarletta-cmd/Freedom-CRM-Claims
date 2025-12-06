@@ -272,6 +272,101 @@ export type Database = {
           },
         ]
       }
+      claim_ai_pending_actions: {
+        Row: {
+          action_type: string
+          ai_reasoning: string | null
+          claim_id: string
+          created_at: string
+          draft_content: Json
+          id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          trigger_email_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          action_type: string
+          ai_reasoning?: string | null
+          claim_id: string
+          created_at?: string
+          draft_content: Json
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          trigger_email_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          action_type?: string
+          ai_reasoning?: string | null
+          claim_id?: string
+          created_at?: string
+          draft_content?: Json
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          trigger_email_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_ai_pending_actions_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_ai_pending_actions_trigger_email_id_fkey"
+            columns: ["trigger_email_id"]
+            isOneToOne: false
+            referencedRelation: "emails"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_automations: {
+        Row: {
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_enabled: boolean
+          settings: Json
+          updated_at: string
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_enabled?: boolean
+          settings?: Json
+          updated_at?: string
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_enabled?: boolean
+          settings?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_automations_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_checks: {
         Row: {
           amount: number

@@ -5,9 +5,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, FileSignature, ArrowRight, Clock } from "lucide-react";
+import { Loader2, Mail, FileSignature, ArrowRight, Clock, Bot } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
+import { PendingApprovals } from "@/components/inbox/PendingApprovals";
 
 const Inbox = () => {
   const navigate = useNavigate();
@@ -59,6 +60,19 @@ const Inbox = () => {
     },
   });
 
+  // Fetch pending AI actions count
+  const { data: pendingCount } = useQuery({
+    queryKey: ["pending-ai-actions-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("claim_ai_pending_actions")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending");
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
   const isLoading = emailsLoading || signaturesLoading;
 
   const handleEmailClick = (claimId: string) => {
@@ -96,12 +110,16 @@ const Inbox = () => {
       <div>
         <h1 className="text-3xl font-bold text-foreground">Inbox</h1>
         <p className="text-muted-foreground mt-2">
-          Manage all emails and signature requests
+          Manage all emails, signature requests, and AI-drafted messages
         </p>
       </div>
 
-      <Tabs defaultValue="emails" className="space-y-4">
+      <Tabs defaultValue="approvals" className="space-y-4">
         <TabsList className="flex flex-row w-full bg-muted/40 p-2 rounded-lg gap-1 overflow-x-auto scrollbar-hide">
+          <TabsTrigger value="approvals" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
+            <Bot className="h-4 w-4 mr-2" />
+            AI Approvals {pendingCount ? `(${pendingCount})` : ""}
+          </TabsTrigger>
           <TabsTrigger value="emails" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
             <Mail className="h-4 w-4 mr-2" />
             Emails ({emails?.length || 0})
@@ -111,6 +129,10 @@ const Inbox = () => {
             Signature Requests ({signatureRequests?.length || 0})
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="approvals" className="space-y-4">
+          <PendingApprovals />
+        </TabsContent>
 
         <TabsContent value="emails" className="space-y-4">
           {!emails || emails.length === 0 ? (

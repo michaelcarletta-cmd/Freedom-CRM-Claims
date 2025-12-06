@@ -17,6 +17,7 @@ import { ClaimPhotos } from "@/components/claim-detail/ClaimPhotos";
 import { EditClaimDialog } from "@/components/claim-detail/EditClaimDialog";
 import { DeleteClaimDialog } from "@/components/claim-detail/DeleteClaimDialog";
 import { NotifyPortalDialog } from "@/components/claim-detail/NotifyPortalDialog";
+import { ClaimAutomationSettings } from "@/components/claim-detail/ClaimAutomationSettings";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Edit, Trash2, Bell } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -375,16 +376,20 @@ const ClaimDetail = () => {
       </Tabs>
 
       {isStaffOrAdmin && activeTab === "overview" && (
-        <div className="mt-12 pt-6 border-t border-destructive/30">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-semibold text-destructive">Danger Zone</h3>
-              <p className="text-sm text-muted-foreground">Permanently delete this claim and all associated data</p>
+        <div className="space-y-6">
+          <ClaimAutomationSettings claimId={id!} />
+          
+          <div className="pt-6 border-t border-destructive/30">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-destructive">Danger Zone</h3>
+                <p className="text-sm text-muted-foreground">Permanently delete this claim and all associated data</p>
+              </div>
+              <Button size="sm" variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Claim
+              </Button>
             </div>
-            <Button size="sm" variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Claim
-            </Button>
           </div>
         </div>
       )}
