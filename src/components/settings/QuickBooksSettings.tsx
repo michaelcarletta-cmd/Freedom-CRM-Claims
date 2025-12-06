@@ -25,14 +25,22 @@ export function QuickBooksSettings() {
     // Check for existing connection
     const stored = localStorage.getItem(QUICKBOOKS_STORAGE_KEY);
     if (stored) {
-      const conn = JSON.parse(stored) as QuickBooksConnection;
-      // Check if token is still valid (with 5 minute buffer)
-      if (conn.expiresAt > Date.now() + 300000) {
-        setConnection(conn);
-        setIsConnected(true);
-      } else if (conn.refreshToken) {
-        // Try to refresh the token
-        refreshToken(conn.refreshToken);
+      try {
+        const conn = JSON.parse(stored) as QuickBooksConnection;
+        // Check if token is still valid (with 5 minute buffer)
+        if (conn.expiresAt > Date.now() + 300000) {
+          setConnection(conn);
+          setIsConnected(true);
+        } else if (conn.refreshToken && conn.realmId) {
+          // Try to refresh the token - pass full connection to preserve realmId
+          refreshTokenWithConnection(conn);
+        } else {
+          // Invalid stored connection, clear it
+          localStorage.removeItem(QUICKBOOKS_STORAGE_KEY);
+        }
+      } catch (e) {
+        console.error('Error parsing stored QuickBooks connection:', e);
+        localStorage.removeItem(QUICKBOOKS_STORAGE_KEY);
       }
     }
 
@@ -40,7 +48,6 @@ export function QuickBooksSettings() {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const realmId = urlParams.get('realmId');
-    const state = urlParams.get('state');
 
     if (code && realmId) {
       handleOAuthCallback(code, realmId);
@@ -49,35 +56,69 @@ export function QuickBooksSettings() {
     }
   }, []);
 
-  const refreshToken = async (refreshToken: string) => {
+  // Set up automatic token refresh 5 minutes before expiration
+  useEffect(() => {
+    if (!connection || !isConnected) return;
+
+    const timeUntilRefresh = connection.expiresAt - Date.now() - 300000; // 5 min before expiry
+    
+    if (timeUntilRefresh <= 0) {
+      // Token already expired or about to, refresh now
+      refreshTokenWithConnection(connection);
+      return;
+    }
+
+    const refreshTimer = setTimeout(() => {
+      console.log('Auto-refreshing QuickBooks token');
+      refreshTokenWithConnection(connection);
+    }, timeUntilRefresh);
+
+    return () => clearTimeout(refreshTimer);
+  }, [connection, isConnected]);
+
+  const refreshTokenWithConnection = async (existingConnection: QuickBooksConnection) => {
     try {
+      console.log('Refreshing QuickBooks token for realm:', existingConnection.realmId);
+      
       const { data, error } = await supabase.functions.invoke('quickbooks-auth', {
         body: {
           action: 'refresh-token',
-          refreshToken,
+          refreshToken: existingConnection.refreshToken,
         },
       });
 
       if (error || !data?.success) {
-        console.error('Token refresh failed');
-        handleDisconnect();
+        console.error('Token refresh failed:', error || data);
+        // Don't disconnect immediately - QuickBooks refresh tokens are valid for 100 days
+        // Only disconnect if refresh fails multiple times
+        const failCount = parseInt(localStorage.getItem('qb_refresh_failures') || '0') + 1;
+        localStorage.setItem('qb_refresh_failures', failCount.toString());
+        
+        if (failCount >= 3) {
+          console.error('Multiple refresh failures, disconnecting');
+          handleDisconnect();
+          localStorage.removeItem('qb_refresh_failures');
+        }
         return;
       }
 
+      // Reset failure count on success
+      localStorage.removeItem('qb_refresh_failures');
+
       const newConnection: QuickBooksConnection = {
         accessToken: data.tokens.access_token,
-        refreshToken: data.tokens.refresh_token,
-        realmId: connection?.realmId || '',
+        refreshToken: data.tokens.refresh_token || existingConnection.refreshToken, // Keep old if not provided
+        realmId: existingConnection.realmId, // Always preserve realmId
         expiresAt: Date.now() + (data.tokens.expires_in * 1000),
-        connectedAt: connection?.connectedAt || new Date().toISOString(),
+        connectedAt: existingConnection.connectedAt,
       };
 
       localStorage.setItem(QUICKBOOKS_STORAGE_KEY, JSON.stringify(newConnection));
       setConnection(newConnection);
       setIsConnected(true);
+      console.log('QuickBooks token refreshed successfully');
     } catch (err) {
       console.error('Token refresh error:', err);
-      handleDisconnect();
     }
   };
 
