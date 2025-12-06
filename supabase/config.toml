@@ -71,3 +71,6 @@ verify_jwt = true
 
 [functions.zapier-webhook]
 verify_jwt = false
+
+[functions.task-reminders]
+verify_jwt = false
