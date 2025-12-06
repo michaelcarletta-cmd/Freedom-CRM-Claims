@@ -6,7 +6,14 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Bot, Mail, MessageSquare, FileText, Sparkles } from "lucide-react";
+import { Loader2, Bot, Mail, MessageSquare, FileText, Sparkles, Send } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ClaimAutomationSettingsProps {
   claimId: string;
@@ -21,6 +28,7 @@ interface AutomationSettings {
 export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [smsRecipient, setSmsRecipient] = useState("policyholder");
 
   const { data: automation, isLoading } = useQuery({
     queryKey: ["claim-automation", claimId],
@@ -83,6 +91,34 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
       updateMutation.mutate({ is_enabled: !automation.is_enabled });
     }
   };
+
+  const draftSmsMutation = useMutation({
+    mutationFn: async (recipientType: string) => {
+      const { data, error } = await supabase.functions.invoke("process-claim-ai-action", {
+        body: {
+          action: "draft_sms",
+          claimId,
+          recipientType,
+        },
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast({
+        title: "SMS Draft Created",
+        description: "Check the Inbox > AI Approvals tab to review and send.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to draft SMS",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleSettingChange = (key: keyof AutomationSettings, value: boolean) => {
     if (automation) {
@@ -219,6 +255,40 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
                     checked={settings?.auto_send_sms ?? false}
                     onCheckedChange={(v) => handleSettingChange("auto_send_sms", v)}
                   />
+                </div>
+
+                <div className="pt-4 border-t border-border">
+                  <h4 className="text-sm font-medium text-muted-foreground mb-3">Manual AI Actions</h4>
+                  <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                    <MessageSquare className="h-5 w-5 text-primary" />
+                    <div className="flex-1">
+                      <Label className="text-sm font-medium">Draft SMS with AI</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Generate an SMS draft for approval
+                      </p>
+                    </div>
+                    <Select value={smsRecipient} onValueChange={setSmsRecipient}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="policyholder">Policyholder</SelectItem>
+                        <SelectItem value="adjuster">Adjuster</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => draftSmsMutation.mutate(smsRecipient)}
+                      disabled={draftSmsMutation.isPending}
+                    >
+                      {draftSmsMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
