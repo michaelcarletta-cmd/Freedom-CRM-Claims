@@ -273,7 +273,7 @@ serve(async (req) => {
     }
 
     // Log the email to the emails table
-    const { error: insertError } = await supabase
+    const { data: insertedEmail, error: insertError } = await supabase
       .from('emails')
       .insert({
         claim_id: claim.id,
@@ -283,7 +283,9 @@ serve(async (req) => {
         subject: subject,
         body: text || '(No Content)',
         sent_by: null, // Inbound emails have no internal sender
-      });
+      })
+      .select()
+      .single();
 
     if (insertError) {
       console.error("Failed to insert email:", insertError);
@@ -294,6 +296,47 @@ serve(async (req) => {
     }
 
     console.log(`Email logged to claim ${claim.claim_number} (policy: ${claim.policy_number}) from ${senderEmail}`);
+
+    // Check if this claim has AI automation enabled
+    const { data: automation } = await supabase
+      .from('claim_automations')
+      .select('*')
+      .eq('claim_id', claim.id)
+      .eq('is_enabled', true)
+      .maybeSingle();
+
+    if (automation) {
+      const settings = automation.settings as { auto_respond_emails?: boolean } | null;
+      
+      if (settings?.auto_respond_emails) {
+        console.log(`Triggering AI response draft for claim ${claim.claim_number}`);
+        
+        // Trigger AI to draft a response (fire and forget)
+        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-claim-ai-action`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'draft_email_response',
+            claimId: claim.id,
+            emailId: insertedEmail.id,
+          }),
+        }).catch(err => console.error('Failed to trigger AI draft:', err));
+
+        // Also add a note if auto_update_notes is enabled
+        if ((settings as any)?.auto_update_notes) {
+          await supabase
+            .from('claim_updates')
+            .insert({
+              claim_id: claim.id,
+              content: `📧 Inbound email received from ${senderName} (${senderEmail}): "${subject}"`,
+              update_type: 'inbound_email',
+            });
+        }
+      }
+    }
 
     return new Response(
       JSON.stringify({ success: true, claim_id: claim.id }),
