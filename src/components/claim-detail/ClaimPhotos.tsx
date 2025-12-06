@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Camera, Upload, Pencil, Trash2, Link2, FileText, Grid, Columns, X, Download, Eye, Sparkles } from "lucide-react";
+import { Camera, Upload, Pencil, Trash2, Link2, FileText, Grid, Columns, X, Download, Eye, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PhotoAnnotationEditor } from "./PhotoAnnotationEditor";
@@ -64,6 +64,8 @@ const PHOTO_CATEGORIES = [
   "General",
 ];
 
+const PHOTOS_PER_PAGE = 24;
+
 export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
   const [photos, setPhotos] = useState<ClaimPhoto[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
@@ -79,6 +81,7 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState("all");
   const [viewMode, setViewMode] = useState<"grid" | "before-after">("grid");
+  const [currentPage, setCurrentPage] = useState(1);
   
   // Upload form state
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
@@ -109,11 +112,35 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
     }
   }, [cameraDialogOpen, cameraStream]);
 
-  // Batch fetch all signed URLs when photos change
+  // Filter photos by category
+  const filteredPhotos = useMemo(() => {
+    return activeCategory === "all" 
+      ? photos 
+      : photos.filter(p => p.category === activeCategory);
+  }, [photos, activeCategory]);
+
+  // Paginate filtered photos
+  const paginatedPhotos = useMemo(() => {
+    const startIdx = (currentPage - 1) * PHOTOS_PER_PAGE;
+    return filteredPhotos.slice(startIdx, startIdx + PHOTOS_PER_PAGE);
+  }, [filteredPhotos, currentPage]);
+
+  const totalPages = Math.ceil(filteredPhotos.length / PHOTOS_PER_PAGE);
+
+  // Reset page when category changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeCategory]);
+
+  // Batch fetch signed URLs only for visible photos
   const fetchSignedUrls = useCallback(async (photosToFetch: ClaimPhoto[]) => {
     if (photosToFetch.length === 0) return;
     
-    const urlPromises = photosToFetch.map(async (photo) => {
+    // Only fetch URLs for photos we don't already have
+    const photosNeedingUrls = photosToFetch.filter(p => !photoUrls[p.id]);
+    if (photosNeedingUrls.length === 0) return;
+    
+    const urlPromises = photosNeedingUrls.map(async (photo) => {
       const path = photo.annotated_file_path || photo.file_path;
       const { data } = await supabase.storage
         .from("claim-files")
@@ -122,12 +149,17 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
     });
     
     const results = await Promise.all(urlPromises);
-    const urlMap: Record<string, string> = {};
+    const newUrls: Record<string, string> = {};
     results.forEach(({ id, url }) => {
-      if (url) urlMap[id] = url;
+      if (url) newUrls[id] = url;
     });
-    setPhotoUrls(urlMap);
-  }, []);
+    setPhotoUrls(prev => ({ ...prev, ...newUrls }));
+  }, [photoUrls]);
+
+  // Fetch URLs when paginated photos change
+  useEffect(() => {
+    fetchSignedUrls(paginatedPhotos);
+  }, [paginatedPhotos, fetchSignedUrls]);
 
   const fetchPhotos = async () => {
     setLoading(true);
@@ -142,17 +174,8 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
       toast({ title: "Error loading photos", variant: "destructive" });
     } else {
       setPhotos(data || []);
-      // Batch fetch all signed URLs
-      await fetchSignedUrls(data || []);
     }
     setLoading(false);
-  };
-
-  const getSignedUrl = async (path: string) => {
-    const { data } = await supabase.storage
-      .from("claim-files")
-      .createSignedUrl(path, 3600);
-    return data?.signedUrl;
   };
 
   const handleUpload = async () => {
@@ -235,6 +258,12 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
       if (error) throw error;
       
       toast({ title: "Photo deleted" });
+      // Clear URL from cache
+      setPhotoUrls(prev => {
+        const newUrls = { ...prev };
+        delete newUrls[photoId];
+        return newUrls;
+      });
       fetchPhotos();
     } catch (error) {
       toast({ title: "Error deleting photo", variant: "destructive" });
@@ -364,20 +393,21 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
     );
   };
 
-  const categories = ["all", ...new Set(photos.map(p => p.category))];
-  const filteredPhotos = activeCategory === "all" 
-    ? photos 
-    : photos.filter(p => p.category === activeCategory);
+  const categories = useMemo(() => {
+    return ["all", ...new Set(photos.map(p => p.category))];
+  }, [photos]);
 
-  const beforeAfterPairs = photos
-    .filter(p => p.before_after_pair_id && p.before_after_type === "before")
-    .map(beforePhoto => {
-      const afterPhoto = photos.find(
-        p => p.before_after_pair_id === beforePhoto.before_after_pair_id && p.before_after_type === "after"
-      );
-      return { before: beforePhoto, after: afterPhoto };
-    })
-    .filter(pair => pair.after);
+  const beforeAfterPairs = useMemo(() => {
+    return photos
+      .filter(p => p.before_after_pair_id && p.before_after_type === "before")
+      .map(beforePhoto => {
+        const afterPhoto = photos.find(
+          p => p.before_after_pair_id === beforePhoto.before_after_pair_id && p.before_after_type === "after"
+        );
+        return { before: beforePhoto, after: afterPhoto };
+      })
+      .filter(pair => pair.after);
+  }, [photos]);
 
   return (
     <div className="space-y-4">
@@ -527,21 +557,50 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
           </CardContent>
         </Card>
       ) : viewMode === "grid" ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {filteredPhotos.map(photo => (
-            <PhotoCard
-              key={photo.id}
-              photo={photo}
-              imageUrl={photoUrls[photo.id] || ""}
-              selected={selectedPhotos.includes(photo.id)}
-              onSelect={() => togglePhotoSelection(photo.id)}
-              onEdit={() => openEditDialog(photo)}
-              onAnnotate={() => openAnnotateDialog(photo)}
-              onDelete={() => handleDelete(photo.id)}
-              onPreview={() => openPreviewDialog(photo)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {paginatedPhotos.map(photo => (
+              <PhotoCard
+                key={photo.id}
+                photo={photo}
+                imageUrl={photoUrls[photo.id] || ""}
+                selected={selectedPhotos.includes(photo.id)}
+                onSelect={() => togglePhotoSelection(photo.id)}
+                onEdit={() => openEditDialog(photo)}
+                onAnnotate={() => openAnnotateDialog(photo)}
+                onDelete={() => handleDelete(photo.id)}
+                onPreview={() => openPreviewDialog(photo)}
+              />
+            ))}
+          </div>
+          
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-4 mt-6">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages} ({filteredPhotos.length} photos)
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
+        </>
       ) : (
         <div className="space-y-6">
           <h4 className="font-medium">Before/After Comparisons</h4>
@@ -637,14 +696,21 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
             {selectedPhotos.map((photoId, idx) => {
               const photo = photos.find(p => p.id === photoId);
               if (!photo) return null;
+              const url = photoUrls[photoId];
               return (
                 <div key={photoId} className="text-center">
                   <p className="text-sm font-medium mb-2">{idx === 0 ? "Before" : "After"}</p>
-                  <img
-                    src={`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/claim-files/${photo.file_path}`}
-                    alt={photo.file_name}
-                    className="rounded aspect-square object-cover"
-                  />
+                  {url ? (
+                    <img
+                      src={url}
+                      alt={photo.file_name}
+                      className="rounded aspect-square object-cover"
+                    />
+                  ) : (
+                    <div className="rounded aspect-square bg-muted flex items-center justify-center">
+                      <Camera className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -780,7 +846,7 @@ const PhotoCard = memo(function PhotoCard({
           />
         ) : (
           <div className="w-full h-full bg-muted flex items-center justify-center">
-            <Camera className="h-8 w-8 text-muted-foreground" />
+            <Camera className="h-8 w-8 text-muted-foreground animate-pulse" />
           </div>
         )}
         {photo.annotated_file_path && (
