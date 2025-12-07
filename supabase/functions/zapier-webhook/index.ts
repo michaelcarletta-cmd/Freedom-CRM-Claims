@@ -3,8 +3,47 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-signature',
 };
+
+// Verify HMAC-SHA256 signature
+async function verifyWebhookSignature(payload: string, signature: string, secret: string): Promise<boolean> {
+  try {
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    
+    const signatureBuffer = await crypto.subtle.sign(
+      'HMAC',
+      key,
+      encoder.encode(payload)
+    );
+    
+    const expectedSignature = Array.from(new Uint8Array(signatureBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    
+    // Constant-time comparison to prevent timing attacks
+    if (signature.length !== expectedSignature.length) {
+      return false;
+    }
+    
+    let result = 0;
+    for (let i = 0; i < signature.length; i++) {
+      result |= signature.charCodeAt(i) ^ expectedSignature.charCodeAt(i);
+    }
+    
+    return result === 0;
+  } catch (error) {
+    console.error('Signature verification error:', error);
+    return false;
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -14,9 +53,10 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const webhookSecret = Deno.env.get('ZAPIER_WEBHOOK_SECRET');
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get raw body text first for logging
+    // Get raw body text first for signature verification
     const rawBody = await req.text();
     console.log('Zapier webhook raw body length:', rawBody.length);
     
@@ -25,6 +65,33 @@ serve(async (req) => {
       return new Response(JSON.stringify({ status: 'ok', message: 'Webhook endpoint ready' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Verify webhook signature if secret is configured
+    if (webhookSecret) {
+      const signature = req.headers.get('x-webhook-signature');
+      
+      if (!signature) {
+        console.error('Missing webhook signature');
+        return new Response(JSON.stringify({ error: 'Missing webhook signature' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      const isValid = await verifyWebhookSignature(rawBody, signature, webhookSecret);
+      
+      if (!isValid) {
+        console.error('Invalid webhook signature');
+        return new Response(JSON.stringify({ error: 'Invalid webhook signature' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      console.log('Webhook signature verified successfully');
+    } else {
+      console.warn('ZAPIER_WEBHOOK_SECRET not configured - webhook authentication disabled');
     }
 
     let body;
@@ -41,7 +108,7 @@ serve(async (req) => {
     const action = body.action;
     const data = body.data || body;
 
-    console.log('Zapier webhook parsed:', JSON.stringify(body));
+    console.log('Zapier webhook parsed action:', action);
 
     switch (action) {
       case 'import_photo': {
