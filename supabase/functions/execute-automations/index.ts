@@ -369,7 +369,7 @@ async function sendEmail(supabase: any, config: any, execution: any) {
 }
 
 async function sendSms(supabase: any, config: any, execution: any) {
-  // Get claim data
+  // Get claim data with inspection
   const { data: claim } = await supabase
     .from('claims')
     .select('*')
@@ -377,6 +377,15 @@ async function sendSms(supabase: any, config: any, execution: any) {
     .single();
 
   if (!claim) throw new Error('Claim not found');
+
+  // Get latest inspection for merge fields
+  const { data: inspection } = await supabase
+    .from('inspections')
+    .select('inspection_date, inspection_time, inspector_name, inspection_type')
+    .eq('claim_id', execution.claim_id)
+    .order('inspection_date', { ascending: false })
+    .limit(1)
+    .single();
 
   // Determine recipient phone
   let recipientPhone = '';
@@ -394,7 +403,20 @@ async function sendSms(supabase: any, config: any, execution: any) {
     throw new Error(`No phone found for ${config.recipient_type}`);
   }
 
-  const messageBody = replaceVariables(config.message || '', claim, execution.trigger_data);
+  // Get message from template or config
+  let messageTemplate = config.message || '';
+  if (config.sms_template_id) {
+    const { data: template } = await supabase
+      .from('sms_templates')
+      .select('body')
+      .eq('id', config.sms_template_id)
+      .single();
+    if (template) {
+      messageTemplate = template.body;
+    }
+  }
+
+  const messageBody = replaceVariables(messageTemplate, claim, execution.trigger_data, inspection);
 
   // Use Twilio to send SMS
   const twilioAccountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
@@ -501,7 +523,17 @@ async function callWebhook(config: any, execution: any) {
   return { status: response.status, statusText: response.statusText };
 }
 
-function replaceVariables(template: string, claim: any, triggerData: any): string {
+// Helper to format time from 24h to 12h format
+function formatTimeTo12Hour(time24: string): string {
+  if (!time24) return '';
+  const [hours, minutes] = time24.split(':');
+  const hour = parseInt(hours, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${minutes} ${ampm}`;
+}
+
+function replaceVariables(template: string, claim: any, triggerData: any, inspection?: any): string {
   let result = template;
   
   // Replace claim variables
@@ -514,11 +546,23 @@ function replaceVariables(template: string, claim: any, triggerData: any): strin
     result = result.replace(/\{trigger\.(\w+)\}/g, (_, field) => triggerData[field] || '');
     
     // Replace inspection-specific variables for inspection_scheduled triggers
-    result = result.replace(/\{inspection\.date\}/g, triggerData.inspection_date || '');
-    result = result.replace(/\{inspection\.time\}/g, triggerData.inspection_time || '');
+    const inspDate = triggerData.inspection_date || '';
+    const inspTime = triggerData.inspection_time ? formatTimeTo12Hour(triggerData.inspection_time) : '';
+    result = result.replace(/\{inspection\.date\}/g, inspDate);
+    result = result.replace(/\{inspection\.time\}/g, inspTime);
     result = result.replace(/\{inspection\.type\}/g, triggerData.inspection_type || '');
     result = result.replace(/\{inspection\.inspector\}/g, triggerData.inspector_name || '');
     result = result.replace(/\{inspection\.notes\}/g, triggerData.notes || '');
+  }
+  
+  // Also replace from inspection parameter (for SMS with fetched inspection)
+  if (inspection) {
+    const inspDate = inspection.inspection_date || '';
+    const inspTime = inspection.inspection_time ? formatTimeTo12Hour(inspection.inspection_time) : '';
+    result = result.replace(/\{inspection\.date\}/g, inspDate);
+    result = result.replace(/\{inspection\.time\}/g, inspTime);
+    result = result.replace(/\{inspection\.type\}/g, inspection.inspection_type || '');
+    result = result.replace(/\{inspection\.inspector\}/g, inspection.inspector_name || '');
   }
   
   return result;

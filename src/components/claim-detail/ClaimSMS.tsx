@@ -249,8 +249,17 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
       const formattedDate = inspectionData.inspection_date 
         ? format(new Date(inspectionData.inspection_date), "MMMM d, yyyy")
         : "";
+      // Format time to 12-hour format (e.g., "2:30 PM")
+      let formattedTime = "";
+      if (inspectionData.inspection_time) {
+        const [hours, minutes] = inspectionData.inspection_time.split(':');
+        const hour = parseInt(hours, 10);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour % 12 || 12;
+        formattedTime = `${hour12}:${minutes} ${ampm}`;
+      }
       body = body.replace(/\{inspection\.date\}/g, formattedDate);
-      body = body.replace(/\{inspection\.time\}/g, inspectionData.inspection_time || "");
+      body = body.replace(/\{inspection\.time\}/g, formattedTime);
       body = body.replace(/\{inspection\.inspector\}/g, inspectionData.inspector_name || "");
       body = body.replace(/\{inspection\.type\}/g, inspectionData.inspection_type || "");
     } else {

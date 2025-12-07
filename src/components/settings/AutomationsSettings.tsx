@@ -41,6 +41,7 @@ interface ActionConfig {
     subject?: string;
     message?: string;
     email_template_id?: string; // Reference to email template
+    sms_template_id?: string; // Reference to SMS template
     // Email attachments
     attachment_folders?: string[]; // Folder names to pull files from
     file_name_patterns?: string[]; // File name patterns to match (parsed from text)
@@ -111,6 +112,19 @@ export const AutomationsSettings = () => {
       const { data, error } = await supabase
         .from("email_templates")
         .select("id, name, subject, body, category")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: smsTemplates } = useQuery({
+    queryKey: ["sms-templates"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sms_templates")
+        .select("id, name, body, category")
         .eq("is_active", true)
         .order("name");
       if (error) throw error;
@@ -808,6 +822,40 @@ export const AutomationsSettings = () => {
                             </SelectContent>
                           </Select>
                         </div>
+                        
+                        {/* SMS Template Selection */}
+                        {smsTemplates && smsTemplates.length > 0 && (
+                          <div className="space-y-2">
+                            <Label>Use SMS Template (optional)</Label>
+                            <Select 
+                              value={currentAction.config.sms_template_id || ''} 
+                              onValueChange={(value) => {
+                                const template = smsTemplates.find(t => t.id === value);
+                                setCurrentAction({
+                                  ...currentAction,
+                                  config: { 
+                                    ...currentAction.config, 
+                                    sms_template_id: value || undefined,
+                                    message: template ? template.body : currentAction.config.message
+                                  }
+                                });
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a template..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">-- Custom Message --</SelectItem>
+                                {smsTemplates.map((template) => (
+                                  <SelectItem key={template.id} value={template.id}>
+                                    {template.name} {template.category && `(${template.category})`}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        
                         <div className="space-y-2">
                           <Label>Message</Label>
                           <Textarea 
@@ -816,7 +864,7 @@ export const AutomationsSettings = () => {
                             value={currentAction.config.message || ''}
                             onChange={(e) => setCurrentAction({
                               ...currentAction,
-                              config: { ...currentAction.config, message: e.target.value }
+                              config: { ...currentAction.config, message: e.target.value, sms_template_id: undefined }
                             })}
                           />
                           <p className="text-xs text-muted-foreground">
