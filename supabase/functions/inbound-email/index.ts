@@ -101,6 +101,26 @@ serve(async (req) => {
   }
 
   try {
+    // Validate webhook secret to prevent unauthorized access
+    const webhookSecret = Deno.env.get('INBOUND_EMAIL_WEBHOOK_SECRET');
+    const providedSecret = req.headers.get('x-email-webhook-secret');
+
+    if (!webhookSecret) {
+      console.error("INBOUND_EMAIL_WEBHOOK_SECRET not configured");
+      return new Response(
+        JSON.stringify({ error: "Server misconfiguration" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!providedSecret || providedSecret !== webhookSecret) {
+      console.error("Invalid or missing webhook secret");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const payload = await req.json();
     
     console.log("Received inbound email payload:", JSON.stringify(payload, null, 2).substring(0, 2000));
