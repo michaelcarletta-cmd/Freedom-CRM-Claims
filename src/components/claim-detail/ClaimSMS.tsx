@@ -215,22 +215,28 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
       return;
     }
 
-    console.log("SMS - Applying template:", template.name, "Body:", template.body);
-    console.log("SMS - Claim data for merge:", claimData);
-
     // Replace merge fields with claim data
     let body = template.body;
     if (claimData) {
+      // Standard merge field format
       body = body.replace(/\{claim\.policyholder_name\}/g, claimData.policyholder_name || "");
       body = body.replace(/\{claim\.claim_number\}/g, claimData.claim_number || "");
       body = body.replace(/\{claim\.policy_number\}/g, claimData.policy_number || "");
+      body = body.replace(/\{claim\.policyholder_address\}/g, claimData.policyholder_address || "");
+      body = body.replace(/\{claim\.policyholder_phone\}/g, claimData.policyholder_phone || "");
+      body = body.replace(/\{claim\.policyholder_email\}/g, claimData.policyholder_email || "");
+      body = body.replace(/\{claim\.insurance_company\}/g, claimData.insurance_company || "");
+      body = body.replace(/\{claim\.loss_type\}/g, claimData.loss_type || "");
+      
+      // Handle legacy/alternate syntax (${address} format)
+      body = body.replace(/\$\{address\}/g, claimData.policyholder_address || "");
     }
-    // Leave inspection fields as placeholders since we don't have that context
-    body = body.replace(/\{inspection\.date\}/g, "[date]");
-    body = body.replace(/\{inspection\.time\}/g, "[time]");
-    body = body.replace(/\{inspection\.inspector\}/g, "[inspector]");
+    
+    // Leave inspection fields as placeholders - user should fill these in
+    body = body.replace(/\{inspection\.date\}/g, "[DATE]");
+    body = body.replace(/\{inspection\.time\}/g, "[TIME]");
+    body = body.replace(/\{inspection\.inspector\}/g, "[INSPECTOR]");
 
-    console.log("SMS - Final message body:", body);
     setNewMessage(body);
   };
 
