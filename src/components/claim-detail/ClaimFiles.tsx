@@ -221,15 +221,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       return;
     }
 
-    // Construct full URL for Chrome compatibility
-    const { data: { publicUrl } } = supabase.storage
-      .from("claim-files")
-      .getPublicUrl(file.file_path);
-    
-    const baseUrl = publicUrl.split('/object/public/')[0];
-    const fullUrl = `${baseUrl}${data.signedUrl}`;
-
-    setPreviewUrl(fullUrl);
+    setPreviewUrl(data.signedUrl);
     setPreviewFileType(file.file_type || "");
     setPreviewDialogOpen(true);
   };
