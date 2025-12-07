@@ -50,6 +50,7 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
   const [selectedRecipients, setSelectedRecipients] = useState<Contact[]>([]);
   const [availableContacts, setAvailableContacts] = useState<Contact[]>([]);
   const [claimData, setClaimData] = useState<any>(null);
+  const [inspectionData, setInspectionData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const { toast } = useToast();
@@ -118,8 +119,20 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
         .single();
 
       if (claimError) throw claimError;
-      console.log("SMS - Claim data loaded:", claim);
       setClaimData(claim);
+
+      // Fetch the latest/upcoming inspection for this claim
+      const { data: inspection } = await supabase
+        .from("inspections")
+        .select("inspection_date, inspection_time, inspector_name, inspection_type")
+        .eq("claim_id", claimId)
+        .order("inspection_date", { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (inspection) {
+        setInspectionData(inspection);
+      }
 
       const contacts: Contact[] = [];
 
@@ -211,7 +224,6 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
   const applyTemplate = (templateId: string) => {
     const template = templates?.find(t => t.id === templateId);
     if (!template) {
-      console.log("SMS - Template not found:", templateId);
       return;
     }
 
@@ -232,10 +244,22 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
       body = body.replace(/\$\{address\}/g, claimData.policyholder_address || "");
     }
     
-    // Leave inspection fields as placeholders - user should fill these in
-    body = body.replace(/\{inspection\.date\}/g, "[DATE]");
-    body = body.replace(/\{inspection\.time\}/g, "[TIME]");
-    body = body.replace(/\{inspection\.inspector\}/g, "[INSPECTOR]");
+    // Replace inspection fields with actual inspection data if available
+    if (inspectionData) {
+      const formattedDate = inspectionData.inspection_date 
+        ? format(new Date(inspectionData.inspection_date), "MMMM d, yyyy")
+        : "";
+      body = body.replace(/\{inspection\.date\}/g, formattedDate);
+      body = body.replace(/\{inspection\.time\}/g, inspectionData.inspection_time || "");
+      body = body.replace(/\{inspection\.inspector\}/g, inspectionData.inspector_name || "");
+      body = body.replace(/\{inspection\.type\}/g, inspectionData.inspection_type || "");
+    } else {
+      // No inspection scheduled - leave as placeholders
+      body = body.replace(/\{inspection\.date\}/g, "[NO INSPECTION SCHEDULED]");
+      body = body.replace(/\{inspection\.time\}/g, "");
+      body = body.replace(/\{inspection\.inspector\}/g, "");
+      body = body.replace(/\{inspection\.type\}/g, "");
+    }
 
     setNewMessage(body);
   };
