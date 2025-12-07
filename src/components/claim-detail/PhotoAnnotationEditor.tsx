@@ -33,102 +33,130 @@ export function PhotoAnnotationEditor({ open, onOpenChange, photo, claimId, onSa
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!open || !canvasRef.current) return;
+    if (!open) return;
+    
+    // Small delay to ensure DOM is ready
+    const timeoutId = setTimeout(() => {
+      if (!canvasRef.current) {
+        console.error("Canvas ref not available");
+        return;
+      }
 
-    let canvas: FabricCanvas | null = null;
-    let isMounted = true;
+      let canvas: FabricCanvas | null = null;
+      let isMounted = true;
 
-    const loadImage = async () => {
-      try {
-        const { data, error } = await supabase.storage
-          .from("claim-files")
-          .createSignedUrl(photo.file_path, 3600);
-        
-        if (error || !data?.signedUrl) {
-          console.error("Error getting signed URL:", error);
-          return;
-        }
-
-        if (!isMounted) return;
-
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        
-        img.onerror = (e) => {
-          console.error("Error loading image:", e);
-        };
-
-        img.onload = () => {
-          if (!canvasRef.current || !isMounted) return;
+      const loadImage = async () => {
+        try {
+          console.log("Loading image for annotation:", photo.file_path);
           
-          // Calculate canvas size to fit within dialog
-          const maxWidth = 800;
-          const maxHeight = 600;
-          let width = img.width;
-          let height = img.height;
+          const { data, error } = await supabase.storage
+            .from("claim-files")
+            .createSignedUrl(photo.file_path, 3600);
           
-          if (width > maxWidth) {
-            height = (maxWidth / width) * height;
-            width = maxWidth;
-          }
-          if (height > maxHeight) {
-            width = (maxHeight / height) * width;
-            height = maxHeight;
+          if (error || !data?.signedUrl) {
+            console.error("Error getting signed URL:", error);
+            return;
           }
 
-          canvas = new FabricCanvas(canvasRef.current, {
-            width,
-            height,
-            backgroundColor: "#ffffff",
-          });
+          console.log("Got signed URL, loading image...");
 
-          // Load background image
-          FabricImage.fromURL(data.signedUrl, { crossOrigin: "anonymous" }).then((fabricImg) => {
-            if (!canvas || !isMounted) return;
+          if (!isMounted) return;
+
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          
+          img.onerror = (e) => {
+            console.error("Error loading image element:", e);
+          };
+
+          img.onload = () => {
+            console.log("Image loaded, dimensions:", img.width, img.height);
+            
+            if (!canvasRef.current || !isMounted) {
+              console.error("Canvas ref lost or unmounted");
+              return;
+            }
+            
+            // Calculate canvas size to fit within dialog
+            const maxWidth = 800;
+            const maxHeight = 600;
+            let width = img.width;
+            let height = img.height;
+            
+            if (width > maxWidth) {
+              height = (maxWidth / width) * height;
+              width = maxWidth;
+            }
+            if (height > maxHeight) {
+              width = (maxHeight / height) * width;
+              height = maxHeight;
+            }
+
+            console.log("Creating canvas with dimensions:", width, height);
+
+            canvas = new FabricCanvas(canvasRef.current, {
+              width,
+              height,
+              backgroundColor: "#ffffff",
+            });
+
+            // Set background image directly from the loaded img element
+            const fabricImg = new FabricImage(img, {
+              crossOrigin: "anonymous",
+            });
             fabricImg.scaleToWidth(width);
             fabricImg.scaleToHeight(height);
             canvas.backgroundImage = fabricImg;
             canvas.renderAll();
-            setImageLoaded(true);
-          }).catch((err) => {
-            console.error("Error loading fabric image:", err);
-          });
+            
+            console.log("Background image set, initializing tools...");
 
-          // Initialize drawing brush
-          canvas.freeDrawingBrush = new PencilBrush(canvas);
-          canvas.freeDrawingBrush.color = activeColor;
-          canvas.freeDrawingBrush.width = 3;
-          canvas.isDrawingMode = true;
+            // Initialize drawing brush
+            canvas.freeDrawingBrush = new PencilBrush(canvas);
+            canvas.freeDrawingBrush.color = activeColor;
+            canvas.freeDrawingBrush.width = 3;
+            canvas.isDrawingMode = true;
 
-          // Load existing annotations if any
-          if (photo.annotations) {
-            try {
-              canvas.loadFromJSON(photo.annotations, () => {
-                canvas?.renderAll();
-              });
-            } catch (e) {
-              console.error("Error loading annotations:", e);
+            // Load existing annotations if any
+            if (photo.annotations) {
+              try {
+                canvas.loadFromJSON(photo.annotations, () => {
+                  canvas?.renderAll();
+                });
+              } catch (e) {
+                console.error("Error loading annotations:", e);
+              }
             }
-          }
 
-          setFabricCanvas(canvas);
-        };
-        img.src = data.signedUrl;
-      } catch (err) {
-        console.error("Error in loadImage:", err);
-      }
-    };
+            setFabricCanvas(canvas);
+            setImageLoaded(true);
+            console.log("Canvas ready!");
+          };
+          
+          img.src = data.signedUrl;
+        } catch (err) {
+          console.error("Error in loadImage:", err);
+        }
+      };
+
+      loadImage();
+
+      return () => {
+        isMounted = false;
+        if (canvas) {
+          canvas.dispose();
+        }
+      };
+    }, 100);
 
     // Reset state when opening
     setImageLoaded(false);
     setFabricCanvas(null);
-    
-    loadImage();
 
     return () => {
-      isMounted = false;
-      if (canvas) {
-        canvas.dispose();
+      clearTimeout(timeoutId);
+      if (fabricCanvas) {
+        fabricCanvas.dispose();
       }
       setFabricCanvas(null);
       setImageLoaded(false);
