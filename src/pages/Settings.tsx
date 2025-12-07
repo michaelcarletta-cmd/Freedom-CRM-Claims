@@ -36,7 +36,7 @@ import { AIKnowledgeBaseSettings } from "@/components/settings/AIKnowledgeBaseSe
 import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
 import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
-import { ZapierIntegrationSettings } from "@/components/settings/ZapierIntegrationSettings";
+import { MakeIntegrationSettings } from "@/components/settings/MakeIntegrationSettings";
 import NotificationPreferencesSettings from "@/components/settings/NotificationPreferencesSettings";
 import { useQuery } from "@tanstack/react-query";
 
@@ -423,7 +423,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="integrations" className="w-full space-y-6">
-          <ZapierIntegrationSettings />
+          <MakeIntegrationSettings />
           <QuickBooksSettings />
         </TabsContent>
 
