@@ -103,16 +103,22 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
         .select(`
           policyholder_name,
           policyholder_phone,
+          policyholder_email,
+          policyholder_address,
           adjuster_name,
           adjuster_phone,
           referrer_id,
           claim_number,
-          policy_number
+          policy_number,
+          loss_type,
+          loss_date,
+          insurance_company
         `)
         .eq("id", claimId)
         .single();
 
       if (claimError) throw claimError;
+      console.log("SMS - Claim data loaded:", claim);
       setClaimData(claim);
 
       const contacts: Contact[] = [];
@@ -204,20 +210,27 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
 
   const applyTemplate = (templateId: string) => {
     const template = templates?.find(t => t.id === templateId);
-    if (!template) return;
+    if (!template) {
+      console.log("SMS - Template not found:", templateId);
+      return;
+    }
+
+    console.log("SMS - Applying template:", template.name, "Body:", template.body);
+    console.log("SMS - Claim data for merge:", claimData);
 
     // Replace merge fields with claim data
     let body = template.body;
     if (claimData) {
-      body = body.replace(/{claim\.policyholder_name}/g, claimData.policyholder_name || "");
-      body = body.replace(/{claim\.claim_number}/g, claimData.claim_number || "");
-      body = body.replace(/{claim\.policy_number}/g, claimData.policy_number || "");
+      body = body.replace(/\{claim\.policyholder_name\}/g, claimData.policyholder_name || "");
+      body = body.replace(/\{claim\.claim_number\}/g, claimData.claim_number || "");
+      body = body.replace(/\{claim\.policy_number\}/g, claimData.policy_number || "");
     }
     // Leave inspection fields as placeholders since we don't have that context
-    body = body.replace(/{inspection\.date}/g, "[date]");
-    body = body.replace(/{inspection\.time}/g, "[time]");
-    body = body.replace(/{inspection\.inspector}/g, "[inspector]");
+    body = body.replace(/\{inspection\.date\}/g, "[date]");
+    body = body.replace(/\{inspection\.time\}/g, "[time]");
+    body = body.replace(/\{inspection\.inspector\}/g, "[inspector]");
 
+    console.log("SMS - Final message body:", body);
     setNewMessage(body);
   };
 
