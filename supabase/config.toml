@@ -69,9 +69,6 @@ verify_jwt = true
 [functions.online-check-writer]
 verify_jwt = true
 
-[functions.zapier-webhook]
-verify_jwt = false
-
 [functions.task-reminders]
 verify_jwt = false
 
