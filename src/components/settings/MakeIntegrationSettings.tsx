@@ -343,12 +343,6 @@ export function MakeIntegrationSettings() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Button asChild>
-              <a href="https://www.make.com/en/register" target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Create Make Account
-              </a>
-            </Button>
             <Button variant="outline" asChild>
               <a href="https://www.make.com/en/integrations" target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="h-4 w-4 mr-2" />
