@@ -380,9 +380,20 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
     setAnnotateDialogOpen(true);
   };
 
-  const openPreviewDialog = (photo: ClaimPhoto) => {
+  const openPreviewDialog = async (photo: ClaimPhoto) => {
     setSelectedPhoto(photo);
     setPreviewDialogOpen(true);
+    
+    // Ensure we have the signed URL for this photo
+    if (!photoUrls[photo.id]) {
+      const path = photo.annotated_file_path || photo.file_path;
+      const { data } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(path, 3600);
+      if (data?.signedUrl) {
+        setPhotoUrls(prev => ({ ...prev, [photo.id]: data.signedUrl }));
+      }
+    }
   };
 
   const togglePhotoSelection = (photoId: string) => {
