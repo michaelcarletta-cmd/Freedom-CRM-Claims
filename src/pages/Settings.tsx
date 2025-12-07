@@ -26,7 +26,6 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { LossTypesSettings } from "@/components/settings/LossTypesSettings";
 import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
-import { TemplatesSettings } from "@/components/settings/TemplatesSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
 
 import { ImportSettings } from "@/components/settings/ImportSettings";
@@ -311,7 +310,6 @@ export default function Settings() {
           <TabsTrigger value="notifications" className="w-full md:w-auto justify-start text-base font-medium px-4">Notifications</TabsTrigger>
           <TabsTrigger value="workflow" className="w-full md:w-auto justify-start text-base font-medium px-4">Workflow Management</TabsTrigger>
           <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium px-4">User Management</TabsTrigger>
-          <TabsTrigger value="templates" className="w-full md:w-auto justify-start text-base font-medium px-4">Templates</TabsTrigger>
           <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
           <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
           <TabsTrigger value="ai-knowledge" className="w-full md:w-auto justify-start text-base font-medium px-4">AI Knowledge Base</TabsTrigger>
@@ -404,10 +402,6 @@ export default function Settings() {
 
         <TabsContent value="users" className="w-full">
           <UserManagementSettings />
-        </TabsContent>
-
-        <TabsContent value="templates" className="w-full">
-          <TemplatesSettings />
         </TabsContent>
 
         <TabsContent value="automations" className="w-full">
