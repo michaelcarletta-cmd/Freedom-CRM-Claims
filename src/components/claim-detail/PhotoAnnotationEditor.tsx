@@ -35,80 +35,105 @@ export function PhotoAnnotationEditor({ open, onOpenChange, photo, claimId, onSa
   useEffect(() => {
     if (!open || !canvasRef.current) return;
 
+    let canvas: FabricCanvas | null = null;
+    let isMounted = true;
+
     const loadImage = async () => {
-      const { data } = await supabase.storage
-        .from("claim-files")
-        .createSignedUrl(photo.file_path, 3600);
-      
-      if (!data?.signedUrl) return;
-
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        if (!canvasRef.current) return;
+      try {
+        const { data, error } = await supabase.storage
+          .from("claim-files")
+          .createSignedUrl(photo.file_path, 3600);
         
-        // Calculate canvas size to fit within dialog
-        const maxWidth = 800;
-        const maxHeight = 600;
-        let width = img.width;
-        let height = img.height;
-        
-        if (width > maxWidth) {
-          height = (maxWidth / width) * height;
-          width = maxWidth;
-        }
-        if (height > maxHeight) {
-          width = (maxHeight / height) * width;
-          height = maxHeight;
+        if (error || !data?.signedUrl) {
+          console.error("Error getting signed URL:", error);
+          return;
         }
 
-        const canvas = new FabricCanvas(canvasRef.current, {
-          width,
-          height,
-          backgroundColor: "#ffffff",
-        });
+        if (!isMounted) return;
 
-        // Load background image
-        FabricImage.fromURL(data.signedUrl, { crossOrigin: "anonymous" }).then((fabricImg) => {
-          fabricImg.scaleToWidth(width);
-          fabricImg.scaleToHeight(height);
-          canvas.backgroundImage = fabricImg;
-          canvas.renderAll();
-          setImageLoaded(true);
-        });
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        
+        img.onerror = (e) => {
+          console.error("Error loading image:", e);
+        };
 
-        // Initialize drawing brush
-        canvas.freeDrawingBrush = new PencilBrush(canvas);
-        canvas.freeDrawingBrush.color = activeColor;
-        canvas.freeDrawingBrush.width = 3;
-        canvas.isDrawingMode = true;
-
-        // Load existing annotations if any
-        if (photo.annotations) {
-          try {
-            canvas.loadFromJSON(photo.annotations, () => {
-              canvas.renderAll();
-            });
-          } catch (e) {
-            console.error("Error loading annotations:", e);
+        img.onload = () => {
+          if (!canvasRef.current || !isMounted) return;
+          
+          // Calculate canvas size to fit within dialog
+          const maxWidth = 800;
+          const maxHeight = 600;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > maxWidth) {
+            height = (maxWidth / width) * height;
+            width = maxWidth;
           }
-        }
+          if (height > maxHeight) {
+            width = (maxHeight / height) * width;
+            height = maxHeight;
+          }
 
-        setFabricCanvas(canvas);
-      };
-      img.src = data.signedUrl;
+          canvas = new FabricCanvas(canvasRef.current, {
+            width,
+            height,
+            backgroundColor: "#ffffff",
+          });
+
+          // Load background image
+          FabricImage.fromURL(data.signedUrl, { crossOrigin: "anonymous" }).then((fabricImg) => {
+            if (!canvas || !isMounted) return;
+            fabricImg.scaleToWidth(width);
+            fabricImg.scaleToHeight(height);
+            canvas.backgroundImage = fabricImg;
+            canvas.renderAll();
+            setImageLoaded(true);
+          }).catch((err) => {
+            console.error("Error loading fabric image:", err);
+          });
+
+          // Initialize drawing brush
+          canvas.freeDrawingBrush = new PencilBrush(canvas);
+          canvas.freeDrawingBrush.color = activeColor;
+          canvas.freeDrawingBrush.width = 3;
+          canvas.isDrawingMode = true;
+
+          // Load existing annotations if any
+          if (photo.annotations) {
+            try {
+              canvas.loadFromJSON(photo.annotations, () => {
+                canvas?.renderAll();
+              });
+            } catch (e) {
+              console.error("Error loading annotations:", e);
+            }
+          }
+
+          setFabricCanvas(canvas);
+        };
+        img.src = data.signedUrl;
+      } catch (err) {
+        console.error("Error in loadImage:", err);
+      }
     };
 
+    // Reset state when opening
+    setImageLoaded(false);
+    setFabricCanvas(null);
+    
     loadImage();
 
     return () => {
-      if (fabricCanvas) {
-        fabricCanvas.dispose();
-        setFabricCanvas(null);
-        setImageLoaded(false);
+      isMounted = false;
+      if (canvas) {
+        canvas.dispose();
       }
+      setFabricCanvas(null);
+      setImageLoaded(false);
     };
-  }, [open, photo.file_path]);
+  }, [open, photo.file_path, photo.id]);
 
   useEffect(() => {
     if (!fabricCanvas) return;
