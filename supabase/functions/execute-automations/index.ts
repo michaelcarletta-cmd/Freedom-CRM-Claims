@@ -134,7 +134,8 @@ async function executeAction(supabase: any, action: any, execution: any) {
       return await sendSms(supabase, config, execution);
     
     case 'webhook':
-      return await callWebhook(config, execution);
+    case 'call_webhook':
+      return await callWebhook(supabase, config, execution);
     
     default:
       throw new Error(`Unknown action type: ${type}`);
@@ -501,26 +502,94 @@ async function updateClaimStatus(supabase: any, config: any, execution: any) {
   return { new_status: config.new_status, claim_id: execution.claim_id };
 }
 
-async function callWebhook(config: any, execution: any) {
-  const response = await fetch(config.url, {
-    method: config.method || 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(config.headers || {})
-    },
-    body: JSON.stringify({
-      execution_id: execution.id,
-      claim_id: execution.claim_id,
-      trigger_data: execution.trigger_data,
-      automation_id: execution.automation_id
-    })
-  });
+async function callWebhook(supabase: any, config: any, execution: any) {
+  // Fetch full claim data for the webhook
+  const { data: claim } = await supabase
+    .from('claims')
+    .select('*, insurance_companies(name, email, phone)')
+    .eq('id', execution.claim_id)
+    .single();
 
-  if (!response.ok) {
-    throw new Error(`Webhook failed: ${response.status} ${response.statusText}`);
+  // Build comprehensive payload for Make.com / external integrations
+  const payload: any = {
+    execution_id: execution.id,
+    automation_id: execution.automation_id,
+    trigger_data: execution.trigger_data,
+    claim: claim ? {
+      id: claim.id,
+      claim_number: claim.claim_number,
+      policy_number: claim.policy_number,
+      status: claim.status,
+      loss_type: claim.loss_type,
+      loss_date: claim.loss_date,
+      loss_description: claim.loss_description,
+      policyholder_name: claim.policyholder_name,
+      policyholder_email: claim.policyholder_email,
+      policyholder_phone: claim.policyholder_phone,
+      policyholder_address: claim.policyholder_address,
+      insurance_company: claim.insurance_company || claim.insurance_companies?.name,
+      insurance_email: claim.insurance_email || claim.insurance_companies?.email,
+      insurance_phone: claim.insurance_phone || claim.insurance_companies?.phone,
+      adjuster_name: claim.adjuster_name,
+      adjuster_email: claim.adjuster_email,
+      adjuster_phone: claim.adjuster_phone,
+      claim_amount: claim.claim_amount,
+      created_at: claim.created_at,
+      updated_at: claim.updated_at
+    } : null,
+    timestamp: new Date().toISOString()
+  };
+
+  // Optionally include file URLs
+  if (config.webhook_include_files && claim) {
+    const { data: files } = await supabase
+      .from('claim_files')
+      .select('id, file_name, file_path, file_type, uploaded_at')
+      .eq('claim_id', claim.id)
+      .order('uploaded_at', { ascending: false })
+      .limit(20);
+
+    if (files && files.length > 0) {
+      // Generate signed URLs for files
+      const filesWithUrls = await Promise.all(
+        files.map(async (file: any) => {
+          const { data: urlData } = await supabase.storage
+            .from('claim-files')
+            .createSignedUrl(file.file_path, 3600); // 1 hour validity
+          return {
+            ...file,
+            signed_url: urlData?.signedUrl || null
+          };
+        })
+      );
+      payload.files = filesWithUrls;
+    }
   }
 
-  return { status: response.status, statusText: response.statusText };
+  const webhookUrl = config.webhook_url || config.url;
+  if (!webhookUrl) {
+    throw new Error('Webhook URL not configured');
+  }
+
+  console.log('Calling webhook:', webhookUrl);
+  console.log('Payload:', JSON.stringify(payload, null, 2));
+
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  // Make.com may return empty response, that's OK
+  if (!response.ok && response.status !== 0) {
+    const errorText = await response.text().catch(() => 'Unknown error');
+    throw new Error(`Webhook failed: ${response.status} ${response.statusText} - ${errorText}`);
+  }
+
+  console.log('Webhook called successfully');
+  return { status: response.status || 200, webhookUrl, claimId: execution.claim_id };
 }
 
 // Helper to format time from 24h to 12h format
