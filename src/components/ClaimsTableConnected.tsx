@@ -138,7 +138,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   };
 
   const fetchClaims = async () => {
-    if (!user && portalType) {
+    if (!user?.id) {
       setLoading(false);
       return;
     }
@@ -148,12 +148,12 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
 
       // Filter based on portal type
       if (portalType === "client") {
-        query = query.eq("client_id", user?.id);
+        query = query.eq("client_id", user.id);
       } else if (portalType === "contractor") {
         const { data: assignments } = await supabase
           .from("claim_contractors")
           .select("claim_id")
-          .eq("contractor_id", user?.id);
+          .eq("contractor_id", user.id);
 
         if (assignments && assignments.length > 0) {
           const claimIds = assignments.map((a) => a.claim_id);
@@ -168,7 +168,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
         const { data: referrerData } = await supabase
           .from("referrers")
           .select("id")
-          .eq("user_id", user?.id)
+          .eq("user_id", user.id)
           .maybeSingle();
 
         if (referrerData?.id) {
@@ -182,7 +182,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
         const { data: roles } = await supabase
           .from("user_roles")
           .select("role")
-          .eq("user_id", user?.id);
+          .eq("user_id", user.id);
 
         const isAdmin = roles?.some((r) => r.role === "admin");
         const isStaff = roles?.some((r) => r.role === "staff");
@@ -191,7 +191,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
           const { data: staffAssignments } = await supabase
             .from("claim_staff")
             .select("claim_id")
-            .eq("staff_id", user?.id);
+            .eq("staff_id", user.id);
 
           if (staffAssignments && staffAssignments.length > 0) {
             const claimIds = staffAssignments.map((a) => a.claim_id);
