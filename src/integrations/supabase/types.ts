@@ -891,6 +891,7 @@ export type Database = {
           other_structures_non_recoverable_depreciation: number | null
           other_structures_rcv: number | null
           other_structures_recoverable_depreciation: number | null
+          prior_offer: number | null
           pwi_deductible: number | null
           pwi_non_recoverable_depreciation: number | null
           pwi_rcv: number | null
@@ -913,6 +914,7 @@ export type Database = {
           other_structures_non_recoverable_depreciation?: number | null
           other_structures_rcv?: number | null
           other_structures_recoverable_depreciation?: number | null
+          prior_offer?: number | null
           pwi_deductible?: number | null
           pwi_non_recoverable_depreciation?: number | null
           pwi_rcv?: number | null
@@ -935,6 +937,7 @@ export type Database = {
           other_structures_non_recoverable_depreciation?: number | null
           other_structures_rcv?: number | null
           other_structures_recoverable_depreciation?: number | null
+          prior_offer?: number | null
           pwi_deductible?: number | null
           pwi_non_recoverable_depreciation?: number | null
           pwi_rcv?: number | null
