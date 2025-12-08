@@ -887,6 +887,14 @@ export type Database = {
           id: string
           non_recoverable_depreciation: number
           notes: string | null
+          other_structures_deductible: number | null
+          other_structures_non_recoverable_depreciation: number | null
+          other_structures_rcv: number | null
+          other_structures_recoverable_depreciation: number | null
+          pwi_deductible: number | null
+          pwi_non_recoverable_depreciation: number | null
+          pwi_rcv: number | null
+          pwi_recoverable_depreciation: number | null
           recoverable_depreciation: number
           replacement_cost_value: number
           total_settlement: number | null
@@ -901,6 +909,14 @@ export type Database = {
           id?: string
           non_recoverable_depreciation?: number
           notes?: string | null
+          other_structures_deductible?: number | null
+          other_structures_non_recoverable_depreciation?: number | null
+          other_structures_rcv?: number | null
+          other_structures_recoverable_depreciation?: number | null
+          pwi_deductible?: number | null
+          pwi_non_recoverable_depreciation?: number | null
+          pwi_rcv?: number | null
+          pwi_recoverable_depreciation?: number | null
           recoverable_depreciation?: number
           replacement_cost_value?: number
           total_settlement?: number | null
@@ -915,6 +931,14 @@ export type Database = {
           id?: string
           non_recoverable_depreciation?: number
           notes?: string | null
+          other_structures_deductible?: number | null
+          other_structures_non_recoverable_depreciation?: number | null
+          other_structures_rcv?: number | null
+          other_structures_recoverable_depreciation?: number | null
+          pwi_deductible?: number | null
+          pwi_non_recoverable_depreciation?: number | null
+          pwi_rcv?: number | null
+          pwi_recoverable_depreciation?: number | null
           recoverable_depreciation?: number
           replacement_cost_value?: number
           total_settlement?: number | null

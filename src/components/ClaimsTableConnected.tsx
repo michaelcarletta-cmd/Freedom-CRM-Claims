@@ -219,18 +219,21 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
         const claimIds = data.map(c => c.id);
         const { data: settlements, error: settlementsError } = await supabase
           .from("claim_settlements")
-          .select("claim_id, replacement_cost_value")
+          .select("claim_id, replacement_cost_value, other_structures_rcv, pwi_rcv")
           .in("claim_id", claimIds);
 
         if (settlementsError) {
           console.error("Error fetching settlements:", settlementsError);
         }
 
-        // Calculate total RCV per claim
+        // Calculate total RCV per claim (sum of main, other structures, and PWI)
         const rcvByClaimId: Record<string, number> = {};
         settlements?.forEach(s => {
-          const rcvValue = parseFloat(String(s.replacement_cost_value || 0));
-          rcvByClaimId[s.claim_id] = (rcvByClaimId[s.claim_id] || 0) + rcvValue;
+          const mainRcv = parseFloat(String(s.replacement_cost_value || 0));
+          const otherStructuresRcv = parseFloat(String(s.other_structures_rcv || 0));
+          const pwiRcv = parseFloat(String(s.pwi_rcv || 0));
+          const totalRcv = mainRcv + otherStructuresRcv + pwiRcv;
+          rcvByClaimId[s.claim_id] = (rcvByClaimId[s.claim_id] || 0) + totalRcv;
         });
 
         // Merge RCV into claims
@@ -398,7 +401,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                       />
                     </TableCell>
                     <TableCell className="font-semibold">
-                      {claim.total_rcv !== undefined && claim.total_rcv > 0 ? `$${claim.total_rcv.toLocaleString()}` : "N/A"}
+                      {claim.total_rcv > 0 ? `$${claim.total_rcv.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "N/A"}
                     </TableCell>
                     <TableCell>
                       {format(new Date(claim.created_at), "MMM dd, yyyy")}

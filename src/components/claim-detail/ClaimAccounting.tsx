@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package } from "lucide-react";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -190,35 +191,117 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
   );
 }
 
-// Settlement Section Component
+// Settlement Section Component with Tabs
 function SettlementSection({ claimId, settlement, isAdmin }: any) {
+  const [activeTab, setActiveTab] = useState("dwelling");
   const [open, setOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    replacement_cost_value: settlement?.replacement_cost_value || 0,
-    non_recoverable_depreciation: settlement?.non_recoverable_depreciation || 0,
-    recoverable_depreciation: settlement?.recoverable_depreciation || 0,
-    deductible: settlement?.deductible || 0,
-    estimate_amount: settlement?.estimate_amount || 0,
-    notes: settlement?.notes || "",
-  });
+  const [editingType, setEditingType] = useState<"dwelling" | "other_structures" | "pwi">("dwelling");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Form data for each tab type
+  const getFormDataForType = (type: string) => {
+    if (type === "dwelling") {
+      return {
+        replacement_cost_value: settlement?.replacement_cost_value || 0,
+        non_recoverable_depreciation: settlement?.non_recoverable_depreciation || 0,
+        recoverable_depreciation: settlement?.recoverable_depreciation || 0,
+        deductible: settlement?.deductible || 0,
+        estimate_amount: settlement?.estimate_amount || 0,
+        notes: settlement?.notes || "",
+      };
+    } else if (type === "other_structures") {
+      return {
+        replacement_cost_value: settlement?.other_structures_rcv || 0,
+        non_recoverable_depreciation: settlement?.other_structures_non_recoverable_depreciation || 0,
+        recoverable_depreciation: settlement?.other_structures_recoverable_depreciation || 0,
+        deductible: settlement?.other_structures_deductible || 0,
+      };
+    } else {
+      return {
+        replacement_cost_value: settlement?.pwi_rcv || 0,
+        non_recoverable_depreciation: settlement?.pwi_non_recoverable_depreciation || 0,
+        recoverable_depreciation: settlement?.pwi_recoverable_depreciation || 0,
+        deductible: settlement?.pwi_deductible || 0,
+      };
+    }
+  };
+
+  const [formData, setFormData] = useState(getFormDataForType("dwelling"));
+
+  // Calculate totals for each type
+  const dwellingRcv = Number(settlement?.replacement_cost_value || 0);
+  const otherStructuresRcv = Number(settlement?.other_structures_rcv || 0);
+  const pwiRcv = Number(settlement?.pwi_rcv || 0);
+  const totalRcv = dwellingRcv + otherStructuresRcv + pwiRcv;
+
+  const calculateAcv = (rcv: number, recDep: number, nonRecDep: number, deductible: number) => {
+    return rcv - recDep - nonRecDep - deductible;
+  };
+
+  const dwellingAcv = calculateAcv(
+    dwellingRcv,
+    Number(settlement?.recoverable_depreciation || 0),
+    Number(settlement?.non_recoverable_depreciation || 0),
+    Number(settlement?.deductible || 0)
+  );
+
+  const otherStructuresAcv = calculateAcv(
+    otherStructuresRcv,
+    Number(settlement?.other_structures_recoverable_depreciation || 0),
+    Number(settlement?.other_structures_non_recoverable_depreciation || 0),
+    Number(settlement?.other_structures_deductible || 0)
+  );
+
+  const pwiAcv = calculateAcv(
+    pwiRcv,
+    Number(settlement?.pwi_recoverable_depreciation || 0),
+    Number(settlement?.pwi_non_recoverable_depreciation || 0),
+    Number(settlement?.pwi_deductible || 0)
+  );
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       
+      let updateData: any = {};
+      
+      if (editingType === "dwelling") {
+        updateData = {
+          replacement_cost_value: formData.replacement_cost_value,
+          non_recoverable_depreciation: formData.non_recoverable_depreciation,
+          recoverable_depreciation: formData.recoverable_depreciation,
+          deductible: formData.deductible,
+          estimate_amount: (formData as any).estimate_amount || 0,
+          notes: (formData as any).notes || "",
+        };
+      } else if (editingType === "other_structures") {
+        updateData = {
+          other_structures_rcv: formData.replacement_cost_value,
+          other_structures_non_recoverable_depreciation: formData.non_recoverable_depreciation,
+          other_structures_recoverable_depreciation: formData.recoverable_depreciation,
+          other_structures_deductible: formData.deductible,
+        };
+      } else {
+        updateData = {
+          pwi_rcv: formData.replacement_cost_value,
+          pwi_non_recoverable_depreciation: formData.non_recoverable_depreciation,
+          pwi_recoverable_depreciation: formData.recoverable_depreciation,
+          pwi_deductible: formData.deductible,
+        };
+      }
+
       if (settlement) {
         const { error } = await supabase
           .from("claim_settlements")
-          .update(formData)
+          .update(updateData)
           .eq("id", settlement.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from("claim_settlements")
           .insert({
-            ...formData,
+            ...updateData,
             claim_id: claimId,
             created_by: user?.id,
           });
@@ -241,6 +324,96 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
     Number(formData.non_recoverable_depreciation) - 
     Number(formData.deductible);
 
+  const openEditDialog = (type: "dwelling" | "other_structures" | "pwi") => {
+    setEditingType(type);
+    setFormData(getFormDataForType(type));
+    setOpen(true);
+  };
+
+  const getTypeLabel = (type: string) => {
+    if (type === "dwelling") return "Dwelling";
+    if (type === "other_structures") return "Other Structures";
+    return "PWI Items";
+  };
+
+  const renderSettlementContent = (
+    rcv: number,
+    recDep: number,
+    nonRecDep: number,
+    deductible: number,
+    acv: number,
+    type: "dwelling" | "other_structures" | "pwi",
+    estimateAmount?: number,
+    notes?: string
+  ) => {
+    const hasData = rcv > 0 || recDep > 0 || nonRecDep > 0 || deductible > 0;
+
+    if (!hasData && !settlement) {
+      return <p className="text-muted-foreground text-center py-8">No {getTypeLabel(type).toLowerCase()} settlement details added yet</p>;
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground">Replacement Cost Value (RCV)</p>
+            <p className="text-lg font-semibold">${rcv.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+          </div>
+          {type === "dwelling" && estimateAmount !== undefined && (
+            <div>
+              <p className="text-sm text-muted-foreground">Estimate Amount</p>
+              <p className="text-lg font-semibold">${estimateAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+            </div>
+          )}
+        </div>
+        
+        <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+          <div className="flex justify-between text-sm">
+            <span>Replacement Cost Value (RCV):</span>
+            <span className="font-semibold">${rcv.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="flex justify-between text-sm text-destructive">
+            <span>- Recoverable Depreciation:</span>
+            <span className="font-semibold">-${recDep.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="flex justify-between text-sm text-destructive">
+            <span>- Non-Recoverable Depreciation:</span>
+            <span className="font-semibold">-${nonRecDep.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="flex justify-between text-sm text-destructive">
+            <span>- Deductible:</span>
+            <span className="font-semibold">-${deductible.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="border-t border-border pt-2 flex justify-between">
+            <span className="font-medium">Actual Cash Value (ACV):</span>
+            <span className="text-xl font-bold text-primary">
+              ${acv.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+
+        <div className="p-4 bg-success/10 rounded-lg border border-success/20">
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-sm font-medium text-success">Recoverable Depreciation</p>
+              <p className="text-xs text-muted-foreground">Paid when work is completed</p>
+            </div>
+            <p className="text-xl font-bold text-success">
+              ${recDep.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+        </div>
+
+        {type === "dwelling" && notes && (
+          <div>
+            <p className="text-sm text-muted-foreground">Notes</p>
+            <p className="text-sm">{notes}</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -249,201 +422,202 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
             <Building2 className="h-5 w-5" />
             Settlement Details
           </CardTitle>
-          {isAdmin && (
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => {
-                if (settlement) {
-                  setFormData({
-                    replacement_cost_value: settlement.replacement_cost_value,
-                    non_recoverable_depreciation: settlement.non_recoverable_depreciation,
-                    recoverable_depreciation: settlement.recoverable_depreciation,
-                    deductible: settlement.deductible,
-                    estimate_amount: settlement.estimate_amount,
-                    notes: settlement.notes || "",
-                  });
-                }
-              }}>
-                <Plus className="h-4 w-4 mr-2" />
-                {settlement ? "Edit" : "Add"} Settlement
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>{settlement ? "Edit" : "Add"} Settlement</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Replacement Cost Value (RCV)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={formData.replacement_cost_value}
-                      onChange={(e) => setFormData({ ...formData, replacement_cost_value: parseFloat(e.target.value) || 0 })}
-                    />
-                  </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-sm text-muted-foreground">Total RCV</p>
+              <p className="text-xl font-bold text-primary">${totalRcv.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-3 mb-4">
+            <TabsTrigger value="dwelling" className="flex items-center gap-2">
+              <Home className="h-4 w-4" />
+              Dwelling
+              {dwellingRcv > 0 && <span className="text-xs text-muted-foreground">${dwellingRcv.toLocaleString()}</span>}
+            </TabsTrigger>
+            <TabsTrigger value="other_structures" className="flex items-center gap-2">
+              <Warehouse className="h-4 w-4" />
+              Other Structures
+              {otherStructuresRcv > 0 && <span className="text-xs text-muted-foreground">${otherStructuresRcv.toLocaleString()}</span>}
+            </TabsTrigger>
+            <TabsTrigger value="pwi" className="flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              PWI Items
+              {pwiRcv > 0 && <span className="text-xs text-muted-foreground">${pwiRcv.toLocaleString()}</span>}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="dwelling">
+            {isAdmin && (
+              <div className="flex justify-end mb-4">
+                <Button onClick={() => openEditDialog("dwelling")}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {settlement?.replacement_cost_value ? "Edit" : "Add"} Dwelling
+                </Button>
+              </div>
+            )}
+            {renderSettlementContent(
+              dwellingRcv,
+              Number(settlement?.recoverable_depreciation || 0),
+              Number(settlement?.non_recoverable_depreciation || 0),
+              Number(settlement?.deductible || 0),
+              dwellingAcv,
+              "dwelling",
+              Number(settlement?.estimate_amount || 0),
+              settlement?.notes
+            )}
+          </TabsContent>
+
+          <TabsContent value="other_structures">
+            {isAdmin && (
+              <div className="flex justify-end mb-4">
+                <Button onClick={() => openEditDialog("other_structures")}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {settlement?.other_structures_rcv ? "Edit" : "Add"} Other Structures
+                </Button>
+              </div>
+            )}
+            {renderSettlementContent(
+              otherStructuresRcv,
+              Number(settlement?.other_structures_recoverable_depreciation || 0),
+              Number(settlement?.other_structures_non_recoverable_depreciation || 0),
+              Number(settlement?.other_structures_deductible || 0),
+              otherStructuresAcv,
+              "other_structures"
+            )}
+          </TabsContent>
+
+          <TabsContent value="pwi">
+            {isAdmin && (
+              <div className="flex justify-end mb-4">
+                <Button onClick={() => openEditDialog("pwi")}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {settlement?.pwi_rcv ? "Edit" : "Add"} PWI Items
+                </Button>
+              </div>
+            )}
+            {renderSettlementContent(
+              pwiRcv,
+              Number(settlement?.pwi_recoverable_depreciation || 0),
+              Number(settlement?.pwi_non_recoverable_depreciation || 0),
+              Number(settlement?.pwi_deductible || 0),
+              pwiAcv,
+              "pwi"
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {/* Edit Dialog */}
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{settlement ? "Edit" : "Add"} {getTypeLabel(editingType)} Settlement</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Replacement Cost Value (RCV)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.replacement_cost_value}
+                    onChange={(e) => setFormData({ ...formData, replacement_cost_value: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                {editingType === "dwelling" && (
                   <div>
                     <Label>Estimate Amount</Label>
                     <Input
                       type="number"
                       step="0.01"
-                      value={formData.estimate_amount}
-                      onChange={(e) => setFormData({ ...formData, estimate_amount: parseFloat(e.target.value) || 0 })}
+                      value={(formData as any).estimate_amount || 0}
+                      onChange={(e) => setFormData({ ...formData, estimate_amount: parseFloat(e.target.value) || 0 } as any)}
                     />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Non-Recoverable Depreciation</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={formData.non_recoverable_depreciation}
-                      onChange={(e) => setFormData({ ...formData, non_recoverable_depreciation: parseFloat(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <div>
-                    <Label>Recoverable Depreciation</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={formData.recoverable_depreciation}
-                      onChange={(e) => setFormData({ ...formData, recoverable_depreciation: parseFloat(e.target.value) || 0 })}
-                    />
-                  </div>
-                </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Deductible</Label>
+                  <Label>Non-Recoverable Depreciation</Label>
                   <Input
                     type="number"
                     step="0.01"
-                    value={formData.deductible}
-                    onChange={(e) => setFormData({ ...formData, deductible: parseFloat(e.target.value) || 0 })}
+                    value={formData.non_recoverable_depreciation}
+                    onChange={(e) => setFormData({ ...formData, non_recoverable_depreciation: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
+                <div>
+                  <Label>Recoverable Depreciation</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.recoverable_depreciation}
+                    onChange={(e) => setFormData({ ...formData, recoverable_depreciation: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Deductible</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.deductible}
+                  onChange={(e) => setFormData({ ...formData, deductible: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              {editingType === "dwelling" && (
                 <div>
                   <Label>Notes</Label>
                   <Textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    value={(formData as any).notes || ""}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value } as any)}
                     rows={3}
                   />
                 </div>
-                <div className="space-y-3 p-4 bg-muted rounded-lg">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>Replacement Cost Value (RCV):</span>
-                      <span className="font-semibold">${Number(formData.replacement_cost_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="flex justify-between text-destructive">
-                      <span>- Recoverable Depreciation:</span>
-                      <span className="font-semibold">-${Number(formData.recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="flex justify-between text-destructive">
-                      <span>- Non-Recoverable Depreciation:</span>
-                      <span className="font-semibold">-${Number(formData.non_recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="flex justify-between text-destructive">
-                      <span>- Deductible:</span>
-                      <span className="font-semibold">-${Number(formData.deductible).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="border-t pt-2 flex justify-between">
-                      <span className="font-medium">Actual Cash Value (ACV) - Initial Payment:</span>
-                      <span className="text-lg font-bold text-primary">
-                        ${actualCashValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                    </div>
+              )}
+              <div className="space-y-3 p-4 bg-muted rounded-lg">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Replacement Cost Value (RCV):</span>
+                    <span className="font-semibold">${Number(formData.replacement_cost_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className="border-t pt-3 mt-3">
-                    <div className="flex justify-between text-success">
-                      <span className="font-medium">Recoverable Depreciation (paid at completion):</span>
-                      <span className="text-lg font-bold">
-                        ${Number(formData.recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
+                  <div className="flex justify-between text-destructive">
+                    <span>- Recoverable Depreciation:</span>
+                    <span className="font-semibold">-${Number(formData.recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-2 p-2 bg-background rounded">
-                    <p><strong>Note:</strong> Deductible (${Number(formData.deductible).toLocaleString()}) is paid by policyholder to contractor, not included in checks to track.</p>
+                  <div className="flex justify-between text-destructive">
+                    <span>- Non-Recoverable Depreciation:</span>
+                    <span className="font-semibold">-${Number(formData.non_recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-destructive">
+                    <span>- Deductible:</span>
+                    <span className="font-semibold">-${Number(formData.deductible).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="border-t pt-2 flex justify-between">
+                    <span className="font-medium">Actual Cash Value (ACV):</span>
+                    <span className="text-lg font-bold text-primary">
+                      ${actualCashValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
-                <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full">
-                  Save Settlement
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        {settlement ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Replacement Cost Value (RCV)</p>
-                <p className="text-lg font-semibold">${Number(settlement.replacement_cost_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Estimate Amount</p>
-                <p className="text-lg font-semibold">${Number(settlement.estimate_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-              </div>
-            </div>
-            
-            <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Replacement Cost Value (RCV):</span>
-                <span className="font-semibold">${Number(settlement.replacement_cost_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between text-sm text-destructive">
-                <span>- Recoverable Depreciation:</span>
-                <span className="font-semibold">-${Number(settlement.recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between text-sm text-destructive">
-                <span>- Non-Recoverable Depreciation:</span>
-                <span className="font-semibold">-${Number(settlement.non_recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between text-sm text-destructive">
-                <span>- Deductible:</span>
-                <span className="font-semibold">-${Number(settlement.deductible).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="border-t border-border pt-2 flex justify-between">
-                <span className="font-medium">Actual Cash Value (ACV) - Initial Payment:</span>
-                <span className="text-xl font-bold text-primary">
-                  ${Number(settlement.total_settlement).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-
-            <div className="p-4 bg-success/10 rounded-lg border border-success/20">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-medium text-success">Recoverable Depreciation</p>
-                  <p className="text-xs text-muted-foreground">Paid when work is completed</p>
+                <div className="border-t pt-3 mt-3">
+                  <div className="flex justify-between text-success">
+                    <span className="font-medium">Recoverable Depreciation (paid at completion):</span>
+                    <span className="text-lg font-bold">
+                      ${Number(formData.recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
-                <p className="text-xl font-bold text-success">
-                  ${Number(settlement.recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </p>
               </div>
+              <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full">
+                Save {getTypeLabel(editingType)} Settlement
+              </Button>
             </div>
-
-            <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded border">
-              <p><strong>Checks to Track:</strong></p>
-              <p className="mt-1">• Initial ACV Payment: ${Number(settlement.total_settlement).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-              <p>• Recoverable Depreciation (upon completion): ${Number(settlement.recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-              <p className="mt-2 text-xs"><em>Deductible (${Number(settlement.deductible).toLocaleString()}) is paid by policyholder to contractor</em></p>
-            </div>
-
-            {settlement.notes && (
-              <div>
-                <p className="text-sm text-muted-foreground">Notes</p>
-                <p className="text-sm">{settlement.notes}</p>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-center py-8">No settlement details added yet</p>
-        )}
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
