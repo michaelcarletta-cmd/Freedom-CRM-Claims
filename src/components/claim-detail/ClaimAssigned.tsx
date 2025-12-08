@@ -102,9 +102,30 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
   });
 
   const addAdjusterMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
+    mutationFn: async (data: typeof formData & { directoryAdjusterId?: string | null }) => {
+      let adjusterId = data.directoryAdjusterId;
+
+      // If not selected from directory, create new entry in adjusters table
+      if (!adjusterId) {
+        const { data: newAdjuster, error: adjusterError } = await supabase
+          .from("adjusters")
+          .insert({
+            name: data.adjuster_name,
+            email: data.adjuster_email || null,
+            phone: data.adjuster_phone || null,
+            company: data.company || null,
+          })
+          .select("id")
+          .single();
+        
+        if (adjusterError) throw adjusterError;
+        adjusterId = newAdjuster.id;
+      }
+
+      // Create claim adjuster entry linked to directory
       const { error } = await supabase.from("claim_adjusters").insert({
         claim_id: claim.id,
+        adjuster_id: adjusterId,
         adjuster_name: data.adjuster_name,
         adjuster_email: data.adjuster_email || null,
         adjuster_phone: data.adjuster_phone || null,
@@ -116,6 +137,7 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["claim-adjusters", claim.id] });
+      queryClient.invalidateQueries({ queryKey: ["adjusters-directory"] });
       toast.success("Adjuster added successfully");
       handleCloseDialog();
     },
@@ -220,7 +242,7 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
     if (editingAdjuster) {
       updateAdjusterMutation.mutate({ id: editingAdjuster.id, data: formData });
     } else {
-      addAdjusterMutation.mutate(formData);
+      addAdjusterMutation.mutate({ ...formData, directoryAdjusterId: selectedDirectoryAdjuster });
     }
   };
 
