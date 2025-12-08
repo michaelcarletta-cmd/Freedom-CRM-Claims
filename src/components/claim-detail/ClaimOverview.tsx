@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { User, Calendar, MapPin, DollarSign, Mail, UserPlus, Loader2, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { ClaimCustomFields } from "./ClaimCustomFields";
-import { ClaimTimeline } from "./ClaimTimeline";
 import { ProofOfLossGenerator } from "./ProofOfLossGenerator";
 import { EnhancedEstimateBuilder } from "./EnhancedEstimateBuilder";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
@@ -410,21 +409,6 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
               <ProofOfLossGenerator claimId={claim.id} claim={claim} />
               <EnhancedEstimateBuilder claimId={claim.id} claim={claim} />
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Claim Timeline */}
-      {!isPortalUser && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-primary" />
-              AI Claim Timeline
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ClaimTimeline claimId={claim.id} claim={claim} />
           </CardContent>
         </Card>
       )}
