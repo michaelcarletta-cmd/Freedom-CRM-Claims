@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { User, MapPin, Plus, Trash2, Edit } from "lucide-react";
+import { User, MapPin, Plus, Trash2, Edit, Search, Check, ChevronsUpDown } from "lucide-react";
 import { ClaimAssignments } from "./ClaimAssignments";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +18,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+
+interface DirectoryAdjuster {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  company: string | null;
+}
 
 interface ClaimAssignedProps {
   claim: any;
@@ -39,6 +61,8 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
   const queryClient = useQueryClient();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingAdjuster, setEditingAdjuster] = useState<Adjuster | null>(null);
+  const [adjusterSearchOpen, setAdjusterSearchOpen] = useState(false);
+  const [selectedDirectoryAdjuster, setSelectedDirectoryAdjuster] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     adjuster_name: "",
     adjuster_email: "",
@@ -46,6 +70,20 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
     company: "",
     is_primary: false,
     notes: "",
+  });
+
+  // Fetch adjusters directory
+  const { data: directoryAdjusters = [] } = useQuery({
+    queryKey: ["adjusters-directory"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("adjusters")
+        .select("id, name, email, phone, company")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data as DirectoryAdjuster[];
+    },
   });
 
   const { data: adjusters = [], isLoading } = useQuery({
@@ -134,6 +172,7 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
   const handleCloseDialog = () => {
     setIsAddDialogOpen(false);
     setEditingAdjuster(null);
+    setSelectedDirectoryAdjuster(null);
     setFormData({
       adjuster_name: "",
       adjuster_email: "",
@@ -142,6 +181,21 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
       is_primary: false,
       notes: "",
     });
+  };
+
+  const handleSelectDirectoryAdjuster = (adjusterId: string) => {
+    const adjuster = directoryAdjusters.find(a => a.id === adjusterId);
+    if (adjuster) {
+      setSelectedDirectoryAdjuster(adjusterId);
+      setFormData({
+        ...formData,
+        adjuster_name: adjuster.name,
+        adjuster_email: adjuster.email || "",
+        adjuster_phone: adjuster.phone || "",
+        company: adjuster.company || "",
+      });
+    }
+    setAdjusterSearchOpen(false);
   };
 
   const handleOpenEdit = (adjuster: Adjuster) => {
@@ -297,6 +351,59 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
             </DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            {/* Adjuster Directory Selector - only show when adding */}
+            {!editingAdjuster && directoryAdjusters.length > 0 && (
+              <div className="grid gap-2">
+                <Label>Select from Directory</Label>
+                <Popover open={adjusterSearchOpen} onOpenChange={setAdjusterSearchOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={adjusterSearchOpen}
+                      className="justify-between"
+                    >
+                      {selectedDirectoryAdjuster
+                        ? directoryAdjusters.find(a => a.id === selectedDirectoryAdjuster)?.name
+                        : "Search saved adjusters..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Search adjusters..." />
+                      <CommandList>
+                        <CommandEmpty>No adjuster found.</CommandEmpty>
+                        <CommandGroup>
+                          {directoryAdjusters.map((adjuster) => (
+                            <CommandItem
+                              key={adjuster.id}
+                              value={`${adjuster.name} ${adjuster.company || ""}`}
+                              onSelect={() => handleSelectDirectoryAdjuster(adjuster.id)}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedDirectoryAdjuster === adjuster.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="flex flex-col">
+                                <span>{adjuster.name}</span>
+                                {adjuster.company && (
+                                  <span className="text-xs text-muted-foreground">{adjuster.company}</span>
+                                )}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">Or enter details manually below</p>
+              </div>
+            )}
+
             <div className="grid gap-2">
               <Label htmlFor="adjuster_name">Name *</Label>
               <Input
