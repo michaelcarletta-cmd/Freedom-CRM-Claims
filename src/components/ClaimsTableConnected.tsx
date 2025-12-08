@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -35,9 +35,9 @@ interface ClaimsTableConnectedProps {
 
 export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) => {
   const [claims, setClaims] = useState<Claim[]>([]);
-  const [filteredClaims, setFilteredClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [lossTypeFilter, setLossTypeFilter] = useState<string>("all");
   const [showClosed, setShowClosed] = useState(false);
@@ -54,11 +54,16 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
     fetchActiveStatuses();
   }, [portalType, user]);
 
+  // Debounce search query
   useEffect(() => {
-    filterClaims();
-  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed]);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-  const filterClaims = () => {
+  // Use memoized filtering instead of state
+  const filteredClaims = useMemo(() => {
     let filtered = [...claims];
 
     // Hide closed claims by default
@@ -66,9 +71,9 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       filtered = filtered.filter((claim) => !claim.is_closed);
     }
 
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    // Search filter (use debounced value)
+    if (debouncedSearch) {
+      const query = debouncedSearch.toLowerCase();
       filtered = filtered.filter(
         (claim) =>
           claim.claim_number?.toLowerCase().includes(query) ||
@@ -87,8 +92,8 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       filtered = filtered.filter((claim) => claim.loss_type === lossTypeFilter);
     }
 
-    setFilteredClaims(filtered);
-  };
+    return filtered;
+  }, [claims, debouncedSearch, statusFilter, lossTypeFilter, showClosed]);
 
   const toggleClaimSelection = (claimId: string) => {
     const newSelected = new Set(selectedClaims);
