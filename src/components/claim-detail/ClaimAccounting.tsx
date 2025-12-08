@@ -169,6 +169,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
         grossProfit={grossProfit}
         totalChecksReceived={totalChecksReceived}
         checks={checks || []}
+        priorOffer={settlement?.prior_offer || 0}
         isAdmin={isAdmin}
       />
 
@@ -208,6 +209,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
         recoverable_depreciation: settlement?.recoverable_depreciation || 0,
         deductible: settlement?.deductible || 0,
         estimate_amount: settlement?.estimate_amount || 0,
+        prior_offer: settlement?.prior_offer || 0,
         notes: settlement?.notes || "",
       };
     } else if (type === "other_structures") {
@@ -273,6 +275,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
           recoverable_depreciation: formData.recoverable_depreciation,
           deductible: formData.deductible,
           estimate_amount: (formData as any).estimate_amount || 0,
+          prior_offer: (formData as any).prior_offer || 0,
           notes: (formData as any).notes || "",
         };
       } else if (editingType === "other_structures") {
@@ -344,6 +347,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
     acv: number,
     type: "dwelling" | "other_structures" | "pwi",
     estimateAmount?: number,
+    priorOffer?: number,
     notes?: string
   ) => {
     const hasData = rcv > 0 || recDep > 0 || nonRecDep > 0 || deductible > 0;
@@ -354,7 +358,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
 
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div>
             <p className="text-sm text-muted-foreground">Replacement Cost Value (RCV)</p>
             <p className="text-lg font-semibold">${rcv.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
@@ -363,6 +367,12 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
             <div>
               <p className="text-sm text-muted-foreground">Estimate Amount</p>
               <p className="text-lg font-semibold">${estimateAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+            </div>
+          )}
+          {type === "dwelling" && priorOffer !== undefined && priorOffer > 0 && (
+            <div>
+              <p className="text-sm text-muted-foreground">Prior Offer (No Fees)</p>
+              <p className="text-lg font-semibold text-warning">${priorOffer.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
             </div>
           )}
         </div>
@@ -464,6 +474,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
               dwellingAcv,
               "dwelling",
               Number(settlement?.estimate_amount || 0),
+              Number(settlement?.prior_offer || 0),
               settlement?.notes
             )}
           </TabsContent>
@@ -525,15 +536,28 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
                   />
                 </div>
                 {editingType === "dwelling" && (
-                  <div>
-                    <Label>Estimate Amount</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={(formData as any).estimate_amount || 0}
-                      onChange={(e) => setFormData({ ...formData, estimate_amount: parseFloat(e.target.value) || 0 } as any)}
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <Label>Estimate Amount</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={(formData as any).estimate_amount || 0}
+                        onChange={(e) => setFormData({ ...formData, estimate_amount: parseFloat(e.target.value) || 0 } as any)}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Prior Offer (Before Involvement - No Fees Collected)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={(formData as any).prior_offer || 0}
+                        onChange={(e) => setFormData({ ...formData, prior_offer: parseFloat(e.target.value) || 0 } as any)}
+                        placeholder="Settlement amount offered before your involvement"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Fees will only be calculated on amounts above this prior offer</p>
+                    </div>
+                  </>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -982,14 +1006,15 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
 }
 
 // Fees Section Component
-function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, isAdmin }: any) {
+function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, priorOffer = 0, isAdmin }: any) {
   const [open, setOpen] = useState(false);
   
-  // Calculate company fee based on percentage of each check
+  // Calculate company fee based on percentage of checks minus prior offer
+  // Prior offer is the settlement amount before involvement that we don't collect fees on
   const calculateFeeFromChecks = (percentage: number) => {
-    return checks.reduce((sum: number, check: any) => {
-      return sum + (Number(check.amount) * percentage / 100);
-    }, 0);
+    const totalCheckAmount = checks.reduce((sum: number, check: any) => sum + Number(check.amount), 0);
+    const feeableAmount = Math.max(0, totalCheckAmount - Number(priorOffer || 0));
+    return feeableAmount * percentage / 100;
   };
   
   // Calculate adjuster fee as percentage of company fee
@@ -1093,8 +1118,14 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                 <DialogTitle>{fees ? "Edit" : "Set"} Fees</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
+                {priorOffer > 0 && (
+                  <div className="p-3 bg-warning/10 rounded-lg border border-warning/20 text-sm">
+                    <p className="font-medium text-warning">Prior Offer: ${Number(priorOffer).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                    <p className="text-muted-foreground text-xs">Fees are calculated on amounts above this prior offer only</p>
+                  </div>
+                )}
                 <div className="space-y-2">
-                  <Label>Company Fee (% of each check)</Label>
+                  <Label>Company Fee (% of checks minus prior offer)</Label>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Label className="text-xs text-muted-foreground">Percentage</Label>
@@ -1150,7 +1181,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Contractor Fee (% of each check)</Label>
+                  <Label>Contractor Fee (% of checks minus prior offer)</Label>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Label className="text-xs text-muted-foreground">Percentage</Label>
@@ -1182,7 +1213,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Referrer Fee (% of each check)</Label>
+                  <Label>Referrer Fee (% of checks minus prior offer)</Label>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Label className="text-xs text-muted-foreground">Percentage</Label>
