@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { UserPlus, Mail, Phone, Search, Trash2, Settings, Link2 } from "lucide-react";
+import { UserPlus, Mail, Phone, Search, Trash2, Settings, Link2, Send } from "lucide-react";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { Switch } from "@/components/ui/switch";
 import { formatPhoneNumber } from "@/lib/utils";
@@ -48,6 +48,47 @@ export const ContractorsTab = () => {
   const [selectedContractor, setSelectedContractor] = useState<Contractor | null>(null);
   const [jobnimbusApiKey, setJobnimbusApiKey] = useState("");
   const [jobnimbusEnabled, setJobnimbusEnabled] = useState(false);
+  const [sendingInvite, setSendingInvite] = useState<string | null>(null);
+
+  const handleSendPortalInvite = async (contractor: Contractor) => {
+    if (!contractor.email) {
+      toast.error("Contractor has no email address");
+      return;
+    }
+
+    setSendingInvite(contractor.id);
+    
+    // Generate a new temporary password
+    const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+    
+    try {
+      // Update the user's password first
+      const { error: updateError } = await supabase.auth.admin.updateUserById(
+        contractor.id,
+        { password: tempPassword }
+      );
+
+      // Even if admin update fails, try to send the invite with a reset link option
+      const { error } = await supabase.functions.invoke("send-portal-invite", {
+        body: {
+          email: contractor.email,
+          password: tempPassword,
+          userType: "Contractor",
+          userName: contractor.full_name,
+          appUrl: window.location.origin,
+        },
+      });
+
+      if (error) throw error;
+
+      toast.success(`Portal invite sent to ${contractor.email}`);
+    } catch (error: any) {
+      console.error("Error sending invite:", error);
+      toast.error("Failed to send portal invite: " + error.message);
+    } finally {
+      setSendingInvite(null);
+    }
+  };
 
   useEffect(() => {
     fetchContractors();
@@ -304,14 +345,25 @@ export const ContractorsTab = () => {
                     </Button>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDeleteClick(contractor)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleSendPortalInvite(contractor)}
+                        disabled={sendingInvite === contractor.id}
+                        title="Send portal invite email"
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteClick(contractor)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
