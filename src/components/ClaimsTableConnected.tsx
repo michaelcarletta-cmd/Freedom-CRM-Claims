@@ -70,8 +70,8 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (claim) =>
-          claim.claim_number.toLowerCase().includes(query) ||
-          claim.policyholder_name.toLowerCase().includes(query) ||
+          claim.claim_number?.toLowerCase().includes(query) ||
+          claim.policyholder_name?.toLowerCase().includes(query) ||
           claim.policyholder_address?.toLowerCase().includes(query)
       );
     }
