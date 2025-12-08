@@ -9,6 +9,7 @@ import { Calendar, User, ExternalLink } from "lucide-react";
 import { format, isPast } from "date-fns";
 import { Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import TaskAIAssistant from "@/components/TaskAIAssistant";
 
 interface Task {
   id: string;
@@ -177,11 +178,14 @@ const Tasks = () => {
                         <p className="text-sm text-muted-foreground mt-1">{task.description}</p>
                       )}
                     </div>
-                    <Link to={`/claims/${task.claim_id}`}>
-                      <Button variant="ghost" size="sm">
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
-                    </Link>
+                    <div className="flex items-center gap-1">
+                      <TaskAIAssistant task={task} />
+                      <Link to={`/claims/${task.claim_id}`}>
+                        <Button variant="ghost" size="sm">
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-4 mt-3 text-sm">
                     <Badge variant="outline">{task.claim_number}</Badge>
