@@ -3,6 +3,7 @@ import { ContractorsTab } from "@/components/networking/ContractorsTab";
 import { ReferrersTab } from "@/components/networking/ReferrersTab";
 import { InsuranceCompaniesTab } from "@/components/networking/InsuranceCompaniesTab";
 import { MortgageCompaniesTab } from "@/components/networking/MortgageCompaniesTab";
+import { AdjustersTab } from "@/components/networking/AdjustersTab";
 
 export default function Networking() {
   return (
@@ -22,6 +23,9 @@ export default function Networking() {
           <TabsTrigger value="referrers" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Referrers
           </TabsTrigger>
+          <TabsTrigger value="adjusters" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+            Adjusters
+          </TabsTrigger>
           <TabsTrigger value="insurance" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
             Insurance Companies
           </TabsTrigger>
@@ -36,6 +40,10 @@ export default function Networking() {
 
         <TabsContent value="referrers">
           <ReferrersTab />
+        </TabsContent>
+
+        <TabsContent value="adjusters">
+          <AdjustersTab />
         </TabsContent>
 
         <TabsContent value="insurance">

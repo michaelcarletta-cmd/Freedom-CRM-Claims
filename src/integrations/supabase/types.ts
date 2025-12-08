@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      adjusters: {
+        Row: {
+          company: string | null
+          created_at: string | null
+          created_by: string | null
+          email: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          notes: string | null
+          phone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          company?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       ai_knowledge_chunks: {
         Row: {
           chunk_index: number
@@ -193,6 +232,7 @@ export type Database = {
       claim_adjusters: {
         Row: {
           adjuster_email: string | null
+          adjuster_id: string | null
           adjuster_name: string
           adjuster_phone: string | null
           claim_id: string
@@ -205,6 +245,7 @@ export type Database = {
         }
         Insert: {
           adjuster_email?: string | null
+          adjuster_id?: string | null
           adjuster_name: string
           adjuster_phone?: string | null
           claim_id: string
@@ -217,6 +258,7 @@ export type Database = {
         }
         Update: {
           adjuster_email?: string | null
+          adjuster_id?: string | null
           adjuster_name?: string
           adjuster_phone?: string | null
           claim_id?: string
@@ -228,6 +270,13 @@ export type Database = {
           notes?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_adjusters_adjuster_id_fkey"
+            columns: ["adjuster_id"]
+            isOneToOne: false
+            referencedRelation: "adjusters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "claim_adjusters_claim_id_fkey"
             columns: ["claim_id"]
