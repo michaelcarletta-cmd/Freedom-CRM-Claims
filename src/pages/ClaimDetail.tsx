@@ -21,6 +21,10 @@ import { ClaimAutomationSettings } from "@/components/claim-detail/ClaimAutomati
 import { ClaimTimeline } from "@/components/claim-detail/ClaimTimeline";
 import { ProofOfLossGenerator } from "@/components/claim-detail/ProofOfLossGenerator";
 import { EnhancedEstimateBuilder } from "@/components/claim-detail/EnhancedEstimateBuilder";
+import { DarwinDenialAnalyzer } from "@/components/claim-detail/DarwinDenialAnalyzer";
+import { DarwinNextSteps } from "@/components/claim-detail/DarwinNextSteps";
+import { DarwinSupplementGenerator } from "@/components/claim-detail/DarwinSupplementGenerator";
+import { DarwinCorrespondenceAnalyzer } from "@/components/claim-detail/DarwinCorrespondenceAnalyzer";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -389,13 +393,25 @@ const ClaimDetail = () => {
               <div className="flex items-center gap-2 mb-4">
                 <Brain className="h-6 w-6 text-primary" />
                 <h2 className="text-xl font-semibold">Darwin AI</h2>
+                <span className="text-sm text-muted-foreground">Your intelligent claims assistant</span>
               </div>
               
-              {/* AI Tools */}
+              {/* Next Steps Predictor - Most used, shown first */}
+              <DarwinNextSteps claimId={claim.id} claim={claim} />
+              
+              {/* AI Analysis Tools */}
+              <div className="grid gap-6 lg:grid-cols-2">
+                <DarwinDenialAnalyzer claimId={claim.id} claim={claim} />
+                <DarwinSupplementGenerator claimId={claim.id} claim={claim} />
+              </div>
+              
+              <DarwinCorrespondenceAnalyzer claimId={claim.id} claim={claim} />
+              
+              {/* Document Generation Tools */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-primary" />
-                  AI Tools
+                  Document Generation
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   <ProofOfLossGenerator claimId={claim.id} claim={claim} />

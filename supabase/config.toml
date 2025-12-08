@@ -80,3 +80,6 @@ verify_jwt = false
 
 [functions.signature-webhook]
 verify_jwt = false
+
+[functions.darwin-ai-analysis]
+verify_jwt = true

@@ -1,0 +1,349 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+interface AnalysisRequest {
+  claimId: string;
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence';
+  content?: string; // For denial letters or correspondence
+  additionalContext?: any;
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      throw new Error('LOVABLE_API_KEY is not configured');
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { claimId, analysisType, content, additionalContext }: AnalysisRequest = await req.json();
+    console.log(`Darwin AI Analysis - Type: ${analysisType}, Claim: ${claimId}`);
+
+    // Fetch claim data
+    const { data: claim, error: claimError } = await supabase
+      .from('claims')
+      .select('*')
+      .eq('id', claimId)
+      .single();
+
+    if (claimError) throw claimError;
+
+    // Fetch related data based on analysis type
+    let context: any = { claim };
+
+    // Get settlements
+    const { data: settlements } = await supabase
+      .from('claim_settlements')
+      .select('*')
+      .eq('claim_id', claimId);
+    context.settlements = settlements || [];
+
+    // Get checks received
+    const { data: checks } = await supabase
+      .from('claim_checks')
+      .select('*')
+      .eq('claim_id', claimId);
+    context.checks = checks || [];
+
+    // Get tasks
+    const { data: tasks } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('claim_id', claimId)
+      .order('created_at', { ascending: false });
+    context.tasks = tasks || [];
+
+    // Get inspections
+    const { data: inspections } = await supabase
+      .from('inspections')
+      .select('*')
+      .eq('claim_id', claimId);
+    context.inspections = inspections || [];
+
+    // Get recent emails
+    const { data: emails } = await supabase
+      .from('emails')
+      .select('*')
+      .eq('claim_id', claimId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    context.emails = emails || [];
+
+    // Get files
+    const { data: files } = await supabase
+      .from('claim_files')
+      .select('*')
+      .eq('claim_id', claimId);
+    context.files = files || [];
+
+    // Build system prompt based on analysis type
+    let systemPrompt = '';
+    let userPrompt = '';
+
+    const claimSummary = `
+CLAIM DETAILS:
+- Claim Number: ${claim.claim_number || 'N/A'}
+- Policy Number: ${claim.policy_number || 'N/A'}
+- Policyholder: ${claim.policyholder_name || 'N/A'}
+- Address: ${claim.policyholder_address || 'N/A'}
+- Insurance Company: ${claim.insurance_company || 'N/A'}
+- Loss Type: ${claim.loss_type || 'N/A'}
+- Loss Date: ${claim.loss_date || 'N/A'}
+- Loss Description: ${claim.loss_description || 'N/A'}
+- Current Status: ${claim.status || 'N/A'}
+- Claim Amount: $${claim.claim_amount?.toLocaleString() || 'N/A'}
+
+SETTLEMENT DATA:
+${context.settlements?.length > 0 
+  ? context.settlements.map((s: any) => `- RCV: $${s.replacement_cost_value?.toLocaleString()}, Deductible: $${s.deductible?.toLocaleString()}, Recoverable Dep: $${s.recoverable_depreciation?.toLocaleString()}`).join('\n')
+  : '- No settlement data'}
+
+CHECKS RECEIVED:
+${context.checks?.length > 0 
+  ? context.checks.map((c: any) => `- ${c.check_type}: $${c.amount?.toLocaleString()} (${c.check_date})`).join('\n')
+  : '- No checks received'}
+
+TASKS:
+${context.tasks?.slice(0, 5).map((t: any) => `- [${t.status}] ${t.title} (Due: ${t.due_date || 'N/A'})`).join('\n') || '- No tasks'}
+
+INSPECTIONS:
+${context.inspections?.map((i: any) => `- ${i.inspection_type}: ${i.inspection_date} - ${i.status}`).join('\n') || '- No inspections'}
+
+RECENT COMMUNICATIONS:
+${context.emails?.slice(0, 3).map((e: any) => `- ${e.subject} (${new Date(e.created_at).toLocaleDateString()})`).join('\n') || '- No recent emails'}
+`;
+
+    switch (analysisType) {
+      case 'denial_rebuttal':
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in insurance claim rebuttals. Your role is to analyze denial letters and generate professional, legally-sound rebuttals that maximize claim recovery for policyholders.
+
+You have deep knowledge of:
+- Insurance policy interpretation and coverage analysis
+- Texas insurance regulations and case law
+- Appraisal and umpire processes
+- Building codes and manufacturer specifications
+- Common carrier denial tactics and how to counter them
+
+When generating rebuttals:
+1. Identify each specific reason for denial
+2. Counter each reason with policy language, regulations, or case law
+3. Reference the Texas Insurance Code where applicable
+4. Cite specific building codes or manufacturer specs when relevant
+5. Maintain a professional but assertive tone
+6. Include specific documentation requests and next steps`;
+
+        userPrompt = `${claimSummary}
+
+DENIAL LETTER CONTENT:
+${content || 'No denial letter content provided'}
+
+Please analyze this denial and generate a comprehensive rebuttal that:
+1. Lists each denial reason with a point-by-point counter-argument
+2. Cites relevant policy language, Texas Insurance Code, and case law
+3. References any applicable building codes or manufacturer specifications
+4. Includes specific documentation or evidence to support the claim
+5. Proposes next steps (supplemental documentation, appraisal demand, etc.)
+6. Maintains professional language suitable for carrier correspondence
+
+Format your response as a structured rebuttal document.`;
+        break;
+
+      case 'next_steps':
+        systemPrompt = `You are Darwin, an intelligent claims management AI for public adjusters. Your role is to analyze claim status, timeline, and activities to recommend the optimal next actions.
+
+You understand:
+- Claim processing timelines and deadlines
+- Texas Prompt Payment Act requirements
+- When to escalate vs wait
+- Optimal sequencing of claim activities
+- Resource allocation and prioritization
+
+Provide actionable, specific recommendations based on the claim's current state.`;
+
+        userPrompt = `${claimSummary}
+
+${additionalContext?.timeline ? `TIMELINE EVENTS:\n${JSON.stringify(additionalContext.timeline, null, 2)}` : ''}
+
+Analyze this claim and provide:
+1. TOP 3 PRIORITY ACTIONS - What should be done immediately and why
+2. TIMELINE ANALYSIS - Are there any deadline concerns or Prompt Payment Act violations?
+3. MISSING DOCUMENTATION - What evidence or documents should be gathered?
+4. CARRIER ENGAGEMENT STRATEGY - How to approach the insurance company
+5. ESTIMATED NEXT MILESTONES - What events should occur in the next 7, 14, and 30 days
+6. RISK ASSESSMENT - Any red flags or concerns to address
+
+Be specific and actionable. Reference dates and deadlines where possible.`;
+        break;
+
+      case 'supplement':
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in identifying missed damage and generating supplement requests. Your role is to maximize claim recovery by finding overlooked items.
+
+You have expertise in:
+- Xactimate line items and pricing
+- Building codes requiring upgrades
+- Manufacturer installation requirements
+- Hidden or consequential damage
+- Code compliance items
+- Overhead and profit calculations
+
+Generate comprehensive supplement requests that are defensible and well-documented.`;
+
+        userPrompt = `${claimSummary}
+
+${additionalContext?.existingEstimate ? `EXISTING ESTIMATE ITEMS:\n${additionalContext.existingEstimate}` : ''}
+
+${content ? `ADDITIONAL NOTES/OBSERVATIONS:\n${content}` : ''}
+
+Based on the claim details, generate a supplement analysis that includes:
+
+1. COMMONLY MISSED ITEMS for this loss type:
+   - List specific line items with Xactimate codes if possible
+   - Include unit prices and estimated quantities
+
+2. CODE UPGRADE REQUIREMENTS:
+   - Identify building codes that require upgrades beyond like-kind replacement
+   - Reference specific code sections
+
+3. MANUFACTURER SPECIFICATION ITEMS:
+   - Items required by manufacturer installation guidelines
+   - Warranty requirements
+
+4. CONSEQUENTIAL/HIDDEN DAMAGE:
+   - Damage that may not be immediately visible
+   - Items that should be inspected
+
+5. OVERHEAD & PROFIT JUSTIFICATION:
+   - When O&P applies and why
+   - Supporting arguments for O&P inclusion
+
+6. SUPPLEMENT REQUEST LETTER:
+   - Professional letter template requesting the supplement
+   - List of items with estimated values
+
+Format as a structured supplement package ready for submission.`;
+        break;
+
+      case 'correspondence':
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in carrier communication strategy. Your role is to analyze adjuster correspondence and provide strategic response recommendations.
+
+You understand:
+- Common adjuster negotiation tactics
+- When adjusters are stalling or being evasive
+- How to maintain professional relationships while being assertive
+- When to escalate to supervisors or legal channels
+- Effective documentation strategies
+
+Provide strategic analysis and response recommendations.`;
+
+        userPrompt = `${claimSummary}
+
+ADJUSTER CORRESPONDENCE TO ANALYZE:
+${content || 'No correspondence provided'}
+
+${additionalContext?.previousResponses ? `PREVIOUS RESPONSES:\n${additionalContext.previousResponses}` : ''}
+
+Analyze this correspondence and provide:
+
+1. TONE & INTENT ANALYSIS:
+   - What is the adjuster really saying?
+   - Are there any red flags or stalling tactics?
+   - What commitments (if any) are being made?
+
+2. KEY ISSUES IDENTIFIED:
+   - What are the main points of contention?
+   - What information is the adjuster seeking or avoiding?
+
+3. STRATEGIC RESPONSE RECOMMENDATIONS:
+   - How should this be responded to?
+   - What tone should be used?
+   - What questions should be asked?
+
+4. DOCUMENTATION NOTES:
+   - What should be documented from this exchange?
+   - Any follow-up deadlines to track?
+
+5. DRAFT RESPONSE:
+   - Professional response addressing each point
+   - Questions to keep the claim moving forward
+   - Clear next steps and deadlines
+
+Maintain a professional, assertive tone appropriate for carrier correspondence.`;
+        break;
+
+      default:
+        throw new Error(`Unknown analysis type: ${analysisType}`);
+    }
+
+    // Call Lovable AI
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI Gateway error:', response.status, errorText);
+      
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: 'AI usage limit reached. Please add credits to continue.' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      throw new Error(`AI Gateway error: ${response.status}`);
+    }
+
+    const aiData = await response.json();
+    const analysisResult = aiData.choices?.[0]?.message?.content || 'No analysis generated';
+
+    console.log(`Darwin AI Analysis completed for ${analysisType}`);
+
+    return new Response(
+      JSON.stringify({ 
+        success: true,
+        analysisType,
+        result: analysisResult,
+        claimId
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error: any) {
+    console.error('Darwin AI Analysis error:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});
