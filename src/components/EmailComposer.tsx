@@ -133,6 +133,20 @@ export function EmailComposer({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  // Fetch adjusters from claim_adjusters table
+  const { data: adjusters } = useQuery({
+    queryKey: ["claim-adjusters-email", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_adjusters")
+        .select("id, adjuster_name, adjuster_email, company, is_primary")
+        .eq("claim_id", claimId);
+      if (error) throw error;
+      return data;
+    },
+    enabled: isOpen,
+  });
+
   // Build recipients list from claim data
   const availableRecipients: Recipient[] = [];
   
@@ -144,11 +158,23 @@ export function EmailComposer({
     });
   }
   
-  if (claim.adjuster_email) {
+  // Add adjusters from claim_adjusters table
+  adjusters?.forEach((adjuster) => {
+    if (adjuster.adjuster_email) {
+      availableRecipients.push({
+        email: adjuster.adjuster_email,
+        name: adjuster.adjuster_name || "Adjuster",
+        type: adjuster.is_primary ? "primary adjuster" : "adjuster"
+      });
+    }
+  });
+
+  // Add insurance company email
+  if (claim.insurance_email) {
     availableRecipients.push({
-      email: claim.adjuster_email,
-      name: claim.adjuster_name || "Adjuster",
-      type: "adjuster"
+      email: claim.insurance_email,
+      name: claim.insurance_company || "Insurance Company",
+      type: "insurance company"
     });
   }
 
