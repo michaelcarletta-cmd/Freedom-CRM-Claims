@@ -26,7 +26,6 @@ interface Claim {
   updated_at: string;
   loss_type: string;
   is_closed: boolean;
-  total_rcv?: number;
 }
 
 interface ClaimsTableConnectedProps {
@@ -214,38 +213,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
 
       if (error) throw error;
 
-      // Fetch settlements for all claims to get RCV totals
-      if (data && data.length > 0) {
-        const claimIds = data.map(c => c.id);
-        const { data: settlements, error: settlementsError } = await supabase
-          .from("claim_settlements")
-          .select("claim_id, replacement_cost_value, other_structures_rcv, pwi_rcv")
-          .in("claim_id", claimIds);
-
-        if (settlementsError) {
-          console.error("Error fetching settlements:", settlementsError);
-        }
-
-        // Calculate total RCV per claim (sum of main, other structures, and PWI)
-        const rcvByClaimId: Record<string, number> = {};
-        settlements?.forEach(s => {
-          const mainRcv = parseFloat(String(s.replacement_cost_value || 0));
-          const otherStructuresRcv = parseFloat(String(s.other_structures_rcv || 0));
-          const pwiRcv = parseFloat(String(s.pwi_rcv || 0));
-          const totalRcv = mainRcv + otherStructuresRcv + pwiRcv;
-          rcvByClaimId[s.claim_id] = (rcvByClaimId[s.claim_id] || 0) + totalRcv;
-        });
-
-        // Merge RCV into claims
-        const claimsWithRcv = data.map(claim => ({
-          ...claim,
-          total_rcv: rcvByClaimId[claim.id] || 0
-        }));
-
-        setClaims(claimsWithRcv);
-      } else {
-        setClaims(data || []);
-      }
+      setClaims(data || []);
     } catch (error) {
       console.error("Error fetching claims:", error);
     } finally {
@@ -363,7 +331,6 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                 <TableHead className="whitespace-nowrap">Property Address</TableHead>
                 <TableHead className="whitespace-nowrap">Loss Type</TableHead>
                 <TableHead className="whitespace-nowrap">Status</TableHead>
-                <TableHead className="whitespace-nowrap">RCV Total</TableHead>
                 <TableHead className="whitespace-nowrap">Date Submitted</TableHead>
                 <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
               </TableRow>
@@ -371,7 +338,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
             <TableBody>
               {filteredClaims.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
                     No claims found
                   </TableCell>
                 </TableRow>
@@ -399,9 +366,6 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                         claimId={claim.id} 
                         currentStatus={claim.status}
                       />
-                    </TableCell>
-                    <TableCell className="font-semibold">
-                      {claim.total_rcv > 0 ? `$${claim.total_rcv.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "N/A"}
                     </TableCell>
                     <TableCell>
                       {format(new Date(claim.created_at), "MMM dd, yyyy")}
