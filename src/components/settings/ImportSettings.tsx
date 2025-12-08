@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Upload, Download, FileText, AlertCircle, CheckCircle2 } from "lucide-react";
-import Papa from "papaparse";
+import * as XLSX from "xlsx";
 
 interface ImportResult {
   success: number;
@@ -40,7 +40,7 @@ const SKIP_MAPPING_VALUE = "__skip__";
 
 export function ImportSettings() {
   const [file, setFile] = useState<File | null>(null);
-  const [csvData, setCsvData] = useState<any[]>([]);
+  const [data, setData] = useState<any[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({});
   const [importing, setImporting] = useState(false);
@@ -52,10 +52,13 @@ export function ImportSettings() {
     const uploadedFile = e.target.files?.[0];
     if (!uploadedFile) return;
 
-    if (!uploadedFile.name.endsWith('.csv')) {
+    const isExcel = uploadedFile.name.endsWith('.xlsx') || uploadedFile.name.endsWith('.xls');
+    const isCsv = uploadedFile.name.endsWith('.csv');
+
+    if (!isExcel && !isCsv) {
       toast({
         title: "Invalid file type",
-        description: "Please upload a CSV file",
+        description: "Please upload an Excel (.xlsx, .xls) or CSV file",
         variant: "destructive",
       });
       return;
@@ -64,22 +67,32 @@ export function ImportSettings() {
     setFile(uploadedFile);
     setImportResult(null);
 
-    Papa.parse(uploadedFile, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        if (results.data.length === 0) {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const binaryStr = event.target?.result;
+        const workbook = XLSX.read(binaryStr, { type: "binary" });
+        
+        // Get the first sheet
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        // Convert to JSON with headers
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+        
+        if (jsonData.length === 0) {
           toast({
             title: "Empty file",
-            description: "The CSV file contains no data",
+            description: "The file contains no data",
             variant: "destructive",
           });
           return;
         }
 
-        const fileHeaders = results.meta.fields || [];
+        // Extract headers from first row keys
+        const fileHeaders = Object.keys(jsonData[0] as object);
         setHeaders(fileHeaders);
-        setCsvData(results.data);
+        setData(jsonData);
 
         // Auto-map fields based on similar names
         const autoMapping: Record<string, string> = {};
@@ -96,24 +109,25 @@ export function ImportSettings() {
 
         toast({
           title: "File loaded",
-          description: `Found ${results.data.length} records with ${fileHeaders.length} columns`,
+          description: `Found ${jsonData.length} records with ${fileHeaders.length} columns`,
         });
-      },
-      error: (error) => {
+      } catch (error: any) {
         toast({
           title: "Parse error",
-          description: error.message,
+          description: error.message || "Failed to parse file",
           variant: "destructive",
         });
-      },
-    });
+      }
+    };
+    
+    reader.readAsBinaryString(uploadedFile);
   };
 
   const handleImport = async () => {
-    if (csvData.length === 0) {
+    if (data.length === 0) {
       toast({
         title: "No data",
-        description: "Please upload a CSV file first",
+        description: "Please upload a file first",
         variant: "destructive",
       });
       return;
@@ -137,11 +151,11 @@ export function ImportSettings() {
       errors: [],
     };
 
-    for (let i = 0; i < csvData.length; i++) {
-      const row = csvData[i];
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
       
       try {
-        // Map CSV columns to database fields
+        // Map columns to database fields
         const claimData: any = {
           claim_number: row[fieldMapping.claim_number],
           policyholder_name: row[fieldMapping.policyholder_name],
@@ -149,15 +163,21 @@ export function ImportSettings() {
 
         // Add optional fields if mapped
         Object.keys(fieldMapping).forEach((dbField) => {
-          const csvColumn = fieldMapping[dbField];
-          if (csvColumn && row[csvColumn] && dbField !== 'claim_number' && dbField !== 'policyholder_name') {
-            let value = row[csvColumn];
+          const column = fieldMapping[dbField];
+          if (column && row[column] && dbField !== 'claim_number' && dbField !== 'policyholder_name') {
+            let value = row[column];
             
-            // Handle date fields
+            // Handle date fields - Excel stores dates as serial numbers
             if (dbField === 'loss_date' && value) {
-              const date = new Date(value);
-              if (!isNaN(date.getTime())) {
-                value = date.toISOString().split('T')[0];
+              if (typeof value === 'number') {
+                // Excel date serial number
+                const date = XLSX.SSF.parse_date_code(value);
+                value = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+              } else {
+                const date = new Date(value);
+                if (!isNaN(date.getTime())) {
+                  value = date.toISOString().split('T')[0];
+                }
               }
             }
             
@@ -188,7 +208,7 @@ export function ImportSettings() {
         results.errors.push(`Row ${i + 1}: ${error.message}`);
       }
 
-      setProgress(Math.round(((i + 1) / csvData.length) * 100));
+      setProgress(Math.round(((i + 1) / data.length) * 100));
     }
 
     setImportResult(results);
@@ -202,44 +222,43 @@ export function ImportSettings() {
   };
 
   const downloadTemplate = () => {
-    const headers = Object.values(FIELD_MAPPINGS).join(",");
-    const sampleRow = [
-      "CLM-2025-001",
-      "John Doe",
-      "john@example.com",
-      "555-0123",
-      "123 Main St, City, State 12345",
-      "2025-01-15",
-      "Fire",
-      "Kitchen fire damage",
-      "State Farm",
-      "555-0199",
-      "claims@statefarm.com",
-      "Jane Smith",
-      "555-0188",
-      "jane.smith@statefarm.com",
-      "25000",
-      "open",
-      "POL-123456"
-    ].join(",");
+    // Create worksheet data
+    const templateData = [
+      Object.values(FIELD_MAPPINGS),
+      [
+        "CLM-2025-001",
+        "John Doe",
+        "john@example.com",
+        "555-0123",
+        "123 Main St, City, State 12345",
+        "2025-01-15",
+        "Fire",
+        "Kitchen fire damage",
+        "State Farm",
+        "555-0199",
+        "claims@statefarm.com",
+        "Jane Smith",
+        "555-0188",
+        "jane.smith@statefarm.com",
+        "25000",
+        "open",
+        "POL-123456"
+      ]
+    ];
 
-    const csv = `${headers}\n${sampleRow}`;
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "claims_import_template.csv";
-    a.click();
-    window.URL.revokeObjectURL(url);
+    const ws = XLSX.utils.aoa_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Claims");
+    XLSX.writeFile(wb, "claims_import_template.xlsx");
   };
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Import Claims from CSV</CardTitle>
+          <CardTitle>Import Claims from Excel</CardTitle>
           <CardDescription>
-            Upload a CSV file from your previous system to bulk import claims
+            Upload an Excel or CSV file from your previous system to bulk import claims
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -250,7 +269,7 @@ export function ImportSettings() {
               <div>
                 <p className="font-medium">Download Template</p>
                 <p className="text-sm text-muted-foreground">
-                  Get a sample CSV file with the correct format
+                  Get a sample Excel file with the correct format
                 </p>
               </div>
             </div>
@@ -262,18 +281,18 @@ export function ImportSettings() {
 
           {/* File Upload */}
           <div className="space-y-2">
-            <Label htmlFor="csv-file">Upload CSV File</Label>
+            <Label htmlFor="import-file">Upload Excel or CSV File</Label>
             <div className="flex items-center gap-4">
               <input
-                id="csv-file"
+                id="import-file"
                 type="file"
-                accept=".csv"
+                accept=".xlsx,.xls,.csv"
                 onChange={handleFileUpload}
                 className="hidden"
               />
               <Button
                 variant="outline"
-                onClick={() => document.getElementById("csv-file")?.click()}
+                onClick={() => document.getElementById("import-file")?.click()}
                 disabled={importing}
               >
                 <Upload className="h-4 w-4 mr-2" />
@@ -281,7 +300,7 @@ export function ImportSettings() {
               </Button>
               {file && (
                 <span className="text-sm text-muted-foreground">
-                  {file.name} ({csvData.length} records)
+                  {file.name} ({data.length} records)
                 </span>
               )}
             </div>
@@ -293,7 +312,7 @@ export function ImportSettings() {
               <div>
                 <h4 className="font-medium mb-2">Map Your Columns</h4>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Match your CSV columns to the database fields. Required fields are marked with *
+                  Match your columns to the database fields. Required fields are marked with *
                 </p>
               </div>
 
@@ -387,9 +406,9 @@ export function ImportSettings() {
           <div className="flex justify-end">
             <Button
               onClick={handleImport}
-              disabled={csvData.length === 0 || importing || !fieldMapping.claim_number}
+              disabled={data.length === 0 || importing || !fieldMapping.claim_number}
             >
-              {importing ? "Importing..." : `Import ${csvData.length} Claims`}
+              {importing ? "Importing..." : `Import ${data.length} Claims`}
             </Button>
           </div>
         </CardContent>
@@ -402,10 +421,13 @@ export function ImportSettings() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div>
+            <strong>Supported Formats:</strong> Excel (.xlsx, .xls) and CSV files are supported.
+          </div>
+          <div>
             <strong>Required Fields:</strong> Claim Number and Policyholder Name are required for every claim.
           </div>
           <div>
-            <strong>Date Format:</strong> Use YYYY-MM-DD format for dates (e.g., 2025-01-15).
+            <strong>Date Format:</strong> Use YYYY-MM-DD format for dates (e.g., 2025-01-15) or standard Excel date cells.
           </div>
           <div>
             <strong>Amounts:</strong> Currency values should be numbers without currency symbols (e.g., 25000 instead of $25,000).
