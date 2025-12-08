@@ -45,8 +45,22 @@ serve(async (req: Request): Promise<Response> => {
     const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
 
     if (existingUser) {
-      console.log("User already exists with email:", email, "- returning existing user ID");
+      console.log("User already exists with email:", email, "- updating password and returning existing user ID");
       
+      // Update the user's password to the new one provided
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        existingUser.id,
+        { password }
+      );
+
+      if (updateError) {
+        console.error("Error updating user password:", updateError);
+        return new Response(
+          JSON.stringify({ error: "Failed to update user credentials: " + updateError.message }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
       // Ensure user has the role in user_roles table
       const { data: existingRole } = await supabaseAdmin
         .from("user_roles")
@@ -63,8 +77,16 @@ serve(async (req: Request): Promise<Response> => {
         console.log("Added role", role, "to existing user");
       }
 
+      // Update profile with phone if provided
+      if (phone) {
+        await supabaseAdmin
+          .from("profiles")
+          .update({ phone, full_name: fullName })
+          .eq("id", existingUser.id);
+      }
+
       return new Response(
-        JSON.stringify({ success: true, userId: existingUser.id, existingUser: true }),
+        JSON.stringify({ success: true, userId: existingUser.id, existingUser: true, passwordUpdated: true }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
@@ -86,6 +108,17 @@ serve(async (req: Request): Promise<Response> => {
         JSON.stringify({ error: createError.message }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
+    }
+
+    // Add role to user_roles table
+    if (userData.user) {
+      const { error: roleError } = await supabaseAdmin
+        .from("user_roles")
+        .insert({ user_id: userData.user.id, role });
+      
+      if (roleError) {
+        console.error("Error adding role:", roleError);
+      }
     }
 
     // Update profile with phone if provided
