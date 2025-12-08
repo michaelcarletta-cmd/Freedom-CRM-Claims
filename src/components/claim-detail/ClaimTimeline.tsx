@@ -1,84 +1,404 @@
-import { Clock, CheckCircle, AlertCircle, FileText } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { 
+  Clock, 
+  CheckCircle2, 
+  AlertTriangle, 
+  Calendar, 
+  Sparkles, 
+  Loader2,
+  FileText,
+  Mail,
+  Camera,
+  ClipboardCheck,
+  DollarSign,
+  ArrowRight
+} from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { format, differenceInDays } from "date-fns";
 
-interface TimelineEvent {
-  id: string;
-  type: "status" | "note" | "document" | "communication";
-  title: string;
-  description: string;
-  timestamp: string;
-  user: string;
+interface ClaimTimelineProps {
+  claimId: string;
+  claim?: any;
 }
 
-// No mock timeline data - activity will be tracked dynamically
-const mockTimeline: TimelineEvent[] = [];
+interface Milestone {
+  id: string;
+  title: string;
+  description: string;
+  date: string | null;
+  status: "completed" | "pending" | "upcoming" | "overdue";
+  type: "inspection" | "document" | "communication" | "payment" | "task" | "milestone";
+  icon: any;
+}
 
-const getEventIcon = (type: string) => {
-  switch (type) {
-    case "status":
-      return CheckCircle;
-    case "note":
-      return FileText;
-    case "document":
-      return FileText;
-    case "communication":
-      return AlertCircle;
-    default:
-      return Clock;
-  }
-};
+interface AIInsight {
+  nextStep: string;
+  priority: "high" | "medium" | "low";
+  reasoning: string;
+  deadline?: string;
+}
 
-const getEventColor = (type: string) => {
-  switch (type) {
-    case "status":
-      return "text-success";
-    case "document":
-      return "text-primary";
-    case "communication":
-      return "text-accent";
-    default:
-      return "text-muted-foreground";
-  }
-};
+export const ClaimTimeline = ({ claimId, claim }: ClaimTimelineProps) => {
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [aiInsights, setAiInsights] = useState<AIInsight | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [generatingInsights, setGeneratingInsights] = useState(false);
+  const [claimData, setClaimData] = useState<any>(claim);
 
-export const ClaimTimeline = ({ claimId }: { claimId: string }) => {
-  if (mockTimeline.length === 0) {
+  useEffect(() => {
+    fetchTimelineData();
+  }, [claimId]);
+
+  const fetchTimelineData = async () => {
+    setLoading(true);
+    try {
+      // Fetch claim if not provided
+      let currentClaim = claim;
+      if (!currentClaim) {
+        const { data } = await supabase
+          .from("claims")
+          .select("*")
+          .eq("id", claimId)
+          .single();
+        currentClaim = data;
+        setClaimData(data);
+      }
+
+      // Fetch all relevant data in parallel
+      const [
+        { data: tasks },
+        { data: inspections },
+        { data: emails },
+        { data: checks },
+      ] = await Promise.all([
+        supabase.from("tasks").select("*").eq("claim_id", claimId).order("due_date"),
+        supabase.from("inspections").select("*").eq("claim_id", claimId).order("inspection_date"),
+        supabase.from("emails").select("*").eq("claim_id", claimId).order("sent_at", { ascending: false }).limit(5),
+        supabase.from("claim_checks").select("*").eq("claim_id", claimId).order("check_date"),
+      ]);
+
+      const timelineItems: Milestone[] = [];
+      const today = new Date();
+
+      // Add claim creation milestone
+      if (currentClaim) {
+        timelineItems.push({
+          id: "claim-created",
+          title: "Claim Created",
+          description: `Claim ${currentClaim.claim_number || "opened"} for ${currentClaim.loss_type || "property damage"}`,
+          date: currentClaim.created_at,
+          status: "completed",
+          type: "milestone",
+          icon: FileText,
+        });
+
+        // Add loss date milestone
+        if (currentClaim.loss_date) {
+          timelineItems.push({
+            id: "loss-date",
+            title: "Date of Loss",
+            description: `${currentClaim.loss_type || "Damage"} occurred at property`,
+            date: currentClaim.loss_date,
+            status: "completed",
+            type: "milestone",
+            icon: AlertTriangle,
+          });
+        }
+      }
+
+      // Add inspections
+      inspections?.forEach((insp) => {
+        const inspDate = new Date(insp.inspection_date);
+        let status: Milestone["status"] = "pending";
+        if (insp.status === "completed") status = "completed";
+        else if (inspDate < today) status = "overdue";
+        else if (differenceInDays(inspDate, today) <= 7) status = "upcoming";
+
+        timelineItems.push({
+          id: `insp-${insp.id}`,
+          title: `${insp.inspection_type || "Inspection"} ${insp.status === "completed" ? "Completed" : "Scheduled"}`,
+          description: insp.inspector_name ? `Inspector: ${insp.inspector_name}` : "Property inspection",
+          date: insp.inspection_date,
+          status,
+          type: "inspection",
+          icon: Camera,
+        });
+      });
+
+      // Add tasks
+      tasks?.forEach((task) => {
+        let status: Milestone["status"] = "pending";
+        if (task.status === "completed") status = "completed";
+        else if (task.due_date && new Date(task.due_date) < today) status = "overdue";
+        else if (task.due_date && differenceInDays(new Date(task.due_date), today) <= 3) status = "upcoming";
+
+        timelineItems.push({
+          id: `task-${task.id}`,
+          title: task.title,
+          description: task.description || "Task pending",
+          date: task.due_date || task.created_at,
+          status,
+          type: "task",
+          icon: ClipboardCheck,
+        });
+      });
+
+      // Add checks received
+      checks?.forEach((check) => {
+        timelineItems.push({
+          id: `check-${check.id}`,
+          title: `Check Received: $${Number(check.amount).toLocaleString()}`,
+          description: `${check.check_type} - ${check.check_number || "No check number"}`,
+          date: check.received_date || check.check_date,
+          status: "completed",
+          type: "payment",
+          icon: DollarSign,
+        });
+      });
+
+      // Add recent emails
+      emails?.slice(0, 3).forEach((email) => {
+        timelineItems.push({
+          id: `email-${email.id}`,
+          title: `Email: ${email.subject}`,
+          description: `To: ${email.recipient_name || email.recipient_email}`,
+          date: email.sent_at,
+          status: "completed",
+          type: "communication",
+          icon: Mail,
+        });
+      });
+
+      // Sort by date
+      timelineItems.sort((a, b) => {
+        if (!a.date) return 1;
+        if (!b.date) return -1;
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+
+      setMilestones(timelineItems);
+    } catch (error) {
+      console.error("Error fetching timeline data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateAIInsights = async () => {
+    setGeneratingInsights(true);
+    try {
+      const pendingTasks = milestones.filter(m => m.status === "pending" || m.status === "overdue");
+      const completedTasks = milestones.filter(m => m.status === "completed");
+      
+      const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
+        body: {
+          question: `Analyze this insurance claim timeline and suggest the most important next step.
+
+Claim Details:
+- Claim Number: ${claimData?.claim_number || "Unknown"}
+- Loss Type: ${claimData?.loss_type || "Unknown"}
+- Loss Date: ${claimData?.loss_date || "Unknown"}
+- Status: ${claimData?.status || "Unknown"}
+- Days Since Loss: ${claimData?.loss_date ? differenceInDays(new Date(), new Date(claimData.loss_date)) : "Unknown"}
+
+Completed Activities (${completedTasks.length}):
+${completedTasks.slice(0, 5).map(t => `- ${t.title}`).join("\n")}
+
+Pending Items (${pendingTasks.length}):
+${pendingTasks.map(t => `- ${t.title} (${t.status})`).join("\n")}
+
+Based on typical claim workflows and best practices, what is the single most important next action to take?
+
+Respond with JSON format:
+{
+  "nextStep": "Brief action description",
+  "priority": "high/medium/low",
+  "reasoning": "Why this step matters",
+  "deadline": "Suggested deadline if applicable"
+}`,
+          mode: "general",
+          messages: [],
+        },
+      });
+
+      if (error) throw error;
+
+      try {
+        const jsonMatch = data.answer.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const insights = JSON.parse(jsonMatch[0]);
+          setAiInsights(insights);
+        } else {
+          setAiInsights({
+            nextStep: data.answer.substring(0, 200),
+            priority: "medium",
+            reasoning: "AI analysis completed",
+          });
+        }
+      } catch {
+        setAiInsights({
+          nextStep: data.answer.substring(0, 200),
+          priority: "medium",
+          reasoning: "Review AI recommendation above",
+        });
+      }
+
+      toast.success("AI insights generated");
+    } catch (error: any) {
+      console.error("Error generating insights:", error);
+      toast.error(error.message || "Failed to generate AI insights");
+    } finally {
+      setGeneratingInsights(false);
+    }
+  };
+
+  const getStatusColor = (status: Milestone["status"]) => {
+    switch (status) {
+      case "completed": return "text-green-600 bg-green-100";
+      case "overdue": return "text-red-600 bg-red-100";
+      case "upcoming": return "text-amber-600 bg-amber-100";
+      default: return "text-blue-600 bg-blue-100";
+    }
+  };
+
+  const getStatusIcon = (status: Milestone["status"]) => {
+    switch (status) {
+      case "completed": return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+      case "overdue": return <AlertTriangle className="h-4 w-4 text-red-600" />;
+      case "upcoming": return <Clock className="h-4 w-4 text-amber-600" />;
+      default: return <Clock className="h-4 w-4 text-blue-600" />;
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="text-center text-sm text-muted-foreground py-8">
-        No activity recorded yet. Timeline will update as actions are taken on this claim.
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
   }
 
+  const overdueCount = milestones.filter(m => m.status === "overdue").length;
+  const upcomingCount = milestones.filter(m => m.status === "upcoming").length;
+  const completedCount = milestones.filter(m => m.status === "completed").length;
+  const pendingCount = milestones.filter(m => m.status === "pending").length;
+
   return (
     <div className="space-y-4">
-      <div className="relative">
-        {mockTimeline.map((event, index) => {
-          const Icon = getEventIcon(event.type);
-          const isLast = index === mockTimeline.length - 1;
+      {/* Summary Stats */}
+      <div className="grid grid-cols-4 gap-2">
+        <div className="flex items-center gap-2 p-2 rounded-md bg-green-50 dark:bg-green-950">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <span className="text-sm font-medium">{completedCount} Done</span>
+        </div>
+        <div className="flex items-center gap-2 p-2 rounded-md bg-blue-50 dark:bg-blue-950">
+          <Clock className="h-4 w-4 text-blue-600" />
+          <span className="text-sm font-medium">{pendingCount} Pending</span>
+        </div>
+        <div className="flex items-center gap-2 p-2 rounded-md bg-amber-50 dark:bg-amber-950">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <span className="text-sm font-medium">{upcomingCount} Soon</span>
+        </div>
+        <div className="flex items-center gap-2 p-2 rounded-md bg-red-50 dark:bg-red-950">
+          <AlertTriangle className="h-4 w-4 text-red-600" />
+          <span className="text-sm font-medium">{overdueCount} Overdue</span>
+        </div>
+      </div>
 
-          return (
-            <div key={event.id} className="relative pb-6">
-              {!isLast && (
-                <div className="absolute left-[11px] top-6 h-full w-px bg-border" />
+      {/* AI Insights */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              AI Next Step
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={generateAIInsights}
+              disabled={generatingInsights}
+              className="h-7 gap-1 text-xs"
+            >
+              {generatingInsights ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Sparkles className="h-3 w-3" />
               )}
-              <div className="flex items-start gap-3">
-                <div className={`p-1.5 rounded-full bg-card border-2 border-border ${getEventColor(event.type)}`}>
-                  <Icon className="h-3 w-3" />
-                </div>
-                <div className="flex-1 pt-0.5">
-                  <p className="text-sm font-medium text-foreground">{event.title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{event.description}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-muted-foreground">{event.user}</span>
-                    <span className="text-xs text-muted-foreground">•</span>
-                    <span className="text-xs text-muted-foreground">{event.timestamp}</span>
+              {aiInsights ? "Refresh" : "Analyze"}
+            </Button>
+          </div>
+        </CardHeader>
+        {aiInsights && (
+          <CardContent className="pt-0">
+            <div className="bg-primary/5 rounded-md p-3">
+              <div className="flex items-start gap-2">
+                <ArrowRight className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-sm">{aiInsights.nextStep}</span>
+                    <Badge variant={
+                      aiInsights.priority === "high" ? "destructive" : 
+                      aiInsights.priority === "medium" ? "default" : "secondary"
+                    } className="text-xs">
+                      {aiInsights.priority}
+                    </Badge>
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1">{aiInsights.reasoning}</p>
+                  {aiInsights.deadline && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      <Calendar className="h-3 w-3 inline mr-1" />
+                      {aiInsights.deadline}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Timeline */}
+      <ScrollArea className="h-[300px]">
+        <div className="relative pl-6">
+          <div className="absolute left-2 top-0 bottom-0 w-0.5 bg-border" />
+          
+          <div className="space-y-3">
+            {milestones.slice(0, 15).map((milestone) => {
+              const IconComponent = milestone.icon;
+              return (
+                <div key={milestone.id} className="relative">
+                  <div className={`absolute -left-4 w-4 h-4 rounded-full flex items-center justify-center ${getStatusColor(milestone.status)}`}>
+                    <IconComponent className="h-2.5 w-2.5" />
+                  </div>
+                  
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium text-sm truncate">{milestone.title}</span>
+                        {getStatusIcon(milestone.status)}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {milestone.description}
+                      </p>
+                    </div>
+                    {milestone.date && (
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {format(new Date(milestone.date), "MMM d")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </ScrollArea>
     </div>
   );
 };

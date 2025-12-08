@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { User, Calendar, MapPin, DollarSign, Mail, UserPlus, Loader2 } from "lucide-react";
+import { User, Calendar, MapPin, DollarSign, Mail, UserPlus, Loader2, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { ClaimCustomFields } from "./ClaimCustomFields";
+import { ClaimTimeline } from "./ClaimTimeline";
+import { ProofOfLossGenerator } from "./ProofOfLossGenerator";
+import { EnhancedEstimateBuilder } from "./EnhancedEstimateBuilder";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -392,6 +395,39 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
           </div>
         </CardContent>
       </Card>
+
+      {/* AI Tools Section */}
+      {!isPortalUser && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              AI Tools
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              <ProofOfLossGenerator claimId={claim.id} claim={claim} />
+              <EnhancedEstimateBuilder claimId={claim.id} claim={claim} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Claim Timeline */}
+      {!isPortalUser && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              AI Claim Timeline
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ClaimTimeline claimId={claim.id} claim={claim} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Custom Fields */}
       <ClaimCustomFields claimId={claim.id} />
