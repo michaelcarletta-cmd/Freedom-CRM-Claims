@@ -26,6 +26,7 @@ interface Claim {
   updated_at: string;
   loss_type: string;
   is_closed: boolean;
+  total_rcv?: number;
 }
 
 interface ClaimsTableConnectedProps {
@@ -207,7 +208,31 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       const { data, error } = await query.order("updated_at", { ascending: false });
 
       if (error) throw error;
-      setClaims(data || []);
+
+      // Fetch settlements for all claims to get RCV totals
+      if (data && data.length > 0) {
+        const claimIds = data.map(c => c.id);
+        const { data: settlements } = await supabase
+          .from("claim_settlements")
+          .select("claim_id, replacement_cost_value")
+          .in("claim_id", claimIds);
+
+        // Calculate total RCV per claim
+        const rcvByClaimId: Record<string, number> = {};
+        settlements?.forEach(s => {
+          rcvByClaimId[s.claim_id] = (rcvByClaimId[s.claim_id] || 0) + Number(s.replacement_cost_value || 0);
+        });
+
+        // Merge RCV into claims
+        const claimsWithRcv = data.map(claim => ({
+          ...claim,
+          total_rcv: rcvByClaimId[claim.id] || 0
+        }));
+
+        setClaims(claimsWithRcv);
+      } else {
+        setClaims(data || []);
+      }
     } catch (error) {
       console.error("Error fetching claims:", error);
     } finally {
@@ -325,7 +350,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                 <TableHead className="whitespace-nowrap">Property Address</TableHead>
                 <TableHead className="whitespace-nowrap">Loss Type</TableHead>
                 <TableHead className="whitespace-nowrap">Status</TableHead>
-                <TableHead className="whitespace-nowrap">Amount</TableHead>
+                <TableHead className="whitespace-nowrap">RCV Total</TableHead>
                 <TableHead className="whitespace-nowrap">Date Submitted</TableHead>
                 <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
               </TableRow>
@@ -363,7 +388,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                       />
                     </TableCell>
                     <TableCell className="font-semibold">
-                      {claim.claim_amount ? `$${claim.claim_amount.toLocaleString()}` : "N/A"}
+                      {claim.total_rcv ? `$${claim.total_rcv.toLocaleString()}` : "N/A"}
                     </TableCell>
                     <TableCell>
                       {format(new Date(claim.created_at), "MMM dd, yyyy")}
