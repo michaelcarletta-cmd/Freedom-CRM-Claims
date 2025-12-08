@@ -311,7 +311,7 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Date of Loss</p>
               <p className="text-sm font-medium">
-                {claim.loss_date ? format(new Date(claim.loss_date), "MMM dd, yyyy") : "N/A"}
+                {claim.loss_date ? format(new Date(claim.loss_date + 'T12:00:00'), "MMM dd, yyyy") : "N/A"}
               </p>
             </div>
             <div className="space-y-1">
