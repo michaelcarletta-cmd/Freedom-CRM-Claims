@@ -9,7 +9,7 @@ const corsHeaders = {
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup';
   content?: string; // For denial letters or correspondence
   additionalContext?: any;
 }
@@ -281,6 +281,63 @@ Analyze this correspondence and provide:
    - Clear next steps and deadlines
 
 Maintain a professional, assertive tone appropriate for carrier correspondence.`;
+        break;
+
+      case 'task_followup':
+        const taskInfo = additionalContext?.task;
+        systemPrompt = `You are Darwin, an intelligent public adjuster AI assistant helping with task follow-ups. Your role is to analyze tasks and suggest the best way to complete them effectively.
+
+You understand:
+- Insurance claim workflows and processes
+- Professional communication with carriers, clients, and contractors
+- Time-sensitive claim activities and deadlines
+- Effective follow-up strategies
+- Documentation best practices
+
+Provide actionable, specific suggestions with ready-to-use communications.`;
+
+        userPrompt = `${claimSummary}
+
+TASK TO FOLLOW UP ON:
+- Title: ${taskInfo?.title || 'N/A'}
+- Description: ${taskInfo?.description || 'No description'}
+- Priority: ${taskInfo?.priority || 'N/A'}
+- Due Date: ${taskInfo?.due_date || 'No due date'}
+- Status: ${taskInfo?.status || 'N/A'}
+
+${additionalContext?.customPrompt ? `ADDITIONAL CONTEXT FROM USER:\n${additionalContext.customPrompt}` : ''}
+
+Based on this task and the claim context, provide:
+
+1. TASK ANALYSIS:
+   - What does this task require?
+   - Why is it important for the claim?
+   - What's the urgency level?
+
+2. RECOMMENDED APPROACH:
+   - Step-by-step plan to complete this task
+   - Who needs to be contacted?
+   - What documents or information are needed?
+
+3. SUGGESTED COMMUNICATIONS:
+   Provide ready-to-use drafts for any communications needed:
+   
+   [EMAIL DRAFT] - If an email is appropriate
+   Subject: [subject line]
+   Body: [professional email body]
+   
+   [SMS DRAFT] - If a quick text is appropriate
+   [short, professional message]
+   
+   [NOTE/DOCUMENTATION] - What should be documented
+   [documentation text]
+
+4. FOLLOW-UP ACTIONS:
+   - What should be done after the initial action?
+   - Any tasks that should be created as follow-ups?
+   - Timeline recommendations
+
+Be specific, professional, and provide communications that are ready to copy and use.`;
         break;
 
       default:
