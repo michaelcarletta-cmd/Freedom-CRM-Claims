@@ -36,7 +36,6 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [lossTypeFilter, setLossTypeFilter] = useState<string>("all");
   const [showClosed, setShowClosed] = useState(false);
@@ -53,15 +52,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
     fetchActiveStatuses();
   }, [portalType, user]);
 
-  // Debounce search query
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // Use memoized filtering instead of state
+  // Use memoized filtering - no debounce needed for client-side filtering
   const filteredClaims = useMemo(() => {
     let filtered = [...claims];
 
@@ -70,15 +61,15 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       filtered = filtered.filter((claim) => !claim.is_closed);
     }
 
-    // Search filter (use debounced value)
-    if (debouncedSearch) {
-      const query = debouncedSearch.toLowerCase();
-      filtered = filtered.filter(
-        (claim) =>
-          claim.claim_number?.toLowerCase().includes(query) ||
-          claim.policyholder_name?.toLowerCase().includes(query) ||
-          claim.policyholder_address?.toLowerCase().includes(query)
-      );
+    // Search filter - instant client-side filtering
+    const query = searchQuery.trim().toLowerCase();
+    if (query) {
+      filtered = filtered.filter((claim) => {
+        const claimNum = (claim.claim_number || "").toLowerCase();
+        const name = (claim.policyholder_name || "").toLowerCase();
+        const address = (claim.policyholder_address || "").toLowerCase();
+        return claimNum.includes(query) || name.includes(query) || address.includes(query);
+      });
     }
 
     // Status filter
@@ -92,7 +83,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
     }
 
     return filtered;
-  }, [claims, debouncedSearch, statusFilter, lossTypeFilter, showClosed]);
+  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed]);
 
   const toggleClaimSelection = (claimId: string) => {
     const newSelected = new Set(selectedClaims);
