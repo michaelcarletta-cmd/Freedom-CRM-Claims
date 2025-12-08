@@ -40,9 +40,6 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
     insurance_company_id: claim?.insurance_company_id || "",
     insurance_phone: claim?.insurance_phone || "",
     insurance_email: claim?.insurance_email || "",
-    adjuster_name: claim?.adjuster_name || "",
-    adjuster_phone: claim?.adjuster_phone || "",
-    adjuster_email: claim?.adjuster_email || "",
     claim_amount: claim?.claim_amount || "",
     status: claim?.status || "open",
     loan_number: claim?.loan_number || "",
@@ -66,9 +63,6 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
         insurance_company_id: claim.insurance_company_id || "",
         insurance_phone: claim.insurance_phone || "",
         insurance_email: claim.insurance_email || "",
-        adjuster_name: claim.adjuster_name || "",
-        adjuster_phone: claim.adjuster_phone || "",
-        adjuster_email: claim.adjuster_email || "",
         claim_amount: claim.claim_amount || "",
         status: claim.status || "open",
         loan_number: claim.loan_number || "",
@@ -409,39 +403,6 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
             </div>
           </div>
 
-          {/* Adjuster Information */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold">Adjuster Information</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="adjuster_name">Adjuster Name</Label>
-                <Input
-                  id="adjuster_name"
-                  value={formData.adjuster_name}
-                  onChange={(e) => handleChange("adjuster_name", e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="adjuster_phone">Phone</Label>
-                <Input
-                  id="adjuster_phone"
-                  type="tel"
-                  value={formData.adjuster_phone}
-                  onChange={(e) => handleChange("adjuster_phone", formatPhoneNumber(e.target.value))}
-                  placeholder="123-456-7890"
-                />
-              </div>
-              <div>
-                <Label htmlFor="adjuster_email">Email</Label>
-                <Input
-                  id="adjuster_email"
-                  type="email"
-                  value={formData.adjuster_email}
-                  onChange={(e) => handleChange("adjuster_email", e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
 
           {/* Mortgage Company Details */}
           <div className="space-y-4">
