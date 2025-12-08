@@ -19,8 +19,10 @@ import { DeleteClaimDialog } from "@/components/claim-detail/DeleteClaimDialog";
 import { NotifyPortalDialog } from "@/components/claim-detail/NotifyPortalDialog";
 import { ClaimAutomationSettings } from "@/components/claim-detail/ClaimAutomationSettings";
 import { ClaimTimeline } from "@/components/claim-detail/ClaimTimeline";
+import { ProofOfLossGenerator } from "@/components/claim-detail/ProofOfLossGenerator";
+import { EnhancedEstimateBuilder } from "@/components/claim-detail/EnhancedEstimateBuilder";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Edit, Trash2, Bell, Brain } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Contractor {
@@ -387,6 +389,18 @@ const ClaimDetail = () => {
               <div className="flex items-center gap-2 mb-4">
                 <Brain className="h-6 w-6 text-primary" />
                 <h2 className="text-xl font-semibold">Darwin AI</h2>
+              </div>
+              
+              {/* AI Tools */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  AI Tools
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  <ProofOfLossGenerator claimId={claim.id} claim={claim} />
+                  <EnhancedEstimateBuilder claimId={claim.id} claim={claim} />
+                </div>
               </div>
               
               {/* AI Claim Timeline */}
