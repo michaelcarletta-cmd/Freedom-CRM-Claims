@@ -77,3 +77,6 @@ verify_jwt = true
 
 [functions.process-follow-ups]
 verify_jwt = false
+
+[functions.signature-webhook]
+verify_jwt = false

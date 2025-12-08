@@ -31,7 +31,7 @@ interface TriggerConfig {
 }
 
 interface ActionConfig {
-  type: 'send_email' | 'send_sms' | 'create_task' | 'send_notification' | 'update_claim_status';
+  type: 'send_email' | 'send_sms' | 'create_task' | 'send_notification' | 'update_claim_status' | 'call_webhook';
   config: {
     // Email/SMS - support multiple recipients
     recipient_types?: ('policyholder' | 'adjuster' | 'referrer' | 'contractors')[]; // Multiple recipient types
@@ -54,6 +54,9 @@ interface ActionConfig {
     due_date_type?: 'calendar' | 'business'; // Calendar or business days
     // Status change
     new_status?: string;
+    // Webhook
+    webhook_url?: string;
+    webhook_include_files?: boolean;
   };
 }
 
@@ -307,6 +310,7 @@ export const AutomationsSettings = () => {
       case 'create_task': return <CheckSquare className="h-4 w-4" />;
       case 'send_notification': return <AlertCircle className="h-4 w-4" />;
       case 'update_claim_status': return <Zap className="h-4 w-4" />;
+      case 'call_webhook': return <Zap className="h-4 w-4" />;
       default: return null;
     }
   };
@@ -340,6 +344,8 @@ export const AutomationsSettings = () => {
         return `Send notification`;
       case 'update_claim_status':
         return `Change status to: ${action.config.new_status}`;
+      case 'call_webhook':
+        return `Call webhook: ${action.config.webhook_url ? 'Make.com' : 'Not configured'}`;
       default:
         return action.type;
     }
@@ -608,6 +614,7 @@ export const AutomationsSettings = () => {
                           <SelectItem value="create_task">Create Task</SelectItem>
                           <SelectItem value="send_notification">Send Portal Notification</SelectItem>
                           <SelectItem value="update_claim_status">Change Claim Status</SelectItem>
+                          <SelectItem value="call_webhook">Call Webhook (Make.com)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1001,6 +1008,51 @@ export const AutomationsSettings = () => {
                               ))}
                             </SelectContent>
                           </Select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Webhook Config */}
+                    {currentAction?.type === 'call_webhook' && (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Make.com Webhook URL</Label>
+                          <Input 
+                            placeholder="https://hook.make.com/..."
+                            value={currentAction.config.webhook_url || ''}
+                            onChange={(e) => setCurrentAction({
+                              ...currentAction,
+                              config: { ...currentAction.config, webhook_url: e.target.value }
+                            })}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Create a webhook trigger in Make.com and paste the URL here. The webhook will receive claim data including policyholder info, claim number, and documents.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="webhook_include_files"
+                            checked={currentAction.config.webhook_include_files || false}
+                            onChange={(e) => setCurrentAction({
+                              ...currentAction,
+                              config: { ...currentAction.config, webhook_include_files: e.target.checked }
+                            })}
+                            className="rounded border-input"
+                          />
+                          <Label htmlFor="webhook_include_files" className="text-sm font-normal cursor-pointer">
+                            Include file URLs in webhook payload
+                          </Label>
+                        </div>
+                        <div className="p-3 bg-muted rounded-lg text-sm">
+                          <p className="font-medium mb-1">Webhook Payload Includes:</p>
+                          <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                            <li>Claim details (number, status, loss type)</li>
+                            <li>Policyholder info (name, email, address)</li>
+                            <li>Insurance company details</li>
+                            <li>Trigger data (e.g., new status)</li>
+                            {currentAction.config.webhook_include_files && <li>Document file URLs</li>}
+                          </ul>
                         </div>
                       </div>
                     )}
