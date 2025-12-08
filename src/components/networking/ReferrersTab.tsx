@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { UserPlus, Mail, Phone, Building, Search } from "lucide-react";
+import { UserPlus, Mail, Phone, Building, Search, Send } from "lucide-react";
 import { formatPhoneNumber } from "@/lib/utils";
 
 interface Referrer {
@@ -17,6 +17,7 @@ interface Referrer {
   phone: string | null;
   email: string | null;
   is_active: boolean;
+  user_id: string | null;
 }
 
 export const ReferrersTab = () => {
@@ -30,10 +31,49 @@ export const ReferrersTab = () => {
     phone: "",
     company: "",
   });
+  const [sendingInvite, setSendingInvite] = useState<string | null>(null);
 
   useEffect(() => {
     fetchReferrers();
   }, []);
+
+  const handleSendPortalInvite = async (referrer: Referrer) => {
+    if (!referrer.email) {
+      toast.error("Referrer has no email address");
+      return;
+    }
+
+    if (!referrer.user_id) {
+      toast.error("Referrer has no portal account. Please recreate with email.");
+      return;
+    }
+
+    setSendingInvite(referrer.id);
+    
+    // Generate a new temporary password
+    const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+    
+    try {
+      const { error } = await supabase.functions.invoke("send-portal-invite", {
+        body: {
+          email: referrer.email,
+          password: tempPassword,
+          userType: "Referrer",
+          userName: referrer.name,
+          appUrl: window.location.origin,
+        },
+      });
+
+      if (error) throw error;
+
+      toast.success(`Portal invite sent to ${referrer.email}`);
+    } catch (error: any) {
+      console.error("Error sending invite:", error);
+      toast.error("Failed to send portal invite: " + error.message);
+    } finally {
+      setSendingInvite(null);
+    }
+  };
 
   useEffect(() => {
     const filtered = referrers.filter((referrer) => {
@@ -197,6 +237,7 @@ export const ReferrersTab = () => {
                   <TableHead className="whitespace-nowrap">Company</TableHead>
                   <TableHead className="whitespace-nowrap">Email</TableHead>
                   <TableHead className="whitespace-nowrap">Phone</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
             <TableBody>
@@ -231,6 +272,19 @@ export const ReferrersTab = () => {
                       </div>
                     ) : (
                       <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {referrer.email && referrer.user_id && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleSendPortalInvite(referrer)}
+                        disabled={sendingInvite === referrer.id}
+                        title="Send portal invite email"
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
                     )}
                   </TableCell>
                 </TableRow>
