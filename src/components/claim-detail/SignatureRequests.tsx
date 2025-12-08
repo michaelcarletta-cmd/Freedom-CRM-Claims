@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, ChevronLeft } from "lucide-react";
+import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, ChevronLeft, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FieldPlacementEditor } from "./FieldPlacementEditor";
 
@@ -23,12 +23,26 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1); // 1: template, 2: fields, 3: signers
   const [signers, setSigners] = useState([
-    { name: claim.policyholder_name, email: claim.policyholder_email || "", type: "policyholder", order: 1 }
+    { name: claim.policyholder_name || "", email: claim.policyholder_email || "", type: "policyholder", order: 1 }
   ]);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [generatedDocUrl, setGeneratedDocUrl] = useState<string | null>(null);
   const [generatedDocPath, setGeneratedDocPath] = useState<string | null>(null);
   const [placedFields, setPlacedFields] = useState<any[]>([]);
+
+  // Fetch Make webhook URL from company branding
+  const { data: companyBranding } = useQuery({
+    queryKey: ["company-branding"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("company_branding")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const { data: templates } = useQuery({
     queryKey: ["document-templates"],
@@ -112,7 +126,16 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     mutationFn: async () => {
       if (!selectedTemplate || !generatedDocPath) throw new Error("Missing required data");
 
-      // Create signature request with field data
+      const webhookUrl = companyBranding?.signnow_make_webhook_url;
+      
+      // Get a long-lived signed URL for the document (24 hours)
+      const { data: urlData } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(generatedDocPath, 86400);
+      
+      if (!urlData?.signedUrl) throw new Error("Failed to generate document URL");
+
+      // Create signature request record
       const { data: request, error: requestError } = await supabase
         .from("signature_requests")
         .insert({
@@ -120,6 +143,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
           document_name: selectedTemplate.name,
           document_path: generatedDocPath,
           field_data: placedFields,
+          status: webhookUrl ? "sent_to_signnow" : "pending",
         })
         .select()
         .single();
@@ -139,23 +163,61 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .insert(signersData);
       if (signersError) throw signersError;
 
-      // Send notification emails
-      await supabase.functions.invoke("send-signature-request", {
-        body: { requestId: request.id },
-      });
+      // If Make webhook is configured, send to SignNow via Make
+      if (webhookUrl) {
+        const response = await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          mode: "no-cors",
+          body: JSON.stringify({
+            request_id: request.id,
+            claim_id: claimId,
+            claim_number: claim.claim_number,
+            policy_number: claim.policy_number,
+            policyholder_name: claim.policyholder_name,
+            policyholder_email: claim.policyholder_email,
+            document_name: selectedTemplate.name,
+            document_url: urlData.signedUrl,
+            field_data: placedFields,
+            signers: signers.map(s => ({
+              name: s.name,
+              email: s.email,
+              type: s.type,
+              order: s.order,
+            })),
+            callback_url: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/signature-webhook`,
+          }),
+        });
+
+        // Log that we sent to Make/SignNow
+        await supabase.from("claim_updates").insert({
+          claim_id: claimId,
+          content: `📝 Signature request for "${selectedTemplate.name}" sent to SignNow via Make.com`,
+          update_type: "signature",
+        });
+      } else {
+        // Fall back to built-in email notification
+        await supabase.functions.invoke("send-signature-request", {
+          body: { requestId: request.id },
+        });
+      }
 
       return request;
     },
     onSuccess: () => {
-      toast({ title: "Signature request created and emails sent" });
+      const usedMake = !!companyBranding?.signnow_make_webhook_url;
+      toast({ 
+        title: usedMake ? "Sent to SignNow via Make.com" : "Signature request created and emails sent" 
+      });
       setIsCreateOpen(false);
       setCurrentStep(1);
       setSelectedTemplate(null);
       setGeneratedDocUrl(null);
       setGeneratedDocPath(null);
       setPlacedFields([]);
-      setSigners([{ name: claim.policyholder_name, email: claim.policyholder_email || "", type: "policyholder", order: 1 }]);
+      setSigners([{ name: claim.policyholder_name || "", email: claim.policyholder_email || "", type: "policyholder", order: 1 }]);
       queryClient.invalidateQueries({ queryKey: ["signature-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["claim-updates"] });
     },
     onError: (error: Error) => {
       toast({ title: "Failed to create request", description: error.message, variant: "destructive" });
@@ -215,8 +277,10 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       in_progress: "secondary",
       declined: "destructive",
       pending: "outline",
+      sent_to_signnow: "secondary",
     };
-    return <Badge variant={variants[status] || "outline"}>{status.replace("_", " ")}</Badge>;
+    const displayStatus = status === "sent_to_signnow" ? "Sent to SignNow" : status.replace("_", " ");
+    return <Badge variant={variants[status] || "outline"}>{displayStatus}</Badge>;
   };
 
   const handleOpenDocument = async (request: any) => {
