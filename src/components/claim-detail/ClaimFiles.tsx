@@ -157,12 +157,6 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["claim-files", claimId] });
-      setUploadDialogOpen(false);
-      setSelectedFolderId(null);
-      toast({
-        title: "File uploaded",
-        description: "The file has been uploaded successfully.",
-      });
     },
     onError: () => {
       toast({
@@ -174,14 +168,23 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
   });
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     setUploadingFile(true);
     try {
-      await uploadFileMutation.mutateAsync(file);
+      const uploadPromises = Array.from(files).map(file => uploadFileMutation.mutateAsync(file));
+      await Promise.all(uploadPromises);
+      toast({
+        title: files.length > 1 ? "Files uploaded" : "File uploaded",
+        description: `${files.length} file${files.length > 1 ? 's' : ''} uploaded successfully.`,
+      });
+    } catch (error) {
+      // Error handled by mutation
     } finally {
       setUploadingFile(false);
+      setUploadDialogOpen(false);
+      setSelectedFolderId(null);
     }
   };
 
@@ -445,6 +448,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                       <div className="space-y-4">
                         <Input
                           type="file"
+                          multiple
                           onChange={handleFileUpload}
                           disabled={uploadingFile}
                         />
