@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package } from "lucide-react";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -193,7 +193,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
 
 // Settlement Section Component with Tabs
 function SettlementSection({ claimId, settlement, isAdmin }: any) {
-  const [activeTab, setActiveTab] = useState("dwelling");
+  const [expandedSections, setExpandedSections] = useState<string[]>(["dwelling"]);
   const [open, setOpen] = useState(false);
   const [editingType, setEditingType] = useState<"dwelling" | "other_structures" | "pwi">("dwelling");
   const { toast } = useToast();
@@ -431,84 +431,105 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
         </div>
       </CardHeader>
       <CardContent>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-4">
-            <TabsTrigger value="dwelling" className="flex items-center gap-2">
-              <Home className="h-4 w-4" />
-              Dwelling
-              {dwellingRcv > 0 && <span className="text-xs text-muted-foreground">${dwellingRcv.toLocaleString()}</span>}
-            </TabsTrigger>
-            <TabsTrigger value="other_structures" className="flex items-center gap-2">
-              <Warehouse className="h-4 w-4" />
-              Other Structures
-              {otherStructuresRcv > 0 && <span className="text-xs text-muted-foreground">${otherStructuresRcv.toLocaleString()}</span>}
-            </TabsTrigger>
-            <TabsTrigger value="pwi" className="flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              PWI Items
-              {pwiRcv > 0 && <span className="text-xs text-muted-foreground">${pwiRcv.toLocaleString()}</span>}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="dwelling">
-            {isAdmin && (
-              <div className="flex justify-end mb-4">
-                <Button onClick={() => openEditDialog("dwelling")}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  {settlement?.replacement_cost_value ? "Edit" : "Add"} Dwelling
-                </Button>
+        <Accordion type="multiple" value={expandedSections} onValueChange={setExpandedSections} className="space-y-2">
+          <AccordionItem value="dwelling" className="border rounded-lg px-4">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-3">
+                <Home className="h-4 w-4" />
+                <span>Dwelling</span>
+                {dwellingRcv > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    ${dwellingRcv.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                )}
               </div>
-            )}
-            {renderSettlementContent(
-              dwellingRcv,
-              Number(settlement?.recoverable_depreciation || 0),
-              Number(settlement?.non_recoverable_depreciation || 0),
-              Number(settlement?.deductible || 0),
-              dwellingAcv,
-              "dwelling",
-              Number(settlement?.estimate_amount || 0),
-              settlement?.notes
-            )}
-          </TabsContent>
+            </AccordionTrigger>
+            <AccordionContent>
+              {isAdmin && (
+                <div className="flex justify-end mb-4">
+                  <Button onClick={() => openEditDialog("dwelling")}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    {settlement?.replacement_cost_value ? "Edit" : "Add"} Dwelling
+                  </Button>
+                </div>
+              )}
+              {renderSettlementContent(
+                dwellingRcv,
+                Number(settlement?.recoverable_depreciation || 0),
+                Number(settlement?.non_recoverable_depreciation || 0),
+                Number(settlement?.deductible || 0),
+                dwellingAcv,
+                "dwelling",
+                Number(settlement?.estimate_amount || 0),
+                settlement?.notes
+              )}
+            </AccordionContent>
+          </AccordionItem>
 
-          <TabsContent value="other_structures">
-            {isAdmin && (
-              <div className="flex justify-end mb-4">
-                <Button onClick={() => openEditDialog("other_structures")}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  {settlement?.other_structures_rcv ? "Edit" : "Add"} Other Structures
-                </Button>
+          <AccordionItem value="other_structures" className="border rounded-lg px-4">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-3">
+                <Warehouse className="h-4 w-4" />
+                <span>Other Structures</span>
+                {otherStructuresRcv > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    ${otherStructuresRcv.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                )}
               </div>
-            )}
-            {renderSettlementContent(
-              otherStructuresRcv,
-              Number(settlement?.other_structures_recoverable_depreciation || 0),
-              Number(settlement?.other_structures_non_recoverable_depreciation || 0),
-              Number(settlement?.other_structures_deductible || 0),
-              otherStructuresAcv,
-              "other_structures"
-            )}
-          </TabsContent>
+            </AccordionTrigger>
+            <AccordionContent>
+              {isAdmin && (
+                <div className="flex justify-end mb-4">
+                  <Button onClick={() => openEditDialog("other_structures")}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    {settlement?.other_structures_rcv ? "Edit" : "Add"} Other Structures
+                  </Button>
+                </div>
+              )}
+              {renderSettlementContent(
+                otherStructuresRcv,
+                Number(settlement?.other_structures_recoverable_depreciation || 0),
+                Number(settlement?.other_structures_non_recoverable_depreciation || 0),
+                Number(settlement?.other_structures_deductible || 0),
+                otherStructuresAcv,
+                "other_structures"
+              )}
+            </AccordionContent>
+          </AccordionItem>
 
-          <TabsContent value="pwi">
-            {isAdmin && (
-              <div className="flex justify-end mb-4">
-                <Button onClick={() => openEditDialog("pwi")}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  {settlement?.pwi_rcv ? "Edit" : "Add"} PWI Items
-                </Button>
+          <AccordionItem value="pwi" className="border rounded-lg px-4">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-3">
+                <Package className="h-4 w-4" />
+                <span>PWI Items</span>
+                {pwiRcv > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    ${pwiRcv.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                )}
               </div>
-            )}
-            {renderSettlementContent(
-              pwiRcv,
-              Number(settlement?.pwi_recoverable_depreciation || 0),
-              Number(settlement?.pwi_non_recoverable_depreciation || 0),
-              Number(settlement?.pwi_deductible || 0),
-              pwiAcv,
-              "pwi"
-            )}
-          </TabsContent>
-        </Tabs>
+            </AccordionTrigger>
+            <AccordionContent>
+              {isAdmin && (
+                <div className="flex justify-end mb-4">
+                  <Button onClick={() => openEditDialog("pwi")}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    {settlement?.pwi_rcv ? "Edit" : "Add"} PWI Items
+                  </Button>
+                </div>
+              )}
+              {renderSettlementContent(
+                pwiRcv,
+                Number(settlement?.pwi_recoverable_depreciation || 0),
+                Number(settlement?.pwi_non_recoverable_depreciation || 0),
+                Number(settlement?.pwi_deductible || 0),
+                pwiAcv,
+                "pwi"
+              )}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
         {/* Edit Dialog */}
         <Dialog open={open} onOpenChange={setOpen}>
