@@ -43,6 +43,45 @@ serve(async (req) => {
 
     if (claimError) throw claimError;
 
+    // Detect state from policyholder address
+    const detectState = (address: string | null): { state: string; stateName: string; insuranceCode: string; promptPayAct: string } => {
+      if (!address) return { state: 'NJ', stateName: 'New Jersey', insuranceCode: 'New Jersey Insurance Code (N.J.S.A. 17B)', promptPayAct: 'New Jersey Prompt Payment Act' };
+      
+      const upperAddress = address.toUpperCase();
+      
+      // Check for state abbreviations or full names
+      if (upperAddress.includes(' NJ') || upperAddress.includes('NEW JERSEY') || upperAddress.includes(', NJ')) {
+        return { 
+          state: 'NJ', 
+          stateName: 'New Jersey', 
+          insuranceCode: 'New Jersey Insurance Code (N.J.S.A. 17B)',
+          promptPayAct: 'New Jersey Unfair Claims Settlement Practices Act (N.J.S.A. 17:29B-4)'
+        };
+      }
+      if (upperAddress.includes(' PA') || upperAddress.includes('PENNSYLVANIA') || upperAddress.includes(', PA')) {
+        return { 
+          state: 'PA', 
+          stateName: 'Pennsylvania', 
+          insuranceCode: 'Pennsylvania Insurance Code (40 P.S.)',
+          promptPayAct: 'Pennsylvania Unfair Insurance Practices Act (40 P.S. § 1171.5)'
+        };
+      }
+      if (upperAddress.includes(' TX') || upperAddress.includes('TEXAS') || upperAddress.includes(', TX')) {
+        return { 
+          state: 'TX', 
+          stateName: 'Texas', 
+          insuranceCode: 'Texas Insurance Code',
+          promptPayAct: 'Texas Prompt Payment of Claims Act'
+        };
+      }
+      
+      // Default to NJ since that's more common for this user
+      return { state: 'NJ', stateName: 'New Jersey', insuranceCode: 'New Jersey Insurance Code (N.J.S.A. 17B)', promptPayAct: 'New Jersey Unfair Claims Settlement Practices Act (N.J.S.A. 17:29B-4)' };
+    };
+
+    const stateInfo = detectState(claim.policyholder_address);
+    console.log(`Detected state: ${stateInfo.stateName} from address: ${claim.policyholder_address}`);
+
     // Fetch related data based on analysis type
     let context: any = { claim };
 
@@ -132,9 +171,13 @@ ${context.emails?.slice(0, 3).map((e: any) => `- ${e.subject} (${new Date(e.crea
       case 'denial_rebuttal':
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in insurance claim rebuttals. Your role is to analyze denial letters and generate professional, legally-sound rebuttals that maximize claim recovery for policyholders.
 
+IMPORTANT: This claim is located in ${stateInfo.stateName}. You MUST cite ${stateInfo.stateName} law and regulations.
+
 You have deep knowledge of:
 - Insurance policy interpretation and coverage analysis
-- Texas insurance regulations and case law
+- ${stateInfo.stateName} insurance regulations and case law
+- ${stateInfo.insuranceCode}
+- ${stateInfo.promptPayAct}
 - Appraisal and umpire processes
 - Building codes and manufacturer specifications
 - Common carrier denial tactics and how to counter them
@@ -142,19 +185,22 @@ You have deep knowledge of:
 When generating rebuttals:
 1. Identify each specific reason for denial
 2. Counter each reason with policy language, regulations, or case law
-3. Reference the Texas Insurance Code where applicable
+3. Reference the ${stateInfo.insuranceCode} where applicable
 4. Cite specific building codes or manufacturer specs when relevant
 5. Maintain a professional but assertive tone
 6. Include specific documentation requests and next steps`;
 
         userPrompt = `${claimSummary}
 
+STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
+APPLICABLE LAW: ${stateInfo.insuranceCode}
+
 ${pdfContent ? `A PDF of the denial letter has been provided for analysis.` : `DENIAL LETTER CONTENT:
 ${content || 'No denial letter content provided'}`}
 
 Please analyze this denial and generate a comprehensive rebuttal that:
 1. Lists each denial reason with a point-by-point counter-argument
-2. Cites relevant policy language, Texas Insurance Code, and case law
+2. Cites relevant policy language, ${stateInfo.insuranceCode}, and ${stateInfo.stateName} case law
 3. References any applicable building codes or manufacturer specifications
 4. Includes specific documentation or evidence to support the claim
 5. Proposes next steps (supplemental documentation, appraisal demand, etc.)
@@ -166,28 +212,35 @@ Format your response as a structured rebuttal document.`;
       case 'next_steps':
         systemPrompt = `You are Darwin, an intelligent claims management AI for public adjusters. Your role is to analyze claim status, timeline, and activities to recommend the optimal next actions.
 
+IMPORTANT: This claim is located in ${stateInfo.stateName}. Apply ${stateInfo.stateName} law and deadlines.
+
 You understand:
 - Claim processing timelines and deadlines
-- Texas Prompt Payment Act requirements
+- ${stateInfo.promptPayAct} requirements
+- ${stateInfo.stateName} insurance regulations and timelines
 - When to escalate vs wait
 - Optimal sequencing of claim activities
 - Resource allocation and prioritization
 
-Provide actionable, specific recommendations based on the claim's current state.`;
+Provide actionable, specific recommendations based on the claim's current state and ${stateInfo.stateName} law.`;
 
         userPrompt = `${claimSummary}
+
+STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
+APPLICABLE LAW: ${stateInfo.insuranceCode}
+PROMPT PAYMENT: ${stateInfo.promptPayAct}
 
 ${additionalContext?.timeline ? `TIMELINE EVENTS:\n${JSON.stringify(additionalContext.timeline, null, 2)}` : ''}
 
 Analyze this claim and provide:
 1. TOP 3 PRIORITY ACTIONS - What should be done immediately and why
-2. TIMELINE ANALYSIS - Are there any deadline concerns or Prompt Payment Act violations?
+2. TIMELINE ANALYSIS - Are there any deadline concerns or ${stateInfo.promptPayAct} violations?
 3. MISSING DOCUMENTATION - What evidence or documents should be gathered?
 4. CARRIER ENGAGEMENT STRATEGY - How to approach the insurance company
 5. ESTIMATED NEXT MILESTONES - What events should occur in the next 7, 14, and 30 days
 6. RISK ASSESSMENT - Any red flags or concerns to address
 
-Be specific and actionable. Reference dates and deadlines where possible.`;
+Be specific and actionable. Reference ${stateInfo.stateName} deadlines and regulations where possible.`;
         break;
 
       case 'supplement':
@@ -380,6 +433,8 @@ Be specific, professional, and provide communications that are ready to copy and
       case 'engineer_report_rebuttal':
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in analyzing and refuting engineer reports used by insurance carriers to deny or underpay claims. Your role is to identify flaws, methodological issues, and bias in engineering reports.
 
+IMPORTANT: This claim is located in ${stateInfo.stateName}. You MUST cite ${stateInfo.stateName} law and case law.
+
 You have deep expertise in:
 - Engineering report methodology and standards
 - Common flaws in desk reviews vs field inspections
@@ -388,7 +443,8 @@ You have deep expertise in:
 - ASTM testing standards and proper protocols
 - Weather event analysis and hail/wind damage patterns
 - Material science and failure analysis
-- Texas case law regarding engineer testimony and reports
+- ${stateInfo.stateName} case law regarding engineer testimony and reports
+- ${stateInfo.insuranceCode}
 - Building codes and manufacturer installation requirements
 
 When analyzing engineer reports, look for:
@@ -404,6 +460,9 @@ When analyzing engineer reports, look for:
 10. Conflicts with building codes or manufacturer specifications`;
 
         userPrompt = `${claimSummary}
+
+STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
+APPLICABLE LAW: ${stateInfo.insuranceCode}
 
 ${pdfContent ? `A PDF of the engineer report has been provided for analysis.` : `ENGINEER REPORT CONTENT:
 ${content || 'No engineer report content provided'}`}
@@ -451,9 +510,9 @@ Please provide a comprehensive analysis and rebuttal of this engineer report inc
    - Request for re-inspection or independent engineering
 
 8. CASE LAW & STANDARDS:
-   - Relevant Texas case law regarding engineer reports
+   - Relevant ${stateInfo.stateName} case law regarding engineer reports
    - Industry standards the engineer may have violated
-   - Building codes that support the claim
+   - ${stateInfo.stateName} building codes that support the claim
 
 Format as a comprehensive rebuttal package suitable for carrier submission or litigation support.`;
         break;
