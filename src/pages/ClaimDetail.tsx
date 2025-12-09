@@ -12,6 +12,7 @@ import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
 import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
 import { ClaimAccessManagement } from "@/components/claim-detail/ClaimAccessManagement";
+import { ClaimExternalSync } from "@/components/claim-detail/ClaimExternalSync";
 import { ClaimAssigned } from "@/components/claim-detail/ClaimAssigned";
 import { ClaimPhotos } from "@/components/claim-detail/ClaimPhotos";
 import { EditClaimDialog } from "@/components/claim-detail/EditClaimDialog";
@@ -383,7 +384,8 @@ const ClaimDetail = () => {
         </TabsContent>
 
         {isStaffOrAdmin && (
-          <TabsContent value="access" className="mt-6">
+          <TabsContent value="access" className="mt-6 space-y-6">
+            <ClaimExternalSync claimId={id!} />
             <ClaimAccessManagement claimId={id!} />
           </TabsContent>
         )}

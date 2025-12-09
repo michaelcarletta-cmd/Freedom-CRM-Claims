@@ -83,3 +83,9 @@ verify_jwt = false
 
 [functions.darwin-ai-analysis]
 verify_jwt = true
+
+[functions.claim-sync-webhook]
+verify_jwt = false
+
+[functions.sync-claim-to-external]
+verify_jwt = true
