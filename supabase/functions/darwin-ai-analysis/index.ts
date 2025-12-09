@@ -191,7 +191,7 @@ Be specific and actionable. Reference dates and deadlines where possible.`;
         break;
 
       case 'supplement':
-        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in identifying missed damage and generating supplement requests. Your role is to maximize claim recovery by finding overlooked items.
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in identifying missed damage and generating supplement requests. Your role is to maximize claim recovery by finding overlooked items in carrier estimates.
 
 You have expertise in:
 - Xactimate line items and pricing
@@ -200,42 +200,77 @@ You have expertise in:
 - Hidden or consequential damage
 - Code compliance items
 - Overhead and profit calculations
+- Comparing carrier estimates against proper scope of work
+- Identifying underpayment tactics and missing line items
+
+When analyzing carrier estimates, look for:
+1. Missing trades or scopes of work
+2. Undervalued or incorrect unit pricing
+3. Insufficient quantities
+4. Missing code-required items
+5. Omitted manufacturer-required components
+6. Missing O&P where applicable
+7. Incorrect depreciation calculations
 
 Generate comprehensive supplement requests that are defensible and well-documented.`;
 
         userPrompt = `${claimSummary}
 
-${additionalContext?.existingEstimate ? `EXISTING ESTIMATE ITEMS:\n${additionalContext.existingEstimate}` : ''}
+${pdfContent ? `A PDF of the carrier's estimate has been provided for detailed analysis. Review every line item carefully to identify what is missing, undervalued, or incorrect.` : ''}
+
+${additionalContext?.existingEstimate ? `EXISTING ESTIMATE ITEMS (TEXT):\n${additionalContext.existingEstimate}` : ''}
 
 ${content ? `ADDITIONAL NOTES/OBSERVATIONS:\n${content}` : ''}
 
-Based on the claim details, generate a supplement analysis that includes:
+Based on the claim details and the provided estimate, generate a comprehensive supplement analysis that includes:
 
-1. COMMONLY MISSED ITEMS for this loss type:
-   - List specific line items with Xactimate codes if possible
-   - Include unit prices and estimated quantities
+1. ESTIMATE ANALYSIS (if estimate provided):
+   - Summary of what the carrier's estimate includes
+   - Total value of carrier's estimate
+   - Obvious gaps or missing scopes
 
-2. CODE UPGRADE REQUIREMENTS:
-   - Identify building codes that require upgrades beyond like-kind replacement
+2. MISSING LINE ITEMS:
+   - List specific items NOT in the carrier's estimate that should be included
+   - Include Xactimate codes where possible
+   - Provide estimated quantities and unit prices
+   - Explain why each item is necessary
+
+3. UNDERVALUED ITEMS:
+   - Items where quantities are insufficient
+   - Items where unit pricing is below market
+   - Incorrect labor calculations
+
+4. CODE UPGRADE REQUIREMENTS:
+   - Building codes requiring upgrades beyond like-kind replacement
    - Reference specific code sections
+   - Items carrier estimate fails to account for
 
-3. MANUFACTURER SPECIFICATION ITEMS:
+5. MANUFACTURER SPECIFICATION ITEMS:
    - Items required by manufacturer installation guidelines
-   - Warranty requirements
+   - Warranty requirements that mandate certain work
+   - Components the carrier may have omitted
 
-4. CONSEQUENTIAL/HIDDEN DAMAGE:
+6. CONSEQUENTIAL/HIDDEN DAMAGE:
    - Damage that may not be immediately visible
-   - Items that should be inspected
+   - Areas that should be further inspected
+   - Related damage the carrier missed
 
-5. OVERHEAD & PROFIT JUSTIFICATION:
-   - When O&P applies and why
+7. OVERHEAD & PROFIT JUSTIFICATION:
+   - Whether O&P was included in carrier estimate
+   - Why O&P should apply to this claim
    - Supporting arguments for O&P inclusion
 
-6. SUPPLEMENT REQUEST LETTER:
-   - Professional letter template requesting the supplement
-   - List of items with estimated values
+8. SUPPLEMENT VALUE SUMMARY:
+   - Total estimated supplement amount
+   - Breakdown by category
+   - Priority items to pursue first
 
-Format as a structured supplement package ready for submission.`;
+9. SUPPLEMENT REQUEST LETTER:
+   - Professional letter template requesting the supplement
+   - Itemized list with values
+   - Supporting rationale for each request
+
+Format as a structured supplement package ready for carrier submission.`;
         break;
 
       case 'correspondence':
@@ -430,7 +465,7 @@ Format as a comprehensive rebuttal package suitable for carrier submission or li
     // Build messages array - handle PDF content with multimodal format
     let messages: any[];
     
-    if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal')) {
+    if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'supplement')) {
       // Use multimodal format for PDF analysis
       messages = [
         { role: 'system', content: systemPrompt },
