@@ -36,15 +36,21 @@ export default function Auth() {
   }, [navigate]);
 
   const checkApprovalAndNavigate = async (userId: string) => {
-    // Check if user has staff role and is pending approval
+    // Check user roles
     const { data: roles } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", userId);
 
-    const isStaff = roles?.some(r => r.role === 'staff');
+    const roleList = roles?.map(r => r.role) || [];
+    const isStaff = roleList.includes('staff');
+    const isAdmin = roleList.includes('admin');
+    const isContractor = roleList.includes('contractor');
+    const isReferrer = roleList.includes('referrer');
+    const isClient = roleList.includes('client');
     
-    if (isStaff) {
+    // Staff approval check
+    if (isStaff && !isAdmin) {
       const { data: profile } = await supabase
         .from("profiles")
         .select("approval_status")
@@ -53,7 +59,6 @@ export default function Auth() {
 
       if (profile?.approval_status === 'pending') {
         setPendingApproval(true);
-        // Sign them out since they can't access yet
         await supabase.auth.signOut();
         return;
       }
@@ -69,7 +74,16 @@ export default function Auth() {
       }
     }
 
-    navigate("/");
+    // Route to appropriate portal based on role
+    if (isContractor && !isAdmin && !isStaff) {
+      navigate("/contractor-portal");
+    } else if (isReferrer && !isAdmin && !isStaff) {
+      navigate("/referrer-portal");
+    } else if (isClient && !isAdmin && !isStaff) {
+      navigate("/client-portal");
+    } else {
+      navigate("/");
+    }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
