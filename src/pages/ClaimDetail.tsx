@@ -27,6 +27,7 @@ import { DarwinNextSteps } from "@/components/claim-detail/DarwinNextSteps";
 import { DarwinSupplementGenerator } from "@/components/claim-detail/DarwinSupplementGenerator";
 import { DarwinCorrespondenceAnalyzer } from "@/components/claim-detail/DarwinCorrespondenceAnalyzer";
 import { DarwinEngineerReportAnalyzer } from "@/components/claim-detail/DarwinEngineerReportAnalyzer";
+import { DarwinClaimBriefing } from "@/components/claim-detail/DarwinClaimBriefing";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -399,7 +400,10 @@ const ClaimDetail = () => {
                 <span className="text-sm text-muted-foreground">Your intelligent claims assistant</span>
               </div>
               
-              {/* Next Steps Predictor - Most used, shown first */}
+              {/* Claim Briefing - Get caught up first */}
+              <DarwinClaimBriefing claimId={claim.id} claim={claim} />
+              
+              {/* Next Steps Predictor */}
               <DarwinNextSteps claimId={claim.id} claim={claim} />
               
               {/* AI Analysis Tools */}

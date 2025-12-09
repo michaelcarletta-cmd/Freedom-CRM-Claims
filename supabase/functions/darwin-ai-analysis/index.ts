@@ -9,11 +9,13 @@ const corsHeaders = {
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
   additionalContext?: any;
+  claim?: any; // Full claim object for briefing
+  contextData?: any; // Additional context data
 }
 
 serve(async (req) => {
@@ -31,7 +33,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { claimId, analysisType, content, pdfContent, pdfFileName, additionalContext }: AnalysisRequest = await req.json();
+    const { claimId, analysisType, content, pdfContent, pdfFileName, additionalContext, claim: providedClaim, contextData }: AnalysisRequest = await req.json();
     console.log(`Darwin AI Analysis - Type: ${analysisType}, Claim: ${claimId}, Has PDF: ${!!pdfContent}`);
 
     // Fetch claim data
@@ -501,6 +503,86 @@ Please provide a comprehensive analysis and rebuttal of this engineer report inc
 Format as a comprehensive rebuttal package suitable for carrier submission or litigation support.`;
         break;
 
+      case 'claim_briefing':
+        systemPrompt = `You are Darwin, an expert public adjuster AI assistant. Your role is to provide comprehensive claim briefings that help public adjusters quickly get up to speed on a claim's status, history, and strategic considerations.
+
+IMPORTANT: This claim is located in ${stateInfo.stateName}. Apply ${stateInfo.stateName} law and deadlines where relevant.
+
+You are an expert at:
+- Insurance claim analysis and strategy
+- Identifying opportunities for claim recovery
+- Recognizing potential issues or red flags
+- Understanding claim timelines and deadlines
+- ${stateInfo.stateName} insurance regulations and policyholder rights
+- ${stateInfo.insuranceCode}
+- ${stateInfo.promptPayAct}
+
+Your briefing should be:
+1. Comprehensive but concise
+2. Action-oriented with clear recommendations
+3. Highlight any urgent matters or deadlines
+4. Note any red flags or concerns
+5. Provide strategic insights for maximizing claim value`;
+
+        const briefingContext = contextData || {};
+        
+        userPrompt = `${claimSummary}
+
+STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
+APPLICABLE LAW: ${stateInfo.insuranceCode}
+
+ADDITIONAL CONTEXT:
+- Total checks received: $${briefingContext.checks?.reduce((sum: number, c: any) => sum + (c.amount || 0), 0)?.toLocaleString() || '0'}
+- Pending tasks: ${briefingContext.tasks?.filter((t: any) => t.status === 'pending').length || 0}
+- Completed tasks: ${briefingContext.tasks?.filter((t: any) => t.status === 'completed').length || 0}
+- Inspections: ${briefingContext.inspections?.length || 0}
+- Recent emails: ${briefingContext.emails?.length || 0}
+- Activity updates: ${briefingContext.updates?.length || 0}
+- Adjusters assigned: ${briefingContext.adjusters?.map((a: any) => a.adjuster_name).join(', ') || 'None'}
+
+Please provide a comprehensive claim briefing that includes:
+
+1. **CLAIM OVERVIEW**
+   - Summary of the claim in 2-3 sentences
+   - Current status assessment
+   - Key dates and timeline
+
+2. **FINANCIAL SUMMARY**
+   - Total claim value and breakdown
+   - What's been paid vs outstanding
+   - Potential for additional recovery
+
+3. **KEY STAKEHOLDERS**
+   - Insurance company and adjusters
+   - Any concerns about the carrier or adjuster responsiveness
+
+4. **CLAIM PROGRESS**
+   - What's been accomplished
+   - Current phase of the claim
+   - Recent significant activities
+
+5. **ACTION ITEMS & PRIORITIES**
+   - Urgent tasks or deadlines
+   - Recommended next steps
+   - Tasks that may be overdue
+
+6. **STRATEGIC CONSIDERATIONS**
+   - Opportunities to maximize recovery
+   - Potential obstacles or concerns
+   - Recommendations for claim strategy
+
+7. **RED FLAGS & CONCERNS**
+   - Any issues that need immediate attention
+   - Potential carrier tactics to watch for
+   - Deadlines or statute limitations
+
+8. **RECOMMENDATIONS**
+   - Top 3 priority actions to take
+   - Long-term strategy suggestions
+
+Format your response clearly with headers and bullet points for easy scanning.`;
+        break;
+
       default:
         throw new Error(`Unknown analysis type: ${analysisType}`);
     }
@@ -583,6 +665,7 @@ Format as a comprehensive rebuttal package suitable for carrier submission or li
         success: true,
         analysisType,
         result: analysisResult,
+        analysis: analysisResult, // Also include as 'analysis' for components that expect it
         claimId
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
