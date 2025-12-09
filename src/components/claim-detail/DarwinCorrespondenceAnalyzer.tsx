@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Loader2, Copy, Send, Sparkles } from "lucide-react";
+import { Mail, Loader2, Copy, Send, Sparkles, History } from "lucide-react";
 
 interface DarwinCorrespondenceAnalyzerProps {
   claimId: string;
@@ -17,7 +17,29 @@ export const DarwinCorrespondenceAnalyzer = ({ claimId, claim }: DarwinCorrespon
   const [previousResponses, setPreviousResponses] = useState("");
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [lastAnalyzed, setLastAnalyzed] = useState<Date | null>(null);
   const { toast } = useToast();
+
+  // Load previous analysis on mount
+  useEffect(() => {
+    const loadPreviousAnalysis = async () => {
+      const { data } = await supabase
+        .from('darwin_analysis_results')
+        .select('*')
+        .eq('claim_id', claimId)
+        .eq('analysis_type', 'correspondence')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (data) {
+        setAnalysis(data.result);
+        setLastAnalyzed(new Date(data.created_at));
+      }
+    };
+
+    loadPreviousAnalysis();
+  }, [claimId]);
 
   const handleAnalyze = async () => {
     if (!correspondence.trim()) {
@@ -47,6 +69,18 @@ export const DarwinCorrespondenceAnalyzer = ({ claimId, claim }: DarwinCorrespon
       }
 
       setAnalysis(data.result);
+      setLastAnalyzed(new Date());
+
+      // Save the analysis result
+      const { data: userData } = await supabase.auth.getUser();
+      await supabase.from('darwin_analysis_results').insert({
+        claim_id: claimId,
+        analysis_type: 'correspondence',
+        input_summary: correspondence.substring(0, 200),
+        result: data.result,
+        created_by: userData.user?.id
+      });
+
       toast({
         title: "Analysis complete",
         description: "Darwin has analyzed the correspondence"
@@ -96,6 +130,13 @@ export const DarwinCorrespondenceAnalyzer = ({ claimId, claim }: DarwinCorrespon
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {lastAnalyzed && (
+          <div className="p-3 bg-muted/50 rounded-md text-sm text-muted-foreground flex items-center gap-2">
+            <History className="h-4 w-4" />
+            Previous analysis from {lastAnalyzed.toLocaleString()}
+          </div>
+        )}
+
         <div className="space-y-2">
           <label className="text-sm font-medium">Adjuster Email/Correspondence</label>
           <Textarea
