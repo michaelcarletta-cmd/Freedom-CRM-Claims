@@ -16,6 +16,7 @@ interface AnalysisRequest {
   additionalContext?: any;
   claim?: any; // Full claim object for briefing
   contextData?: any; // Additional context data
+  darwinNotes?: string; // User-provided context notes for Darwin
 }
 
 serve(async (req) => {
@@ -33,7 +34,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { claimId, analysisType, content, pdfContent, pdfFileName, additionalContext, claim: providedClaim, contextData }: AnalysisRequest = await req.json();
+    const { claimId, analysisType, content, pdfContent, pdfFileName, additionalContext, claim: providedClaim, contextData, darwinNotes: providedNotes }: AnalysisRequest = await req.json();
     console.log(`Darwin AI Analysis - Type: ${analysisType}, Claim: ${claimId}, Has PDF: ${!!pdfContent}`);
 
     // Fetch claim data
@@ -116,6 +117,20 @@ serve(async (req) => {
       .eq('claim_id', claimId);
     context.files = files || [];
 
+    // Fetch user's Darwin context notes if not provided
+    let darwinNotes = providedNotes || '';
+    if (!darwinNotes) {
+      const { data: notesResult } = await supabase
+        .from('darwin_analysis_results')
+        .select('result')
+        .eq('claim_id', claimId)
+        .eq('analysis_type', 'context_notes')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      darwinNotes = notesResult?.result || '';
+    }
+
     // Build system prompt based on analysis type
     let systemPrompt = '';
     let userPrompt = '';
@@ -151,6 +166,9 @@ ${context.inspections?.map((i: any) => `- ${i.inspection_type}: ${i.inspection_d
 
 RECENT COMMUNICATIONS:
 ${context.emails?.slice(0, 3).map((e: any) => `- ${e.subject} (${new Date(e.created_at).toLocaleDateString()})`).join('\n') || '- No recent emails'}
+
+${darwinNotes ? `IMPORTANT USER-PROVIDED CONTEXT NOTES:
+${darwinNotes}` : ''}
 `;
 
     switch (analysisType) {

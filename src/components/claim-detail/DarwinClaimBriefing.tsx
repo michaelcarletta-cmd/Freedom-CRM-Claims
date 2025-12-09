@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, Loader2, RefreshCw, FileText, DollarSign, Users, Calendar, ClipboardList } from "lucide-react";
+import { BookOpen, Loader2, RefreshCw, FileText, DollarSign, Calendar, ClipboardList, Save, MessageSquare } from "lucide-react";
 import { format } from "date-fns";
 
 interface DarwinClaimBriefingProps {
@@ -17,11 +18,15 @@ export const DarwinClaimBriefing = ({ claimId, claim }: DarwinClaimBriefingProps
   const [briefing, setBriefing] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [contextData, setContextData] = useState<any>(null);
+  const [darwinNotes, setDarwinNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [notesChanged, setNotesChanged] = useState(false);
   const { toast } = useToast();
 
   // Load claim context data on mount
   useEffect(() => {
     loadContextData();
+    loadDarwinNotes();
   }, [claimId]);
 
   const loadContextData = async () => {
@@ -54,6 +59,60 @@ export const DarwinClaimBriefing = ({ claimId, claim }: DarwinClaimBriefingProps
     });
   };
 
+  const loadDarwinNotes = async () => {
+    // Load from darwin_analysis_results with type 'context_notes'
+    const { data } = await supabase
+      .from('darwin_analysis_results')
+      .select('result')
+      .eq('claim_id', claimId)
+      .eq('analysis_type', 'context_notes')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (data?.result) {
+      setDarwinNotes(data.result);
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    setSavingNotes(true);
+    try {
+      // Delete existing context notes and insert new one
+      await supabase
+        .from('darwin_analysis_results')
+        .delete()
+        .eq('claim_id', claimId)
+        .eq('analysis_type', 'context_notes');
+
+      const { error } = await supabase
+        .from('darwin_analysis_results')
+        .insert({
+          claim_id: claimId,
+          analysis_type: 'context_notes',
+          result: darwinNotes,
+          input_summary: 'User-provided context notes for Darwin AI'
+        });
+
+      if (error) throw error;
+
+      setNotesChanged(false);
+      toast({
+        title: "Notes Saved",
+        description: "Darwin will now consider this context in future analyses."
+      });
+    } catch (error: any) {
+      console.error('Error saving notes:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save notes",
+        variant: "destructive"
+      });
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
   const handleGenerateBriefing = async () => {
     setLoading(true);
     try {
@@ -62,7 +121,8 @@ export const DarwinClaimBriefing = ({ claimId, claim }: DarwinClaimBriefingProps
           claimId,
           analysisType: 'claim_briefing',
           claim,
-          contextData
+          contextData,
+          darwinNotes // Include user notes in the briefing
         }
       });
 
@@ -127,6 +187,41 @@ export const DarwinClaimBriefing = ({ claimId, claim }: DarwinClaimBriefingProps
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Context Notes for Darwin */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-medium text-sm text-muted-foreground flex items-center gap-2">
+              <MessageSquare className="h-4 w-4" />
+              Context Notes for Darwin
+            </h4>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSaveNotes}
+              disabled={savingNotes || !notesChanged}
+            >
+              {savingNotes ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              Save Notes
+            </Button>
+          </div>
+          <Textarea
+            placeholder="Add any important context Darwin should know about this claim... (e.g., verbal conversations with adjuster, special circumstances, strategy notes, client preferences, important deadlines, etc.)"
+            value={darwinNotes}
+            onChange={(e) => {
+              setDarwinNotes(e.target.value);
+              setNotesChanged(true);
+            }}
+            className="min-h-[120px]"
+          />
+          <p className="text-xs text-muted-foreground">
+            These notes will be included in all Darwin AI analyses for this claim
+          </p>
+        </div>
+
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-3 bg-muted/50 rounded-lg">
