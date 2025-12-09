@@ -86,9 +86,40 @@ export function EmailComposer({
     enabled: isOpen,
   });
 
+  // Fetch settlement data for merge fields
+  const { data: settlement } = useQuery({
+    queryKey: ["claim-settlement-email", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_settlements")
+        .select("*")
+        .eq("claim_id", claimId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: isOpen,
+  });
+
+  const formatCurrency = (amount: number | null | undefined) => {
+    if (amount == null) return "$0.00";
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  };
+
   // Replace merge fields with actual values
   const replaceMergeFields = (text: string) => {
+    // Calculate totals
+    const dwellingACV = (settlement?.replacement_cost_value || 0) - (settlement?.recoverable_depreciation || 0) - (settlement?.non_recoverable_depreciation || 0);
+    const dwellingNet = dwellingACV - (settlement?.deductible || 0);
+    const otherStructuresACV = (settlement?.other_structures_rcv || 0) - (settlement?.other_structures_recoverable_depreciation || 0) - (settlement?.other_structures_non_recoverable_depreciation || 0);
+    const otherStructuresNet = otherStructuresACV - (settlement?.other_structures_deductible || 0);
+    const pwiACV = (settlement?.pwi_rcv || 0) - (settlement?.pwi_recoverable_depreciation || 0) - (settlement?.pwi_non_recoverable_depreciation || 0);
+    const pwiNet = pwiACV - (settlement?.pwi_deductible || 0);
+    const totalRCV = (settlement?.replacement_cost_value || 0) + (settlement?.other_structures_rcv || 0) + (settlement?.pwi_rcv || 0);
+    const totalNet = dwellingNet + otherStructuresNet + pwiNet;
+
     return text
+      // Claim fields
       .replace(/\{claim\.policyholder_name\}/g, claim.policyholder_name || '')
       .replace(/\{claim\.claim_number\}/g, claim.claim_number || '')
       .replace(/\{claim\.status\}/g, claim.status || '')
@@ -97,7 +128,33 @@ export function EmailComposer({
       .replace(/\{claim\.policy_number\}/g, claim.policy_number || '')
       .replace(/\{claim\.policyholder_email\}/g, claim.policyholder_email || '')
       .replace(/\{claim\.policyholder_phone\}/g, claim.policyholder_phone || '')
-      .replace(/\{claim\.policyholder_address\}/g, claim.policyholder_address || '');
+      .replace(/\{claim\.policyholder_address\}/g, claim.policyholder_address || '')
+      .replace(/\{claim\.insurance_company\}/g, claim.insurance_company || '')
+      // Dwelling settlement fields
+      .replace(/\{settlement\.dwelling_rcv\}/g, formatCurrency(settlement?.replacement_cost_value))
+      .replace(/\{settlement\.dwelling_recoverable_depreciation\}/g, formatCurrency(settlement?.recoverable_depreciation))
+      .replace(/\{settlement\.dwelling_non_recoverable_depreciation\}/g, formatCurrency(settlement?.non_recoverable_depreciation))
+      .replace(/\{settlement\.dwelling_deductible\}/g, formatCurrency(settlement?.deductible))
+      .replace(/\{settlement\.dwelling_acv\}/g, formatCurrency(dwellingACV))
+      .replace(/\{settlement\.dwelling_net\}/g, formatCurrency(dwellingNet))
+      // Other Structures settlement fields
+      .replace(/\{settlement\.other_structures_rcv\}/g, formatCurrency(settlement?.other_structures_rcv))
+      .replace(/\{settlement\.other_structures_recoverable_depreciation\}/g, formatCurrency(settlement?.other_structures_recoverable_depreciation))
+      .replace(/\{settlement\.other_structures_non_recoverable_depreciation\}/g, formatCurrency(settlement?.other_structures_non_recoverable_depreciation))
+      .replace(/\{settlement\.other_structures_deductible\}/g, formatCurrency(settlement?.other_structures_deductible))
+      .replace(/\{settlement\.other_structures_acv\}/g, formatCurrency(otherStructuresACV))
+      .replace(/\{settlement\.other_structures_net\}/g, formatCurrency(otherStructuresNet))
+      // PWI settlement fields
+      .replace(/\{settlement\.pwi_rcv\}/g, formatCurrency(settlement?.pwi_rcv))
+      .replace(/\{settlement\.pwi_recoverable_depreciation\}/g, formatCurrency(settlement?.pwi_recoverable_depreciation))
+      .replace(/\{settlement\.pwi_non_recoverable_depreciation\}/g, formatCurrency(settlement?.pwi_non_recoverable_depreciation))
+      .replace(/\{settlement\.pwi_deductible\}/g, formatCurrency(settlement?.pwi_deductible))
+      .replace(/\{settlement\.pwi_acv\}/g, formatCurrency(pwiACV))
+      .replace(/\{settlement\.pwi_net\}/g, formatCurrency(pwiNet))
+      // Totals
+      .replace(/\{settlement\.total_rcv\}/g, formatCurrency(totalRCV))
+      .replace(/\{settlement\.total_net\}/g, formatCurrency(totalNet))
+      .replace(/\{settlement\.prior_offer\}/g, formatCurrency(settlement?.prior_offer));
   };
 
   const handleTemplateSelect = (templateId: string) => {
