@@ -43,21 +43,13 @@ serve(async (req) => {
 
     if (claimError) throw claimError;
 
-    // Detect state from policyholder address
+    // Detect state from policyholder address (NJ and PA only)
     const detectState = (address: string | null): { state: string; stateName: string; insuranceCode: string; promptPayAct: string } => {
-      if (!address) return { state: 'NJ', stateName: 'New Jersey', insuranceCode: 'New Jersey Insurance Code (N.J.S.A. 17B)', promptPayAct: 'New Jersey Prompt Payment Act' };
+      if (!address) return { state: 'NJ', stateName: 'New Jersey', insuranceCode: 'New Jersey Insurance Code (N.J.S.A. 17B)', promptPayAct: 'New Jersey Unfair Claims Settlement Practices Act (N.J.S.A. 17:29B-4)' };
       
       const upperAddress = address.toUpperCase();
       
-      // Check for state abbreviations or full names
-      if (upperAddress.includes(' NJ') || upperAddress.includes('NEW JERSEY') || upperAddress.includes(', NJ')) {
-        return { 
-          state: 'NJ', 
-          stateName: 'New Jersey', 
-          insuranceCode: 'New Jersey Insurance Code (N.J.S.A. 17B)',
-          promptPayAct: 'New Jersey Unfair Claims Settlement Practices Act (N.J.S.A. 17:29B-4)'
-        };
-      }
+      // Check for Pennsylvania
       if (upperAddress.includes(' PA') || upperAddress.includes('PENNSYLVANIA') || upperAddress.includes(', PA')) {
         return { 
           state: 'PA', 
@@ -66,16 +58,8 @@ serve(async (req) => {
           promptPayAct: 'Pennsylvania Unfair Insurance Practices Act (40 P.S. § 1171.5)'
         };
       }
-      if (upperAddress.includes(' TX') || upperAddress.includes('TEXAS') || upperAddress.includes(', TX')) {
-        return { 
-          state: 'TX', 
-          stateName: 'Texas', 
-          insuranceCode: 'Texas Insurance Code',
-          promptPayAct: 'Texas Prompt Payment of Claims Act'
-        };
-      }
       
-      // Default to NJ since that's more common for this user
+      // Default to New Jersey
       return { state: 'NJ', stateName: 'New Jersey', insuranceCode: 'New Jersey Insurance Code (N.J.S.A. 17B)', promptPayAct: 'New Jersey Unfair Claims Settlement Practices Act (N.J.S.A. 17:29B-4)' };
     };
 
