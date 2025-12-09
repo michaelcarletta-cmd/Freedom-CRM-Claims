@@ -87,6 +87,16 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
   const totalChecksReceived = checks?.reduce((sum, check) => sum + Number(check.amount), 0) || 0;
   const totalExpenses = expenses?.reduce((sum, exp) => sum + Number(exp.amount), 0) || 0;
   const settlementAmount = settlement?.total_settlement || 0;
+  
+  // Calculate expected checks: Total RCV minus Total Deductible
+  const totalRCV = (Number(settlement?.replacement_cost_value) || 0) + 
+                   (Number(settlement?.other_structures_rcv) || 0) + 
+                   (Number(settlement?.pwi_rcv) || 0);
+  const totalDeductible = (Number(settlement?.deductible) || 0) + 
+                          (Number(settlement?.other_structures_deductible) || 0) + 
+                          (Number(settlement?.pwi_deductible) || 0);
+  const expectedChecks = totalRCV - totalDeductible;
+  
   const grossProfit = totalChecksReceived - totalExpenses;
   const companyFee = fees?.company_fee_amount || 0;
   const adjusterFee = fees?.adjuster_fee_amount || 0;
@@ -157,7 +167,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
       <SettlementSection claimId={claim.id} settlement={settlement} isAdmin={isAdmin} />
 
       {/* Insurance Checks */}
-      <ChecksSection claimId={claim.id} checks={checks || []} isAdmin={isAdmin} claim={claim} settlementAmount={settlementAmount} />
+      <ChecksSection claimId={claim.id} checks={checks || []} isAdmin={isAdmin} claim={claim} expectedChecks={expectedChecks} />
 
       {/* Expenses */}
       <ExpensesSection claimId={claim.id} expenses={expenses || []} isAdmin={isAdmin} />
@@ -645,9 +655,9 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
 }
 
 // Checks Section Component  
-function ChecksSection({ claimId, checks, isAdmin, claim, settlementAmount }: any) {
+function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any) {
   const totalChecksReceived = checks?.reduce((sum: number, check: any) => sum + Number(check.amount), 0) || 0;
-  const outstandingAmount = settlementAmount - totalChecksReceived;
+  const outstandingAmount = expectedChecks - totalChecksReceived;
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     check_number: "",
