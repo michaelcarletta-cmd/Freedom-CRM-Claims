@@ -98,6 +98,7 @@ serve(async (req) => {
     // Send to external instance
     const syncUrl = `${baseUrl}/functions/v1/claim-sync-webhook`;
     console.log(`Sending sync request to: ${syncUrl}`);
+    console.log(`Secret length: ${syncSecret?.length}, first 4 chars: ${syncSecret?.substring(0, 4)}...`);
 
     const response = await fetch(syncUrl, {
       method: 'POST',
