@@ -158,14 +158,29 @@ export const EmailTemplatesSettings = () => {
         <Info className="h-4 w-4" />
         <AlertTitle>Email Template Merge Fields</AlertTitle>
         <AlertDescription>
-          <p className="mb-2">Use these fields in your templates with curly braces:</p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
+          <p className="mb-2 font-medium">Claim Fields:</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-1 text-xs font-mono mb-3">
             <div>{`{claim.policyholder_name}`}</div>
             <div>{`{claim.claim_number}`}</div>
             <div>{`{claim.status}`}</div>
             <div>{`{claim.loss_type}`}</div>
             <div>{`{claim.loss_date}`}</div>
             <div>{`{claim.policy_number}`}</div>
+            <div>{`{claim.insurance_company}`}</div>
+          </div>
+          <p className="mb-2 font-medium">Settlement/Accounting Fields:</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-1 text-xs font-mono">
+            <div>{`{settlement.dwelling_rcv}`}</div>
+            <div>{`{settlement.dwelling_acv}`}</div>
+            <div>{`{settlement.dwelling_net}`}</div>
+            <div>{`{settlement.dwelling_deductible}`}</div>
+            <div>{`{settlement.other_structures_rcv}`}</div>
+            <div>{`{settlement.other_structures_net}`}</div>
+            <div>{`{settlement.pwi_rcv}`}</div>
+            <div>{`{settlement.pwi_net}`}</div>
+            <div>{`{settlement.total_rcv}`}</div>
+            <div>{`{settlement.total_net}`}</div>
+            <div>{`{settlement.prior_offer}`}</div>
           </div>
         </AlertDescription>
       </Alert>
