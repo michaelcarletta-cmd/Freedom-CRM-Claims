@@ -1,11 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { PlusCircle, Loader2, Copy, Download, Sparkles, Upload, X, FileText } from "lucide-react";
+import { PlusCircle, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History } from "lucide-react";
 
 interface DarwinSupplementGeneratorProps {
   claimId: string;
@@ -18,8 +18,32 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [lastAnalyzed, setLastAnalyzed] = useState<Date | null>(null);
+  const [lastFileName, setLastFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  // Load previous analysis on mount
+  useEffect(() => {
+    const loadPreviousAnalysis = async () => {
+      const { data } = await supabase
+        .from('darwin_analysis_results')
+        .select('*')
+        .eq('claim_id', claimId)
+        .eq('analysis_type', 'supplement')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (data) {
+        setAnalysis(data.result);
+        setLastAnalyzed(new Date(data.created_at));
+        setLastFileName(data.pdf_file_name || null);
+      }
+    };
+
+    loadPreviousAnalysis();
+  }, [claimId]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -84,6 +108,20 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
       }
 
       setAnalysis(data.result);
+      setLastAnalyzed(new Date());
+      setLastFileName(pdfFile?.name || null);
+
+      // Save the analysis result
+      const { data: userData } = await supabase.auth.getUser();
+      await supabase.from('darwin_analysis_results').insert({
+        claim_id: claimId,
+        analysis_type: 'supplement',
+        input_summary: pdfFile?.name || existingEstimate.substring(0, 200),
+        result: data.result,
+        pdf_file_name: pdfFile?.name || null,
+        created_by: userData.user?.id
+      });
+
       toast({
         title: "Supplement generated",
         description: "Darwin has identified potential supplement items"
@@ -131,6 +169,14 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {lastAnalyzed && (
+          <div className="p-3 bg-muted/50 rounded-md text-sm text-muted-foreground flex items-center gap-2">
+            <History className="h-4 w-4" />
+            Previous analysis from {lastAnalyzed.toLocaleString()}
+            {lastFileName && <span className="text-xs">({lastFileName})</span>}
+          </div>
+        )}
+
         <div className="space-y-2">
           <label className="text-sm font-medium">Upload Carrier Estimate (PDF)</label>
           <div className="flex items-center gap-2">

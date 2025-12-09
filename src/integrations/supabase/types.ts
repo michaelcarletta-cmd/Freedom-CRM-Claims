@@ -1315,6 +1315,47 @@ export type Database = {
         }
         Relationships: []
       }
+      darwin_analysis_results: {
+        Row: {
+          analysis_type: string
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          input_summary: string | null
+          pdf_file_name: string | null
+          result: string
+        }
+        Insert: {
+          analysis_type: string
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          input_summary?: string | null
+          pdf_file_name?: string | null
+          result: string
+        }
+        Update: {
+          analysis_type?: string
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          input_summary?: string | null
+          pdf_file_name?: string | null
+          result?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "darwin_analysis_results_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_templates: {
         Row: {
           category: string | null
