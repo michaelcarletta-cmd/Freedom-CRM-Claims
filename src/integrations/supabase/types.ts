@@ -1605,6 +1605,50 @@ export type Database = {
           },
         ]
       }
+      linked_claims: {
+        Row: {
+          claim_id: string
+          created_by: string | null
+          external_claim_id: string | null
+          external_instance_url: string
+          id: string
+          instance_name: string
+          last_synced_at: string | null
+          linked_at: string | null
+          sync_status: string | null
+        }
+        Insert: {
+          claim_id: string
+          created_by?: string | null
+          external_claim_id?: string | null
+          external_instance_url: string
+          id?: string
+          instance_name: string
+          last_synced_at?: string | null
+          linked_at?: string | null
+          sync_status?: string | null
+        }
+        Update: {
+          claim_id?: string
+          created_by?: string | null
+          external_claim_id?: string | null
+          external_instance_url?: string
+          id?: string
+          instance_name?: string
+          last_synced_at?: string | null
+          linked_at?: string | null
+          sync_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "linked_claims_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loss_types: {
         Row: {
           created_at: string
