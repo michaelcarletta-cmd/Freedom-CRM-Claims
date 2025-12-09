@@ -1,12 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, DollarSign, Clock, CheckCircle } from "lucide-react";
+import { FileText, DollarSign, CheckCircle, AlertTriangle, ListTodo, TrendingUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, startOfMonth, endOfMonth, isAfter, isBefore, addDays } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
 
 const Index = () => {
   const navigate = useNavigate();
+  const now = new Date();
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
 
   const { data: claims } = useQuery({
     queryKey: ["dashboard-claims"],
@@ -14,40 +18,151 @@ const Index = () => {
       const { data, error } = await supabase
         .from("claims")
         .select("*")
-        .order("created_at", { ascending: false });
+        .eq("is_closed", false)
+        .order("updated_at", { ascending: false });
       
       if (error) throw error;
       return data;
     },
   });
 
-  const totalClaims = claims?.length || 0;
-  const activeClaims = claims?.filter(c => c.status !== "closed" && c.status !== "settled")?.length || 0;
-  const totalValue = claims?.reduce((sum, c) => sum + (c.claim_amount || 0), 0) || 0;
-  const approvedClaims = claims?.filter(c => c.status === "approved" || c.status === "settled")?.length || 0;
+  const { data: tasks } = useQuery({
+    queryKey: ["dashboard-tasks"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*, claims(claim_number, policyholder_name)")
+        .eq("status", "pending")
+        .order("due_date", { ascending: true });
+      
+      if (error) throw error;
+      return data;
+    },
+  });
 
-  const recentClaims = claims?.slice(0, 5) || [];
+  const { data: settlements } = useQuery({
+    queryKey: ["dashboard-settlements", monthStart.toISOString()],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_settlements")
+        .select("replacement_cost_value, created_at");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: checks } = useQuery({
+    queryKey: ["dashboard-checks"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_checks")
+        .select("amount, check_date");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: expenses } = useQuery({
+    queryKey: ["dashboard-expenses"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_expenses")
+        .select("amount, expense_date");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: payments } = useQuery({
+    queryKey: ["dashboard-payments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_payments")
+        .select("amount, payment_date");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: fees } = useQuery({
+    queryKey: ["dashboard-fees"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_fees")
+        .select("adjuster_fee_amount");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Calculations
+  const activeClaims = claims?.length || 0;
+  const totalTasks = tasks?.length || 0;
+
+  // Monthly RCV
+  const monthlyRCV = settlements?.reduce((sum, s) => {
+    const createdAt = new Date(s.created_at);
+    if (createdAt >= monthStart && createdAt <= monthEnd) {
+      return sum + (s.replacement_cost_value || 0);
+    }
+    return sum;
+  }, 0) || 0;
+
+  // Net profit calculation (checks - expenses - payments - adjuster fees)
+  const totalChecks = checks?.reduce((sum, c) => sum + (c.amount || 0), 0) || 0;
+  const totalExpenses = expenses?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
+  const totalPayments = payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+  const totalAdjusterFees = fees?.reduce((sum, f) => sum + (f.adjuster_fee_amount || 0), 0) || 0;
+  const netProfit = totalChecks - totalExpenses - totalPayments - totalAdjusterFees;
+
+  // Urgent tasks (overdue or due within 2 days)
+  const urgentTasks = tasks?.filter(task => {
+    if (!task.due_date) return false;
+    const dueDate = new Date(task.due_date);
+    return isBefore(dueDate, addDays(now, 2));
+  }) || [];
+
+  const overdueTasks = urgentTasks.filter(task => isBefore(new Date(task.due_date!), now));
+  const dueSoonTasks = urgentTasks.filter(task => !isBefore(new Date(task.due_date!), now));
+
+  const formatCurrency = (amount: number) => {
+    if (amount >= 1000000) {
+      return `$${(amount / 1000000).toFixed(2)}M`;
+    } else if (amount >= 1000) {
+      return `$${(amount / 1000).toFixed(1)}K`;
+    }
+    return `$${amount.toLocaleString()}`;
+  };
 
   const stats = [
     {
-      title: "Total Claims",
-      value: totalClaims.toString(),
-      icon: FileText,
-    },
-    {
       title: "Active Claims",
       value: activeClaims.toString(),
-      icon: Clock,
+      icon: FileText,
+      color: "text-blue-500",
     },
     {
-      title: "Total Value",
-      value: `$${(totalValue / 1000000).toFixed(1)}M`,
+      title: "Pending Tasks",
+      value: totalTasks.toString(),
+      icon: ListTodo,
+      color: "text-amber-500",
+    },
+    {
+      title: "Monthly RCV",
+      value: formatCurrency(monthlyRCV),
+      icon: TrendingUp,
+      color: "text-emerald-500",
+    },
+    {
+      title: "Net Profit",
+      value: formatCurrency(netProfit),
       icon: DollarSign,
-    },
-    {
-      title: "Approved",
-      value: approvedClaims.toString(),
-      icon: CheckCircle,
+      color: netProfit >= 0 ? "text-emerald-500" : "text-red-500",
     },
   ];
 
@@ -55,17 +170,18 @@ const Index = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Welcome back! Here's your claims overview</p>
+        <p className="text-muted-foreground mt-1">Welcome back! Here's your overview</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      {/* Stats Grid */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, index) => (
           <Card key={index} className="transition-all hover:shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 {stat.title}
               </CardTitle>
-              <stat.icon className="h-5 w-5 text-primary" />
+              <stat.icon className={`h-5 w-5 ${stat.color}`} />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-foreground">{stat.value}</div>
@@ -74,39 +190,139 @@ const Index = () => {
         ))}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Claims</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {recentClaims.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No claims yet</p>
-          ) : (
-            <div className="space-y-4">
-              {recentClaims.map((claim) => (
-                <div 
-                  key={claim.id}
-                  className="flex items-center gap-4 cursor-pointer hover:bg-accent/50 p-2 rounded-lg transition-colors"
-                  onClick={() => navigate(`/claims/${claim.id}`)}
-                >
-                  <div className="h-2 w-2 rounded-full bg-primary" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{claim.policyholder_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {claim.claim_number} • {claim.created_at ? formatDistanceToNow(new Date(claim.created_at), { addSuffix: true }) : 'Recently'}
-                    </p>
+      {/* Urgent Section */}
+      {urgentTasks.length > 0 && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Urgent Attention Required
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {overdueTasks.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-destructive">Overdue Tasks ({overdueTasks.length})</p>
+                {overdueTasks.slice(0, 3).map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-background border cursor-pointer hover:bg-accent/50 transition-colors"
+                    onClick={() => navigate(`/claims/${task.claim_id}`)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{task.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(task.claims as any)?.policyholder_name || (task.claims as any)?.claim_number}
+                      </p>
+                    </div>
+                    <Badge variant="destructive" className="ml-2 shrink-0">
+                      {formatDistanceToNow(new Date(task.due_date!), { addSuffix: true })}
+                    </Badge>
                   </div>
-                  {claim.status && (
-                    <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary capitalize">
-                      {claim.status}
-                    </span>
-                  )}
-                </div>
-              ))}
+                ))}
+              </div>
+            )}
+            {dueSoonTasks.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-amber-600">Due Soon ({dueSoonTasks.length})</p>
+                {dueSoonTasks.slice(0, 3).map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-background border cursor-pointer hover:bg-accent/50 transition-colors"
+                    onClick={() => navigate(`/claims/${task.claim_id}`)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{task.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(task.claims as any)?.policyholder_name || (task.claims as any)?.claim_number}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="ml-2 shrink-0 border-amber-500 text-amber-600">
+                      {formatDistanceToNow(new Date(task.due_date!), { addSuffix: true })}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tasks and Quick Stats */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Upcoming Tasks */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ListTodo className="h-5 w-5" />
+              Upcoming Tasks
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!tasks || tasks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No pending tasks</p>
+            ) : (
+              <div className="space-y-3">
+                {tasks.slice(0, 5).map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-center justify-between p-3 rounded-lg border cursor-pointer hover:bg-accent/50 transition-colors"
+                    onClick={() => navigate(`/claims/${task.claim_id}`)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{task.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(task.claims as any)?.policyholder_name || (task.claims as any)?.claim_number}
+                      </p>
+                    </div>
+                    {task.due_date && (
+                      <span className="text-xs text-muted-foreground ml-2 shrink-0">
+                        {formatDistanceToNow(new Date(task.due_date), { addSuffix: true })}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Financial Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              Financial Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between py-2 border-b">
+                <span className="text-sm text-muted-foreground">Total Checks Received</span>
+                <span className="font-medium">{formatCurrency(totalChecks)}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b">
+                <span className="text-sm text-muted-foreground">Total Expenses</span>
+                <span className="font-medium text-red-500">-{formatCurrency(totalExpenses)}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b">
+                <span className="text-sm text-muted-foreground">Total Payments</span>
+                <span className="font-medium text-red-500">-{formatCurrency(totalPayments)}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b">
+                <span className="text-sm text-muted-foreground">Adjuster Fees</span>
+                <span className="font-medium text-red-500">-{formatCurrency(totalAdjusterFees)}</span>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <span className="text-sm font-medium">Net Profit</span>
+                <span className={`font-bold text-lg ${netProfit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  {formatCurrency(netProfit)}
+                </span>
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
