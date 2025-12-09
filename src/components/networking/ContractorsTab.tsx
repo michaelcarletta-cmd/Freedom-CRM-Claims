@@ -29,6 +29,8 @@ interface Contractor {
   phone: string | null;
   jobnimbus_api_key?: string | null;
   jobnimbus_enabled?: boolean;
+  external_instance_url?: string | null;
+  external_instance_name?: string | null;
 }
 
 export const ContractorsTab = () => {
@@ -49,6 +51,8 @@ export const ContractorsTab = () => {
   const [jobnimbusApiKey, setJobnimbusApiKey] = useState("");
   const [jobnimbusEnabled, setJobnimbusEnabled] = useState(false);
   const [sendingInvite, setSendingInvite] = useState<string | null>(null);
+  const [externalInstanceUrl, setExternalInstanceUrl] = useState("");
+  const [externalInstanceName, setExternalInstanceName] = useState("");
 
   const handleSendPortalInvite = async (contractor: Contractor) => {
     if (!contractor.email) {
@@ -128,7 +132,7 @@ export const ContractorsTab = () => {
     // Fetch profiles for these users
     const { data: profileData, error: profileError } = await supabase
       .from("profiles")
-      .select("id, full_name, email, phone, jobnimbus_api_key, jobnimbus_enabled")
+      .select("id, full_name, email, phone, jobnimbus_api_key, jobnimbus_enabled, external_instance_url, external_instance_name")
       .in("id", contractorIds);
 
     if (profileError) {
@@ -143,6 +147,8 @@ export const ContractorsTab = () => {
     setSelectedContractor(contractor);
     setJobnimbusApiKey(contractor.jobnimbus_api_key || "");
     setJobnimbusEnabled(contractor.jobnimbus_enabled || false);
+    setExternalInstanceUrl(contractor.external_instance_url || "");
+    setExternalInstanceName(contractor.external_instance_name || "");
     setIntegrationDialogOpen(true);
   };
 
@@ -154,6 +160,8 @@ export const ContractorsTab = () => {
       .update({
         jobnimbus_api_key: jobnimbusApiKey || null,
         jobnimbus_enabled: jobnimbusEnabled,
+        external_instance_url: externalInstanceUrl || null,
+        external_instance_name: externalInstanceName || null,
       })
       .eq("id", selectedContractor.id);
 
@@ -337,7 +345,9 @@ export const ContractorsTab = () => {
                       className="gap-1"
                     >
                       <Link2 className="h-4 w-4" />
-                      {contractor.jobnimbus_enabled ? (
+                      {contractor.external_instance_url ? (
+                        <span className="text-xs text-primary">{contractor.external_instance_name || 'External'}</span>
+                      ) : contractor.jobnimbus_enabled ? (
                         <span className="text-xs text-success">JobNimbus</span>
                       ) : (
                         <span className="text-xs text-muted-foreground">Configure</span>
@@ -407,11 +417,37 @@ export const ContractorsTab = () => {
           </DialogHeader>
           <div className="space-y-6">
             <div className="p-4 border rounded-lg space-y-4">
+              <h4 className="font-medium">External Instance Sync</h4>
+              <p className="text-sm text-muted-foreground">
+                Auto-sync claims when this contractor is assigned
+              </p>
+              <div>
+                <Label>Instance Name</Label>
+                <Input
+                  value={externalInstanceName}
+                  onChange={(e) => setExternalInstanceName(e.target.value)}
+                  placeholder="e.g., Condition One"
+                />
+              </div>
+              <div>
+                <Label>Instance URL</Label>
+                <Input
+                  value={externalInstanceUrl}
+                  onChange={(e) => setExternalInstanceUrl(e.target.value)}
+                  placeholder="https://xxx.supabase.co"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  The Supabase project URL of the external instance
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 border rounded-lg space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-medium">JobNimbus Integration</h4>
                   <p className="text-sm text-muted-foreground">
-                    Automatically sync claims, tasks, notes, and files
+                    Sync claims, tasks, notes, and files
                   </p>
                 </div>
                 <Switch
