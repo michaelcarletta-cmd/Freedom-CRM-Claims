@@ -25,6 +25,7 @@ import { DarwinDenialAnalyzer } from "@/components/claim-detail/DarwinDenialAnal
 import { DarwinNextSteps } from "@/components/claim-detail/DarwinNextSteps";
 import { DarwinSupplementGenerator } from "@/components/claim-detail/DarwinSupplementGenerator";
 import { DarwinCorrespondenceAnalyzer } from "@/components/claim-detail/DarwinCorrespondenceAnalyzer";
+import { DarwinEngineerReportAnalyzer } from "@/components/claim-detail/DarwinEngineerReportAnalyzer";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -405,7 +406,10 @@ const ClaimDetail = () => {
                 <DarwinSupplementGenerator claimId={claim.id} claim={claim} />
               </div>
               
-              <DarwinCorrespondenceAnalyzer claimId={claim.id} claim={claim} />
+              <div className="grid gap-6 lg:grid-cols-2">
+                <DarwinEngineerReportAnalyzer claimId={claim.id} claim={claim} />
+                <DarwinCorrespondenceAnalyzer claimId={claim.id} claim={claim} />
+              </div>
               
               {/* Document Generation Tools */}
               <div className="space-y-4">
