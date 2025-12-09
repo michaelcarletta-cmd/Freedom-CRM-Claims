@@ -16,9 +16,12 @@ serve(async (req) => {
     const syncSecret = Deno.env.get('CLAIM_SYNC_SECRET');
     const requestSecret = req.headers.get('x-sync-secret');
 
+    console.log(`Webhook received - has env secret: ${!!syncSecret}, has request secret: ${!!requestSecret}`);
+    console.log(`Env secret length: ${syncSecret?.length}, Request secret length: ${requestSecret?.length}`);
+    
     // Validate sync secret
     if (!syncSecret || requestSecret !== syncSecret) {
-      console.error('Invalid or missing sync secret');
+      console.error(`Secret mismatch - env first 4: ${syncSecret?.substring(0, 4)}, request first 4: ${requestSecret?.substring(0, 4)}`);
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
