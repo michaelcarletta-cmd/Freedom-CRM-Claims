@@ -1,4 +1,7 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { Resend } from "https://esm.sh/resend@2.0.0";
+
+const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,44 +17,6 @@ interface PortalInviteRequest {
   appUrl?: string;
 }
 
-async function sendMailjetEmail(to: string, subject: string, htmlContent: string) {
-  const apiKey = Deno.env.get("MAILJET_API_KEY");
-  const secretKey = Deno.env.get("MAILJET_SECRET_KEY");
-  
-  const response = await fetch("https://api.mailjet.com/v3.1/send", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Basic ${btoa(`${apiKey}:${secretKey}`)}`,
-    },
-    body: JSON.stringify({
-      Messages: [
-        {
-          From: {
-            Email: "claims@freedomclaims.work",
-            Name: "Freedom Claims"
-          },
-          To: [
-            {
-              Email: to
-            }
-          ],
-          Subject: subject,
-          HTMLPart: htmlContent
-        }
-      ]
-    }),
-  });
-
-  const result = await response.json();
-  
-  if (!response.ok) {
-    throw new Error(`Mailjet error: ${JSON.stringify(result)}`);
-  }
-  
-  return result;
-}
-
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -64,7 +29,7 @@ const handler = async (req: Request): Promise<Response> => {
     console.log(`Sending portal invite to ${email} for ${userType}`);
 
     // Use the app URL passed from frontend, or fall back to a default
-    const loginUrl = appUrl ? `${appUrl}/auth` : "https://claim-mate-hq.lovable.app/auth";
+    const loginUrl = appUrl ? `${appUrl}/auth` : "https://freedomclaims.work/auth";
     
     console.log(`Using login URL: ${loginUrl}`);
 
@@ -122,11 +87,12 @@ const handler = async (req: Request): Promise<Response> => {
       </html>
     `;
 
-    const emailResponse = await sendMailjetEmail(
-      email,
-      `Your Freedom Claims ${userType} Portal Access`,
-      htmlContent
-    );
+    const emailResponse = await resend.emails.send({
+      from: "Freedom Claims <claims@freedomclaims.work>",
+      to: [email],
+      subject: `Your Freedom Claims ${userType} Portal Access`,
+      html: htmlContent,
+    });
 
     console.log("Portal invite email sent:", emailResponse);
 
