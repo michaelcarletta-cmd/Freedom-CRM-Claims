@@ -747,7 +747,16 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
       staffListContext = `\n\nAvailable Staff Members for Task Assignment:\n${staffMembers.map(s => `- ${s.name} (ID: ${s.id})`).join("\n")}`;
     }
 
+    // Get current date for AI context
+    const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    
     const toolInstructions = `
+
+CURRENT DATE: ${currentDate}
+Use this date as reference when calculating due dates. For example:
+- "tomorrow" means add 1 day to ${currentDate}
+- "next week" means add 7 days to ${currentDate}
+- "in 3 days" means add 3 days to ${currentDate}
 
 IMPORTANT: You have the ability to CREATE TASKS. When the user asks you to create a task, reminder, follow-up, or to-do item:
 1. Use the create_task function
@@ -756,7 +765,7 @@ IMPORTANT: You have the ability to CREATE TASKS. When the user asks you to creat
    - NEVER put names or placeholders like "[CLAIM ID]" in claim_id - that field only accepts UUIDs
    - Only use claim_id if you have an actual UUID from the claims list context
 3. Always include a clear title
-4. Set a due date if the user specifies one (use YYYY-MM-DD format with actual dates, not "XX")
+4. Set a due date if the user specifies one (use YYYY-MM-DD format with actual future dates based on CURRENT DATE above)
 5. Set priority based on urgency (low, medium, high)
 6. Assign to a staff member if requested (use their ID from the staff list)`;
 
