@@ -157,7 +157,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
       <SettlementSection claimId={claim.id} settlement={settlement} isAdmin={isAdmin} />
 
       {/* Insurance Checks */}
-      <ChecksSection claimId={claim.id} checks={checks || []} isAdmin={isAdmin} claim={claim} />
+      <ChecksSection claimId={claim.id} checks={checks || []} isAdmin={isAdmin} claim={claim} settlementAmount={settlementAmount} />
 
       {/* Expenses */}
       <ExpensesSection claimId={claim.id} expenses={expenses || []} isAdmin={isAdmin} />
@@ -645,7 +645,9 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
 }
 
 // Checks Section Component  
-function ChecksSection({ claimId, checks, isAdmin, claim }: any) {
+function ChecksSection({ claimId, checks, isAdmin, claim, settlementAmount }: any) {
+  const totalChecksReceived = checks?.reduce((sum: number, check: any) => sum + Number(check.amount), 0) || 0;
+  const outstandingAmount = settlementAmount - totalChecksReceived;
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     check_number: "",
@@ -709,7 +711,14 @@ function ChecksSection({ claimId, checks, isAdmin, claim }: any) {
     <Card>
       <CardHeader>
         <div className="flex justify-between items-center">
-          <CardTitle>Insurance Checks Received</CardTitle>
+          <div>
+            <CardTitle>Insurance Checks Received</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Outstanding: <span className={outstandingAmount > 0 ? "text-amber-500 font-semibold" : "text-success font-semibold"}>
+                ${outstandingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </p>
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={handleCopyClaimDetails}>
               <Copy className="h-4 w-4 mr-2" />
