@@ -466,17 +466,16 @@ Format as a comprehensive rebuttal package suitable for carrier submission or li
     let messages: any[];
     
     if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'supplement')) {
-      // Use multimodal format for PDF analysis
+      // Use multimodal format for PDF analysis with Gemini-compatible inline_data format
       messages = [
         { role: 'system', content: systemPrompt },
         { 
           role: 'user', 
           content: [
             {
-              type: 'file',
-              file: {
-                filename: pdfFileName || 'document.pdf',
-                file_data: `data:application/pdf;base64,${pdfContent}`
+              type: 'image_url',
+              image_url: {
+                url: `data:application/pdf;base64,${pdfContent}`
               }
             },
             {
