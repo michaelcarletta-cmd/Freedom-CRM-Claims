@@ -98,7 +98,13 @@ serve(async (req) => {
     // Send to external instance
     const syncUrl = `${baseUrl}/functions/v1/claim-sync-webhook`;
     console.log(`Sending sync request to: ${syncUrl}`);
-    console.log(`Secret length: ${syncSecret?.length}, first 4 chars: ${syncSecret?.substring(0, 4)}...`);
+    console.log(`CLAIM_SYNC_SECRET exists: ${!!syncSecret}, length: ${syncSecret?.length}, value starts with: "${syncSecret?.substring(0, 8)}"`);
+    
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-sync-secret': syncSecret,
+    };
+    console.log('Request headers being sent:', JSON.stringify(headers));
 
     const response = await fetch(syncUrl, {
       method: 'POST',
