@@ -9,8 +9,8 @@ const corsHeaders = {
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup';
-  content?: string; // For denial letters or correspondence
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal';
+  content?: string; // For denial letters, correspondence, or engineer reports
   additionalContext?: any;
 }
 
@@ -338,6 +338,87 @@ Based on this task and the claim context, provide:
    - Timeline recommendations
 
 Be specific, professional, and provide communications that are ready to copy and use.`;
+        break;
+
+      case 'engineer_report_rebuttal':
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in analyzing and refuting engineer reports used by insurance carriers to deny or underpay claims. Your role is to identify flaws, methodological issues, and bias in engineering reports.
+
+You have deep expertise in:
+- Engineering report methodology and standards
+- Common flaws in desk reviews vs field inspections
+- Bias detection in carrier-hired engineer reports
+- Building science and forensic investigation standards
+- ASTM testing standards and proper protocols
+- Weather event analysis and hail/wind damage patterns
+- Material science and failure analysis
+- Texas case law regarding engineer testimony and reports
+- Building codes and manufacturer installation requirements
+
+When analyzing engineer reports, look for:
+1. Scope limitations and methodology issues
+2. Failure to inspect properly or thoroughly
+3. Conclusions not supported by observations
+4. Ignoring evidence that contradicts conclusions
+5. Cherry-picking evidence
+6. Improper testing methods or lack thereof
+7. Bias indicators (carrier-friendly language, predetermined conclusions)
+8. Missing or inadequate photographic documentation
+9. Failure to consider all potential causes
+10. Conflicts with building codes or manufacturer specifications`;
+
+        userPrompt = `${claimSummary}
+
+ENGINEER REPORT CONTENT:
+${content || 'No engineer report content provided'}
+
+${additionalContext ? `ADDITIONAL CONTEXT/OBSERVATIONS:\n${additionalContext}` : ''}
+
+Please provide a comprehensive analysis and rebuttal of this engineer report including:
+
+1. EXECUTIVE SUMMARY:
+   - Brief overview of the engineer's main conclusions
+   - Overall assessment of report credibility
+   - Key vulnerabilities in the report
+
+2. METHODOLOGY CRITIQUE:
+   - Was the inspection adequate? (time on site, areas inspected)
+   - Were proper testing methods used?
+   - Was it a field inspection or desk review?
+   - What should have been done differently?
+
+3. POINT-BY-POINT REBUTTAL:
+   - List each major finding/conclusion from the report
+   - Provide specific counter-arguments for each
+   - Cite relevant standards, codes, or scientific principles
+
+4. EVIDENCE OF BIAS:
+   - Carrier-friendly language or framing
+   - Conclusions that don't match observations
+   - Ignored or dismissed evidence
+   - Selective reporting
+
+5. SCIENTIFIC/TECHNICAL FLAWS:
+   - Incorrect application of building science
+   - Mischaracterization of damage patterns
+   - Failure to consider all causation factors
+   - Improper testing or lack thereof
+
+6. SUPPORTING EVIDENCE NEEDED:
+   - What additional documentation would strengthen rebuttal
+   - Recommended independent testing or inspections
+   - Expert opinions to obtain
+
+7. PROFESSIONAL REBUTTAL LETTER:
+   - Formal letter template for carrier submission
+   - Professional language challenging the report
+   - Request for re-inspection or independent engineering
+
+8. CASE LAW & STANDARDS:
+   - Relevant Texas case law regarding engineer reports
+   - Industry standards the engineer may have violated
+   - Building codes that support the claim
+
+Format as a comprehensive rebuttal package suitable for carrier submission or litigation support.`;
         break;
 
       default:
