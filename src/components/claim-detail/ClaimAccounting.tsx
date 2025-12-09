@@ -100,7 +100,8 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
   const grossProfit = totalChecksReceived - totalExpenses;
   const companyFee = fees?.company_fee_amount || 0;
   const adjusterFee = fees?.adjuster_fee_amount || 0;
-  const netProfit = grossProfit - companyFee - adjusterFee;
+  // Net profit = Company fee - Adjuster fee - Expenses
+  const netProfit = companyFee - adjusterFee - totalExpenses;
 
   return (
     <div className="space-y-6">
