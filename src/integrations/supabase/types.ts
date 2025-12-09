@@ -1784,6 +1784,8 @@ export type Database = {
           created_at: string | null
           email: string
           email_signature: string | null
+          external_instance_name: string | null
+          external_instance_url: string | null
           full_name: string | null
           id: string
           jobnimbus_api_key: string | null
@@ -1800,6 +1802,8 @@ export type Database = {
           created_at?: string | null
           email: string
           email_signature?: string | null
+          external_instance_name?: string | null
+          external_instance_url?: string | null
           full_name?: string | null
           id: string
           jobnimbus_api_key?: string | null
@@ -1816,6 +1820,8 @@ export type Database = {
           created_at?: string | null
           email?: string
           email_signature?: string | null
+          external_instance_name?: string | null
+          external_instance_url?: string | null
           full_name?: string | null
           id?: string
           jobnimbus_api_key?: string | null
