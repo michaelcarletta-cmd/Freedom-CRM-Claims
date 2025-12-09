@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { HardHat, Loader2, Copy, Download, Sparkles } from "lucide-react";
+import { HardHat, Loader2, Copy, Download, Sparkles, Upload, X, FileText } from "lucide-react";
 
 interface DarwinEngineerReportAnalyzerProps {
   claimId: string;
@@ -14,16 +14,48 @@ interface DarwinEngineerReportAnalyzerProps {
 
 export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerReportAnalyzerProps) => {
   const [reportContent, setReportContent] = useState("");
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [additionalContext, setAdditionalContext] = useState("");
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload a PDF file",
+          variant: "destructive"
+        });
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please upload a file smaller than 10MB",
+          variant: "destructive"
+        });
+        return;
+      }
+      setPdfFile(file);
+    }
+  };
+
+  const removeFile = () => {
+    setPdfFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleAnalyze = async () => {
-    if (!reportContent.trim()) {
+    if (!reportContent.trim() && !pdfFile) {
       toast({
         title: "Content required",
-        description: "Please paste the engineer report content to analyze",
+        description: "Please paste the engineer report content or upload a PDF",
         variant: "destructive"
       });
       return;
@@ -31,11 +63,24 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
 
     setLoading(true);
     try {
+      let pdfBase64 = null;
+      if (pdfFile) {
+        const arrayBuffer = await pdfFile.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        pdfBase64 = btoa(binary);
+      }
+
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
         body: {
           claimId,
           analysisType: 'engineer_report_rebuttal',
-          content: reportContent,
+          content: reportContent || undefined,
+          pdfContent: pdfBase64 || undefined,
+          pdfFileName: pdfFile?.name || undefined,
           additionalContext: additionalContext || undefined
         }
       });
@@ -90,17 +135,56 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
           Engineer Report Analyzer
         </CardTitle>
         <CardDescription>
-          Paste an engineer's report and Darwin will identify flaws, methodological issues, and generate a professional rebuttal with citations
+          Upload an engineer's report PDF or paste content and Darwin will identify flaws, methodological issues, and generate a professional rebuttal
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* PDF Upload Section */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Upload Engineer Report (PDF)</label>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept=".pdf"
+            className="hidden"
+          />
+          {pdfFile ? (
+            <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
+              <FileText className="h-5 w-5 text-primary" />
+              <span className="flex-1 text-sm truncate">{pdfFile.name}</span>
+              <Button variant="ghost" size="sm" onClick={removeFile}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Select PDF File
+            </Button>
+          )}
+        </div>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-card px-2 text-muted-foreground">or paste content</span>
+          </div>
+        </div>
+
         <div className="space-y-2">
           <label className="text-sm font-medium">Engineer Report Content</label>
           <Textarea
             value={reportContent}
             onChange={(e) => setReportContent(e.target.value)}
             placeholder="Paste the engineer's report content here..."
-            className="min-h-[150px]"
+            className="min-h-[120px]"
           />
         </div>
 
@@ -116,7 +200,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
 
         <Button 
           onClick={handleAnalyze} 
-          disabled={loading || !reportContent.trim()}
+          disabled={loading || (!reportContent.trim() && !pdfFile)}
           className="w-full"
         >
           {loading ? (

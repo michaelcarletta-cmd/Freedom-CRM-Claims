@@ -11,6 +11,8 @@ interface AnalysisRequest {
   claimId: string;
   analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal';
   content?: string; // For denial letters, correspondence, or engineer reports
+  pdfContent?: string; // Base64 encoded PDF content
+  pdfFileName?: string;
   additionalContext?: any;
 }
 
@@ -29,8 +31,8 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { claimId, analysisType, content, additionalContext }: AnalysisRequest = await req.json();
-    console.log(`Darwin AI Analysis - Type: ${analysisType}, Claim: ${claimId}`);
+    const { claimId, analysisType, content, pdfContent, pdfFileName, additionalContext }: AnalysisRequest = await req.json();
+    console.log(`Darwin AI Analysis - Type: ${analysisType}, Claim: ${claimId}, Has PDF: ${!!pdfContent}`);
 
     // Fetch claim data
     const { data: claim, error: claimError } = await supabase
@@ -147,8 +149,8 @@ When generating rebuttals:
 
         userPrompt = `${claimSummary}
 
-DENIAL LETTER CONTENT:
-${content || 'No denial letter content provided'}
+${pdfContent ? `A PDF of the denial letter has been provided for analysis.` : `DENIAL LETTER CONTENT:
+${content || 'No denial letter content provided'}`}
 
 Please analyze this denial and generate a comprehensive rebuttal that:
 1. Lists each denial reason with a point-by-point counter-argument
@@ -368,8 +370,8 @@ When analyzing engineer reports, look for:
 
         userPrompt = `${claimSummary}
 
-ENGINEER REPORT CONTENT:
-${content || 'No engineer report content provided'}
+${pdfContent ? `A PDF of the engineer report has been provided for analysis.` : `ENGINEER REPORT CONTENT:
+${content || 'No engineer report content provided'}`}
 
 ${additionalContext ? `ADDITIONAL CONTEXT/OBSERVATIONS:\n${additionalContext}` : ''}
 
@@ -425,7 +427,42 @@ Format as a comprehensive rebuttal package suitable for carrier submission or li
         throw new Error(`Unknown analysis type: ${analysisType}`);
     }
 
-    // Call Lovable AI
+    // Build messages array - handle PDF content with multimodal format
+    let messages: any[];
+    
+    if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal')) {
+      // Use multimodal format for PDF analysis
+      messages = [
+        { role: 'system', content: systemPrompt },
+        { 
+          role: 'user', 
+          content: [
+            {
+              type: 'file',
+              file: {
+                filename: pdfFileName || 'document.pdf',
+                file_data: `data:application/pdf;base64,${pdfContent}`
+              }
+            },
+            {
+              type: 'text',
+              text: userPrompt
+            }
+          ]
+        }
+      ];
+    } else {
+      // Standard text-only format
+      messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ];
+    }
+
+    // Call Lovable AI - use gemini-2.5-pro for PDF analysis (better document understanding)
+    const model = pdfContent ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
+    console.log(`Using model: ${model}`);
+    
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -433,13 +470,10 @@ Format as a comprehensive rebuttal package suitable for carrier submission or li
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
+        model,
+        messages,
         temperature: 0.7,
-        max_tokens: 4000,
+        max_tokens: 8000,
       }),
     });
 
