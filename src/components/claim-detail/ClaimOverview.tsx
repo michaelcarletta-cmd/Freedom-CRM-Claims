@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { User, Calendar, MapPin, DollarSign, Mail, UserPlus, Loader2 } from "lucide-react";
+import { User, Calendar, MapPin, Mail, UserPlus, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ClaimCustomFields } from "./ClaimCustomFields";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
@@ -318,6 +318,12 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
               <p className="text-sm text-muted-foreground">Type of Loss</p>
               <p className="text-sm font-medium">{claim.loss_type || "N/A"}</p>
             </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Date Submitted</p>
+              <p className="text-sm font-medium">
+                {claim.created_at ? format(new Date(claim.created_at), "MMM dd, yyyy") : "N/A"}
+              </p>
+            </div>
             {!isPortalUser && getClaimEmail(claim) && (
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -367,31 +373,6 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
         </CardContent>
       </Card>
 
-      {/* Claim Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-primary" />
-            Claim Summary
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Claim Amount</p>
-              <p className="text-2xl font-bold text-primary">
-                {claim.claim_amount ? `$${claim.claim_amount.toLocaleString()}` : "N/A"}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Date Submitted</p>
-              <p className="text-sm font-medium">
-                {claim.created_at ? format(new Date(claim.created_at), "MMM dd, yyyy") : "N/A"}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Custom Fields */}
       <ClaimCustomFields claimId={claim.id} />
