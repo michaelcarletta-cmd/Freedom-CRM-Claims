@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { PlusCircle, Loader2, Copy, Download, Sparkles } from "lucide-react";
+import { PlusCircle, Loader2, Copy, Download, Sparkles, Upload, X, FileText } from "lucide-react";
 
 interface DarwinSupplementGeneratorProps {
   claimId: string;
@@ -17,16 +17,62 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload a PDF file",
+          variant: "destructive"
+        });
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please upload a file smaller than 10MB",
+          variant: "destructive"
+        });
+        return;
+      }
+      setPdfFile(file);
+    }
+  };
+
+  const clearFile = () => {
+    setPdfFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleGenerate = async () => {
     setLoading(true);
     try {
+      let pdfContent: string | undefined;
+      
+      if (pdfFile) {
+        const arrayBuffer = await pdfFile.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        pdfContent = btoa(binary);
+      }
+
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
         body: {
           claimId,
           analysisType: 'supplement',
           content: additionalNotes,
+          pdfContent,
+          pdfFileName: pdfFile?.name,
           additionalContext: { existingEstimate }
         }
       });
@@ -86,7 +132,47 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium">Existing Estimate Items (optional)</label>
+          <label className="text-sm font-medium">Upload Carrier Estimate (PDF)</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="file"
+              accept=".pdf"
+              onChange={handleFileChange}
+              ref={fileInputRef}
+              className="hidden"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2"
+            >
+              <Upload className="h-4 w-4" />
+              {pdfFile ? 'Change PDF' : 'Upload PDF'}
+            </Button>
+            {pdfFile && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm truncate max-w-[200px]">{pdfFile.name}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFile}
+                  className="h-6 w-6 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Upload the carrier's estimate PDF for Darwin to analyze and identify missing items
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Or Paste Estimate Items (optional)</label>
           <Textarea
             value={existingEstimate}
             onChange={(e) => setExistingEstimate(e.target.value)}
