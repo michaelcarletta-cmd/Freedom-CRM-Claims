@@ -25,7 +25,13 @@ serve(async (req) => {
 
     const { claim_id, target_instance_url, instance_name, include_accounting } = await req.json();
 
-    console.log(`Syncing claim ${claim_id} to ${target_instance_url}`);
+    // Normalize the URL - strip trailing slashes and remove webhook path if included
+    let baseUrl = target_instance_url.replace(/\/+$/, '');
+    if (baseUrl.includes('/functions/v1/claim-sync-webhook')) {
+      baseUrl = baseUrl.replace('/functions/v1/claim-sync-webhook', '');
+    }
+
+    console.log(`Syncing claim ${claim_id} to ${baseUrl}`);
 
     // Fetch the claim data
     const { data: claim, error: claimError } = await supabase
@@ -90,7 +96,7 @@ serve(async (req) => {
     }
 
     // Send to external instance
-    const syncUrl = `${target_instance_url}/functions/v1/claim-sync-webhook`;
+    const syncUrl = `${baseUrl}/functions/v1/claim-sync-webhook`;
     console.log(`Sending sync request to: ${syncUrl}`);
 
     const response = await fetch(syncUrl, {
