@@ -692,12 +692,60 @@ Format your response clearly with headers and bullet points for easy scanning.`;
 
     console.log(`Darwin AI Analysis completed for ${analysisType}`);
 
+    // For task_followup, parse the response to extract suggested actions
+    let suggestedActions: Array<{type: string; title: string; content: string}> = [];
+    
+    if (analysisType === 'task_followup') {
+      // Parse email drafts
+      const emailMatch = analysisResult.match(/\[EMAIL DRAFT\][^\[]*Subject:\s*([^\n]+)\n[^\[]*Body:\s*([\s\S]*?)(?=\[SMS DRAFT\]|\[NOTE|$)/i);
+      if (emailMatch) {
+        const subject = emailMatch[1].trim();
+        const body = emailMatch[2].trim();
+        if (body) {
+          suggestedActions.push({
+            type: 'email',
+            title: `Email: ${subject}`,
+            content: body
+          });
+        }
+      }
+      
+      // Parse SMS drafts
+      const smsMatch = analysisResult.match(/\[SMS DRAFT\]\s*([\s\S]*?)(?=\[NOTE|\[EMAIL|$)/i);
+      if (smsMatch) {
+        const smsContent = smsMatch[1].trim().split('\n').filter((line: string) => line.trim() && !line.includes('['))[0];
+        if (smsContent) {
+          suggestedActions.push({
+            type: 'sms',
+            title: 'SMS Follow-up',
+            content: smsContent.trim()
+          });
+        }
+      }
+      
+      // Parse notes/documentation
+      const noteMatch = analysisResult.match(/\[NOTE\/DOCUMENTATION\]\s*([\s\S]*?)(?=\d+\.|$)/i);
+      if (noteMatch) {
+        const noteContent = noteMatch[1].trim().split('\n').filter((line: string) => line.trim() && !line.includes('['))[0];
+        if (noteContent) {
+          suggestedActions.push({
+            type: 'note',
+            title: 'Add Documentation Note',
+            content: noteContent.trim()
+          });
+        }
+      }
+      
+      console.log(`Parsed ${suggestedActions.length} suggested actions from task_followup`);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true,
         analysisType,
         result: analysisResult,
-        analysis: analysisResult, // Also include as 'analysis' for components that expect it
+        analysis: analysisResult,
+        suggestedActions,
         claimId
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
