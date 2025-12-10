@@ -654,18 +654,67 @@ Format your response clearly with headers and bullet points for easy scanning.`;
     const model = pdfContent ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
     console.log(`Using model: ${model}`);
     
+    // For task_followup, use tool calling to get structured actions
+    let requestBody: any = {
+      model,
+      messages,
+      temperature: 0.7,
+      max_tokens: 8000,
+    };
+    
+    if (analysisType === 'task_followup') {
+      requestBody.tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'provide_task_followup',
+            description: 'Provide analysis and suggested follow-up actions for a task',
+            parameters: {
+              type: 'object',
+              properties: {
+                analysis: {
+                  type: 'string',
+                  description: 'Detailed analysis of the task including what it requires, why its important, urgency level, and recommended approach'
+                },
+                suggestedActions: {
+                  type: 'array',
+                  description: 'List of suggested follow-up actions',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      type: {
+                        type: 'string',
+                        enum: ['email', 'sms', 'note'],
+                        description: 'Type of action'
+                      },
+                      title: {
+                        type: 'string',
+                        description: 'Brief title for the action'
+                      },
+                      content: {
+                        type: 'string',
+                        description: 'The actual content - email body, SMS message, or note text'
+                      }
+                    },
+                    required: ['type', 'title', 'content']
+                  }
+                }
+              },
+              required: ['analysis', 'suggestedActions']
+            }
+          }
+        }
+      ];
+      requestBody.tool_choice = { type: 'function', function: { name: 'provide_task_followup' } };
+    }
+    
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: 0.7,
-        max_tokens: 8000,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -688,55 +737,30 @@ Format your response clearly with headers and bullet points for easy scanning.`;
     }
 
     const aiData = await response.json();
-    const analysisResult = aiData.choices?.[0]?.message?.content || 'No analysis generated';
-
+    
     console.log(`Darwin AI Analysis completed for ${analysisType}`);
 
-    // For task_followup, parse the response to extract suggested actions
+    // For task_followup, parse the tool call response
     let suggestedActions: Array<{type: string; title: string; content: string}> = [];
+    let analysisResult = '';
     
     if (analysisType === 'task_followup') {
-      // Parse email drafts
-      const emailMatch = analysisResult.match(/\[EMAIL DRAFT\][^\[]*Subject:\s*([^\n]+)\n[^\[]*Body:\s*([\s\S]*?)(?=\[SMS DRAFT\]|\[NOTE|$)/i);
-      if (emailMatch) {
-        const subject = emailMatch[1].trim();
-        const body = emailMatch[2].trim();
-        if (body) {
-          suggestedActions.push({
-            type: 'email',
-            title: `Email: ${subject}`,
-            content: body
-          });
+      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      if (toolCall?.function?.arguments) {
+        try {
+          const parsed = JSON.parse(toolCall.function.arguments);
+          analysisResult = parsed.analysis || 'No analysis generated';
+          suggestedActions = parsed.suggestedActions || [];
+          console.log(`Parsed ${suggestedActions.length} suggested actions from tool call`);
+        } catch (e) {
+          console.error('Failed to parse tool call response:', e);
+          analysisResult = aiData.choices?.[0]?.message?.content || 'No analysis generated';
         }
+      } else {
+        analysisResult = aiData.choices?.[0]?.message?.content || 'No analysis generated';
       }
-      
-      // Parse SMS drafts
-      const smsMatch = analysisResult.match(/\[SMS DRAFT\]\s*([\s\S]*?)(?=\[NOTE|\[EMAIL|$)/i);
-      if (smsMatch) {
-        const smsContent = smsMatch[1].trim().split('\n').filter((line: string) => line.trim() && !line.includes('['))[0];
-        if (smsContent) {
-          suggestedActions.push({
-            type: 'sms',
-            title: 'SMS Follow-up',
-            content: smsContent.trim()
-          });
-        }
-      }
-      
-      // Parse notes/documentation
-      const noteMatch = analysisResult.match(/\[NOTE\/DOCUMENTATION\]\s*([\s\S]*?)(?=\d+\.|$)/i);
-      if (noteMatch) {
-        const noteContent = noteMatch[1].trim().split('\n').filter((line: string) => line.trim() && !line.includes('['))[0];
-        if (noteContent) {
-          suggestedActions.push({
-            type: 'note',
-            title: 'Add Documentation Note',
-            content: noteContent.trim()
-          });
-        }
-      }
-      
-      console.log(`Parsed ${suggestedActions.length} suggested actions from task_followup`);
+    } else {
+      analysisResult = aiData.choices?.[0]?.message?.content || 'No analysis generated';
     }
 
     return new Response(
