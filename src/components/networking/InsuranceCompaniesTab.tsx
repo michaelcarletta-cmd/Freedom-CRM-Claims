@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Building, Mail, Phone, Plus, Search } from "lucide-react";
+import { Building, Mail, Phone, Plus, Search, Pencil } from "lucide-react";
 import { formatPhoneNumber } from "@/lib/utils";
 
 interface InsuranceCompany {
@@ -23,6 +23,7 @@ export const InsuranceCompaniesTab = () => {
   const [filteredCompanies, setFilteredCompanies] = useState<InsuranceCompany[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<InsuranceCompany | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -59,27 +60,60 @@ export const InsuranceCompaniesTab = () => {
     setCompanies(data || []);
   };
 
-  const handleAddCompany = async () => {
+  const handleOpenDialog = (company?: InsuranceCompany) => {
+    if (company) {
+      setEditingCompany(company);
+      setFormData({
+        name: company.name,
+        email: company.email || "",
+        phone: company.phone || "",
+      });
+    } else {
+      setEditingCompany(null);
+      setFormData({ name: "", email: "", phone: "" });
+    }
+    setDialogOpen(true);
+  };
+
+  const handleSaveCompany = async () => {
     if (!formData.name.trim()) {
       toast.error("Company name is required");
       return;
     }
 
-    const { error } = await supabase
-      .from("insurance_companies")
-      .insert([{
-        name: formData.name,
-        phone: formData.phone || null,
-        email: formData.email || null,
-      }]);
+    if (editingCompany) {
+      const { error } = await supabase
+        .from("insurance_companies")
+        .update({
+          name: formData.name,
+          phone: formData.phone || null,
+          email: formData.email || null,
+        })
+        .eq("id", editingCompany.id);
 
-    if (error) {
-      toast.error("Failed to add company");
-      return;
+      if (error) {
+        toast.error("Failed to update company");
+        return;
+      }
+      toast.success("Company updated");
+    } else {
+      const { error } = await supabase
+        .from("insurance_companies")
+        .insert([{
+          name: formData.name,
+          phone: formData.phone || null,
+          email: formData.email || null,
+        }]);
+
+      if (error) {
+        toast.error("Failed to add company");
+        return;
+      }
+      toast.success("Company added");
     }
 
-    toast.success("Company added");
     setDialogOpen(false);
+    setEditingCompany(null);
     setFormData({ name: "", email: "", phone: "" });
     fetchCompanies();
   };
@@ -88,50 +122,10 @@ export const InsuranceCompaniesTab = () => {
     <Card>
       <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <CardTitle>Insurance Companies</CardTitle>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => setFormData({ name: "", email: "", phone: "" })}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Company
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Insurance Company</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Company Name *</Label>
-                <Input
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Enter company name"
-                />
-              </div>
-              <div>
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="Enter email"
-                />
-              </div>
-              <div>
-                <Label>Phone</Label>
-                <Input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) })}
-                  placeholder="123-456-7890"
-                />
-              </div>
-              <Button onClick={handleAddCompany} className="w-full">
-                Add Company
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => handleOpenDialog()}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Company
+        </Button>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="relative">
@@ -156,44 +150,93 @@ export const InsuranceCompaniesTab = () => {
                   <TableHead className="whitespace-nowrap">Company Name</TableHead>
                   <TableHead className="whitespace-nowrap">Email</TableHead>
                   <TableHead className="whitespace-nowrap">Phone</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
-            <TableBody>
-              {filteredCompanies.map((company) => (
-                <TableRow key={company.id}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      <Building className="h-4 w-4 text-muted-foreground" />
-                      {company.name}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {company.email ? (
+              <TableBody>
+                {filteredCompanies.map((company) => (
+                  <TableRow key={company.id}>
+                    <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
-                        <Mail className="h-4 w-4 text-muted-foreground" />
-                        {company.email}
+                        <Building className="h-4 w-4 text-muted-foreground" />
+                        {company.name}
                       </div>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {company.phone ? (
-                      <div className="flex items-center gap-2">
-                        <Phone className="h-4 w-4 text-muted-foreground" />
-                        {company.phone}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      {company.email ? (
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          {company.email}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {company.phone ? (
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          {company.phone}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleOpenDialog(company)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
         )}
       </CardContent>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingCompany ? "Edit" : "Add"} Insurance Company</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Company Name *</Label>
+              <Input
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Enter company name"
+              />
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="Enter email"
+              />
+            </div>
+            <div>
+              <Label>Phone</Label>
+              <Input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) })}
+                placeholder="123-456-7890"
+              />
+            </div>
+            <Button onClick={handleSaveCompany} className="w-full">
+              {editingCompany ? "Save Changes" : "Add Company"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
