@@ -11,7 +11,6 @@ import { Users, Building2, UserPlus, X } from "lucide-react";
 
 interface ClaimAssignmentsProps {
   claimId: string;
-  currentReferrerId?: string | null;
   currentMortgageCompanyId?: string | null;
   loanNumber?: string | null;
   ssnLastFour?: string | null;
@@ -21,12 +20,6 @@ interface Contractor {
   id: string;
   full_name: string | null;
   email: string;
-}
-
-interface Referrer {
-  id: string;
-  name: string;
-  company: string | null;
 }
 
 interface MortgageCompany {
@@ -51,16 +44,14 @@ interface AssignedStaff {
   profiles: Staff;
 }
 
-export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCompanyId, loanNumber, ssnLastFour }: ClaimAssignmentsProps) {
+export function ClaimAssignments({ claimId, currentMortgageCompanyId, loanNumber, ssnLastFour }: ClaimAssignmentsProps) {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [assignedStaff, setAssignedStaff] = useState<AssignedStaff[]>([]);
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [assignedContractors, setAssignedContractors] = useState<AssignedContractor[]>([]);
-  const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [mortgageCompanies, setMortgageCompanies] = useState<MortgageCompany[]>([]);
   const [selectedStaff, setSelectedStaff] = useState<string>("");
   const [selectedContractor, setSelectedContractor] = useState<string>("");
-  const [selectedReferrer, setSelectedReferrer] = useState<string>(currentReferrerId || "none");
   const [selectedMortgageCompany, setSelectedMortgageCompany] = useState<string>(currentMortgageCompanyId || "none");
   const [editLoanNumber, setEditLoanNumber] = useState<string>(loanNumber || "");
   const [editSsnLastFour, setEditSsnLastFour] = useState<string>(ssnLastFour || "");
@@ -175,15 +166,6 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
       setAssignedContractors([]);
     }
 
-    // Fetch referrers
-    const { data: referrerData } = await supabase
-      .from("referrers")
-      .select("*")
-      .eq("is_active", true)
-      .order("name");
-
-    setReferrers(referrerData || []);
-
     // Fetch mortgage companies
     const { data: mortgageData } = await supabase
       .from("mortgage_companies")
@@ -284,23 +266,6 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
 
     toast.success("Staff member removed");
     fetchData();
-  };
-
-  const handleUpdateReferrer = async (referrerId: string) => {
-    const actualReferrerId = referrerId === "none" ? null : referrerId;
-    
-    const { error } = await supabase
-      .from("claims")
-      .update({ referrer_id: actualReferrerId })
-      .eq("id", claimId);
-
-    if (error) {
-      toast.error("Failed to update referrer");
-      return;
-    }
-
-    setSelectedReferrer(referrerId);
-    toast.success("Referrer updated");
   };
 
   const handleUpdateMortgageCompany = async (mortgageCompanyId: string) => {
@@ -455,31 +420,6 @@ export function ClaimAssignments({ claimId, currentReferrerId, currentMortgageCo
               ))
             )}
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Referrer */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserPlus className="h-5 w-5 text-primary" />
-            Referrer
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Select value={selectedReferrer} onValueChange={handleUpdateReferrer}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select a referrer" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {referrers.map((referrer) => (
-                <SelectItem key={referrer.id} value={referrer.id}>
-                  {referrer.name} {referrer.company && `(${referrer.company})`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </CardContent>
       </Card>
 

@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, X, Users, Building2, UserCheck } from "lucide-react";
+import { UserPlus, X, Users, UserCheck } from "lucide-react";
 
 interface ClaimAccessManagementProps {
   claimId: string;
@@ -27,19 +27,15 @@ interface Client {
 export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [contractors, setContractors] = useState<Profile[]>([]);
-  const [referrers, setReferrers] = useState<any[]>([]);
   const [assignedContractors, setAssignedContractors] = useState<Profile[]>([]);
   const [currentClientId, setCurrentClientId] = useState<string | null>(null);
-  const [currentReferrerId, setCurrentReferrerId] = useState<string | null>(null);
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [selectedContractor, setSelectedContractor] = useState<string>("");
-  const [selectedReferrer, setSelectedReferrer] = useState<string>("");
   const { toast } = useToast();
 
   useEffect(() => {
     fetchClients();
     fetchContractors();
-    fetchReferrers();
     fetchClaimAssignments();
   }, [claimId]);
 
@@ -75,30 +71,17 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
     }
   };
 
-  const fetchReferrers = async () => {
-    try {
-      const { data } = await supabase
-        .from("referrers")
-        .select("*")
-        .eq("is_active", true);
-      setReferrers(data || []);
-    } catch (error: any) {
-      console.error("Error fetching referrers:", error);
-    }
-  };
-
   const fetchClaimAssignments = async () => {
     try {
       // Get current claim data
       const { data: claim } = await supabase
         .from("claims")
-        .select("client_id, referrer_id")
+        .select("client_id")
         .eq("id", claimId)
         .single();
 
       if (claim) {
         setCurrentClientId(claim.client_id);
-        setCurrentReferrerId(claim.referrer_id);
       }
 
       // Get assigned contractors
@@ -226,62 +209,7 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
     }
   };
 
-  const assignReferrer = async () => {
-    if (!selectedReferrer) return;
-
-    try {
-      const { error } = await supabase
-        .from("claims")
-        .update({ referrer_id: selectedReferrer })
-        .eq("id", claimId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Referrer assigned to claim",
-      });
-
-      setCurrentReferrerId(selectedReferrer);
-      setSelectedReferrer("");
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const removeReferrer = async () => {
-    try {
-      const { error } = await supabase
-        .from("claims")
-        .update({ referrer_id: null })
-        .eq("id", claimId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Referrer removed from claim",
-      });
-
-      setCurrentReferrerId(null);
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
   const currentClient = allClients.find(c => c.id === currentClientId);
-  
-  // Get client name from claim's policyholder_name if no client assigned
-  const displayClientName = currentClient?.name;
-  const currentReferrer = referrers.find(r => r.id === currentReferrerId);
 
   return (
     <div className="space-y-6">
@@ -374,48 +302,6 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
                   </Button>
                 </div>
               ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Referrer Assignment */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            Referrer Access
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {currentReferrer ? (
-            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-              <div>
-                <p className="font-medium">{currentReferrer.name}</p>
-                <p className="text-sm text-muted-foreground">{currentReferrer.company || currentReferrer.email}</p>
-              </div>
-              <Button variant="ghost" size="sm" onClick={removeReferrer}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <Select value={selectedReferrer} onValueChange={setSelectedReferrer}>
-                <SelectTrigger className="bg-background">
-                  <SelectValue placeholder="Select referrer" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  {referrers.map((referrer) => (
-                    <SelectItem key={referrer.id} value={referrer.id}>
-                      {referrer.name} {referrer.company ? `(${referrer.company})` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button onClick={assignReferrer} disabled={!selectedReferrer}>
-                <UserPlus className="h-4 w-4 mr-2" />
-                Assign
-              </Button>
             </div>
           )}
         </CardContent>

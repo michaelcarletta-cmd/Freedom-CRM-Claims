@@ -1049,8 +1049,8 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
     adjuster_fee_amount: fees?.adjuster_fee_amount || 0,
     contractor_fee_percentage: fees?.contractor_fee_percentage || 0,
     contractor_fee_amount: fees?.contractor_fee_amount || 0,
-    referrer_fee_percentage: fees?.referrer_fee_percentage || 0,
-    referrer_fee_amount: fees?.referrer_fee_amount || 0,
+    referrer_fee_percentage: 0,
+    referrer_fee_amount: 0,
     notes: fees?.notes || "",
   });
   const { toast } = useToast();
@@ -1090,8 +1090,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
   const companyFee = fees?.company_fee_amount || 0;
   const adjusterFee = fees?.adjuster_fee_amount || 0;
   const contractorFee = fees?.contractor_fee_amount || 0;
-  const referrerFee = fees?.referrer_fee_amount || 0;
-  const totalFees = companyFee + adjusterFee + contractorFee + referrerFee;
+  const totalFees = companyFee + adjusterFee + contractorFee;
   const netProfit = grossProfit - totalFees;
 
   // Recalculate adjuster fee when company fee changes (contractor/referrer are independent)
@@ -1123,8 +1122,8 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                     adjuster_fee_amount: fees.adjuster_fee_amount,
                     contractor_fee_percentage: fees.contractor_fee_percentage || 0,
                     contractor_fee_amount: fees.contractor_fee_amount || 0,
-                    referrer_fee_percentage: fees.referrer_fee_percentage || 0,
-                    referrer_fee_amount: fees.referrer_fee_amount || 0,
+                    referrer_fee_percentage: 0,
+                    referrer_fee_amount: 0,
                     notes: fees.notes || "",
                   });
                 }
@@ -1232,38 +1231,6 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                     </div>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Referrer Fee (% of checks minus prior offer)</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Percentage</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.referrer_fee_percentage}
-                        onChange={(e) => {
-                          const percentage = parseFloat(e.target.value) || 0;
-                          const amount = calculateFeeFromChecks(percentage);
-                          setFormData({ 
-                            ...formData, 
-                            referrer_fee_percentage: percentage,
-                            referrer_fee_amount: amount
-                          });
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Amount ($) - Calculated</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.referrer_fee_amount}
-                        disabled
-                        className="bg-muted"
-                      />
-                    </div>
-                  </div>
-                </div>
                 <div>
                   <Label>Notes</Label>
                   <Textarea
@@ -1323,15 +1290,6 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                 )}
               </span>
             </div>
-            <div className="flex justify-between items-center p-3 bg-muted/50 rounded">
-              <span className="text-sm">Referrer Fee</span>
-              <span className="font-semibold">
-                ${referrerFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                {fees?.referrer_fee_percentage > 0 && (
-                  <span className="text-xs text-muted-foreground ml-2">({fees.referrer_fee_percentage}%)</span>
-                )}
-              </span>
-            </div>
           </div>
 
           <div className="p-4 bg-primary/10 rounded-lg border-2 border-primary">
@@ -1342,7 +1300,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              After all fees (company, adjuster, contractor, referrer)
+              After all fees (company, adjuster, contractor)
             </p>
           </div>
         </div>

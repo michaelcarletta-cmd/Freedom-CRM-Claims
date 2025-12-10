@@ -355,10 +355,9 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
         </Card>
       )}
 
-      {/* Claim Assignments (Staff, Contractors, Referrers) */}
+      {/* Claim Assignments (Staff, Contractors) */}
       <ClaimAssignments 
         claimId={claim.id}
-        currentReferrerId={claim.referrer_id}
         currentMortgageCompanyId={claim.mortgage_company_id}
         loanNumber={claim.loan_number}
         ssnLastFour={claim.ssn_last_four}

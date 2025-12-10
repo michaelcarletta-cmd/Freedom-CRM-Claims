@@ -22,7 +22,6 @@ const Sales = lazy(() => import("./pages/Sales"));
 const Auth = lazy(() => import("./pages/Auth"));
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
-const ReferrerPortal = lazy(() => import("./pages/ReferrerPortal"));
 const Sign = lazy(() => import("./pages/Sign"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -85,17 +84,6 @@ function AppRoutes() {
         {publicRoutes}
         <Route path="/contractor-portal" element={<Suspense fallback={<PageLoader />}><ContractorPortal /></Suspense>} />
         <Route path="*" element={<Navigate to="/contractor-portal" replace />} />
-      </Routes>
-    );
-  }
-
-  if (user && userRole === "referrer") {
-    return (
-      <Routes>
-        {publicRoutes}
-        <Route path="/referrer-portal" element={<Suspense fallback={<PageLoader />}><ReferrerPortal /></Suspense>} />
-        <Route path="/claims/:id" element={<Suspense fallback={<PageLoader />}><ClaimDetail /></Suspense>} />
-        <Route path="*" element={<Navigate to="/referrer-portal" replace />} />
       </Routes>
     );
   }

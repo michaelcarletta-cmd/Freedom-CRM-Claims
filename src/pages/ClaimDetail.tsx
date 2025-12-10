@@ -40,12 +40,6 @@ interface Contractor {
   } | null;
 }
 
-interface Referrer {
-  id: string;
-  name: string;
-  email: string | null;
-  user_id: string | null;
-}
 
 const ClaimDetail = () => {
   const { id } = useParams();
@@ -59,10 +53,9 @@ const ClaimDetail = () => {
   const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [contractors, setContractors] = useState<Contractor[]>([]);
-  const [referrer, setReferrer] = useState<Referrer | null>(null);
 
-  // Check if user is a portal user (client, contractor, referrer)
-  const isPortalUser = userRole === "client" || userRole === "contractor" || userRole === "referrer";
+  // Check if user is a portal user (client, contractor)
+  const isPortalUser = userRole === "client" || userRole === "contractor";
   const isStaffOrAdmin = userRole === "admin" || userRole === "staff";
 
   // Generate claim-specific email address using policy number
@@ -88,11 +81,6 @@ const ClaimDetail = () => {
     }
   }, [id]);
 
-  useEffect(() => {
-    if (claim?.referrer_id) {
-      fetchReferrer(claim.referrer_id);
-    }
-  }, [claim?.referrer_id]);
 
   const fetchClaim = async () => {
     try {
@@ -122,21 +110,6 @@ const ClaimDetail = () => {
       setContractors(data || []);
     } catch (error) {
       console.error("Error fetching contractors:", error);
-    }
-  };
-
-  const fetchReferrer = async (referrerId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from("referrers")
-        .select("id, name, email, user_id")
-        .eq("id", referrerId)
-        .maybeSingle();
-
-      if (error) throw error;
-      setReferrer(data);
-    } catch (error) {
-      console.error("Error fetching referrer:", error);
     }
   };
 
@@ -179,7 +152,6 @@ const ClaimDetail = () => {
   const getBackLink = () => {
     if (userRole === "client") return "/client-portal";
     if (userRole === "contractor") return "/contractor-portal";
-    if (userRole === "referrer") return "/referrer-portal";
     return "/claims";
   };
 
@@ -283,10 +255,8 @@ const ClaimDetail = () => {
             onOpenChange={setNotifyDialogOpen}
             claimId={claim.id}
             clientId={claim.client_id}
-            referrerId={claim.referrer_id}
             contractors={contractors}
             policyholderName={claim.policyholder_name}
-            referrer={referrer}
           />
         </>
       )}
