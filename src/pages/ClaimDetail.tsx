@@ -208,11 +208,10 @@ const ClaimDetail = () => {
           </div>
         </div>
         {isStaffOrAdmin && (
-          <div className="flex flex-col md:flex-row flex-wrap gap-2 md:ml-auto">
+          <div className="inline-flex flex-col md:flex-row items-stretch md:items-center gap-2 md:ml-auto">
             <Button
               variant="outline"
               size="sm"
-              className="w-full md:w-auto"
               onClick={() => setNotifyDialogOpen(true)}
             >
               <Bell className="h-4 w-4 mr-2" />
@@ -221,12 +220,11 @@ const ClaimDetail = () => {
             <Button
               variant={claim.is_closed ? "outline" : "secondary"}
               size="sm"
-              className="w-full md:w-auto"
               onClick={toggleClosedStatus}
             >
               {claim.is_closed ? "Reopen Claim" : "Close Claim"}
             </Button>
-            <Button size="sm" className="w-full md:w-auto bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
+            <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
               <Edit className="h-4 w-4 mr-2" />
               Edit Claim
             </Button>
