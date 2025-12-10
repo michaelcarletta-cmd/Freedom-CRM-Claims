@@ -453,16 +453,16 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
       </CardHeader>
       <CardContent>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="inline-flex h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground mb-4">
-            <TabsTrigger value="dwelling" className="inline-flex items-center gap-2">
+          <TabsList className="inline-flex flex-row h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground mb-4 w-auto">
+            <TabsTrigger value="dwelling" className="inline-flex items-center gap-2 whitespace-nowrap">
               <Home className="h-4 w-4" />
               Dwelling
             </TabsTrigger>
-            <TabsTrigger value="other_structures" className="inline-flex items-center gap-2">
+            <TabsTrigger value="other_structures" className="inline-flex items-center gap-2 whitespace-nowrap">
               <Warehouse className="h-4 w-4" />
               Other Structures
             </TabsTrigger>
-            <TabsTrigger value="pwi" className="inline-flex items-center gap-2">
+            <TabsTrigger value="pwi" className="inline-flex items-center gap-2 whitespace-nowrap">
               <Package className="h-4 w-4" />
               PWI Items
             </TabsTrigger>
