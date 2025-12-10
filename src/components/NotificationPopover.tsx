@@ -202,26 +202,26 @@ export function NotificationPopover() {
           </p>
         </div>
         <Tabs defaultValue="updates" className="w-full">
-          <TabsList className="w-full grid grid-cols-2 rounded-none border-b">
-            <TabsTrigger value="updates" className="relative">
-              <MessageSquare className="h-4 w-4 mr-2" />
+          <TabsList className="w-full flex flex-row rounded-none border-b h-auto p-0">
+            <TabsTrigger value="updates" className="flex-1 inline-flex items-center justify-center gap-2 py-3">
+              <MessageSquare className="h-4 w-4" />
               Updates
               {unreadNotificationCount > 0 && (
                 <Badge 
                   variant="destructive" 
-                  className="ml-2 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                  className="ml-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
                 >
                   {unreadNotificationCount}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="tasks" className="relative">
-              <CheckSquare className="h-4 w-4 mr-2" />
+            <TabsTrigger value="tasks" className="flex-1 inline-flex items-center justify-center gap-2 py-3">
+              <CheckSquare className="h-4 w-4" />
               Tasks
               {unreadTaskCount > 0 && (
                 <Badge 
                   variant="destructive" 
-                  className="ml-2 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                  className="ml-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
                 >
                   {unreadTaskCount}
                 </Badge>
