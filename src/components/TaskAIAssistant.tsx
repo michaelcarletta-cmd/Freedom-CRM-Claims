@@ -33,12 +33,25 @@ interface SuggestedAction {
   content: string;
 }
 
+interface ClaimData {
+  id: string;
+  claim_number: string | null;
+  policyholder_name: string | null;
+  policyholder_email: string | null;
+  policyholder_phone: string | null;
+  adjuster_name: string | null;
+  adjuster_email: string | null;
+  adjuster_phone: string | null;
+}
+
 const TaskAIAssistant = ({ task }: TaskAIAssistantProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sendingAction, setSendingAction] = useState<number | null>(null);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>([]);
   const [customPrompt, setCustomPrompt] = useState("");
+  const [claimData, setClaimData] = useState<ClaimData | null>(null);
   const { toast } = useToast();
 
   const handleAnalyzeTask = async () => {
@@ -53,6 +66,8 @@ const TaskAIAssistant = ({ task }: TaskAIAssistantProps) => {
         .select("*")
         .eq("id", task.claim_id)
         .single();
+
+      setClaimData(claim);
 
       const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
         body: {
@@ -87,6 +102,92 @@ const TaskAIAssistant = ({ task }: TaskAIAssistantProps) => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSendAction = async (action: SuggestedAction, index: number) => {
+    if (!claimData) return;
+
+    setSendingAction(index);
+
+    try {
+      if (action.type === "email") {
+        const recipientEmail = claimData.policyholder_email || claimData.adjuster_email;
+        const recipientName = claimData.policyholder_name || claimData.adjuster_name || "there";
+
+        if (!recipientEmail) {
+          toast({
+            title: "No recipient",
+            description: "No email address found for this claim",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const { error } = await supabase.functions.invoke("send-email", {
+          body: {
+            recipients: [{ email: recipientEmail, name: recipientName, type: "task_followup" }],
+            subject: `Re: Claim #${claimData.claim_number || task.claim_id.slice(0, 8)}`,
+            body: action.content,
+            claimId: task.claim_id,
+          },
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: "Email sent",
+          description: `Follow-up email sent to ${recipientEmail}`,
+        });
+      } else if (action.type === "sms") {
+        const recipientPhone = claimData.policyholder_phone || claimData.adjuster_phone;
+
+        if (!recipientPhone) {
+          toast({
+            title: "No recipient",
+            description: "No phone number found for this claim",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const { error } = await supabase.functions.invoke("send-sms", {
+          body: {
+            to: recipientPhone,
+            message: action.content,
+            claimId: task.claim_id,
+          },
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: "SMS sent",
+          description: `Follow-up SMS sent to ${recipientPhone}`,
+        });
+      } else if (action.type === "note") {
+        const { error } = await supabase.from("claim_updates").insert({
+          claim_id: task.claim_id,
+          content: action.content,
+          update_type: "note",
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: "Note added",
+          description: "Follow-up note added to claim",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error sending action:", error);
+      toast({
+        title: "Error",
+        description: `Failed to send ${action.type}`,
+        variant: "destructive",
+      });
+    } finally {
+      setSendingAction(null);
     }
   };
 
@@ -185,13 +286,29 @@ const TaskAIAssistant = ({ task }: TaskAIAssistantProps) => {
                               {getActionIcon(action.type)}
                               {action.title}
                             </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => copyToClipboard(action.content)}
-                            >
-                              Copy
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => copyToClipboard(action.content)}
+                              >
+                                Copy
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => handleSendAction(action, index)}
+                                disabled={sendingAction === index}
+                              >
+                                {sendingAction === index ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <Send className="h-4 w-4 mr-1" />
+                                    Send
+                                  </>
+                                )}
+                              </Button>
+                            </div>
                           </div>
                           <div className="text-sm text-muted-foreground bg-muted/30 p-2 rounded">
                             {action.content}
