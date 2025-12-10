@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-sync-secret',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-claim-sync-secret',
 };
 
 serve(async (req) => {
@@ -14,7 +14,7 @@ serve(async (req) => {
 
   try {
     const syncSecret = Deno.env.get('CLAIM_SYNC_SECRET');
-    const requestSecret = req.headers.get('x-sync-secret');
+    const requestSecret = req.headers.get('x-claim-sync-secret');
 
     console.log(`Webhook received - has env secret: ${!!syncSecret}, has request secret: ${!!requestSecret}`);
     console.log(`Env secret length: ${syncSecret?.length}, Request secret length: ${requestSecret?.length}`);
