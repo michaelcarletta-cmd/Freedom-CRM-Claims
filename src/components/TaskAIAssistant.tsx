@@ -22,9 +22,8 @@ interface TaskAIAssistantProps {
     due_date: string | null;
     status: string;
     priority: string;
-    claim_id: string;
-    claim_number: string;
   };
+  claimId: string;
 }
 
 interface SuggestedAction {
@@ -44,7 +43,7 @@ interface ClaimData {
   adjuster_phone: string | null;
 }
 
-const TaskAIAssistant = ({ task }: TaskAIAssistantProps) => {
+const TaskAIAssistant = ({ task, claimId }: TaskAIAssistantProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sendingAction, setSendingAction] = useState<number | null>(null);
@@ -64,14 +63,14 @@ const TaskAIAssistant = ({ task }: TaskAIAssistantProps) => {
       const { data: claim } = await supabase
         .from("claims")
         .select("*")
-        .eq("id", task.claim_id)
+        .eq("id", claimId)
         .single();
 
       setClaimData(claim);
 
       const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
         body: {
-          claimId: task.claim_id,
+          claimId: claimId,
           analysisType: "task_followup",
           additionalContext: {
             task: {
@@ -127,9 +126,9 @@ const TaskAIAssistant = ({ task }: TaskAIAssistantProps) => {
         const { error } = await supabase.functions.invoke("send-email", {
           body: {
             recipients: [{ email: recipientEmail, name: recipientName, type: "task_followup" }],
-            subject: `Re: Claim #${claimData.claim_number || task.claim_id.slice(0, 8)}`,
+            subject: `Re: Claim #${claimData.claim_number || claimId.slice(0, 8)}`,
             body: action.content,
-            claimId: task.claim_id,
+            claimId: claimId,
           },
         });
 
@@ -155,7 +154,7 @@ const TaskAIAssistant = ({ task }: TaskAIAssistantProps) => {
           body: {
             to: recipientPhone,
             message: action.content,
-            claimId: task.claim_id,
+            claimId: claimId,
           },
         });
 
@@ -167,7 +166,7 @@ const TaskAIAssistant = ({ task }: TaskAIAssistantProps) => {
         });
       } else if (action.type === "note") {
         const { error } = await supabase.from("claim_updates").insert({
-          claim_id: task.claim_id,
+          claim_id: claimId,
           content: action.content,
           update_type: "note",
         });
@@ -235,7 +234,7 @@ const TaskAIAssistant = ({ task }: TaskAIAssistantProps) => {
               <div className="text-muted-foreground mt-1">{task.description}</div>
             )}
             <div className="flex gap-4 mt-2 text-muted-foreground">
-              <span>Claim: {task.claim_number}</span>
+              <span>Claim: {claimData?.claim_number || claimId.slice(0, 8)}</span>
               <span>Priority: {task.priority}</span>
               {task.due_date && <span>Due: {new Date(task.due_date).toLocaleDateString()}</span>}
             </div>

@@ -179,7 +179,7 @@ const Tasks = () => {
                       )}
                     </div>
                     <div className="flex items-center gap-1">
-                      <TaskAIAssistant task={task} />
+                      <TaskAIAssistant task={task} claimId={task.claim_id} />
                       <Link to={`/claims/${task.claim_id}`}>
                         <Button variant="ghost" size="sm">
                           <ExternalLink className="h-4 w-4" />
