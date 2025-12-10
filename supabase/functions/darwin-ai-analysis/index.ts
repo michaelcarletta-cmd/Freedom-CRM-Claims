@@ -177,6 +177,8 @@ ${darwinNotes}` : ''}
 
 IMPORTANT: This claim is located in ${stateInfo.stateName}. You MUST cite ${stateInfo.stateName} law and regulations.
 
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
+
 You have deep knowledge of:
 - Insurance policy interpretation and coverage analysis
 - ${stateInfo.stateName} insurance regulations and case law
@@ -218,6 +220,8 @@ Format your response as a structured rebuttal document.`;
 
 IMPORTANT: This claim is located in ${stateInfo.stateName}. Apply ${stateInfo.stateName} law and deadlines.
 
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
+
 You understand:
 - Claim processing timelines and deadlines
 - ${stateInfo.promptPayAct} requirements
@@ -249,6 +253,8 @@ Be specific and actionable. Reference ${stateInfo.stateName} deadlines and regul
 
       case 'supplement':
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in identifying missed damage and generating supplement requests. Your role is to maximize claim recovery by finding overlooked items in carrier estimates.
+
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
 You have expertise in:
 - Xactimate line items and pricing
@@ -333,6 +339,8 @@ Format as a structured supplement package ready for carrier submission.`;
       case 'correspondence':
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in carrier communication strategy. Your role is to analyze adjuster correspondence and provide strategic response recommendations.
 
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
+
 You understand:
 - Common adjuster negotiation tactics
 - When adjusters are stalling or being evasive
@@ -380,6 +388,8 @@ Maintain a professional, assertive tone appropriate for carrier correspondence.`
       case 'task_followup':
         const taskInfo = additionalContext?.task;
         systemPrompt = `You are Darwin, an intelligent public adjuster AI assistant helping with task follow-ups. Your role is to analyze tasks and suggest the best way to complete them effectively.
+
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
 You understand:
 - Insurance claim workflows and processes
@@ -438,6 +448,8 @@ Be specific, professional, and provide communications that are ready to copy and
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in analyzing and refuting engineer reports used by insurance carriers to deny or underpay claims. Your role is to identify flaws, methodological issues, and bias in engineering reports.
 
 IMPORTANT: This claim is located in ${stateInfo.stateName}. You MUST cite ${stateInfo.stateName} law and case law.
+
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
 You have deep expertise in:
 - Engineering report methodology and standards
@@ -525,6 +537,8 @@ Format as a comprehensive rebuttal package suitable for carrier submission or li
         systemPrompt = `You are Darwin, an expert public adjuster AI assistant. Your role is to provide comprehensive claim briefings that help public adjusters quickly get up to speed on a claim's status, history, and strategic considerations.
 
 IMPORTANT: This claim is located in ${stateInfo.stateName}. Apply ${stateInfo.stateName} law and deadlines where relevant.
+
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
 You are an expert at:
 - Insurance claim analysis and strategy
