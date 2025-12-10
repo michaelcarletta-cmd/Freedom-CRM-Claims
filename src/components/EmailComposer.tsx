@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,13 @@ export function EmailComposer({
   const [sending, setSending] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<ClaimFile[]>([]);
   const [showFileSelector, setShowFileSelector] = useState(false);
+
+  // Auto-populate subject with claim number when dialog opens
+  useEffect(() => {
+    if (isOpen && claim?.claim_number && !emailSubject) {
+      setEmailSubject(`Re: Claim #${claim.claim_number}`);
+    }
+  }, [isOpen, claim?.claim_number]);
 
   // Fetch email templates
   const { data: emailTemplates } = useQuery({
