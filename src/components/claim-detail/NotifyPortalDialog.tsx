@@ -23,13 +23,6 @@ interface Contractor {
   } | null;
 }
 
-interface Referrer {
-  id: string;
-  name: string;
-  email: string | null;
-  user_id?: string | null;
-}
-
 interface Client {
   id: string;
   name: string;
@@ -41,10 +34,8 @@ interface NotifyPortalDialogProps {
   onOpenChange: (open: boolean) => void;
   claimId: string;
   clientId: string | null;
-  referrerId: string | null;
   contractors: Contractor[];
   policyholderName: string;
-  referrer?: Referrer | null;
 }
 
 export function NotifyPortalDialog({
@@ -52,14 +43,11 @@ export function NotifyPortalDialog({
   onOpenChange,
   claimId,
   clientId,
-  referrerId,
   contractors,
   policyholderName,
-  referrer,
 }: NotifyPortalDialogProps) {
   const [message, setMessage] = useState("");
   const [notifyClient, setNotifyClient] = useState(false);
-  const [notifyReferrer, setNotifyReferrer] = useState(false);
   const [notifyContractors, setNotifyContractors] = useState(false);
   const [loading, setLoading] = useState(false);
   const [client, setClient] = useState<Client | null>(null);
@@ -83,7 +71,6 @@ export function NotifyPortalDialog({
     if (open) {
       setMessage("");
       setNotifyClient(false);
-      setNotifyReferrer(false);
       setNotifyContractors(false);
       fetchClient();
     }
@@ -97,11 +84,6 @@ export function NotifyPortalDialog({
     // Use client's user_id (auth user), not client_id (client record)
     if (notifyClient && client?.user_id) {
       recipients.push(client.user_id);
-    }
-    
-    // Use referrer's user_id (auth user), not referrer_id (referrer record)
-    if (notifyReferrer && referrer?.user_id) {
-      recipients.push(referrer.user_id);
     }
     
     // Contractors are already user_ids
@@ -153,8 +135,7 @@ export function NotifyPortalDialog({
 
   // Check if recipients have portal access (user_id set)
   const clientHasPortal = client?.user_id;
-  const referrerHasPortal = referrer?.user_id;
-  const hasRecipients = clientHasPortal || referrerHasPortal || contractors.length > 0;
+  const hasRecipients = clientHasPortal || contractors.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -171,7 +152,7 @@ export function NotifyPortalDialog({
             <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
             <p>No portal users with access are assigned to this claim.</p>
             <p className="text-sm mt-1">
-              Assign a client, referrer, or contractor with portal access first.
+              Assign a client or contractor with portal access first.
             </p>
           </div>
         ) : (
@@ -192,22 +173,6 @@ export function NotifyPortalDialog({
                     >
                       <UserCheck className="h-4 w-4 text-primary" />
                       Client/Policyholder ({client?.name || policyholderName})
-                    </Label>
-                  </div>
-                )}
-                {referrerHasPortal && referrer && (
-                  <div className="flex items-center space-x-3">
-                    <Checkbox
-                      id="notify-referrer"
-                      checked={notifyReferrer}
-                      onCheckedChange={(checked) => setNotifyReferrer(checked as boolean)}
-                    />
-                    <Label
-                      htmlFor="notify-referrer"
-                      className="flex items-center gap-2 text-sm cursor-pointer"
-                    >
-                      <Users className="h-4 w-4 text-primary" />
-                      Referrer ({referrer.name})
                     </Label>
                   </div>
                 )}
