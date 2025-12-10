@@ -8,9 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, CheckCircle2, Calendar, User, Trash2, Edit } from "lucide-react";
+import { Plus, CheckCircle2, Calendar, User, Trash2, Edit, Brain } from "lucide-react";
 import { format, isPast } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
+import TaskAIAssistant from "@/components/TaskAIAssistant";
 
 interface Task {
   id: string;
@@ -394,6 +395,7 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
                         )}
                       </div>
                       <div className="flex gap-1 shrink-0">
+                        <TaskAIAssistant task={task} claimId={claimId} />
                         <Button
                           variant="ghost"
                           size="icon"
