@@ -102,7 +102,7 @@ serve(async (req) => {
     
     const headers = {
       'Content-Type': 'application/json',
-      'x-sync-secret': syncSecret,
+      'x-claim-sync-secret': syncSecret,
     };
     console.log('Request headers being sent:', JSON.stringify(headers));
 
@@ -110,7 +110,7 @@ serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-sync-secret': syncSecret,
+        'x-claim-sync-secret': syncSecret,
       },
       body: JSON.stringify({
         action: 'create_or_update',
