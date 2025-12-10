@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { UserPlus, Mail, Phone, Search, Trash2, Settings, Link2, Send } from "lucide-react";
+import { UserPlus, Mail, Phone, Search, Trash2, Link2, Send, Pencil } from "lucide-react";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { Switch } from "@/components/ui/switch";
 import { formatPhoneNumber } from "@/lib/utils";
@@ -53,6 +53,12 @@ export const ContractorsTab = () => {
   const [sendingInvite, setSendingInvite] = useState<string | null>(null);
   const [externalInstanceUrl, setExternalInstanceUrl] = useState("");
   const [externalInstanceName, setExternalInstanceName] = useState("");
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingContractor, setEditingContractor] = useState<Contractor | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    full_name: "",
+    phone: "",
+  });
 
   const handleSendPortalInvite = async (contractor: Contractor) => {
     if (!contractor.email) {
@@ -219,6 +225,37 @@ export const ContractorsTab = () => {
     setDeleteDialogOpen(true);
   };
 
+  const handleEditClick = (contractor: Contractor) => {
+    setEditingContractor(contractor);
+    setEditFormData({
+      full_name: contractor.full_name || "",
+      phone: contractor.phone || "",
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingContractor) return;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        full_name: editFormData.full_name || null,
+        phone: editFormData.phone || null,
+      })
+      .eq("id", editingContractor.id);
+
+    if (error) {
+      toast.error("Failed to update contractor");
+      return;
+    }
+
+    toast.success("Contractor updated");
+    setEditDialogOpen(false);
+    setEditingContractor(null);
+    fetchContractors();
+  };
+
   const handleDeleteConfirm = async () => {
     if (!contractorToDelete) return;
 
@@ -359,6 +396,14 @@ export const ContractorsTab = () => {
                       <Button
                         variant="ghost"
                         size="icon"
+                        onClick={() => handleEditClick(contractor)}
+                        title="Edit contractor"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => handleSendPortalInvite(contractor)}
                         disabled={sendingInvite === contractor.id}
                         title="Send portal invite email"
@@ -472,6 +517,46 @@ export const ContractorsTab = () => {
             </div>
             <Button onClick={handleSaveIntegration} className="w-full">
               Save Integration Settings
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Contractor</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={editingContractor?.email || ""}
+                disabled
+                className="bg-muted"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Email cannot be changed</p>
+            </div>
+            <div>
+              <Label>Full Name</Label>
+              <Input
+                value={editFormData.full_name}
+                onChange={(e) => setEditFormData({ ...editFormData, full_name: e.target.value })}
+                placeholder="Enter full name"
+              />
+            </div>
+            <div>
+              <Label>Phone</Label>
+              <Input
+                type="tel"
+                value={editFormData.phone}
+                onChange={(e) => setEditFormData({ ...editFormData, phone: formatPhoneNumber(e.target.value) })}
+                placeholder="123-456-7890"
+              />
+            </div>
+            <Button onClick={handleSaveEdit} className="w-full">
+              Save Changes
             </Button>
           </div>
         </DialogContent>
