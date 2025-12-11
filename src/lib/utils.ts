@@ -22,3 +22,12 @@ export function formatPhoneNumber(value: string): string {
     return `${numbers.slice(0, 3)}-${numbers.slice(3, 6)}-${numbers.slice(6, 10)}`;
   }
 }
+
+/**
+ * Parses a date string (YYYY-MM-DD) as local time instead of UTC
+ * This prevents the off-by-one-day issue when displaying dates
+ */
+export function parseLocalDate(dateString: string): Date {
+  // Append T00:00:00 to treat the date as local time instead of UTC
+  return new Date(dateString + 'T00:00:00');
+}

@@ -12,6 +12,7 @@ import { Plus, CheckCircle2, Calendar, User, Trash2, Edit, Brain } from "lucide-
 import { format, isPast } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import TaskAIAssistant from "@/components/TaskAIAssistant";
+import { parseLocalDate } from "@/lib/utils";
 
 interface Task {
   id: string;
@@ -357,8 +358,8 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
       ) : (
         <div className="space-y-3">
           {tasks.map((task) => {
-            const isOverdue =
-              task.due_date && isPast(new Date(task.due_date)) && task.status !== "completed";
+          const isOverdue =
+            task.due_date && isPast(parseLocalDate(task.due_date)) && task.status !== "completed";
             const priorityColors = {
               high: "text-red-600 dark:text-red-400",
               medium: "text-amber-600 dark:text-amber-400",
@@ -424,7 +425,7 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
                           <Calendar className="h-4 w-4" />
                           <span>
                             {isOverdue && "Overdue: "}
-                            {format(new Date(task.due_date), "MMM d, yyyy")}
+                            {format(parseLocalDate(task.due_date), "MMM d, yyyy")}
                           </span>
                         </div>
                       )}
