@@ -81,9 +81,11 @@ const Sales = () => {
   const totalChecksReceived = checks?.reduce((sum, c) => sum + (Number(c.amount) || 0), 0) || 0;
   const totalExpenses = expenses?.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) || 0;
   const totalPaymentsMade = payments?.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
+  const totalCompanyFees = fees?.reduce((sum, f) => sum + (Number(f.company_fee_amount) || 0), 0) || 0;
   const totalAdjusterFees = fees?.reduce((sum, f) => sum + (Number(f.adjuster_fee_amount) || 0), 0) || 0;
   const checksOutstanding = totalSettlements - totalChecksReceived;
-  const netProfit = totalChecksReceived - totalExpenses - totalPaymentsMade - totalAdjusterFees;
+  // Net profit = Company Fee - Adjuster Fee - Expenses
+  const netProfit = totalCompanyFees - totalAdjusterFees - totalExpenses;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -224,7 +226,7 @@ const Sales = () => {
               {formatCurrency(netProfit)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Checks - Expenses - Payments - Fees
+              Company Fees - Adjuster Fees - Expenses
             </p>
           </CardContent>
         </Card>
@@ -254,15 +256,15 @@ const Sales = () => {
           <div className="border-t border-border pt-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="space-y-2">
-                <p className="text-muted-foreground">Total Expenses:</p>
-                <p className="text-muted-foreground">Payments Made:</p>
+                <p className="text-muted-foreground">Company Fees:</p>
                 <p className="text-muted-foreground">Adjuster Fees:</p>
+                <p className="text-muted-foreground">Total Expenses:</p>
                 <p className="font-semibold text-foreground">Net Profit:</p>
               </div>
               <div className="space-y-2 text-right">
-                <p className="font-medium text-red-500">{formatCurrency(totalExpenses)}</p>
-                <p className="font-medium text-red-500">{formatCurrency(totalPaymentsMade)}</p>
+                <p className="font-medium text-green-500">{formatCurrency(totalCompanyFees)}</p>
                 <p className="font-medium text-red-500">{formatCurrency(totalAdjusterFees)}</p>
+                <p className="font-medium text-red-500">{formatCurrency(totalExpenses)}</p>
                 <p className={`font-bold text-lg ${netProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                   {formatCurrency(netProfit)}
                 </p>
