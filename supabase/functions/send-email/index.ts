@@ -178,11 +178,24 @@ serve(async (req) => {
             continue;
           }
           
-          // Convert to base64
+          // Convert to base64 using chunked approach (memory efficient)
           const arrayBuffer = await fileData.arrayBuffer();
-          const base64Content = btoa(
-            new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-          );
+          const uint8Array = new Uint8Array(arrayBuffer);
+          
+          // Check file size - skip files over 5MB to prevent memory issues
+          if (uint8Array.length > 5 * 1024 * 1024) {
+            console.log(`Skipping attachment ${attachment.fileName} - file too large (${uint8Array.length} bytes)`);
+            continue;
+          }
+          
+          // Chunked base64 encoding to avoid memory issues
+          const chunkSize = 32768;
+          let base64Content = '';
+          for (let i = 0; i < uint8Array.length; i += chunkSize) {
+            const chunk = uint8Array.subarray(i, i + chunkSize);
+            base64Content += String.fromCharCode.apply(null, chunk as unknown as number[]);
+          }
+          base64Content = btoa(base64Content);
           
           emailAttachments.push({
             filename: attachment.fileName,
