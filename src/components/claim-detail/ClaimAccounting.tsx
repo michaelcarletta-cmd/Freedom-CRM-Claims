@@ -1090,8 +1090,10 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
   const companyFee = fees?.company_fee_amount || 0;
   const adjusterFee = fees?.adjuster_fee_amount || 0;
   const contractorFee = fees?.contractor_fee_amount || 0;
-  const totalFees = companyFee + adjusterFee + contractorFee;
-  const netProfit = grossProfit - totalFees;
+  // Net profit = Company Fee - Adjuster Fee - Expenses
+  // grossProfit is (checks - expenses), so expenses = (totalChecksReceived - grossProfit)
+  const totalExpensesCalc = totalChecksReceived - grossProfit;
+  const netProfit = companyFee - adjusterFee - totalExpensesCalc;
 
   // Recalculate adjuster fee when company fee changes (contractor/referrer are independent)
   const handleCompanyFeeChange = (percentage: number) => {
@@ -1300,7 +1302,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              After all fees (company, adjuster, contractor)
+              Company Fee - Adjuster Fee - Expenses
             </p>
           </div>
         </div>
