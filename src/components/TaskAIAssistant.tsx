@@ -43,6 +43,12 @@ interface ClaimData {
   adjuster_phone: string | null;
 }
 
+interface AdjusterData {
+  adjuster_name: string;
+  adjuster_email: string | null;
+  adjuster_phone: string | null;
+}
+
 const TaskAIAssistant = ({ task, claimId }: TaskAIAssistantProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -51,6 +57,8 @@ const TaskAIAssistant = ({ task, claimId }: TaskAIAssistantProps) => {
   const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>([]);
   const [customPrompt, setCustomPrompt] = useState("");
   const [claimData, setClaimData] = useState<ClaimData | null>(null);
+  const [primaryAdjuster, setPrimaryAdjuster] = useState<AdjusterData | null>(null);
+  const [userSignature, setUserSignature] = useState<string>("Freedom Adjustment");
   const { toast } = useToast();
 
   const handleAnalyzeTask = async () => {
@@ -59,14 +67,33 @@ const TaskAIAssistant = ({ task, claimId }: TaskAIAssistantProps) => {
     setSuggestedActions([]);
 
     try {
-      // Fetch claim details for context
-      const { data: claim } = await supabase
-        .from("claims")
-        .select("*")
-        .eq("id", claimId)
-        .single();
+      // Fetch claim details, primary adjuster, and user signature in parallel
+      const [claimResult, adjustersResult, userResult] = await Promise.all([
+        supabase.from("claims").select("*").eq("id", claimId).single(),
+        supabase.from("claim_adjusters").select("adjuster_name, adjuster_email, adjuster_phone").eq("claim_id", claimId).eq("is_primary", true).single(),
+        supabase.auth.getUser(),
+      ]);
 
+      const claim = claimResult.data;
       setClaimData(claim);
+      
+      // Set primary adjuster if found
+      if (adjustersResult.data) {
+        setPrimaryAdjuster(adjustersResult.data);
+      }
+
+      // Fetch user's email signature
+      if (userResult.data?.user?.id) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("email_signature")
+          .eq("id", userResult.data.user.id)
+          .single();
+        
+        if (profile?.email_signature) {
+          setUserSignature(profile.email_signature);
+        }
+      }
 
       const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
         body: {
@@ -81,6 +108,7 @@ const TaskAIAssistant = ({ task, claimId }: TaskAIAssistantProps) => {
               priority: task.priority,
             },
             claim: claim,
+            adjuster: adjustersResult.data,
             customPrompt: customPrompt || undefined,
           },
         },
@@ -111,8 +139,12 @@ const TaskAIAssistant = ({ task, claimId }: TaskAIAssistantProps) => {
 
     try {
       if (action.type === "email") {
-        const recipientEmail = claimData.policyholder_email || claimData.adjuster_email;
-        const recipientName = claimData.policyholder_name || claimData.adjuster_name || "there";
+        // Prioritize adjuster (insurance company) over client
+        const adjusterEmail = primaryAdjuster?.adjuster_email || claimData.adjuster_email;
+        const adjusterName = primaryAdjuster?.adjuster_name || claimData.adjuster_name;
+        
+        const recipientEmail = adjusterEmail || claimData.policyholder_email;
+        const recipientName = adjusterEmail ? (adjusterName || "Adjuster") : (claimData.policyholder_name || "there");
 
         if (!recipientEmail) {
           toast({
@@ -123,11 +155,14 @@ const TaskAIAssistant = ({ task, claimId }: TaskAIAssistantProps) => {
           return;
         }
 
+        // Append signature to email content
+        const emailBody = `${action.content}\n\n${userSignature}`;
+
         const { error } = await supabase.functions.invoke("send-email", {
           body: {
             recipients: [{ email: recipientEmail, name: recipientName, type: "task_followup" }],
             subject: `Re: Claim #${claimData.claim_number || claimId.slice(0, 8)}`,
-            body: action.content,
+            body: emailBody,
             claimId: claimId,
           },
         });
@@ -139,7 +174,9 @@ const TaskAIAssistant = ({ task, claimId }: TaskAIAssistantProps) => {
           description: `Follow-up email sent to ${recipientEmail}`,
         });
       } else if (action.type === "sms") {
-        const recipientPhone = claimData.policyholder_phone || claimData.adjuster_phone;
+        // Prioritize adjuster phone over client
+        const adjusterPhone = primaryAdjuster?.adjuster_phone || claimData.adjuster_phone;
+        const recipientPhone = adjusterPhone || claimData.policyholder_phone;
 
         if (!recipientPhone) {
           toast({
