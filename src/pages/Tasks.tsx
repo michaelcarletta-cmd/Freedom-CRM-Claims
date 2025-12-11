@@ -10,6 +10,7 @@ import { format, isPast } from "date-fns";
 import { Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TaskAIAssistant from "@/components/TaskAIAssistant";
+import { parseLocalDate } from "@/lib/utils";
 
 interface Task {
   id: string;
@@ -142,7 +143,7 @@ const Tasks = () => {
       ) : (
         taskList.map((task) => {
           const isOverdue =
-            task.due_date && isPast(new Date(task.due_date)) && task.status !== "completed";
+            task.due_date && isPast(parseLocalDate(task.due_date)) && task.status !== "completed";
           const priorityColors = {
             high: "destructive",
             medium: "default",
@@ -209,7 +210,7 @@ const Tasks = () => {
                         <Calendar className="h-4 w-4" />
                         <span>
                           {isOverdue && "Overdue: "}
-                          {format(new Date(task.due_date), "MMM d, yyyy")}
+                          {format(parseLocalDate(task.due_date), "MMM d, yyyy")}
                         </span>
                       </div>
                     )}
