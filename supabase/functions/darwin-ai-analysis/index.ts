@@ -428,14 +428,13 @@ Based on this task and the claim context, provide:
    
    [EMAIL DRAFT] - If an email is appropriate
    Subject: [subject line]
-   Body: [professional email body]
+   Body: [professional email body - DO NOT include any signature, closing like "Sincerely", or placeholder like "[Your Name]" at the end - the signature will be added automatically]
    
    [SMS DRAFT] - If a quick text is appropriate
    [short, professional message]
    
    [NOTE/DOCUMENTATION] - What should be documented
    [documentation text]
-
 4. FOLLOW-UP ACTIONS:
    - What should be done after the initial action?
    - Any tasks that should be created as follow-ups?
