@@ -460,7 +460,7 @@ async function sendSms(supabase: any, config: any, execution: any) {
     message_body: messageBody,
     direction: 'outbound',
     status: 'sent',
-    twilio_sid: twilioResponse.sid,
+    telnyx_message_id: twilioResponse.sid,
   });
 
   console.log('Sent SMS to:', recipientPhone);

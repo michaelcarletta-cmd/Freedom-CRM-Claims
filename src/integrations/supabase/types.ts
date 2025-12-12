@@ -2016,8 +2016,8 @@ export type Database = {
           id: string
           message_body: string
           status: string
+          telnyx_message_id: string | null
           to_number: string
-          twilio_sid: string | null
           updated_at: string
           user_id: string | null
         }
@@ -2029,8 +2029,8 @@ export type Database = {
           id?: string
           message_body: string
           status?: string
+          telnyx_message_id?: string | null
           to_number: string
-          twilio_sid?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -2042,8 +2042,8 @@ export type Database = {
           id?: string
           message_body?: string
           status?: string
+          telnyx_message_id?: string | null
           to_number?: string
-          twilio_sid?: string | null
           updated_at?: string
           user_id?: string | null
         }
