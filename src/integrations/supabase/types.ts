@@ -2141,6 +2141,14 @@ export type Database = {
           created_by: string | null
           description: string | null
           due_date: string | null
+          follow_up_current_count: number | null
+          follow_up_enabled: boolean | null
+          follow_up_interval_days: number | null
+          follow_up_last_sent_at: string | null
+          follow_up_max_count: number | null
+          follow_up_next_at: string | null
+          follow_up_stop_reason: string | null
+          follow_up_stopped_at: string | null
           id: string
           priority: string | null
           status: string
@@ -2155,6 +2163,14 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           due_date?: string | null
+          follow_up_current_count?: number | null
+          follow_up_enabled?: boolean | null
+          follow_up_interval_days?: number | null
+          follow_up_last_sent_at?: string | null
+          follow_up_max_count?: number | null
+          follow_up_next_at?: string | null
+          follow_up_stop_reason?: string | null
+          follow_up_stopped_at?: string | null
           id?: string
           priority?: string | null
           status?: string
@@ -2169,6 +2185,14 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           due_date?: string | null
+          follow_up_current_count?: number | null
+          follow_up_enabled?: boolean | null
+          follow_up_interval_days?: number | null
+          follow_up_last_sent_at?: string | null
+          follow_up_max_count?: number | null
+          follow_up_next_at?: string | null
+          follow_up_stop_reason?: string | null
+          follow_up_stopped_at?: string | null
           id?: string
           priority?: string | null
           status?: string
