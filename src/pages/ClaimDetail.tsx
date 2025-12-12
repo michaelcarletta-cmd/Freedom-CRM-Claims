@@ -28,6 +28,7 @@ import { DarwinSupplementGenerator } from "@/components/claim-detail/DarwinSuppl
 import { DarwinCorrespondenceAnalyzer } from "@/components/claim-detail/DarwinCorrespondenceAnalyzer";
 import { DarwinEngineerReportAnalyzer } from "@/components/claim-detail/DarwinEngineerReportAnalyzer";
 import { DarwinClaimBriefing } from "@/components/claim-detail/DarwinClaimBriefing";
+import { DarwinDocumentCompiler } from "@/components/claim-detail/DarwinDocumentCompiler";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -384,6 +385,9 @@ const ClaimDetail = () => {
                 <DarwinEngineerReportAnalyzer claimId={claim.id} claim={claim} />
                 <DarwinCorrespondenceAnalyzer claimId={claim.id} claim={claim} />
               </div>
+              
+              {/* Document Compiler - Compile photos and documents into reports */}
+              <DarwinDocumentCompiler claimId={claim.id} claim={claim} />
               
               {/* Document Generation Tools */}
               <div className="space-y-4">

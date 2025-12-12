@@ -9,7 +9,7 @@ const corsHeaders = {
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -614,14 +614,212 @@ Please provide a comprehensive claim briefing that includes:
 Format your response clearly with headers and bullet points for easy scanning.`;
         break;
 
+      case 'document_compilation':
+        const compileContext = additionalContext || {};
+        const reportTypeMap: Record<string, string> = {
+          'proof_of_loss': 'Proof of Loss Package',
+          'damage_explanation': 'Detailed Damage Explanation',
+          'carrier_package': 'Carrier Submission Package',
+          'supplement_request': 'Supplement Request Package',
+          'demand_letter': 'Demand Letter with Exhibits'
+        };
+        const reportTypeName = reportTypeMap[compileContext.reportType as string] || 'Document Compilation';
+
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in compiling professional insurance claim documentation. Your role is to create comprehensive, professionally-formatted reports for carrier submission.
+
+IMPORTANT: This claim is located in ${stateInfo.stateName}. Apply ${stateInfo.stateName} law and regulations.
+
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
+
+You are an expert at:
+- Creating professional insurance claim documentation
+- Organizing evidence and photos effectively
+- Writing clear damage descriptions
+- Preparing proof of loss statements
+- Drafting demand letters with proper legal language
+- Compiling supplement requests with supporting documentation
+- ${stateInfo.stateName} insurance regulations
+- ${stateInfo.insuranceCode}
+
+Your documents must be:
+1. Professional and suitable for carrier submission
+2. Well-organized with clear sections
+3. Factual and evidence-based
+4. Reference photos and documents by number
+5. Include relevant policy language and regulations where applicable`;
+
+        const photoDescriptions = compileContext.photos?.map((p: any, i: number) => 
+          `Photo ${i + 1}: ${p.category || 'Uncategorized'}${p.description ? ` - ${p.description}` : ''}`
+        ).join('\n') || 'No photos selected';
+
+        const documentList = compileContext.documents?.map((d: any, i: number) => 
+          `Document ${i + 1}: ${d.name}`
+        ).join('\n') || 'No documents selected';
+
+        userPrompt = `${claimSummary}
+
+STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
+APPLICABLE LAW: ${stateInfo.insuranceCode}
+
+REPORT TYPE REQUESTED: ${reportTypeName}
+
+SELECTED PHOTOS (${compileContext.photoCount || 0} total):
+${photoDescriptions}
+
+SELECTED DOCUMENTS (${compileContext.documentCount || 0} total):
+${documentList}
+
+${pdfContent ? 'A PDF document has been provided for reference and inclusion in the analysis.' : ''}
+
+${compileContext.additionalInstructions ? `ADDITIONAL INSTRUCTIONS FROM USER:\n${compileContext.additionalInstructions}` : ''}
+
+Please generate a comprehensive ${reportTypeName} that includes:
+
+${compileContext.reportType === 'proof_of_loss' ? `
+1. SWORN STATEMENT OF LOSS
+   - Property description and location
+   - Date and cause of loss
+   - Detailed description of damage
+   - Itemized list of damages with values
+   - Total claim amount
+
+2. SUPPORTING EVIDENCE SUMMARY
+   - Reference each photo by number with description of what it shows
+   - Reference each document and its relevance
+
+3. COVERAGE ANALYSIS
+   - Policy provisions supporting coverage
+   - Applicable ${stateInfo.stateName} regulations
+
+4. DECLARATION
+   - Professional closing statement
+   - Signature block placeholders` : ''}
+
+${compileContext.reportType === 'damage_explanation' ? `
+1. EXECUTIVE SUMMARY
+   - Brief overview of the loss event
+   - Summary of damages identified
+   - Total estimated repair costs
+
+2. DETAILED DAMAGE DESCRIPTION
+   - Room-by-room or area-by-area damage breakdown
+   - Reference photos by number (Photo 1, Photo 2, etc.)
+   - Describe visible damage in each photo
+   - Explain cause and effect relationships
+
+3. REPAIR REQUIREMENTS
+   - What repairs are necessary
+   - Why repairs cannot be partial (explain match requirements, code upgrades)
+   - Reference manufacturer specifications where relevant
+
+4. SUPPORTING DOCUMENTATION
+   - Reference attached documents
+   - Explain how each document supports the claim
+
+5. CONCLUSION
+   - Summary of total damages
+   - Request for full coverage` : ''}
+
+${compileContext.reportType === 'carrier_package' ? `
+1. COVER LETTER
+   - Professional introduction
+   - Summary of enclosed materials
+   - Request for prompt review
+
+2. CLAIM SUMMARY
+   - Key claim information
+   - Timeline of events
+   - Current status
+
+3. EVIDENCE PACKAGE
+   - Photo inventory with descriptions (reference by number)
+   - Document inventory
+   - Explanation of each item's relevance
+
+4. DAMAGE ANALYSIS
+   - Detailed damage descriptions referencing photos
+   - Cost breakdown
+   - Supporting calculations
+
+5. CONCLUSION & REQUEST
+   - Total amount requested
+   - Timeline expectations
+   - Contact information` : ''}
+
+${compileContext.reportType === 'supplement_request' ? `
+1. SUPPLEMENT INTRODUCTION
+   - Reference to original claim and estimate
+   - Reason for supplement request
+
+2. NEWLY IDENTIFIED DAMAGES
+   - Items not in original estimate
+   - Reference supporting photos and documents
+   - Explain why these were missed initially
+
+3. UNDERVALUED ITEMS
+   - Items requiring adjustment
+   - Correct pricing with justification
+
+4. ITEMIZED SUPPLEMENT REQUEST
+   - Line item breakdown
+   - Unit prices and quantities
+   - Total supplement amount
+
+5. SUPPORTING EVIDENCE
+   - Photo references proving additional damage
+   - Code requirements mandating additional work
+   - Manufacturer specifications
+
+6. CONCLUSION
+   - Total supplement amount
+   - Request for review` : ''}
+
+${compileContext.reportType === 'demand_letter' ? `
+1. FORMAL DEMAND HEADER
+   - Date, addressee, claim reference
+   - Professional salutation
+
+2. STATEMENT OF FACTS
+   - Loss date and circumstances
+   - Policy information
+   - Claim history and timeline
+
+3. DAMAGES SUMMARY
+   - Total claim amount
+   - Breakdown by category
+   - Reference to attached exhibits
+
+4. LEGAL BASIS
+   - Policy provisions requiring payment
+   - ${stateInfo.insuranceCode} violations if applicable
+   - ${stateInfo.promptPayAct} requirements
+
+5. EXHIBITS LIST
+   - Exhibit A: Photos (reference each)
+   - Exhibit B: Documents (reference each)
+   - Exhibit C: Cost estimates
+
+6. DEMAND & DEADLINE
+   - Specific amount demanded
+   - Deadline for response (typically 15-30 days)
+   - Warning of further action if not resolved
+
+7. PROFESSIONAL CLOSING
+   - Signature block
+   - Contact information` : ''}
+
+Create a professional, complete document ready for carrier submission.`;
+        break;
+
       default:
         throw new Error(`Unknown analysis type: ${analysisType}`);
+
     }
 
     // Build messages array - handle PDF content with multimodal format
     let messages: any[];
     
-    if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'supplement')) {
+    if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'supplement' || analysisType === 'document_compilation')) {
       // Use multimodal format for PDF analysis with Gemini-compatible inline_data format
       messages = [
         { role: 'system', content: systemPrompt },
