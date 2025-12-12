@@ -12,14 +12,13 @@ serve(async (req) => {
   }
 
   try {
-    const TWILIO_ACCOUNT_SID = Deno.env.get('TWILIO_ACCOUNT_SID');
-    const TWILIO_AUTH_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN');
-    const TWILIO_PHONE_NUMBER = Deno.env.get('TWILIO_PHONE_NUMBER');
+    const TELNYX_API_KEY = Deno.env.get('TELNYX_API_KEY');
+    const TELNYX_PHONE_NUMBER = Deno.env.get('TELNYX_PHONE_NUMBER');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE_NUMBER) {
-      throw new Error('Missing Twilio credentials');
+    if (!TELNYX_API_KEY || !TELNYX_PHONE_NUMBER) {
+      throw new Error('Missing Telnyx credentials');
     }
 
     const { claimId, toNumber, messageBody } = await req.json();
@@ -48,32 +47,29 @@ serve(async (req) => {
 
     console.log(`Sending SMS to ${toNumber} for claim ${claimId}`);
 
-    // Send SMS via Twilio
-    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
-    const twilioAuth = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
-
-    const formData = new URLSearchParams();
-    formData.append('To', toNumber);
-    formData.append('From', TWILIO_PHONE_NUMBER);
-    formData.append('Body', messageBody);
-
-    const twilioResponse = await fetch(twilioUrl, {
+    // Send SMS via Telnyx
+    const telnyxResponse = await fetch('https://api.telnyx.com/v2/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${twilioAuth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Bearer ${TELNYX_API_KEY}`,
+        'Content-Type': 'application/json',
       },
-      body: formData.toString(),
+      body: JSON.stringify({
+        from: TELNYX_PHONE_NUMBER,
+        to: toNumber,
+        text: messageBody,
+      }),
     });
 
-    const twilioData = await twilioResponse.json();
+    const telnyxData = await telnyxResponse.json();
 
-    if (!twilioResponse.ok) {
-      console.error('Twilio error:', twilioData);
-      throw new Error(`Twilio API error: ${twilioData.message || 'Unknown error'}`);
+    if (!telnyxResponse.ok) {
+      console.error('Telnyx error:', telnyxData);
+      throw new Error(`Telnyx API error: ${telnyxData.errors?.[0]?.detail || 'Unknown error'}`);
     }
 
-    console.log('SMS sent successfully:', twilioData.sid);
+    const messageId = telnyxData.data?.id;
+    console.log('SMS sent successfully:', messageId);
 
     // Store SMS in database using service role client
     const serviceSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -82,12 +78,12 @@ serve(async (req) => {
       .from('sms_messages')
       .insert({
         claim_id: claimId,
-        from_number: TWILIO_PHONE_NUMBER,
+        from_number: TELNYX_PHONE_NUMBER,
         to_number: toNumber,
         message_body: messageBody,
-        status: twilioData.status,
+        status: telnyxData.data?.to?.[0]?.status || 'queued',
         direction: 'outbound',
-        twilio_sid: twilioData.sid,
+        twilio_sid: messageId, // Reusing field for Telnyx message ID
         user_id: user.id,
       })
       .select()
@@ -103,7 +99,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        messageSid: twilioData.sid,
+        messageId: messageId,
         smsRecord 
       }),
       { 
