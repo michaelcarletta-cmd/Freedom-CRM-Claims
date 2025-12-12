@@ -23,6 +23,10 @@ interface Task {
   claim_number: string;
   assigned_to: string | null;
   created_at: string;
+  follow_up_enabled?: boolean | null;
+  follow_up_interval_days?: number | null;
+  follow_up_current_count?: number | null;
+  follow_up_last_sent_at?: string | null;
 }
 
 interface TaskUser {
@@ -180,7 +184,7 @@ const Tasks = () => {
                       )}
                     </div>
                     <div className="flex items-center gap-1">
-                      <TaskAIAssistant task={task} claimId={task.claim_id} />
+                      <TaskAIAssistant task={task} claimId={task.claim_id} onTaskUpdated={fetchTasks} />
                       <Link to={`/claims/${task.claim_id}`}>
                         <Button variant="ghost" size="sm">
                           <ExternalLink className="h-4 w-4" />
