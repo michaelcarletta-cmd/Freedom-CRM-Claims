@@ -14,6 +14,7 @@ serve(async (req) => {
   try {
     const TELNYX_API_KEY = Deno.env.get('TELNYX_API_KEY');
     const TELNYX_PHONE_NUMBER = Deno.env.get('TELNYX_PHONE_NUMBER');
+    const TELNYX_MESSAGING_PROFILE_ID = Deno.env.get('TELNYX_MESSAGING_PROFILE_ID');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -58,6 +59,7 @@ serve(async (req) => {
         from: TELNYX_PHONE_NUMBER,
         to: toNumber,
         text: messageBody,
+        messaging_profile_id: TELNYX_MESSAGING_PROFILE_ID,
       }),
     });
 
