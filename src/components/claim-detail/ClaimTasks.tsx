@@ -8,9 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, CheckCircle2, Calendar, User, Trash2, Edit, Brain } from "lucide-react";
+import { Plus, CheckCircle2, Calendar, User, Trash2, Edit, Mail, Clock } from "lucide-react";
 import { format, isPast } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import TaskAIAssistant from "@/components/TaskAIAssistant";
 import { parseLocalDate } from "@/lib/utils";
 
@@ -23,6 +24,13 @@ interface Task {
   status: string;
   created_at: string;
   priority: string;
+  follow_up_enabled?: boolean;
+  follow_up_interval_days?: number;
+  follow_up_max_count?: number;
+  follow_up_current_count?: number;
+  follow_up_next_at?: string | null;
+  follow_up_last_sent_at?: string | null;
+  follow_up_stopped_at?: string | null;
 }
 
 interface UserProfile {
@@ -49,6 +57,9 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
     due_date: "",
     assigned_to: "",
     priority: "medium",
+    follow_up_enabled: false,
+    follow_up_interval_days: 3,
+    follow_up_max_count: 5,
   });
 
   useEffect(() => {
@@ -123,6 +134,10 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
 
       if (editingTask) {
         // Update existing task
+        const followUpNextAt = formData.follow_up_enabled && !editingTask.follow_up_enabled
+          ? new Date(Date.now() + formData.follow_up_interval_days * 24 * 60 * 60 * 1000).toISOString()
+          : editingTask.follow_up_next_at;
+
         const { error } = await supabase
           .from("tasks")
           .update({
@@ -131,6 +146,10 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
             due_date: formData.due_date || null,
             assigned_to: formData.assigned_to || null,
             priority: formData.priority,
+            follow_up_enabled: formData.follow_up_enabled,
+            follow_up_interval_days: formData.follow_up_interval_days,
+            follow_up_max_count: formData.follow_up_max_count,
+            follow_up_next_at: followUpNextAt,
           })
           .eq("id", editingTask.id);
 
@@ -142,6 +161,10 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
         });
       } else {
         // Create new task
+        const followUpNextAt = formData.follow_up_enabled
+          ? new Date(Date.now() + formData.follow_up_interval_days * 24 * 60 * 60 * 1000).toISOString()
+          : null;
+
         const { error } = await supabase.from("tasks").insert({
           claim_id: claimId,
           title: formData.title,
@@ -150,13 +173,19 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
           assigned_to: formData.assigned_to || null,
           priority: formData.priority,
           created_by: user?.id,
+          follow_up_enabled: formData.follow_up_enabled,
+          follow_up_interval_days: formData.follow_up_interval_days,
+          follow_up_max_count: formData.follow_up_max_count,
+          follow_up_next_at: followUpNextAt,
         });
 
         if (error) throw error;
 
         toast({
           title: "Success",
-          description: "Task created successfully",
+          description: formData.follow_up_enabled 
+            ? "Task created with automated follow-ups enabled" 
+            : "Task created successfully",
         });
       }
 
@@ -168,6 +197,9 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
         due_date: "",
         assigned_to: "",
         priority: "medium",
+        follow_up_enabled: false,
+        follow_up_interval_days: 3,
+        follow_up_max_count: 5,
       });
     } catch (error: any) {
       toast({
@@ -188,6 +220,9 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
       due_date: task.due_date || "",
       assigned_to: task.assigned_to || "",
       priority: task.priority,
+      follow_up_enabled: task.follow_up_enabled || false,
+      follow_up_interval_days: task.follow_up_interval_days || 3,
+      follow_up_max_count: task.follow_up_max_count || 5,
     });
     setOpen(true);
   };
@@ -253,6 +288,9 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
               due_date: "",
               assigned_to: "",
               priority: "medium",
+              follow_up_enabled: false,
+              follow_up_interval_days: 3,
+              follow_up_max_count: 5,
             });
           }
         }}>
@@ -335,6 +373,53 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Automated Follow-up Settings */}
+              <div className="border border-border rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="follow_up_enabled" className="flex items-center gap-2">
+                      <Mail className="h-4 w-4" />
+                      Automated Email Follow-ups
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      AI will send follow-up emails and create new tasks automatically
+                    </p>
+                  </div>
+                  <Switch
+                    id="follow_up_enabled"
+                    checked={formData.follow_up_enabled}
+                    onCheckedChange={(checked) => setFormData({ ...formData, follow_up_enabled: checked })}
+                  />
+                </div>
+
+                {formData.follow_up_enabled && (
+                  <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="follow_up_interval_days">Follow-up Interval (days)</Label>
+                      <Input
+                        id="follow_up_interval_days"
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={formData.follow_up_interval_days}
+                        onChange={(e) => setFormData({ ...formData, follow_up_interval_days: parseInt(e.target.value) || 3 })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="follow_up_max_count">Max Follow-ups</Label>
+                      <Input
+                        id="follow_up_max_count"
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={formData.follow_up_max_count}
+                        onChange={(e) => setFormData({ ...formData, follow_up_max_count: parseInt(e.target.value) || 5 })}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
@@ -442,6 +527,14 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
                       >
                         {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)} Priority
                       </span>
+                      {task.follow_up_enabled && !task.follow_up_stopped_at && (
+                        <div className="flex items-center gap-1 text-primary">
+                          <Clock className="h-4 w-4" />
+                          <span>
+                            Auto follow-up {task.follow_up_current_count || 0}/{task.follow_up_max_count}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
