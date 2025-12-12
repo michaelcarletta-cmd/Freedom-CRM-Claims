@@ -31,6 +31,19 @@ serve(async (req) => {
       );
     }
 
+    // Normalize phone number to E.164 format
+    const normalizePhone = (phone: string): string => {
+      const digits = phone.replace(/\D/g, '');
+      if (digits.length === 10) {
+        return `+1${digits}`;
+      } else if (digits.length === 11 && digits.startsWith('1')) {
+        return `+${digits}`;
+      }
+      return phone.startsWith('+') ? phone : `+${digits}`;
+    };
+    
+    const normalizedToNumber = normalizePhone(toNumber);
+
     // Get user ID from auth header
     const authHeader = req.headers.get('Authorization');
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -46,7 +59,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Sending SMS to ${toNumber} for claim ${claimId}`);
+    console.log(`Sending SMS to ${normalizedToNumber} for claim ${claimId}`);
 
     // Send SMS via Telnyx
     const telnyxResponse = await fetch('https://api.telnyx.com/v2/messages', {
@@ -57,7 +70,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         from: TELNYX_PHONE_NUMBER,
-        to: toNumber,
+        to: normalizedToNumber,
         text: messageBody,
         messaging_profile_id: TELNYX_MESSAGING_PROFILE_ID,
       }),
@@ -81,7 +94,7 @@ serve(async (req) => {
       .insert({
         claim_id: claimId,
         from_number: TELNYX_PHONE_NUMBER,
-        to_number: toNumber,
+        to_number: normalizedToNumber,
         message_body: messageBody,
         status: telnyxData.data?.to?.[0]?.status || 'queued',
         direction: 'outbound',
