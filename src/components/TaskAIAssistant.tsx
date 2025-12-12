@@ -189,8 +189,8 @@ const TaskAIAssistant = ({ task, claimId }: TaskAIAssistantProps) => {
 
         const { error } = await supabase.functions.invoke("send-sms", {
           body: {
-            to: recipientPhone,
-            message: action.content,
+            toNumber: recipientPhone,
+            messageBody: action.content,
             claimId: claimId,
           },
         });
