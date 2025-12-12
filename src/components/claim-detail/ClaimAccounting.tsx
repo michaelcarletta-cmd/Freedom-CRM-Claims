@@ -1034,24 +1034,26 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
   const calculateFeeFromChecks = (percentage: number) => {
     const totalCheckAmount = checks.reduce((sum: number, check: any) => sum + Number(check.amount), 0);
     const feeableAmount = Math.max(0, totalCheckAmount - Number(priorOffer || 0));
+    const rawFee = feeableAmount * (percentage / 100);
     // Round to nearest cent
-    return Math.round(feeableAmount * percentage) / 100;
+    return Math.round(rawFee * 100) / 100;
   };
   
   // Calculate adjuster fee as percentage of company fee
   const calculateAdjusterFee = (companyFeeAmount: number, adjusterPercentage: number) => {
+    const rawFee = companyFeeAmount * (adjusterPercentage / 100);
     // Round to nearest cent
-    return Math.round(companyFeeAmount * adjusterPercentage) / 100;
+    return Math.round(rawFee * 100) / 100;
   };
   
   // Calculate contractor fee based on percentage of checks minus prior offer
   const calculateContractorFee = (percentage: number) => {
     const totalCheckAmount = checks.reduce((sum: number, check: any) => sum + Number(check.amount), 0);
     const feeableAmount = Math.max(0, totalCheckAmount - Number(priorOffer || 0));
+    const rawFee = feeableAmount * (percentage / 100);
     // Round to nearest cent
-    return Math.round(feeableAmount * percentage) / 100;
+    return Math.round(rawFee * 100) / 100;
   };
-  
   const [formData, setFormData] = useState({
     company_fee_percentage: fees?.company_fee_percentage || 0,
     company_fee_amount: fees?.company_fee_amount || 0,
