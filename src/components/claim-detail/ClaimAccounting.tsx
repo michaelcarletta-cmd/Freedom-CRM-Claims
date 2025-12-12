@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package } from "lucide-react";
+import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -660,6 +660,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
   const totalChecksReceived = checks?.reduce((sum: number, check: any) => sum + Number(check.amount), 0) || 0;
   const outstandingAmount = expectedChecks - totalChecksReceived;
   const [open, setOpen] = useState(false);
+  const [editingCheck, setEditingCheck] = useState<any>(null);
   const [formData, setFormData] = useState({
     check_number: "",
     check_date: "",
@@ -671,35 +672,93 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const resetForm = () => {
+    setFormData({
+      check_number: "",
+      check_date: "",
+      amount: 0,
+      check_type: "initial",
+      received_date: "",
+      notes: "",
+    });
+    setEditingCheck(null);
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase
-        .from("claim_checks")
-        .insert({
-          ...formData,
-          claim_id: claimId,
-          created_by: user?.id,
-        });
-      if (error) throw error;
+      
+      if (editingCheck) {
+        // Update existing check
+        const { error } = await supabase
+          .from("claim_checks")
+          .update({
+            check_number: formData.check_number,
+            check_date: formData.check_date,
+            amount: formData.amount,
+            check_type: formData.check_type,
+            received_date: formData.received_date || null,
+            notes: formData.notes,
+          })
+          .eq("id", editingCheck.id);
+        if (error) throw error;
+      } else {
+        // Insert new check
+        const { error } = await supabase
+          .from("claim_checks")
+          .insert({
+            ...formData,
+            claim_id: claimId,
+            created_by: user?.id,
+          });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["claim-checks", claimId] });
       setOpen(false);
-      setFormData({
-        check_number: "",
-        check_date: "",
-        amount: 0,
-        check_type: "initial",
-        received_date: "",
-        notes: "",
-      });
-      toast({ title: "Check added successfully" });
+      resetForm();
+      toast({ title: editingCheck ? "Check updated successfully" : "Check added successfully" });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to add check", variant: "destructive" });
+      toast({ title: "Error", description: editingCheck ? "Failed to update check" : "Failed to add check", variant: "destructive" });
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (checkId: string) => {
+      const { error } = await supabase
+        .from("claim_checks")
+        .delete()
+        .eq("id", checkId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["claim-checks", claimId] });
+      toast({ title: "Check deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete check", variant: "destructive" });
+    },
+  });
+
+  const handleEdit = (check: any) => {
+    setEditingCheck(check);
+    setFormData({
+      check_number: check.check_number || "",
+      check_date: check.check_date || "",
+      amount: Number(check.amount) || 0,
+      check_type: check.check_type || "initial",
+      received_date: check.received_date || "",
+      notes: check.notes || "",
+    });
+    setOpen(true);
+  };
+
+  const handleOpenDialog = () => {
+    resetForm();
+    setOpen(true);
+  };
 
   const handleOpenIink = () => {
     window.open('https://iink.com', '_blank', 'noopener,noreferrer');
@@ -740,16 +799,16 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
               Open iink
             </Button>
           {isAdmin && (
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) resetForm(); }}>
               <DialogTrigger asChild>
-                <Button>
+                <Button onClick={handleOpenDialog}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Check
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add Insurance Check</DialogTitle>
+                <DialogTitle>{editingCheck ? "Edit Check" : "Add Insurance Check"}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -810,7 +869,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                   />
                 </div>
                 <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full">
-                  Add Check
+                  {editingCheck ? "Update Check" : "Add Check"}
                 </Button>
               </div>
             </DialogContent>
@@ -829,6 +888,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                 <TableHead>Check Date</TableHead>
                 <TableHead>Received</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
+                {isAdmin && <TableHead className="w-[80px]"></TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -841,6 +901,18 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                   <TableCell className="text-right font-semibold text-success">
                     ${Number(check.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </TableCell>
+                  {isAdmin && (
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(check)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(check.id)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
