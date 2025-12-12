@@ -83,7 +83,7 @@ serve(async (req) => {
         message_body: messageBody,
         status: telnyxData.data?.to?.[0]?.status || 'queued',
         direction: 'outbound',
-        twilio_sid: messageId, // Reusing field for Telnyx message ID
+        telnyx_message_id: messageId,
         user_id: user.id,
       })
       .select()

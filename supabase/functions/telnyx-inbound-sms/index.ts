@@ -89,7 +89,7 @@ serve(async (req) => {
         message_body: messageBody,
         status: 'received',
         direction: 'inbound',
-        twilio_sid: messageId, // Reusing field for Telnyx message ID
+        telnyx_message_id: messageId,
       })
       .select()
       .single();
