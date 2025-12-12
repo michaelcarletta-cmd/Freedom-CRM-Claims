@@ -1034,12 +1034,22 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
   const calculateFeeFromChecks = (percentage: number) => {
     const totalCheckAmount = checks.reduce((sum: number, check: any) => sum + Number(check.amount), 0);
     const feeableAmount = Math.max(0, totalCheckAmount - Number(priorOffer || 0));
-    return feeableAmount * percentage / 100;
+    // Round to nearest cent
+    return Math.round(feeableAmount * percentage) / 100;
   };
   
   // Calculate adjuster fee as percentage of company fee
   const calculateAdjusterFee = (companyFeeAmount: number, adjusterPercentage: number) => {
-    return companyFeeAmount * adjusterPercentage / 100;
+    // Round to nearest cent
+    return Math.round(companyFeeAmount * adjusterPercentage) / 100;
+  };
+  
+  // Calculate contractor fee based on percentage of checks minus prior offer
+  const calculateContractorFee = (percentage: number) => {
+    const totalCheckAmount = checks.reduce((sum: number, check: any) => sum + Number(check.amount), 0);
+    const feeableAmount = Math.max(0, totalCheckAmount - Number(priorOffer || 0));
+    // Round to nearest cent
+    return Math.round(feeableAmount * percentage) / 100;
   };
   
   const [formData, setFormData] = useState({
@@ -1087,13 +1097,13 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
     },
   });
 
-  const companyFee = fees?.company_fee_amount || 0;
-  const adjusterFee = fees?.adjuster_fee_amount || 0;
-  const contractorFee = fees?.contractor_fee_amount || 0;
-  // Net profit = Company Fee - Adjuster Fee - Expenses
-  // grossProfit is (checks - expenses), so expenses = (totalChecksReceived - grossProfit)
-  const totalExpensesCalc = totalChecksReceived - grossProfit;
-  const netProfit = companyFee - adjusterFee - totalExpensesCalc;
+  const companyFee = Number(fees?.company_fee_amount) || 0;
+  const adjusterFee = Number(fees?.adjuster_fee_amount) || 0;
+  const contractorFee = Number(fees?.contractor_fee_amount) || 0;
+  // Calculate total expenses directly from checks - grossProfit
+  const totalExpenses = totalChecksReceived - grossProfit;
+  // Net profit = Company Fee - Adjuster Fee - Expenses (rounded to cents)
+  const netProfit = Math.round((companyFee - adjusterFee - totalExpenses) * 100) / 100;
 
   // Recalculate adjuster fee when company fee changes (contractor/referrer are independent)
   const handleCompanyFeeChange = (percentage: number) => {
@@ -1212,7 +1222,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                         value={formData.contractor_fee_percentage}
                         onChange={(e) => {
                           const percentage = parseFloat(e.target.value) || 0;
-                          const amount = calculateFeeFromChecks(percentage);
+                          const amount = calculateContractorFee(percentage);
                           setFormData({ 
                             ...formData, 
                             contractor_fee_percentage: percentage,
@@ -1255,11 +1265,11 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 border rounded-lg">
               <p className="text-sm text-muted-foreground">Total Income</p>
-              <p className="text-xl font-bold text-success">${totalChecksReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+              <p className="text-xl font-bold text-success">${totalChecksReceived.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
             <div className="p-4 border rounded-lg">
               <p className="text-sm text-muted-foreground">Gross Profit</p>
-              <p className="text-xl font-bold">${grossProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+              <p className="text-xl font-bold">${grossProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               <p className="text-xs text-muted-foreground">Income - Expenses</p>
             </div>
           </div>
@@ -1268,7 +1278,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
             <div className="flex justify-between items-center p-3 bg-muted/50 rounded">
               <span className="text-sm">Company Fee</span>
               <span className="font-semibold">
-                ${companyFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ${companyFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 {fees?.company_fee_percentage > 0 && (
                   <span className="text-xs text-muted-foreground ml-2">({fees.company_fee_percentage}%)</span>
                 )}
@@ -1277,7 +1287,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
             <div className="flex justify-between items-center p-3 bg-muted/50 rounded">
               <span className="text-sm">Adjuster Fee</span>
               <span className="font-semibold">
-                ${adjusterFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ${adjusterFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 {fees?.adjuster_fee_percentage > 0 && (
                   <span className="text-xs text-muted-foreground ml-2">({fees.adjuster_fee_percentage}%)</span>
                 )}
@@ -1286,7 +1296,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
             <div className="flex justify-between items-center p-3 bg-muted/50 rounded">
               <span className="text-sm">Contractor Fee</span>
               <span className="font-semibold">
-                ${contractorFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ${contractorFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 {fees?.contractor_fee_percentage > 0 && (
                   <span className="text-xs text-muted-foreground ml-2">({fees.contractor_fee_percentage}%)</span>
                 )}
@@ -1298,7 +1308,7 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
             <div className="flex justify-between items-center">
               <span className="font-semibold">Net Profit</span>
               <span className="text-2xl font-bold text-primary">
-                ${netProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ${netProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
