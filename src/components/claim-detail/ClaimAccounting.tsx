@@ -413,17 +413,6 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
           </div>
         </div>
 
-        <div className="p-4 bg-success/10 rounded-lg border border-success/20">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-sm font-medium text-success">Recoverable Depreciation</p>
-              <p className="text-xs text-muted-foreground">Paid when work is completed</p>
-            </div>
-            <p className="text-xl font-bold text-success">
-              ${recDep.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-        </div>
 
         {type === "dwelling" && notes && (
           <div>
@@ -528,6 +517,26 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
             )}
           </TabsContent>
         </Tabs>
+
+        {/* Combined Recoverable Depreciation */}
+        {(() => {
+          const totalRecDep = Number(settlement?.recoverable_depreciation || 0) + 
+                              Number(settlement?.other_structures_recoverable_depreciation || 0) + 
+                              Number(settlement?.pwi_recoverable_depreciation || 0);
+          return totalRecDep > 0 ? (
+            <div className="mt-4 p-4 bg-success/10 rounded-lg border border-success/20">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-medium text-success">Total Recoverable Depreciation</p>
+                  <p className="text-xs text-muted-foreground">Paid when work is completed</p>
+                </div>
+                <p className="text-xl font-bold text-success">
+                  ${totalRecDep.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+          ) : null;
+        })()}
 
         {/* Edit Dialog */}
         <Dialog open={open} onOpenChange={setOpen}>
