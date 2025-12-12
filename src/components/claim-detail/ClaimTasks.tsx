@@ -481,7 +481,7 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
                         )}
                       </div>
                       <div className="flex gap-1 shrink-0">
-                        <TaskAIAssistant task={task} claimId={claimId} />
+                        <TaskAIAssistant task={task} claimId={claimId} onTaskUpdated={fetchTasks} />
                         <Button
                           variant="ghost"
                           size="icon"

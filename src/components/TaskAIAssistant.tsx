@@ -22,8 +22,13 @@ interface TaskAIAssistantProps {
     due_date: string | null;
     status: string;
     priority: string;
+    follow_up_enabled?: boolean | null;
+    follow_up_interval_days?: number | null;
+    follow_up_current_count?: number | null;
+    follow_up_last_sent_at?: string | null;
   };
   claimId: string;
+  onTaskUpdated?: () => void;
 }
 
 interface SuggestedAction {
@@ -49,7 +54,7 @@ interface AdjusterData {
   adjuster_phone: string | null;
 }
 
-const TaskAIAssistant = ({ task, claimId }: TaskAIAssistantProps) => {
+const TaskAIAssistant = ({ task, claimId, onTaskUpdated }: TaskAIAssistantProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sendingAction, setSendingAction] = useState<number | null>(null);
@@ -169,9 +174,29 @@ const TaskAIAssistant = ({ task, claimId }: TaskAIAssistantProps) => {
 
         if (error) throw error;
 
+        // Update task follow-up tracking without completing the task
+        // This marks that a follow-up was sent while keeping the task open for future automated follow-ups
+        const now = new Date().toISOString();
+        const currentCount = task.follow_up_current_count || 0;
+        const intervalDays = task.follow_up_interval_days || 3;
+        const nextFollowUp = new Date();
+        nextFollowUp.setDate(nextFollowUp.getDate() + intervalDays);
+
+        await supabase
+          .from("tasks")
+          .update({
+            follow_up_last_sent_at: now,
+            follow_up_current_count: currentCount + 1,
+            follow_up_next_at: task.follow_up_enabled ? nextFollowUp.toISOString() : null,
+          })
+          .eq("id", task.id);
+
+        // Trigger refresh if callback provided
+        onTaskUpdated?.();
+
         toast({
           title: "Email sent",
-          description: `Follow-up email sent to ${recipientEmail}`,
+          description: `Follow-up email sent to ${recipientEmail}. Task updated for tracking.`,
         });
       } else if (action.type === "sms") {
         // Prioritize adjuster phone over client
