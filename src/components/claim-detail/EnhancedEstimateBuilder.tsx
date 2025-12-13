@@ -116,23 +116,23 @@ export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuil
   };
 
   const buildPhotoContext = () => {
-    if (photos.length === 0) return "";
+    // Only include photos that have descriptions - these are the useful ones for scope generation
+    const describedPhotos = photos.filter(p => p.description && p.description.trim().length > 0);
+    if (describedPhotos.length === 0) return "";
     
-    let context = "\n\nCLAIM PHOTOS AVAILABLE:\n";
+    let context = "\n\nDOCUMENTED PHOTO EVIDENCE:\n";
     const categorizedPhotos: Record<string, ClaimPhoto[]> = {};
     
-    photos.forEach(photo => {
+    describedPhotos.forEach(photo => {
       const cat = photo.category || "Uncategorized";
       if (!categorizedPhotos[cat]) categorizedPhotos[cat] = [];
       categorizedPhotos[cat].push(photo);
     });
     
     Object.entries(categorizedPhotos).forEach(([category, catPhotos]) => {
-      context += `\n${category} (${catPhotos.length} photos):\n`;
+      context += `\n${category}:\n`;
       catPhotos.forEach((photo, i) => {
-        context += `  - Photo ${i + 1}: ${photo.file_name}`;
-        if (photo.description) context += ` - ${photo.description}`;
-        context += "\n";
+        context += `  - ${photo.description}\n`;
       });
     });
     
@@ -179,31 +179,26 @@ export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuil
       const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
         body: {
           claimId: claimId,
-          question: `Generate a detailed repair scope for this insurance claim following forensic damage analysis standards.
+          question: `Generate a detailed repair scope for this insurance claim. You MUST respond with ONLY a JSON array.
 
-IMPORTANT: Use the photos and previous analyses to identify SPECIFIC damaged areas/slopes. Do not generate generic scopes - base your analysis on the actual evidence available.
+USE THIS EVIDENCE TO IDENTIFY DAMAGED AREAS:
+${analysisContext || "(No previous Darwin analyses available - generate a reasonable scope based on typical storm damage)"}
 ${photoContext}
-${analysisContext}
 
-Based on the above photos and analyses, identify:
-1. Each specific damaged area/slope (e.g., "Main Roof - North Slope", "Front Elevation - East Side")
-2. The specific damages observed in photos for each area
-3. Recommended repair method per manufacturer specs
-4. Required materials
-5. Estimated labor hours
-6. Additional notes
+Based on the evidence above, generate repair scopes for each damaged area.
 
-Remember: Standard repair scope for roofing is FULL REPLACEMENT of each damaged slope/section, not partial repairs.
+CRITICAL RULES:
+1. Standard repair = FULL REPLACEMENT of each damaged slope/section, not partial repairs
+2. Include realistic labor hours and materials
+3. Be specific about areas (e.g., "North Slope", "East Elevation")
 
-Format as JSON array:
-[{
-  "area": "Specific area name based on photos",
-  "damages": ["specific damage 1 observed", "damage 2"],
-  "repairMethod": "Full replacement per manufacturer specs",
-  "materials": ["material 1", "material 2"],
-  "laborHours": 8,
-  "notes": "Notes referencing specific photo evidence"
-}]`,
+RESPOND WITH ONLY THIS JSON FORMAT (no other text):
+[
+  {"area": "Main Roof - North Slope", "damages": ["hail impacts", "granule loss"], "repairMethod": "Full tear-off and replacement per manufacturer specs", "materials": ["3-tab shingles", "felt underlayment", "ice & water shield", "drip edge"], "laborHours": 16, "notes": "Evidence from photo analysis"},
+  {"area": "Main Roof - South Slope", "damages": ["wind damage", "lifted shingles"], "repairMethod": "Full tear-off and replacement", "materials": ["3-tab shingles", "felt underlayment"], "laborHours": 12, "notes": "Based on damage assessment"}
+]
+
+OUTPUT ONLY THE JSON ARRAY. NO EXPLANATIONS.`,
           messages: [],
         },
       });
