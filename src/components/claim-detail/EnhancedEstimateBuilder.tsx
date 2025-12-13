@@ -249,58 +249,55 @@ Format as JSON array:
     setGeneratingEstimate(true);
     try {
       const scopeSummary = repairScopes.map(s => 
-        `${s.area}: ${s.damages.join(", ")} - ${s.repairMethod}`
+        `${s.area}: ${s.damages.join(", ")} - ${s.repairMethod} | Materials: ${s.materials.join(", ")} | Labor: ${s.laborHours}hrs`
       ).join("\n");
 
       const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
         body: {
           claimId: claimId,
-          question: `Generate Xactimate-style line items for this repair scope.
+          question: `CRITICAL: You MUST respond with ONLY a JSON array. No explanation, no text before or after. Just the JSON array.
 
-Repair Scope:
+Generate Xactimate-style line items for this repair scope:
+
 ${scopeSummary}
 
-For each repair item, provide:
-1. Category (Roofing, Siding, Interior, etc.)
-2. Description (detailed line item description)
-3. Xactimate code if known
-4. Unit (SQ, LF, SF, EA)
-5. Estimated quantity
-6. Unit price
-7. Total
+RESPOND WITH ONLY THIS JSON FORMAT (no other text):
+[
+  {"category": "Roofing", "description": "Remove composition shingles - 3 tab", "xactimateCode": "RFCMTRF", "unit": "SQ", "quantity": 25, "unitPrice": 45.00, "total": 1125.00},
+  {"category": "Roofing", "description": "Composition shingles - 3 tab - 25yr - Install", "xactimateCode": "RFSNRTB", "unit": "SQ", "quantity": 25, "unitPrice": 285.00, "total": 7125.00}
+]
 
-Format as JSON array:
-[{
-  "category": "Roofing",
-  "description": "Remove and replace 3-tab composition shingles - incl felt",
-  "xactimateCode": "RFSNRTB",
-  "unit": "SQ",
-  "quantity": 25,
-  "unitPrice": 285.00,
-  "total": 7125.00
-}]
+Include ALL line items: tear-off, materials, labor, disposal, ice & water shield, drip edge, flashing, vents, and 10% overhead & profit. Use realistic current pricing.
 
-Include all necessary line items: tear-off, materials, labor, disposal, overhead & profit.`,
+REMEMBER: Output ONLY the JSON array. No explanations.`,
           messages: [],
         },
       });
 
       if (error) throw error;
 
+      console.log("AI Response for estimate:", data.answer);
+
       try {
-        const jsonMatch = data.answer.match(/\[[\s\S]*\]/);
+        // Try to find JSON array in response
+        const jsonMatch = data.answer.match(/\[[\s\S]*?\]/);
         if (jsonMatch) {
           const items = JSON.parse(jsonMatch[0]).map((item: any, index: number) => ({
             ...item,
             id: `item-${index}`,
+            quantity: Number(item.quantity) || 1,
+            unitPrice: Number(item.unitPrice) || 0,
+            total: Number(item.total) || (Number(item.quantity) * Number(item.unitPrice)) || 0,
           }));
           setLineItems(items);
           setActiveTab("estimate");
-          toast.success("Estimate line items generated");
+          toast.success(`Generated ${items.length} line items`);
         } else {
-          throw new Error("Could not parse estimate data");
+          console.error("No JSON found in response:", data.answer);
+          toast.error("AI did not return line items - try again");
         }
       } catch (parseError) {
+        console.error("Parse error:", parseError, "Response:", data.answer);
         toast.error("Could not parse estimate - try again");
       }
     } catch (error: any) {
