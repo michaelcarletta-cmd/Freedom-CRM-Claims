@@ -153,8 +153,11 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
     
     const scoredChunks = chunks.map((chunk: any) => {
       const contentLower = chunk.content.toLowerCase();
-      const sourceName = (chunk.ai_knowledge_documents?.file_name || "").toLowerCase();
-      const isFromAudioRecording = sourceName.includes("screenrecording");
+      const sourceName = (chunk.ai_knowledge_documents?.file_name || '').toLowerCase();
+      const category = (chunk.ai_knowledge_documents?.category || '').toLowerCase();
+      // Detect the specific ACV training audio file and similar ACV/code training docs
+      const isFromAcvAudio = sourceName.includes('acv and code upgrade');
+      const isFromAudioRecording = isFromAcvAudio || (category === 'building-codes' && sourceName.includes('acv'));
       
       // Score based on word matches
       let score = 0;
@@ -190,10 +193,10 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
       
       // Strongly boost chunks from the ACV/code-upgrade audio recording when the question is about ACV/code
       if (isAcvQuestion && isFromAudioRecording) {
-        score += 20;
+        score += 30; // make this overwhelmingly preferred
       }
       
-      return { ...chunk, score, sourceName, isFromAudioRecording };
+      return { ...chunk, score, sourceName, category, isFromAudioRecording };
     }).filter((c: any) => c.score > 0);
     
     // For ACV/code-upgrade questions, if we have any chunks from the audio recording,

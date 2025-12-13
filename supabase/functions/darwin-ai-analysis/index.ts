@@ -7,6 +7,161 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Reuse the same knowledge base search logic as the main Claims AI Assistant
+// so Darwin can leverage uploaded training materials (including ACV audio).
+async function searchKnowledgeBase(supabase: any, question: string, category?: string): Promise<string> {
+  try {
+    let query = supabase
+      .from('ai_knowledge_chunks')
+      .select(`
+        content,
+        metadata,
+        ai_knowledge_documents!inner(category, file_name, status)
+      `)
+      .eq('ai_knowledge_documents.status', 'completed');
+
+    if (category) {
+      query = query.eq('ai_knowledge_documents.category', category);
+    }
+
+    const { data: chunks, error } = await query.limit(100);
+
+    if (error || !chunks || chunks.length === 0) {
+      console.log('Darwin KB: no chunks found');
+      return '';
+    }
+
+    console.log(`Darwin KB: searching ${chunks.length} chunks`);
+
+    const questionLower = question.toLowerCase();
+    const questionWords = questionLower
+      .split(/\s+/)
+      .filter((w) => w.length >= 2)
+      .map((w) => w.replace(/[^a-z0-9]/g, ''))
+      .filter((w) => w.length >= 2);
+
+    const importantTerms = [
+      'depreciation',
+      'acv',
+      'rcv',
+      'actual cash value',
+      'replacement cost',
+      'ordinance',
+      'law',
+      'code',
+      'compliance',
+      'deductible',
+      'coverage',
+      'policy',
+      'claim',
+      'adjuster',
+      'supplement',
+      'denial',
+      'settlement',
+      'recoverable',
+      'non-recoverable',
+      'dwelling',
+      'roofing',
+      'damage',
+      'wind',
+      'hail',
+      'storm',
+      'inspection',
+      'estimate',
+      'xactimate',
+    ];
+
+    const matchedTerms = importantTerms.filter((term) => questionLower.includes(term));
+    const isAcvQuestion = /\bacv\b|actual cash value|code upgrade|ordinance and law|ordinance & law/i.test(questionLower);
+
+    const scoredChunks = chunks
+      .map((chunk: any) => {
+        const contentLower = chunk.content.toLowerCase();
+        const sourceName = (chunk.ai_knowledge_documents?.file_name || '').toLowerCase();
+        const category = (chunk.ai_knowledge_documents?.category || '').toLowerCase();
+        const isFromAcvAudio = sourceName.includes('acv and code upgrade');
+        const isFromAudioRecording = isFromAcvAudio || (category === 'building-codes' && sourceName.includes('acv'));
+
+        let score = 0;
+
+        questionWords.forEach((word) => {
+          if (contentLower.includes(word)) {
+            score += 1;
+            if (importantTerms.includes(word)) {
+              score += 2;
+            }
+          }
+        });
+
+        matchedTerms.forEach((term) => {
+          if (contentLower.includes(term)) {
+            score += 3;
+          }
+        });
+
+        const phrases = questionLower.match(/["']([^"']+)["']/g);
+        if (phrases) {
+          phrases.forEach((phrase) => {
+            const cleanPhrase = phrase.replace(/["']/g, '');
+            if (contentLower.includes(cleanPhrase)) {
+              score += 5;
+            }
+          });
+        }
+
+        if (isAcvQuestion && isFromAudioRecording) {
+          score += 30;
+        }
+
+        return { ...chunk, score, sourceName, category, isFromAudioRecording };
+      })
+      .filter((c: any) => c.score > 0);
+
+    let finalChunks: any[] = scoredChunks;
+    if (isAcvQuestion) {
+      const audioChunks = scoredChunks.filter((c: any) => c.isFromAudioRecording);
+      if (audioChunks.length > 0) {
+        finalChunks = audioChunks;
+      }
+    }
+
+    finalChunks = finalChunks.sort((a: any, b: any) => b.score - a.score).slice(0, 8);
+
+    console.log(
+      `Darwin KB: using ${finalChunks.length} chunks with scores: ${finalChunks
+        .map((c: any) => c.score)
+        .join(', ')}`,
+    );
+    if (isAcvQuestion) {
+      console.log('Darwin KB ACV sources:', finalChunks.map((c: any) => c.sourceName));
+    }
+
+    if (finalChunks.length === 0) {
+      return '';
+    }
+
+    let knowledgeContext = '\n\n=== CRITICAL: KNOWLEDGE BASE CONTENT (from uploaded training materials) ===\n';
+    knowledgeContext +=
+      'YOU MUST prioritize and directly reference this information in your analysis and recommendations.\n';
+    knowledgeContext +=
+      'When answering, explicitly mention that this comes from the user\'s uploaded training materials when relevant.\n\n';
+
+    finalChunks.forEach((chunk: any, i: number) => {
+      const source = chunk.ai_knowledge_documents?.file_name || 'Unknown source';
+      const docCategory = chunk.ai_knowledge_documents?.category || 'General';
+      knowledgeContext += `--- Source ${i + 1}: ${source} (${docCategory}) ---\n${chunk.content}\n\n`;
+    });
+
+    knowledgeContext += '=== END KNOWLEDGE BASE CONTENT ===\n';
+
+    return knowledgeContext;
+  } catch (error) {
+    console.error('Darwin KB error:', error);
+    return '';
+  }
+}
+
+
 interface AnalysisRequest {
   claimId: string;
   analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation';
@@ -185,7 +340,13 @@ ${darwinNotes}` : ''}
 `;
 
     switch (analysisType) {
-      case 'denial_rebuttal':
+      case 'denial_rebuttal': {
+        const acvKbDenial = await searchKnowledgeBase(
+          supabase,
+          'ACV policy, actual cash value vs replacement cost, depreciation, code upgrade coverage, ordinance and law, building code upgrade coverage',
+          'building-codes',
+        );
+
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in insurance claim rebuttals. Your role is to analyze denial letters and generate professional, legally-sound rebuttals that maximize claim recovery for policyholders.
 
 IMPORTANT: This claim is located in ${stateInfo.stateName}. You MUST cite ${stateInfo.stateName} law and regulations accurately.
@@ -214,7 +375,7 @@ ${stateInfo.state === 'NJ' ? `
 - 40 P.S. § 1171.5(a)(10) defines unfair claims settlement practices
 - 31 Pa. Code § 146.5 requires acknowledgment within 10 working days
 - 31 Pa. Code § 146.6 requires investigation within 30 days
-- 31 Pa. Code § 146.7 requires written notification of acceptance or denial within 15 working days
+- 31 Pa. Code § 146.7 requires written notification within 15 working days of completing investigation
 `}
 
 When generating rebuttals:
@@ -235,6 +396,8 @@ ADMINISTRATIVE REGULATIONS: ${stateInfo.adminCode}
 ${pdfContent ? `A PDF of the denial letter has been provided for analysis.` : `DENIAL LETTER CONTENT:
 ${content || 'No denial letter content provided'}`}
 
+${acvKbDenial || ''}
+
 Please analyze this denial and generate a comprehensive rebuttal that:
 1. Lists each denial reason with a point-by-point counter-argument
 2. Cites relevant policy language and ${stateInfo.stateName} statutes/regulations accurately
@@ -245,8 +408,15 @@ Please analyze this denial and generate a comprehensive rebuttal that:
 
 Format your response as a structured rebuttal document.`;
         break;
+      }
 
-      case 'next_steps':
+      case 'next_steps': {
+        const acvKbNext = await searchKnowledgeBase(
+          supabase,
+          'ACV policy, actual cash value vs replacement cost, depreciation, code upgrade coverage, ordinance and law, building code upgrade coverage',
+          'building-codes',
+        );
+
         systemPrompt = `You are Darwin, an intelligent claims management AI for public adjusters. Your role is to analyze claim status, timeline, and activities to recommend the optimal next actions.
 
 IMPORTANT: This claim is located in ${stateInfo.stateName}. Apply ${stateInfo.stateName} law and deadlines accurately.
@@ -287,6 +457,8 @@ ADMINISTRATIVE REGULATIONS: ${stateInfo.adminCode}
 
 ${additionalContext?.timeline ? `TIMELINE EVENTS:\n${JSON.stringify(additionalContext.timeline, null, 2)}` : ''}
 
+${acvKbNext || ''}
+
 Analyze this claim and provide:
 1. TOP 3 PRIORITY ACTIONS - What should be done immediately and why
 2. TIMELINE ANALYSIS - Are there any deadline concerns or ${stateInfo.adminCode} violations?
@@ -297,6 +469,7 @@ Analyze this claim and provide:
 
 Be specific and actionable. Reference ${stateInfo.stateName} deadlines and regulations accurately.`;
         break;
+      }
 
       case 'supplement':
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in identifying missed damage and generating supplement requests. Your role is to maximize claim recovery by finding overlooked items in carrier estimates.
