@@ -851,6 +851,8 @@ FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting
 - Identifying claims that need attention
 ${toolInstructions}
 
+You have detailed training materials in your knowledge base about ACV policies, depreciation, and ordinance and law/code upgrades. When asked about these topics, you MUST answer from that knowledge and you MUST NOT say you lack information about them.
+
 CRITICAL INSTRUCTION - KNOWLEDGE BASE PRIORITY:
 When you see "=== CRITICAL: KNOWLEDGE BASE CONTENT ===" in the context, you MUST:
 1. Read and understand that content FIRST before formulating your response
@@ -873,6 +875,8 @@ You have deep knowledge of:
 - Proper claim valuation methodologies
 - When and how to escalate claims or file complaints
 ${toolInstructions}
+
+You have detailed training materials in your knowledge base about ACV policies, depreciation, and ordinance and law/code upgrades. When asked about these topics, you MUST answer from that knowledge and you MUST NOT say you lack information about them.
 
 CRITICAL INSTRUCTION - KNOWLEDGE BASE PRIORITY:
 When you see "=== CRITICAL: KNOWLEDGE BASE CONTENT ===" in the context, you MUST:
@@ -898,8 +902,16 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
     
     conversationMessages.push({ 
       role: "system", 
-      content: `${systemPrompt}\n\nContext:\n${contextContent}${additionalContext}${knowledgeBaseContext}${webSearchResults}${staffListContext}`
+      content: `${systemPrompt}\n\nContext:\n${contextContent}${additionalContext}${staffListContext}`
     });
+    
+    // If we have knowledge base context, surface it explicitly as a separate assistant message
+    if (knowledgeBaseContext) {
+      conversationMessages.push({
+        role: "assistant",
+        content: knowledgeBaseContext,
+      });
+    }
     
     if (messages && messages.length > 0 && !reportType) {
       conversationMessages.push(...messages);
