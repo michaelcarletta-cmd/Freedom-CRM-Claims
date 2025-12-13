@@ -65,13 +65,8 @@ export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuil
     try {
       const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
         body: {
+          claimId: claimId,
           question: `Generate a detailed repair scope for this insurance claim following forensic damage analysis standards.
-
-Claim Details:
-- Loss Type: ${claim.loss_type || "Property damage"}
-- Loss Date: ${claim.loss_date || "Unknown"}
-- Property Address: ${claim.policyholder_address || "Not specified"}
-- Loss Description: ${claim.loss_description || "Not provided"}
 
 For each damaged area, provide:
 1. Area name (e.g., "Main Roof - North Slope")
@@ -92,7 +87,6 @@ Format as JSON array:
   "laborHours": 8,
   "notes": "Additional notes"
 }]`,
-          mode: "general",
           messages: [],
         },
       });
@@ -143,10 +137,8 @@ Format as JSON array:
 
       const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
         body: {
+          claimId: claimId,
           question: `Generate Xactimate-style line items for this repair scope.
-
-Property: ${claim.policyholder_address || "Residential property"}
-Loss Type: ${claim.loss_type || "Property damage"}
 
 Repair Scope:
 ${scopeSummary}
@@ -172,7 +164,6 @@ Format as JSON array:
 }]
 
 Include all necessary line items: tear-off, materials, labor, disposal, overhead & profit.`,
-          mode: "general",
           messages: [],
         },
       });
