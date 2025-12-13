@@ -111,9 +111,38 @@ export function ClaimTasks({ claimId }: ClaimTasksProps) {
 
   const fetchUsers = async () => {
     try {
+      // Fetch staff assigned to this claim
+      const { data: claimStaff, error: staffError } = await supabase
+        .from("claim_staff")
+        .select("staff_id")
+        .eq("claim_id", claimId);
+
+      if (staffError) throw staffError;
+
+      const assignedStaffIds = claimStaff?.map(cs => cs.staff_id) || [];
+
+      // Fetch admins (always show)
+      const { data: adminRoles, error: adminError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "admin");
+
+      if (adminError) throw adminError;
+
+      const adminIds = adminRoles?.map(ar => ar.user_id) || [];
+
+      // Combine unique IDs
+      const allowedUserIds = [...new Set([...assignedStaffIds, ...adminIds])];
+
+      if (allowedUserIds.length === 0) {
+        setUsers([]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("profiles")
         .select("id, full_name, email")
+        .in("id", allowedUserIds)
         .order("full_name");
 
       if (error) throw error;
