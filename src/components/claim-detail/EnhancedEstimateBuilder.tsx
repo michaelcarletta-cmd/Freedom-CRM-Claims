@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +18,9 @@ import {
   Download, 
   Upload,
   FileText,
-  Copy
+  Copy,
+  Image,
+  FileCheck
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -48,6 +50,21 @@ interface RepairScope {
   notes: string;
 }
 
+interface ClaimPhoto {
+  id: string;
+  file_name: string;
+  file_path: string;
+  category: string | null;
+  description: string | null;
+}
+
+interface DarwinAnalysis {
+  id: string;
+  analysis_type: string;
+  result: string;
+  created_at: string;
+}
+
 export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuilderProps) => {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("scope");
@@ -59,19 +76,119 @@ export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuil
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [measurementFile, setMeasurementFile] = useState<File | null>(null);
   const [scopeNotes, setScopeNotes] = useState("");
+  
+  // Photo and analysis data
+  const [photos, setPhotos] = useState<ClaimPhoto[]>([]);
+  const [darwinAnalyses, setDarwinAnalyses] = useState<DarwinAnalysis[]>([]);
+  const [loadingContext, setLoadingContext] = useState(false);
+
+  // Fetch photos and Darwin analyses when dialog opens
+  useEffect(() => {
+    if (open) {
+      fetchClaimContext();
+    }
+  }, [open, claimId]);
+
+  const fetchClaimContext = async () => {
+    setLoadingContext(true);
+    try {
+      // Fetch photos
+      const { data: photosData } = await supabase
+        .from("claim_photos")
+        .select("id, file_name, file_path, category, description")
+        .eq("claim_id", claimId);
+      
+      if (photosData) setPhotos(photosData);
+
+      // Fetch Darwin analysis results
+      const { data: analysesData } = await supabase
+        .from("darwin_analysis_results")
+        .select("id, analysis_type, result, created_at")
+        .eq("claim_id", claimId)
+        .order("created_at", { ascending: false });
+      
+      if (analysesData) setDarwinAnalyses(analysesData);
+    } catch (error) {
+      console.error("Error fetching claim context:", error);
+    } finally {
+      setLoadingContext(false);
+    }
+  };
+
+  const buildPhotoContext = () => {
+    if (photos.length === 0) return "";
+    
+    let context = "\n\nCLAIM PHOTOS AVAILABLE:\n";
+    const categorizedPhotos: Record<string, ClaimPhoto[]> = {};
+    
+    photos.forEach(photo => {
+      const cat = photo.category || "Uncategorized";
+      if (!categorizedPhotos[cat]) categorizedPhotos[cat] = [];
+      categorizedPhotos[cat].push(photo);
+    });
+    
+    Object.entries(categorizedPhotos).forEach(([category, catPhotos]) => {
+      context += `\n${category} (${catPhotos.length} photos):\n`;
+      catPhotos.forEach((photo, i) => {
+        context += `  - Photo ${i + 1}: ${photo.file_name}`;
+        if (photo.description) context += ` - ${photo.description}`;
+        context += "\n";
+      });
+    });
+    
+    return context;
+  };
+
+  const buildAnalysisContext = () => {
+    if (darwinAnalyses.length === 0) return "";
+    
+    let context = "\n\nPREVIOUS DARWIN AI ANALYSES:\n";
+    
+    // Get most relevant analyses (damage, document compilation, etc.)
+    const relevantTypes = ["damage_assessment", "document_compilation", "denial_analysis", "supplement_generation"];
+    const relevantAnalyses = darwinAnalyses.filter(a => 
+      relevantTypes.some(t => a.analysis_type.includes(t)) || 
+      a.result.toLowerCase().includes("damage") ||
+      a.result.toLowerCase().includes("slope") ||
+      a.result.toLowerCase().includes("roof")
+    ).slice(0, 3);
+    
+    if (relevantAnalyses.length === 0 && darwinAnalyses.length > 0) {
+      // Fall back to most recent analyses
+      relevantAnalyses.push(...darwinAnalyses.slice(0, 2));
+    }
+    
+    relevantAnalyses.forEach(analysis => {
+      context += `\n[${analysis.analysis_type.replace(/_/g, " ").toUpperCase()}]:\n`;
+      // Truncate long analyses but keep enough context
+      const truncated = analysis.result.length > 2000 
+        ? analysis.result.substring(0, 2000) + "..." 
+        : analysis.result;
+      context += truncated + "\n";
+    });
+    
+    return context;
+  };
 
   const generateRepairScope = async () => {
     setGeneratingScope(true);
     try {
+      const photoContext = buildPhotoContext();
+      const analysisContext = buildAnalysisContext();
+      
       const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
         body: {
           claimId: claimId,
           question: `Generate a detailed repair scope for this insurance claim following forensic damage analysis standards.
 
-For each damaged area, provide:
-1. Area name (e.g., "Main Roof - North Slope")
-2. List of specific damages observed
-3. Recommended repair method (per manufacturer specs)
+IMPORTANT: Use the photos and previous analyses to identify SPECIFIC damaged areas/slopes. Do not generate generic scopes - base your analysis on the actual evidence available.
+${photoContext}
+${analysisContext}
+
+Based on the above photos and analyses, identify:
+1. Each specific damaged area/slope (e.g., "Main Roof - North Slope", "Front Elevation - East Side")
+2. The specific damages observed in photos for each area
+3. Recommended repair method per manufacturer specs
 4. Required materials
 5. Estimated labor hours
 6. Additional notes
@@ -80,12 +197,12 @@ Remember: Standard repair scope for roofing is FULL REPLACEMENT of each damaged 
 
 Format as JSON array:
 [{
-  "area": "Area name",
-  "damages": ["damage 1", "damage 2"],
+  "area": "Specific area name based on photos",
+  "damages": ["specific damage 1 observed", "damage 2"],
   "repairMethod": "Full replacement per manufacturer specs",
   "materials": ["material 1", "material 2"],
   "laborHours": 8,
-  "notes": "Additional notes"
+  "notes": "Notes referencing specific photo evidence"
 }]`,
           messages: [],
         },
@@ -99,7 +216,7 @@ Format as JSON array:
         if (jsonMatch) {
           const scopes = JSON.parse(jsonMatch[0]);
           setRepairScopes(scopes);
-          toast.success("Repair scope generated");
+          toast.success("Repair scope generated from photos and reports");
         } else {
           throw new Error("Could not parse scope data");
         }
@@ -276,6 +393,41 @@ Include all necessary line items: tear-off, materials, labor, disposal, overhead
           <TabsContent value="scope" className="flex-1 overflow-hidden">
             <ScrollArea className="h-[500px] pr-4">
               <div className="space-y-4">
+                {/* Available Context */}
+                <Card className="p-4 bg-muted/50">
+                  <h3 className="font-semibold mb-2 flex items-center gap-2">
+                    <FileCheck className="h-4 w-4" />
+                    Available Evidence
+                  </h3>
+                  {loadingContext ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Loading photos and reports...
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant={photos.length > 0 ? "default" : "secondary"} className="gap-1">
+                        <Image className="h-3 w-3" />
+                        {photos.length} Photos
+                      </Badge>
+                      <Badge variant={darwinAnalyses.length > 0 ? "default" : "secondary"} className="gap-1">
+                        <FileText className="h-3 w-3" />
+                        {darwinAnalyses.length} Darwin Reports
+                      </Badge>
+                      {photos.length === 0 && darwinAnalyses.length === 0 && (
+                        <span className="text-sm text-muted-foreground">
+                          Upload photos or run Darwin analyses for more accurate scope
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {photos.length > 0 && (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Categories: {[...new Set(photos.map(p => p.category || "Uncategorized"))].join(", ")}
+                    </div>
+                  )}
+                </Card>
+
                 {/* Measurement Upload */}
                 <Card className="p-4">
                   <div className="flex items-center justify-between">
@@ -306,7 +458,7 @@ Include all necessary line items: tear-off, materials, labor, disposal, overhead
                 <div className="flex items-center gap-2">
                   <Button
                     onClick={generateRepairScope}
-                    disabled={generatingScope}
+                    disabled={generatingScope || loadingContext}
                     className="gap-2"
                   >
                     {generatingScope ? (
@@ -314,7 +466,9 @@ Include all necessary line items: tear-off, materials, labor, disposal, overhead
                     ) : (
                       <Sparkles className="h-4 w-4" />
                     )}
-                    Generate AI Repair Scope
+                    {photos.length > 0 || darwinAnalyses.length > 0 
+                      ? "Generate Scope from Evidence" 
+                      : "Generate AI Repair Scope"}
                   </Button>
                   {repairScopes.length > 0 && (
                     <Button
@@ -366,7 +520,9 @@ Include all necessary line items: tear-off, materials, labor, disposal, overhead
 
                 {repairScopes.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">
-                    Click "Generate AI Repair Scope" to analyze the claim and create a detailed repair scope
+                    {photos.length > 0 || darwinAnalyses.length > 0 
+                      ? "Click \"Generate Scope from Evidence\" to analyze photos and reports"
+                      : "Click \"Generate AI Repair Scope\" to analyze the claim and create a detailed repair scope"}
                   </div>
                 )}
               </div>
