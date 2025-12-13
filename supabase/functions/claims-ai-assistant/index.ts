@@ -197,12 +197,17 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
       return "";
     }
 
-    let knowledgeContext = "\n\nRelevant Knowledge Base Information (from your uploaded training materials):\n";
+    let knowledgeContext = "\n\n=== CRITICAL: KNOWLEDGE BASE CONTENT (from your uploaded training materials) ===\n";
+    knowledgeContext += "YOU MUST prioritize and directly reference this information in your response.\n";
+    knowledgeContext += "When answering, explicitly mention that this comes from the user's uploaded training materials.\n\n";
+    
     scoredChunks.forEach((chunk: any, i: number) => {
       const source = chunk.ai_knowledge_documents?.file_name || "Unknown source";
       const docCategory = chunk.ai_knowledge_documents?.category || "General";
-      knowledgeContext += `\n[Source: ${source} | Category: ${docCategory}]\n${chunk.content}\n`;
+      knowledgeContext += `--- Source ${i + 1}: ${source} (${docCategory}) ---\n${chunk.content}\n\n`;
     });
+    
+    knowledgeContext += "=== END KNOWLEDGE BASE CONTENT ===\n";
 
     return knowledgeContext;
   } catch (error) {
@@ -846,6 +851,14 @@ FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting
 - Identifying claims that need attention
 ${toolInstructions}
 
+CRITICAL INSTRUCTION - KNOWLEDGE BASE PRIORITY:
+When you see "=== CRITICAL: KNOWLEDGE BASE CONTENT ===" in the context, you MUST:
+1. Read and understand that content FIRST before formulating your response
+2. Base your answer primarily on that knowledge base content
+3. Explicitly state "Based on your uploaded training materials..." or "According to your knowledge base..." when using that information
+4. Quote or paraphrase the relevant parts directly
+5. Only supplement with general knowledge if the knowledge base doesn't fully answer the question
+
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
 You have access to the user's active claims and pending tasks. Provide practical, actionable advice. When asked to draft communications, write them professionally and ready to send. Be concise but thorough.`
@@ -860,6 +873,14 @@ You have deep knowledge of:
 - Proper claim valuation methodologies
 - When and how to escalate claims or file complaints
 ${toolInstructions}
+
+CRITICAL INSTRUCTION - KNOWLEDGE BASE PRIORITY:
+When you see "=== CRITICAL: KNOWLEDGE BASE CONTENT ===" in the context, you MUST:
+1. Read and understand that content FIRST before formulating your response
+2. Base your answer primarily on that knowledge base content
+3. Explicitly state "Based on your uploaded training materials..." or "According to your knowledge base..." when using that information
+4. Quote or paraphrase the relevant parts directly
+5. Only supplement with general knowledge if the knowledge base doesn't fully answer the question
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
