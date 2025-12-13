@@ -149,11 +149,11 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
     ];
     
     const matchedTerms = importantTerms.filter(term => questionLower.includes(term));
+    const isAcvQuestion = /\bacv\b|actual cash value|code upgrade|ordinance and law|ordinance & law/i.test(questionLower);
     
     const scoredChunks = chunks.map((chunk: any) => {
       const contentLower = chunk.content.toLowerCase();
       const sourceName = (chunk.ai_knowledge_documents?.file_name || "").toLowerCase();
-      const isAcvQuestion = /\bacv\b|actual cash value|code upgrade|ordinance and law|ordinance & law/i.test(questionLower);
       const isFromAudioRecording = sourceName.includes("screenrecording");
       
       // Score based on word matches
@@ -193,14 +193,29 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
         score += 20;
       }
       
-      return { ...chunk, score };
-    }).filter((c: any) => c.score > 0)
+      return { ...chunk, score, sourceName, isFromAudioRecording };
+    }).filter((c: any) => c.score > 0);
+    
+    // For ACV/code-upgrade questions, if we have any chunks from the audio recording,
+    // restrict the context to ONLY those chunks so answers are based on that training.
+    let finalChunks: any[] = scoredChunks;
+    if (isAcvQuestion) {
+      const audioChunks = scoredChunks.filter((c: any) => c.isFromAudioRecording);
+      if (audioChunks.length > 0) {
+        finalChunks = audioChunks;
+      }
+    }
+    
+    finalChunks = finalChunks
       .sort((a: any, b: any) => b.score - a.score)
       .slice(0, 8); // Get more relevant chunks
 
-    console.log(`Found ${scoredChunks.length} matching chunks with scores: ${scoredChunks.map((c: any) => c.score).join(', ')}`);
+    console.log(`Found ${finalChunks.length} matching chunks with scores: ${finalChunks.map((c: any) => c.score).join(', ')}`);
+    if (isAcvQuestion) {
+      console.log("ACV question sources:", finalChunks.map((c: any) => c.sourceName));
+    }
 
-    if (scoredChunks.length === 0) {
+    if (finalChunks.length === 0) {
       console.log("No matching chunks found for question:", question);
       return "";
     }
@@ -209,7 +224,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
     knowledgeContext += "YOU MUST prioritize and directly reference this information in your response.\n";
     knowledgeContext += "When answering, explicitly mention that this comes from the user's uploaded training materials.\n\n";
     
-    scoredChunks.forEach((chunk: any, i: number) => {
+    finalChunks.forEach((chunk: any, i: number) => {
       const source = chunk.ai_knowledge_documents?.file_name || "Unknown source";
       const docCategory = chunk.ai_knowledge_documents?.category || "General";
       knowledgeContext += `--- Source ${i + 1}: ${source} (${docCategory}) ---\n${chunk.content}\n\n`;
