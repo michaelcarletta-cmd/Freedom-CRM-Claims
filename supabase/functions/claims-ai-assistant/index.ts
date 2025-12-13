@@ -152,6 +152,9 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
     
     const scoredChunks = chunks.map((chunk: any) => {
       const contentLower = chunk.content.toLowerCase();
+      const sourceName = (chunk.ai_knowledge_documents?.file_name || "").toLowerCase();
+      const isAcvQuestion = /\bacv\b|actual cash value|code upgrade|ordinance and law|ordinance & law/i.test(questionLower);
+      const isFromAudioRecording = sourceName.includes("screenrecording");
       
       // Score based on word matches
       let score = 0;
@@ -183,6 +186,11 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
             score += 5;
           }
         });
+      }
+      
+      // Strongly boost chunks from the ACV/code-upgrade audio recording when the question is about ACV/code
+      if (isAcvQuestion && isFromAudioRecording) {
+        score += 20;
       }
       
       return { ...chunk, score };
@@ -786,7 +794,8 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
     
     // Determine if web search is needed
     let webSearchResults = "";
-    const needsWebSearch = !reportType && /regulation|law|legal|code|requirement|guideline|best practice|industry standard/i.test(question);
+    const isAcvQuestion = /\bacv\b|actual cash value|code upgrade|ordinance and law|ordinance & law/i.test(question || "");
+    const needsWebSearch = !reportType && !isAcvQuestion && /regulation|law|legal|code|requirement|guideline|best practice|industry standard/i.test(question);
     
     if (needsWebSearch) {
       console.log("Performing web search for:", question);
