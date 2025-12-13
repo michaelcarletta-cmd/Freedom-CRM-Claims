@@ -107,6 +107,7 @@ async function analyzeDocument(fileUrl: string, fileName: string): Promise<strin
 // Search knowledge base for relevant chunks
 async function searchKnowledgeBase(supabase: any, question: string, category?: string): Promise<string> {
   try {
+    // Fetch more chunks to improve matching
     let query = supabase
       .from("ai_knowledge_chunks")
       .select(`
@@ -120,31 +121,87 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
       query = query.eq("ai_knowledge_documents.category", category);
     }
 
-    const { data: chunks, error } = await query.limit(50);
+    const { data: chunks, error } = await query.limit(100);
 
     if (error || !chunks || chunks.length === 0) {
+      console.log("No knowledge base chunks found");
       return "";
     }
 
-    const questionWords = question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    console.log(`Found ${chunks.length} knowledge base chunks to search`);
+
+    // Extract all meaningful words from the question (including short ones like ACV, RCV, O&L)
+    const questionLower = question.toLowerCase();
+    // Include words 2+ characters, and also important insurance abbreviations
+    const questionWords = questionLower
+      .split(/\s+/)
+      .filter(w => w.length >= 2)
+      .map(w => w.replace(/[^a-z0-9]/g, ''))
+      .filter(w => w.length >= 2);
+    
+    // Also extract multi-word phrases for better matching
+    const importantTerms = [
+      'depreciation', 'acv', 'rcv', 'actual cash value', 'replacement cost',
+      'ordinance', 'law', 'code', 'compliance', 'deductible', 'coverage',
+      'policy', 'claim', 'adjuster', 'supplement', 'denial', 'settlement',
+      'recoverable', 'non-recoverable', 'dwelling', 'roofing', 'damage',
+      'wind', 'hail', 'storm', 'inspection', 'estimate', 'xactimate'
+    ];
+    
+    const matchedTerms = importantTerms.filter(term => questionLower.includes(term));
     
     const scoredChunks = chunks.map((chunk: any) => {
       const contentLower = chunk.content.toLowerCase();
-      const matchCount = questionWords.filter(word => contentLower.includes(word)).length;
-      return { ...chunk, score: matchCount };
+      
+      // Score based on word matches
+      let score = 0;
+      
+      // Match individual words
+      questionWords.forEach(word => {
+        if (contentLower.includes(word)) {
+          score += 1;
+          // Bonus for important insurance terms
+          if (importantTerms.includes(word)) {
+            score += 2;
+          }
+        }
+      });
+      
+      // Match important phrases
+      matchedTerms.forEach(term => {
+        if (contentLower.includes(term)) {
+          score += 3;
+        }
+      });
+      
+      // Bonus for exact phrase matches
+      const phrases = questionLower.match(/["']([^"']+)["']/g);
+      if (phrases) {
+        phrases.forEach(phrase => {
+          const cleanPhrase = phrase.replace(/["']/g, '');
+          if (contentLower.includes(cleanPhrase)) {
+            score += 5;
+          }
+        });
+      }
+      
+      return { ...chunk, score };
     }).filter((c: any) => c.score > 0)
       .sort((a: any, b: any) => b.score - a.score)
-      .slice(0, 5);
+      .slice(0, 8); // Get more relevant chunks
+
+    console.log(`Found ${scoredChunks.length} matching chunks with scores: ${scoredChunks.map((c: any) => c.score).join(', ')}`);
 
     if (scoredChunks.length === 0) {
+      console.log("No matching chunks found for question:", question);
       return "";
     }
 
-    let knowledgeContext = "\n\nRelevant Knowledge Base Information:\n";
+    let knowledgeContext = "\n\nRelevant Knowledge Base Information (from your uploaded training materials):\n";
     scoredChunks.forEach((chunk: any, i: number) => {
       const source = chunk.ai_knowledge_documents?.file_name || "Unknown source";
-      const category = chunk.ai_knowledge_documents?.category || "General";
-      knowledgeContext += `\n[Source: ${source} | Category: ${category}]\n${chunk.content}\n`;
+      const docCategory = chunk.ai_knowledge_documents?.category || "General";
+      knowledgeContext += `\n[Source: ${source} | Category: ${docCategory}]\n${chunk.content}\n`;
     });
 
     return knowledgeContext;
