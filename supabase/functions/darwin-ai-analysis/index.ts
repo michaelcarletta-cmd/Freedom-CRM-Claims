@@ -47,8 +47,14 @@ serve(async (req) => {
     if (claimError) throw claimError;
 
     // Detect state from policyholder address (NJ and PA only)
-    const detectState = (address: string | null): { state: string; stateName: string; insuranceCode: string; promptPayAct: string } => {
-      if (!address) return { state: 'NJ', stateName: 'New Jersey', insuranceCode: 'New Jersey Insurance Code (N.J.S.A. 17B)', promptPayAct: 'New Jersey Unfair Claims Settlement Practices Act (N.J.S.A. 17:29B-4)' };
+    const detectState = (address: string | null): { state: string; stateName: string; insuranceCode: string; promptPayAct: string; adminCode: string } => {
+      if (!address) return { 
+        state: 'NJ', 
+        stateName: 'New Jersey', 
+        insuranceCode: 'N.J.S.A. 17:29B (Property and Casualty Insurance) and N.J.S.A. 17B (Life and Health Insurance)',
+        promptPayAct: 'N.J.S.A. 17:29B-4(9) (Unfair Claims Settlement Practices)',
+        adminCode: 'N.J.A.C. 11:2-17 (Unfair Claims Settlement Practices Regulations)'
+      };
       
       const upperAddress = address.toUpperCase();
       
@@ -57,13 +63,20 @@ serve(async (req) => {
         return { 
           state: 'PA', 
           stateName: 'Pennsylvania', 
-          insuranceCode: 'Pennsylvania Insurance Code (40 P.S.)',
-          promptPayAct: 'Pennsylvania Unfair Insurance Practices Act (40 P.S. § 1171.5)'
+          insuranceCode: '40 P.S. (Pennsylvania Insurance Code)',
+          promptPayAct: '40 P.S. § 1171.5 (Unfair Insurance Practices Act)',
+          adminCode: '31 Pa. Code Chapter 146 (Unfair Claims Settlement Practices)'
         };
       }
       
       // Default to New Jersey
-      return { state: 'NJ', stateName: 'New Jersey', insuranceCode: 'New Jersey Insurance Code (N.J.S.A. 17B)', promptPayAct: 'New Jersey Unfair Claims Settlement Practices Act (N.J.S.A. 17:29B-4)' };
+      return { 
+        state: 'NJ', 
+        stateName: 'New Jersey', 
+        insuranceCode: 'N.J.S.A. 17:29B (Property and Casualty Insurance) and N.J.S.A. 17B (Life and Health Insurance)',
+        promptPayAct: 'N.J.S.A. 17:29B-4(9) (Unfair Claims Settlement Practices)',
+        adminCode: 'N.J.A.C. 11:2-17 (Unfair Claims Settlement Practices Regulations)'
+      };
     };
 
     const stateInfo = detectState(claim.policyholder_address);
@@ -175,7 +188,7 @@ ${darwinNotes}` : ''}
       case 'denial_rebuttal':
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in insurance claim rebuttals. Your role is to analyze denial letters and generate professional, legally-sound rebuttals that maximize claim recovery for policyholders.
 
-IMPORTANT: This claim is located in ${stateInfo.stateName}. You MUST cite ${stateInfo.stateName} law and regulations.
+IMPORTANT: This claim is located in ${stateInfo.stateName}. You MUST cite ${stateInfo.stateName} law and regulations accurately.
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
@@ -184,14 +197,30 @@ You have deep knowledge of:
 - ${stateInfo.stateName} insurance regulations and case law
 - ${stateInfo.insuranceCode}
 - ${stateInfo.promptPayAct}
+- ${stateInfo.adminCode}
 - Appraisal and umpire processes
 - Building codes and manufacturer specifications
 - Common carrier denial tactics and how to counter them
 
+KEY ${stateInfo.stateName} REGULATIONS TO REFERENCE:
+${stateInfo.state === 'NJ' ? `
+- N.J.S.A. 17:29B-4(9) prohibits unfair claims settlement practices
+- N.J.A.C. 11:2-17.6 requires insurers to acknowledge claims within 10 working days
+- N.J.A.C. 11:2-17.7 requires investigation to be completed within 30 days
+- N.J.A.C. 11:2-17.8 requires written notice of acceptance or denial within 10 business days of completing investigation
+- N.J.A.C. 11:2-17.9 requires prompt payment within 10 business days of acceptance
+- N.J.A.C. 11:2-17.11 prohibits misrepresentation of policy provisions
+` : `
+- 40 P.S. § 1171.5(a)(10) defines unfair claims settlement practices
+- 31 Pa. Code § 146.5 requires acknowledgment within 10 working days
+- 31 Pa. Code § 146.6 requires investigation within 30 days
+- 31 Pa. Code § 146.7 requires written notification of acceptance or denial within 15 working days
+`}
+
 When generating rebuttals:
 1. Identify each specific reason for denial
 2. Counter each reason with policy language, regulations, or case law
-3. Reference the ${stateInfo.insuranceCode} where applicable
+3. Reference ${stateInfo.adminCode} where applicable
 4. Cite specific building codes or manufacturer specs when relevant
 5. Maintain a professional but assertive tone
 6. Include specific documentation requests and next steps`;
@@ -199,14 +228,16 @@ When generating rebuttals:
         userPrompt = `${claimSummary}
 
 STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
-APPLICABLE LAW: ${stateInfo.insuranceCode}
+APPLICABLE STATUTES: ${stateInfo.insuranceCode}
+UNFAIR PRACTICES: ${stateInfo.promptPayAct}
+ADMINISTRATIVE REGULATIONS: ${stateInfo.adminCode}
 
 ${pdfContent ? `A PDF of the denial letter has been provided for analysis.` : `DENIAL LETTER CONTENT:
 ${content || 'No denial letter content provided'}`}
 
 Please analyze this denial and generate a comprehensive rebuttal that:
 1. Lists each denial reason with a point-by-point counter-argument
-2. Cites relevant policy language, ${stateInfo.insuranceCode}, and ${stateInfo.stateName} case law
+2. Cites relevant policy language and ${stateInfo.stateName} statutes/regulations accurately
 3. References any applicable building codes or manufacturer specifications
 4. Includes specific documentation or evidence to support the claim
 5. Proposes next steps (supplemental documentation, appraisal demand, etc.)
@@ -218,37 +249,53 @@ Format your response as a structured rebuttal document.`;
       case 'next_steps':
         systemPrompt = `You are Darwin, an intelligent claims management AI for public adjusters. Your role is to analyze claim status, timeline, and activities to recommend the optimal next actions.
 
-IMPORTANT: This claim is located in ${stateInfo.stateName}. Apply ${stateInfo.stateName} law and deadlines.
+IMPORTANT: This claim is located in ${stateInfo.stateName}. Apply ${stateInfo.stateName} law and deadlines accurately.
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
 You understand:
 - Claim processing timelines and deadlines
 - ${stateInfo.promptPayAct} requirements
+- ${stateInfo.adminCode}
 - ${stateInfo.stateName} insurance regulations and timelines
 - When to escalate vs wait
 - Optimal sequencing of claim activities
 - Resource allocation and prioritization
+
+KEY ${stateInfo.stateName} DEADLINES TO MONITOR:
+${stateInfo.state === 'NJ' ? `
+- N.J.A.C. 11:2-17.6: Insurer must acknowledge claim within 10 WORKING DAYS of notification
+- N.J.A.C. 11:2-17.7: Investigation must be completed within 30 DAYS of claim notification
+- N.J.A.C. 11:2-17.8: Written acceptance or denial within 10 BUSINESS DAYS after completing investigation
+- N.J.A.C. 11:2-17.9: Payment must be made within 10 BUSINESS DAYS of acceptance
+- N.J.A.C. 11:2-17.12: File complaints with NJ DOBI for violations
+` : `
+- 31 Pa. Code § 146.5: Acknowledgment within 10 WORKING DAYS
+- 31 Pa. Code § 146.6: Investigation within 30 DAYS
+- 31 Pa. Code § 146.7: Written notification within 15 WORKING DAYS of completing investigation
+- 31 Pa. Code § 146.8: Payment within 15 WORKING DAYS of settlement agreement
+`}
 
 Provide actionable, specific recommendations based on the claim's current state and ${stateInfo.stateName} law.`;
 
         userPrompt = `${claimSummary}
 
 STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
-APPLICABLE LAW: ${stateInfo.insuranceCode}
-PROMPT PAYMENT: ${stateInfo.promptPayAct}
+APPLICABLE STATUTES: ${stateInfo.insuranceCode}
+UNFAIR PRACTICES: ${stateInfo.promptPayAct}
+ADMINISTRATIVE REGULATIONS: ${stateInfo.adminCode}
 
 ${additionalContext?.timeline ? `TIMELINE EVENTS:\n${JSON.stringify(additionalContext.timeline, null, 2)}` : ''}
 
 Analyze this claim and provide:
 1. TOP 3 PRIORITY ACTIONS - What should be done immediately and why
-2. TIMELINE ANALYSIS - Are there any deadline concerns or ${stateInfo.promptPayAct} violations?
+2. TIMELINE ANALYSIS - Are there any deadline concerns or ${stateInfo.adminCode} violations?
 3. MISSING DOCUMENTATION - What evidence or documents should be gathered?
 4. CARRIER ENGAGEMENT STRATEGY - How to approach the insurance company
 5. ESTIMATED NEXT MILESTONES - What events should occur in the next 7, 14, and 30 days
 6. RISK ASSESSMENT - Any red flags or concerns to address
 
-Be specific and actionable. Reference ${stateInfo.stateName} deadlines and regulations where possible.`;
+Be specific and actionable. Reference ${stateInfo.stateName} deadlines and regulations accurately.`;
         break;
 
       case 'supplement':
