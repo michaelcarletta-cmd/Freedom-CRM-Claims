@@ -31,6 +31,11 @@ const MERGE_FIELDS = [
   { label: "Inspection Date", value: "{inspection.date}" },
   { label: "Inspection Time", value: "{inspection.time}" },
   { label: "Inspector Name", value: "{inspection.inspector}" },
+  { label: "Total RCV", value: "{settlement.total_rcv}" },
+  { label: "Total Net", value: "{settlement.total_net}" },
+  { label: "Total Deductible", value: "{settlement.total_deductible}" },
+  { label: "Dwelling RCV", value: "{settlement.dwelling_rcv}" },
+  { label: "Prior Offer", value: "{settlement.prior_offer}" },
 ];
 
 export default function SMSTemplatesSettings() {
