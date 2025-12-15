@@ -206,7 +206,20 @@ export const TemplatesSettings = () => {
             <div>{`\${mortgage_company}`}</div>
             <div>{`\${loan_number}`}</div>
             <div>{`\${ssn_last_four}`}</div>
-            <div>...and more</div>
+          </div>
+          <p className="mt-3 mb-2 font-medium">Settlement/Accounting Fields:</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
+            <div>{`\${settlement.total_rcv}`}</div>
+            <div>{`\${settlement.total_net}`}</div>
+            <div>{`\${settlement.total_deductible}`}</div>
+            <div>{`\${settlement.dwelling_rcv}`}</div>
+            <div>{`\${settlement.dwelling_acv}`}</div>
+            <div>{`\${settlement.dwelling_net}`}</div>
+            <div>{`\${settlement.other_structures_rcv}`}</div>
+            <div>{`\${settlement.pwi_rcv}`}</div>
+            <div>{`\${settlement.prior_offer}`}</div>
+            <div>{`\${settlement.total_checks}`}</div>
+            <div>{`\${settlement.outstanding}`}</div>
           </div>
         </AlertDescription>
       </Alert>

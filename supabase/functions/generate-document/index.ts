@@ -43,6 +43,52 @@ serve(async (req) => {
 
     if (claimError) throw claimError;
 
+    // Fetch settlement data
+    const { data: settlements } = await supabaseClient
+      .from("claim_settlements")
+      .select("*")
+      .eq("claim_id", claimId);
+
+    // Fetch checks data
+    const { data: checks } = await supabaseClient
+      .from("claim_checks")
+      .select("*")
+      .eq("claim_id", claimId);
+
+    // Calculate settlement totals
+    const settlement = settlements?.[0] || {};
+    const dwellingRcv = Number(settlement.replacement_cost_value) || 0;
+    const dwellingRecDep = Number(settlement.recoverable_depreciation) || 0;
+    const dwellingNonRecDep = Number(settlement.non_recoverable_depreciation) || 0;
+    const dwellingDeductible = Number(settlement.deductible) || 0;
+    const dwellingAcv = dwellingRcv - dwellingRecDep - dwellingNonRecDep;
+    const dwellingNet = dwellingAcv - dwellingDeductible;
+
+    const otherStructuresRcv = Number(settlement.other_structures_rcv) || 0;
+    const otherStructuresRecDep = Number(settlement.other_structures_recoverable_depreciation) || 0;
+    const otherStructuresNonRecDep = Number(settlement.other_structures_non_recoverable_depreciation) || 0;
+    const otherStructuresDeductible = Number(settlement.other_structures_deductible) || 0;
+    const otherStructuresAcv = otherStructuresRcv - otherStructuresRecDep - otherStructuresNonRecDep;
+    const otherStructuresNet = otherStructuresAcv - otherStructuresDeductible;
+
+    const pwiRcv = Number(settlement.pwi_rcv) || 0;
+    const pwiRecDep = Number(settlement.pwi_recoverable_depreciation) || 0;
+    const pwiNonRecDep = Number(settlement.pwi_non_recoverable_depreciation) || 0;
+    const pwiDeductible = Number(settlement.pwi_deductible) || 0;
+    const pwiAcv = pwiRcv - pwiRecDep - pwiNonRecDep;
+    const pwiNet = pwiAcv - pwiDeductible;
+
+    const totalRcv = dwellingRcv + otherStructuresRcv + pwiRcv;
+    const totalDeductible = dwellingDeductible + otherStructuresDeductible + pwiDeductible;
+    const totalNet = dwellingNet + otherStructuresNet + pwiNet;
+    const priorOffer = Number(settlement.prior_offer) || 0;
+    const totalRecoverableDep = dwellingRecDep + otherStructuresRecDep + pwiRecDep;
+
+    const totalChecks = checks?.reduce((sum, c) => sum + (Number(c.amount) || 0), 0) || 0;
+    const outstanding = (totalRcv - totalDeductible) - totalChecks;
+
+    const formatCurrency = (val: number) => `$${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
     // Download template file
     const { data: fileData, error: downloadError } = await supabaseClient.storage
       .from("document-templates")
@@ -158,6 +204,29 @@ serve(async (req) => {
       // Current date
       date: new Date().toLocaleDateString(),
       today: new Date().toLocaleDateString(),
+      // Settlement/Accounting data
+      settlement: {
+        dwelling_rcv: formatCurrency(dwellingRcv),
+        dwelling_acv: formatCurrency(dwellingAcv),
+        dwelling_net: formatCurrency(dwellingNet),
+        dwelling_deductible: formatCurrency(dwellingDeductible),
+        dwelling_recoverable_dep: formatCurrency(dwellingRecDep),
+        other_structures_rcv: formatCurrency(otherStructuresRcv),
+        other_structures_acv: formatCurrency(otherStructuresAcv),
+        other_structures_net: formatCurrency(otherStructuresNet),
+        other_structures_deductible: formatCurrency(otherStructuresDeductible),
+        pwi_rcv: formatCurrency(pwiRcv),
+        pwi_acv: formatCurrency(pwiAcv),
+        pwi_net: formatCurrency(pwiNet),
+        pwi_deductible: formatCurrency(pwiDeductible),
+        total_rcv: formatCurrency(totalRcv),
+        total_net: formatCurrency(totalNet),
+        total_deductible: formatCurrency(totalDeductible),
+        total_recoverable_dep: formatCurrency(totalRecoverableDep),
+        prior_offer: formatCurrency(priorOffer),
+        total_checks: formatCurrency(totalChecks),
+        outstanding: formatCurrency(outstanding),
+      },
     };
 
     // Render the document
