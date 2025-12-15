@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,6 +32,8 @@ import { DarwinDocumentCompiler } from "@/components/claim-detail/DarwinDocument
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface Contractor {
   contractor_id: string;
@@ -47,17 +49,46 @@ const ClaimDetail = () => {
   const navigate = useNavigate();
   const { userRole } = useAuth();
   const { toast } = useToast();
-  const [claim, setClaim] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
-  const [contractors, setContractors] = useState<Contractor[]>([]);
 
   // Check if user is a portal user (client, contractor)
   const isPortalUser = userRole === "client" || userRole === "contractor";
   const isStaffOrAdmin = userRole === "admin" || userRole === "staff";
+
+  // Fetch claim with React Query for caching
+  const { data: claim, isLoading } = useQuery({
+    queryKey: ["claim", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claims")
+        .select("*")
+        .eq("id", id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+    staleTime: 30000, // Cache for 30 seconds
+  });
+
+  // Fetch contractors with React Query
+  const { data: contractors = [] } = useQuery({
+    queryKey: ["claim-contractors", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_contractors")
+        .select("contractor_id")
+        .eq("claim_id", id);
+      if (error) throw error;
+      return (data || []) as Contractor[];
+    },
+    enabled: !!id,
+    staleTime: 30000,
+  });
 
   // Generate claim-specific email address using policy number
   const getClaimEmail = (claim: any): string => {
@@ -75,49 +106,14 @@ const ClaimDetail = () => {
     return `claim-${claim.claim_email_id}@${domain}`;
   };
 
-  useEffect(() => {
-    if (id) {
-      fetchClaim();
-      fetchContractors();
-    }
-  }, [id]);
-
-
-  const fetchClaim = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("claims")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (error) throw error;
-      setClaim(data);
-    } catch (error) {
-      console.error("Error fetching claim:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchContractors = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("claim_contractors")
-        .select("contractor_id")
-        .eq("claim_id", id);
-
-      if (error) throw error;
-      setContractors(data || []);
-    } catch (error) {
-      console.error("Error fetching contractors:", error);
-    }
-  };
-
   const handleStatusChange = (newStatus: string) => {
-    if (claim) {
-      setClaim({ ...claim, status: newStatus });
-    }
+    queryClient.setQueryData(["claim", id], (old: any) => 
+      old ? { ...old, status: newStatus } : old
+    );
+  };
+
+  const handleClaimUpdated = (updatedClaim: any) => {
+    queryClient.setQueryData(["claim", id], updatedClaim);
   };
 
   const toggleClosedStatus = async () => {
@@ -133,7 +129,9 @@ const ClaimDetail = () => {
 
       if (error) throw error;
 
-      setClaim({ ...claim, is_closed: newIsClosed });
+      queryClient.setQueryData(["claim", id], (old: any) => 
+        old ? { ...old, is_closed: newIsClosed } : old
+      );
       toast({
         title: "Status updated",
         description: newIsClosed
@@ -156,8 +154,25 @@ const ClaimDetail = () => {
     return "/claims";
   };
 
-  if (loading) {
-    return <div className="p-8">Loading...</div>;
+  // Skeleton loading component
+  if (isLoading) {
+    return (
+      <div className="space-y-4 md:space-y-6 p-4 md:p-6 bg-background min-h-screen">
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-10 w-10 rounded-md" />
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-full max-w-lg" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </div>
+    );
   }
 
   if (!claim) {
@@ -239,7 +254,7 @@ const ClaimDetail = () => {
             open={editDialogOpen}
             onOpenChange={setEditDialogOpen}
             claim={claim}
-            onClaimUpdated={(updatedClaim) => setClaim(updatedClaim)}
+            onClaimUpdated={handleClaimUpdated}
           />
 
           <DeleteClaimDialog
@@ -310,7 +325,7 @@ const ClaimDetail = () => {
           <ClaimOverview 
             claim={claim} 
             isPortalUser={isPortalUser} 
-            onClaimUpdated={(updatedClaim) => setClaim(updatedClaim)}
+            onClaimUpdated={handleClaimUpdated}
           />
         </TabsContent>
 
