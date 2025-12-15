@@ -224,6 +224,12 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     setGenerating(true);
     setAiReport(null);
     
+    // Inform user to stay on page
+    toast({ 
+      title: "Generating report...", 
+      description: "This may take 2-3 minutes. Please stay on this page until complete.",
+    });
+    
     try {
       // Use fetch directly with extended timeout for large photo batches (10 minutes)
       const controller = new AbortController();
