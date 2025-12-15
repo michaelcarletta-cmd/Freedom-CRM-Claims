@@ -147,7 +147,37 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   const [aiSupportingDocs, setAiSupportingDocs] = useState<{ name: string; url: string }[]>([]);
   const [weatherData, setWeatherData] = useState<any>(null);
   const [previewingWeather, setPreviewingWeather] = useState(false);
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [pollingForResult, setPollingForResult] = useState(false);
   const { toast } = useToast();
+
+  // Check for recently completed photo reports when dialog opens
+  useEffect(() => {
+    const checkForRecentReport = async () => {
+      if (!open || !claimId) return;
+      
+      // Check if there's a recent photo report (within last 10 minutes)
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const { data: recentReport } = await supabase
+        .from("darwin_analysis_results")
+        .select("*")
+        .eq("claim_id", claimId)
+        .like("analysis_type", "photo_report_%")
+        .gte("created_at", tenMinutesAgo)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (recentReport && !aiReport) {
+        toast({
+          title: "Previous report found",
+          description: "A recently generated report was found. View it in Darwin tab or generate a new one.",
+        });
+      }
+    };
+    
+    checkForRecentReport();
+  }, [open, claimId]);
 
   useEffect(() => {
     if (open) {
@@ -159,6 +189,8 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       setAiSupportingDocs([]);
       setWeatherData(null);
       setPreviewingWeather(false);
+      setCurrentJobId(null);
+      setPollingForResult(false);
     }
   }, [open, claim, photos]);
 
@@ -270,6 +302,9 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       setAiPhotoUrls(data.photoUrls || []);
       setAiSupportingDocs(data.supportingDocs || []);
       setWeatherData(data.weatherData || null);
+      if (data.jobId) {
+        setCurrentJobId(data.jobId);
+      }
       
       // Notify if photos were limited
       if (data.wasLimited) {
@@ -282,16 +317,85 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       }
     } catch (error: any) {
       console.error("AI report error:", error);
-      const errorMessage = error.name === 'AbortError' 
-        ? "Request timed out. Try selecting fewer photos (max 30 recommended)."
-        : error.message || "Please try again";
-      toast({ 
-        title: "Error generating AI report", 
-        description: errorMessage,
-        variant: "destructive" 
-      });
+      if (error.name === 'AbortError' || error.message?.includes('connection')) {
+        // Connection issue - start polling for completed report
+        setPollingForResult(true);
+        toast({ 
+          title: "Connection interrupted", 
+          description: "Checking for completed report in background...",
+        });
+        pollForResult();
+      } else {
+        toast({ 
+          title: "Error generating AI report", 
+          description: error.message || "Please try again",
+          variant: "destructive" 
+        });
+      }
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const pollForResult = async () => {
+    // Check for recently completed photo reports
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    
+    for (let i = 0; i < 20; i++) { // Poll for up to ~2 minutes
+      await new Promise(resolve => setTimeout(resolve, 6000)); // Wait 6 seconds
+      
+      const { data: recentReport } = await supabase
+        .from("darwin_analysis_results")
+        .select("*")
+        .eq("claim_id", claimId)
+        .like("analysis_type", "photo_report_%")
+        .gte("created_at", fiveMinutesAgo)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (recentReport) {
+        setAiReport(recentReport.result);
+        setPollingForResult(false);
+        toast({ title: "Report retrieved!", description: "Your report completed successfully." });
+        return;
+      }
+    }
+    
+    setPollingForResult(false);
+    toast({ 
+      title: "Report may still be processing", 
+      description: "Check the Darwin tab later for completed reports.",
+      variant: "destructive" 
+    });
+  };
+
+  const checkForCompletedReport = async () => {
+    setPollingForResult(true);
+    toast({ title: "Checking for completed reports..." });
+    
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { data: recentReport } = await supabase
+      .from("darwin_analysis_results")
+      .select("*")
+      .eq("claim_id", claimId)
+      .like("analysis_type", "photo_report_%")
+      .gte("created_at", tenMinutesAgo)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    setPollingForResult(false);
+    
+    if (recentReport) {
+      setAiReport(recentReport.result);
+      toast({ title: "Report found!", description: "Loaded the most recent report." });
+    } else {
+      toast({ 
+        title: "No recent reports found", 
+        description: "No reports completed in the last 10 minutes.",
+        variant: "destructive" 
+      });
     }
   };
 
@@ -819,19 +923,38 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
                   Save & Download Report
                 </Button>
               ) : (
-                <Button onClick={generateAIReport} disabled={generating || selectedPhotos.length === 0}>
-                  {generating ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Analyzing Photos...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Generate AI Report
-                    </>
+                <div className="flex gap-2">
+                  {(generating || pollingForResult) && (
+                    <Button variant="outline" onClick={checkForCompletedReport} disabled={pollingForResult}>
+                      {pollingForResult ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Checking...
+                        </>
+                      ) : (
+                        "Check for Completed Report"
+                      )}
+                    </Button>
                   )}
-                </Button>
+                  <Button onClick={generateAIReport} disabled={generating || pollingForResult || selectedPhotos.length === 0}>
+                    {generating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Analyzing (stay on page)...
+                      </>
+                    ) : pollingForResult ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Retrieving...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Generate AI Report
+                      </>
+                    )}
+                  </Button>
+                </div>
               )}
             </DialogFooter>
           </TabsContent>

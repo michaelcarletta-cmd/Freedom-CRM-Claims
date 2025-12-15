@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
+declare const EdgeRuntime: {
+  waitUntil: (promise: Promise<any>) => void;
+};
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -231,14 +235,39 @@ serve(async (req) => {
   }
 
   try {
-    const { photoIds, claimId, reportType, weatherOnly, documentIds } = await req.json();
+    const { photoIds, claimId, reportType, weatherOnly, documentIds, checkJob } = await req.json();
+    
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Poll for existing job result
+    if (checkJob) {
+      const { data: result } = await supabase
+        .from("darwin_analysis_results")
+        .select("*")
+        .eq("id", checkJob)
+        .single();
+      
+      if (result) {
+        return new Response(
+          JSON.stringify({ 
+            status: "complete",
+            report: result.result,
+            reportType: result.analysis_type,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      return new Response(
+        JSON.stringify({ status: "processing" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     // Handle weather-only preview requests
     if (weatherOnly && claimId) {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      
       const { data: claim } = await supabase
         .from("claims")
         .select("policyholder_address, loss_date")
@@ -282,9 +311,7 @@ serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // supabase client already initialized above
 
     // Fetch claim details
     let claimContext = "";
@@ -662,9 +689,28 @@ ${claimContext}
 
     console.log("Photo analysis complete, final report length:", reportContent.length);
 
+    // Save report to darwin_analysis_results so it persists even if connection drops
+    const jobId = crypto.randomUUID();
+    const { error: saveError } = await supabase
+      .from("darwin_analysis_results")
+      .insert({
+        id: jobId,
+        claim_id: claimId,
+        analysis_type: `photo_report_${reportType}`,
+        result: reportContent,
+        input_summary: `${photos.length} photos analyzed`,
+      });
+    
+    if (saveError) {
+      console.error("Failed to save report to database:", saveError);
+    } else {
+      console.log("Report saved to database with jobId:", jobId);
+    }
+
     return new Response(
       JSON.stringify({ 
         report: reportContent,
+        jobId,
         photoCount: photos.length,
         reportType,
         photoUrls: photoUrls,
