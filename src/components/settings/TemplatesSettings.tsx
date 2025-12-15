@@ -221,6 +221,17 @@ export const TemplatesSettings = () => {
             <div>{`\${settlement.total_checks}`}</div>
             <div>{`\${settlement.outstanding}`}</div>
           </div>
+          <p className="mt-3 mb-2 font-medium">Depreciation Fields:</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
+            <div>{`\${settlement.dwelling_recoverable_dep}`}</div>
+            <div>{`\${settlement.dwelling_non_recoverable_dep}`}</div>
+            <div>{`\${settlement.other_structures_recoverable_dep}`}</div>
+            <div>{`\${settlement.other_structures_non_recoverable_dep}`}</div>
+            <div>{`\${settlement.pwi_recoverable_dep}`}</div>
+            <div>{`\${settlement.pwi_non_recoverable_dep}`}</div>
+            <div>{`\${settlement.total_recoverable_dep}`}</div>
+            <div>{`\${settlement.total_non_recoverable_dep}`}</div>
+          </div>
         </AlertDescription>
       </Alert>
 
