@@ -135,6 +135,11 @@ serve(async (req) => {
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
+      nullGetter: () => "",
+      delimiters: {
+        start: "${",
+        end: "}"
+      }
     });
 
     // Parse address from policyholder_address field
