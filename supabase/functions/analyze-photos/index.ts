@@ -6,8 +6,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Batch size for processing photos (OpenAI vision works best with ~20 images at a time)
-const BATCH_SIZE = 20;
+// Batch size for processing photos - reduced for faster processing
+const BATCH_SIZE = 15;
+// Maximum photos to process in a single request to avoid timeouts
+const MAX_PHOTOS = 30;
 
 // Fetch historical weather data using Visual Crossing API
 async function fetchWeatherData(address: string, lossDate: string): Promise<any> {
@@ -265,6 +267,13 @@ serve(async (req) => {
       );
     }
 
+    // Limit photos to prevent timeout
+    const limitedPhotoIds = photoIds.slice(0, MAX_PHOTOS);
+    const wasLimited = photoIds.length > MAX_PHOTOS;
+    if (wasLimited) {
+      console.log(`Photo count limited from ${photoIds.length} to ${MAX_PHOTOS} to prevent timeout`);
+    }
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       return new Response(
@@ -402,11 +411,11 @@ Day After (${weatherData.daily.dates?.[2]}):
       }
     }
 
-    // Fetch photos with signed URLs
+    // Fetch photos with signed URLs (using limited list)
     const { data: photos, error: photosError } = await supabase
       .from("claim_photos")
       .select("*")
-      .in("id", photoIds);
+      .in("id", limitedPhotoIds);
 
     if (photosError || !photos || photos.length === 0) {
       return new Response(
@@ -415,7 +424,10 @@ Day After (${weatherData.daily.dates?.[2]}):
       );
     }
 
-    console.log(`Analyzing ${photos.length} photos for claim ${claimId} (batch size: ${BATCH_SIZE})`);
+    console.log(`Analyzing ${photos.length} photos for claim ${claimId} (batch size: ${BATCH_SIZE}, max: ${MAX_PHOTOS})`);
+    if (wasLimited) {
+      console.log(`Note: ${photoIds.length - MAX_PHOTOS} additional photos were excluded due to limits`);
+    }
 
     // Get signed URLs and build image content for AI
     const allImageContents: any[] = [];
@@ -659,7 +671,9 @@ ${claimContext}
         weatherData: weatherData,
         supportingDocs: supportingDocsInfo,
         batchesProcessed: batchResults.length,
-        totalBatches
+        totalBatches,
+        wasLimited,
+        originalPhotoCount: photoIds.length
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

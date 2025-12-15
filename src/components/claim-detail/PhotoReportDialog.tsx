@@ -212,6 +212,15 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       return;
     }
 
+    // Warn if more than 30 photos selected
+    if (selectedPhotos.length > 30) {
+      toast({ 
+        title: "Photo limit exceeded", 
+        description: "Only the first 30 photos will be analyzed to prevent timeout. Select fewer photos for best results.",
+        variant: "destructive" 
+      });
+    }
+
     setGenerating(true);
     setAiReport(null);
     
@@ -255,11 +264,20 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       setAiPhotoUrls(data.photoUrls || []);
       setAiSupportingDocs(data.supportingDocs || []);
       setWeatherData(data.weatherData || null);
-      toast({ title: "Analysis complete" });
+      
+      // Notify if photos were limited
+      if (data.wasLimited) {
+        toast({ 
+          title: "Analysis complete", 
+          description: `Analyzed ${data.photoCount} of ${data.originalPhotoCount} photos (limited to prevent timeout)`
+        });
+      } else {
+        toast({ title: "Analysis complete" });
+      }
     } catch (error: any) {
       console.error("AI report error:", error);
       const errorMessage = error.name === 'AbortError' 
-        ? "Request timed out. Try selecting fewer photos."
+        ? "Request timed out. Try selecting fewer photos (max 30 recommended)."
         : error.message || "Please try again";
       toast({ 
         title: "Error generating AI report", 
