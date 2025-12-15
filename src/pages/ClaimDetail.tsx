@@ -29,6 +29,7 @@ import { DarwinCorrespondenceAnalyzer } from "@/components/claim-detail/DarwinCo
 import { DarwinEngineerReportAnalyzer } from "@/components/claim-detail/DarwinEngineerReportAnalyzer";
 import { DarwinClaimBriefing } from "@/components/claim-detail/DarwinClaimBriefing";
 import { DarwinDocumentCompiler } from "@/components/claim-detail/DarwinDocumentCompiler";
+import { DarwinDemandPackage } from "@/components/claim-detail/DarwinDemandPackage";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -401,7 +402,10 @@ const ClaimDetail = () => {
                 <DarwinCorrespondenceAnalyzer claimId={claim.id} claim={claim} />
               </div>
               
-              {/* Document Compiler - Compile photos and documents into reports */}
+              {/* Demand Package Builder - Primary tool for building cases from evidence */}
+              <DarwinDemandPackage claimId={claim.id} claim={claim} />
+              
+              {/* Document Compiler - Legacy tool for compiling photos and documents */}
               <DarwinDocumentCompiler claimId={claim.id} claim={claim} />
               
               {/* Document Generation Tools */}

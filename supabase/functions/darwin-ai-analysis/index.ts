@@ -164,10 +164,11 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
+  pdfContents?: Array<{ name: string; content: string; folder?: string }>; // Multiple PDFs for demand package
   additionalContext?: any;
   claim?: any; // Full claim object for briefing
   contextData?: any; // Additional context data
@@ -189,7 +190,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { claimId, analysisType, content, pdfContent, pdfFileName, additionalContext, claim: providedClaim, contextData, darwinNotes: providedNotes }: AnalysisRequest = await req.json();
+    const { claimId, analysisType, content, pdfContent, pdfFileName, pdfContents, additionalContext, claim: providedClaim, contextData, darwinNotes: providedNotes }: AnalysisRequest = await req.json();
     console.log(`Darwin AI Analysis - Type: ${analysisType}, Claim: ${claimId}, Has PDF: ${!!pdfContent}`);
 
     // Fetch claim data
@@ -1031,6 +1032,115 @@ ${compileContext.reportType === 'demand_letter' ? `
 Create a professional, complete document ready for carrier submission.`;
         break;
 
+      case 'demand_package': {
+        const dpContext = additionalContext || {};
+        
+        // Fetch knowledge base for demand packages
+        const kbContent = await searchKnowledgeBase(
+          supabase,
+          'insurance claim demand settlement depreciation coverage policy ACV RCV building code',
+          'building-codes'
+        );
+        
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in creating comprehensive demand packages for insurance claims. You have been given evidence documents to analyze and use to build a compelling case.
+
+IMPORTANT: This claim is located in ${stateInfo.stateName}. Apply ${stateInfo.stateName} law and regulations.
+
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
+
+Your expertise includes:
+- Analyzing inspection reports, estimates, and other evidence documents
+- Extracting key facts and damage documentation from source materials
+- Building persuasive arguments based on documented evidence
+- Understanding insurance policy interpretation
+- ${stateInfo.insuranceCode}
+- ${stateInfo.promptPayAct}
+- Building codes, manufacturer specifications, and industry standards
+
+CRITICAL INSTRUCTION: You MUST thoroughly review and analyze the content of each uploaded document. Extract specific details, quotes, measurements, and findings from the documents to support your arguments. Do not make generic statements - use the actual evidence from the documents.`;
+
+        const photoList = dpContext.photos?.map((p: any) => 
+          `Photo ${p.number}: ${p.category}${p.description ? ` - ${p.description}` : ''}`
+        ).join('\n') || 'No photos included';
+
+        const docList = dpContext.documents?.map((d: any, i: number) => 
+          `Document ${i + 1}: ${d.name} (${d.folder || 'Uncategorized'})`
+        ).join('\n') || 'No documents provided';
+
+        userPrompt = `${claimSummary}
+
+STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
+APPLICABLE LAW: ${stateInfo.insuranceCode}
+UNFAIR PRACTICES: ${stateInfo.promptPayAct}
+
+${kbContent || ''}
+
+EVIDENCE DOCUMENTS PROVIDED FOR ANALYSIS (${dpContext.documentCount || 0} total):
+${docList}
+
+${dpContext.photoCount > 0 ? `PHOTOS REFERENCED (${dpContext.photoCount} total):\n${photoList}` : ''}
+
+${dpContext.additionalInstructions ? `USER INSTRUCTIONS:\n${dpContext.additionalInstructions}` : ''}
+
+IMPORTANT: The PDF documents have been provided for you to analyze. Read through each document carefully and extract:
+- Specific damage findings and measurements
+- Inspector/engineer observations and conclusions
+- Cost estimates and line items
+- Photos descriptions and damage documentation
+- Any other relevant evidence
+
+Using the evidence from these documents, create a COMPREHENSIVE DEMAND PACKAGE that includes:
+
+1. EXECUTIVE SUMMARY
+   - Brief overview of the claim and total damages
+   - Key evidence supporting the claim
+   - Settlement demand amount
+
+2. STATEMENT OF FACTS
+   - Loss date and circumstances from evidence
+   - Property description
+   - Timeline of events
+   - Insurance claim history
+
+3. EVIDENCE ANALYSIS
+   - Detailed analysis of each document provided
+   - Key findings extracted from inspection reports
+   - Damage documentation with specific references
+   - Cost justification from estimates
+
+4. DAMAGES BREAKDOWN
+   - Category-by-category damage summary
+   - Specific items and costs from evidence
+   - Total replacement cost value (RCV)
+   - Recoverable depreciation analysis
+
+5. LEGAL AND REGULATORY BASIS
+   - ${stateInfo.insuranceCode} requirements
+   - ${stateInfo.promptPayAct} compliance obligations
+   - Policy provisions requiring payment
+   - Unfair claims practices violations if applicable
+
+6. RESTORATION REQUIREMENTS
+   - Building code requirements
+   - Manufacturer specifications
+   - Industry standards (NRCA, IRC, etc.)
+   - Why full replacement is required vs repair
+
+7. EXHIBITS REFERENCE
+   - List of all attached documents
+   - Photo exhibit references
+   - Supporting evidence summary
+
+8. FORMAL DEMAND
+   - Specific amount demanded with breakdown
+   - Response deadline
+   - Warning of further action if not resolved
+   - Request for written response
+
+Create a professional, comprehensive demand package that thoroughly uses the evidence from the provided documents to support every argument and claim.`;
+        break;
+      }
+
       default:
         throw new Error(`Unknown analysis type: ${analysisType}`);
 
@@ -1039,7 +1149,33 @@ Create a professional, complete document ready for carrier submission.`;
     // Build messages array - handle PDF content with multimodal format
     let messages: any[];
     
-    if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'supplement' || analysisType === 'document_compilation')) {
+    // Handle multiple PDFs for demand_package
+    if (pdfContents && pdfContents.length > 0 && analysisType === 'demand_package') {
+      const contentParts: any[] = [];
+      
+      // Add each PDF as an image_url (Gemini will process PDFs this way)
+      for (const pdf of pdfContents.slice(0, 5)) { // Limit to 5 PDFs to avoid token limits
+        contentParts.push({
+          type: 'image_url',
+          image_url: {
+            url: `data:application/pdf;base64,${pdf.content}`
+          }
+        });
+      }
+      
+      // Add the text prompt last
+      contentParts.push({
+        type: 'text',
+        text: userPrompt
+      });
+      
+      messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: contentParts }
+      ];
+      
+      console.log(`Demand package with ${pdfContents.length} PDFs (processing ${Math.min(pdfContents.length, 5)})`);
+    } else if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'supplement' || analysisType === 'document_compilation')) {
       // Use multimodal format for PDF analysis with Gemini-compatible inline_data format
       messages = [
         { role: 'system', content: systemPrompt },
@@ -1068,7 +1204,7 @@ Create a professional, complete document ready for carrier submission.`;
     }
 
     // Call Lovable AI - use gemini-2.5-pro for PDF analysis (better document understanding)
-    const model = pdfContent ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
+    const model = (pdfContent || (pdfContents && pdfContents.length > 0)) ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
     console.log(`Using model: ${model}`);
     
     // For task_followup, use tool calling to get structured actions
