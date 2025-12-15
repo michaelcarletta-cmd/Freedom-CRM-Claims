@@ -114,7 +114,7 @@ async function fetchWeatherData(address: string, lossDate: string): Promise<any>
   }
 }
 
-// Process a batch of photos with the AI
+// Process a batch of photos with the AI using Lovable AI
 async function processBatch(
   imageContents: any[],
   photoDescriptions: string[],
@@ -122,7 +122,7 @@ async function processBatch(
   totalBatches: number,
   systemPrompt: string,
   basePrompt: string,
-  OPENAI_API_KEY: string
+  LOVABLE_API_KEY: string
 ): Promise<string> {
   const batchPrompt = totalBatches > 1 
     ? `${basePrompt}\n\n[BATCH ${batchNumber} of ${totalBatches}]\nThis batch contains photos ${photoDescriptions.map(d => d.split(':')[0]).join(', ')}.`
@@ -130,14 +130,14 @@ async function processBatch(
 
   console.log(`Processing batch ${batchNumber}/${totalBatches} with ${imageContents.length} images...`);
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      model: "google/gemini-2.5-pro",
       messages: [
         { role: "system", content: systemPrompt },
         {
@@ -148,13 +148,18 @@ async function processBatch(
           ]
         }
       ],
-      max_tokens: 8000,
     }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
     console.error(`Batch ${batchNumber} failed:`, response.status, errorText);
+    if (response.status === 429) {
+      throw new Error(`Rate limit exceeded. Please try again later.`);
+    }
+    if (response.status === 402) {
+      throw new Error(`Payment required. Please add funds to your Lovable AI workspace.`);
+    }
     throw new Error(`AI API error: ${response.status}`);
   }
 
@@ -162,12 +167,12 @@ async function processBatch(
   return result.choices?.[0]?.message?.content || '';
 }
 
-// Combine batch results into a cohesive report
+// Combine batch results into a cohesive report using Lovable AI
 async function combineResults(
   batchResults: string[],
   reportType: string,
   claimContext: string,
-  OPENAI_API_KEY: string
+  LOVABLE_API_KEY: string
 ): Promise<string> {
   if (batchResults.length === 1) {
     return batchResults[0];
@@ -194,19 +199,18 @@ ${batchResults.map((r, i) => `=== BATCH ${i + 1} ANALYSIS ===\n${r}\n`).join('\n
 
 Create a single, unified report that incorporates all the above analyses.`;
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      model: "google/gemini-2.5-flash",
       messages: [
         { role: "system", content: "You are an expert at combining forensic analysis reports into cohesive documents." },
         { role: "user", content: combinePrompt }
       ],
-      max_tokens: 12000,
     }),
   });
 
@@ -261,10 +265,10 @@ serve(async (req) => {
       );
     }
 
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "OpenAI API key not configured" }),
+        JSON.stringify({ error: "Lovable API key not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -619,7 +623,7 @@ ${claimContext}
           totalBatches,
           systemPrompt,
           userPrompt,
-          OPENAI_API_KEY
+          LOVABLE_API_KEY
         );
         batchResults.push(batchResult);
         console.log(`Batch ${i + 1}/${totalBatches} complete, result length: ${batchResult.length}`);
@@ -639,7 +643,7 @@ ${claimContext}
     // Combine batch results
     let reportContent: string;
     if (batchResults.length > 1) {
-      reportContent = await combineResults(batchResults, reportType, claimContext, OPENAI_API_KEY);
+      reportContent = await combineResults(batchResults, reportType, claimContext, LOVABLE_API_KEY);
     } else {
       reportContent = batchResults[0];
     }
