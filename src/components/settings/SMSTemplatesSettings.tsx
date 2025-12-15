@@ -36,6 +36,8 @@ const MERGE_FIELDS = [
   { label: "Total Deductible", value: "{settlement.total_deductible}" },
   { label: "Dwelling RCV", value: "{settlement.dwelling_rcv}" },
   { label: "Prior Offer", value: "{settlement.prior_offer}" },
+  { label: "Total Recoverable Dep", value: "{settlement.total_recoverable_dep}" },
+  { label: "Total Non-Recoverable Dep", value: "{settlement.total_non_recoverable_dep}" },
 ];
 
 export default function SMSTemplatesSettings() {

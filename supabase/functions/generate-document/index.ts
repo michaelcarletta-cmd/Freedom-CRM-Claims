@@ -83,6 +83,7 @@ serve(async (req) => {
     const totalNet = dwellingNet + otherStructuresNet + pwiNet;
     const priorOffer = Number(settlement.prior_offer) || 0;
     const totalRecoverableDep = dwellingRecDep + otherStructuresRecDep + pwiRecDep;
+    const totalNonRecoverableDep = dwellingNonRecDep + otherStructuresNonRecDep + pwiNonRecDep;
 
     const totalChecks = checks?.reduce((sum, c) => sum + (Number(c.amount) || 0), 0) || 0;
     const outstanding = (totalRcv - totalDeductible) - totalChecks;
@@ -211,18 +212,24 @@ serve(async (req) => {
         dwelling_net: formatCurrency(dwellingNet),
         dwelling_deductible: formatCurrency(dwellingDeductible),
         dwelling_recoverable_dep: formatCurrency(dwellingRecDep),
+        dwelling_non_recoverable_dep: formatCurrency(dwellingNonRecDep),
         other_structures_rcv: formatCurrency(otherStructuresRcv),
         other_structures_acv: formatCurrency(otherStructuresAcv),
         other_structures_net: formatCurrency(otherStructuresNet),
         other_structures_deductible: formatCurrency(otherStructuresDeductible),
+        other_structures_recoverable_dep: formatCurrency(otherStructuresRecDep),
+        other_structures_non_recoverable_dep: formatCurrency(otherStructuresNonRecDep),
         pwi_rcv: formatCurrency(pwiRcv),
         pwi_acv: formatCurrency(pwiAcv),
         pwi_net: formatCurrency(pwiNet),
         pwi_deductible: formatCurrency(pwiDeductible),
+        pwi_recoverable_dep: formatCurrency(pwiRecDep),
+        pwi_non_recoverable_dep: formatCurrency(pwiNonRecDep),
         total_rcv: formatCurrency(totalRcv),
         total_net: formatCurrency(totalNet),
         total_deductible: formatCurrency(totalDeductible),
         total_recoverable_dep: formatCurrency(totalRecoverableDep),
+        total_non_recoverable_dep: formatCurrency(totalNonRecoverableDep),
         prior_offer: formatCurrency(priorOffer),
         total_checks: formatCurrency(totalChecks),
         outstanding: formatCurrency(outstanding),
