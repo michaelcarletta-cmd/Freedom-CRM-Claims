@@ -225,7 +225,7 @@ serve(async (req) => {
   }
 
   try {
-    const { photoIds, claimId, reportType, weatherOnly } = await req.json();
+    const { photoIds, claimId, reportType, weatherOnly, documentIds } = await req.json();
     
     // Handle weather-only preview requests
     if (weatherOnly && claimId) {
@@ -278,6 +278,8 @@ serve(async (req) => {
     let weatherData: any = null;
     let weatherContext = "";
     let claimData: any = null;
+    let supportingDocsContext = "";
+    let supportingDocsInfo: { name: string; url: string }[] = [];
     
     if (claimId) {
       const { data: claim } = await supabase
@@ -298,6 +300,47 @@ Claim Information:
 - Loss Description: ${claim.loss_description || 'N/A'}
 - Insurance Company: ${claim.insurance_company || 'N/A'}
 `;
+
+        // Fetch supporting documents for demand packages
+        if (reportType === 'demand-package' && documentIds && documentIds.length > 0) {
+          console.log(`Fetching ${documentIds.length} supporting documents...`);
+          
+          const { data: docs } = await supabase
+            .from("claim_files")
+            .select("id, file_name, file_path, file_type")
+            .in("id", documentIds);
+          
+          if (docs && docs.length > 0) {
+            const docDescriptions: string[] = [];
+            
+            for (const doc of docs) {
+              // Get signed URL for each document
+              const { data: signedUrl } = await supabase.storage
+                .from("claim-files")
+                .createSignedUrl(doc.file_path, 3600);
+              
+              if (signedUrl?.signedUrl) {
+                supportingDocsInfo.push({
+                  name: doc.file_name,
+                  url: signedUrl.signedUrl
+                });
+                docDescriptions.push(`- ${doc.file_name} (${doc.file_type || 'document'})`);
+              }
+            }
+            
+            if (docDescriptions.length > 0) {
+              supportingDocsContext = `
+
+SUPPORTING EVIDENCE DOCUMENTS INCLUDED:
+The following supporting documents from the claim file are being included as exhibits:
+${docDescriptions.join('\n')}
+
+When creating the demand package, reference these supporting documents in the appropriate sections and note that they are included as exhibits.
+`;
+              console.log(`Added ${docDescriptions.length} supporting documents to context`);
+            }
+          }
+        }
 
         // Fetch weather data for demand packages
         if (reportType === 'demand-package' && claim.policyholder_address && claim.loss_date) {
@@ -527,6 +570,7 @@ Please create a professional Final Demand Letter including:
 
 ${claimContext}
 ${weatherContext}
+${supportingDocsContext}
 
 Create a comprehensive demand package structured as follows:
 
@@ -537,7 +581,8 @@ Create a comprehensive demand package structured as follows:
 ## V. PROSPECTIVE LIABILITY (NJ/PA Insurance Codes)
 ## VI. DEMAND FOR PAYMENT
 
-${weatherData ? 'Include weather data in the analysis sections.' : ''}`;
+${weatherData ? 'Include weather data in the analysis sections.' : ''}
+${supportingDocsInfo.length > 0 ? 'Reference the supporting evidence documents in relevant sections and note they are attached as exhibits.' : ''}`;
         break;
         
       default: // full-report
@@ -608,6 +653,7 @@ ${claimContext}
         reportType,
         photoUrls: photoUrls,
         weatherData: weatherData,
+        supportingDocs: supportingDocsInfo,
         batchesProcessed: batchResults.length,
         totalBatches
       }),

@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Download, Grid, Columns, Sparkles, Loader2, Cloud, Wind, Droplets, Thermometer } from "lucide-react";
+import { FileText, Download, Grid, Columns, Sparkles, Loader2, Cloud, Wind, Droplets, Thermometer, File, FolderOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import html2pdf from "html2pdf.js";
@@ -22,6 +22,13 @@ interface ClaimPhoto {
   annotated_file_path: string | null;
   before_after_type: string | null;
   before_after_pair_id: string | null;
+}
+
+interface SupportingDocument {
+  id: string;
+  file_name: string;
+  file_path: string;
+  file_type: string | null;
 }
 
 interface PhotoReportDialogProps {
@@ -80,6 +87,11 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   const [activeTab, setActiveTab] = useState<"standard" | "ai">("ai");
   const [aiReportType, setAiReportType] = useState("demand-package");
   const [companyBranding, setCompanyBranding] = useState<{ company_name?: string; letterhead_url?: string } | null>(null);
+  
+  // Supporting documents state
+  const [supportingDocs, setSupportingDocs] = useState<SupportingDocument[]>([]);
+  const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
 
   useEffect(() => {
     const fetchBranding = async () => {
@@ -92,8 +104,47 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     };
     fetchBranding();
   }, []);
+
+  // Fetch supporting documents when dialog opens
+  useEffect(() => {
+    const fetchSupportingDocs = async () => {
+      if (!open || !claimId) return;
+      
+      setLoadingDocs(true);
+      try {
+        // Find the Supporting Evidence folder
+        const { data: folders } = await supabase
+          .from("claim_folders")
+          .select("id")
+          .eq("claim_id", claimId)
+          .eq("name", "Supporting Evidence")
+          .maybeSingle();
+        
+        if (folders?.id) {
+          // Fetch files from this folder
+          const { data: files } = await supabase
+            .from("claim_files")
+            .select("id, file_name, file_path, file_type")
+            .eq("claim_id", claimId)
+            .eq("folder_id", folders.id);
+          
+          if (files) {
+            setSupportingDocs(files);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching supporting docs:", error);
+      } finally {
+        setLoadingDocs(false);
+      }
+    };
+    
+    fetchSupportingDocs();
+  }, [open, claimId]);
+
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [aiPhotoUrls, setAiPhotoUrls] = useState<{ url: string; fileName: string; category: string; description: string; photoNumber: number }[]>([]);
+  const [aiSupportingDocs, setAiSupportingDocs] = useState<{ name: string; url: string }[]>([]);
   const [weatherData, setWeatherData] = useState<any>(null);
   const [previewingWeather, setPreviewingWeather] = useState(false);
   const { toast } = useToast();
@@ -102,8 +153,10 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     if (open) {
       setReportTitle(`Photo Report - ${claim?.policyholder_name || "Claim"} - ${new Date().toLocaleDateString()}`);
       setSelectedPhotos(photos.map(p => p.id));
+      setSelectedDocs([]);
       setAiReport(null);
       setAiPhotoUrls([]);
+      setAiSupportingDocs([]);
       setWeatherData(null);
       setPreviewingWeather(false);
     }
@@ -142,6 +195,17 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   const selectAll = () => setSelectedPhotos(photos.map(p => p.id));
   const selectNone = () => setSelectedPhotos([]);
 
+  const toggleDoc = (docId: string) => {
+    setSelectedDocs(prev =>
+      prev.includes(docId)
+        ? prev.filter(id => id !== docId)
+        : [...prev, docId]
+    );
+  };
+
+  const selectAllDocs = () => setSelectedDocs(supportingDocs.map(d => d.id));
+  const clearDocs = () => setSelectedDocs([]);
+
   const generateAIReport = async () => {
     if (selectedPhotos.length === 0) {
       toast({ title: "Please select at least one photo", variant: "destructive" });
@@ -157,6 +221,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
           photoIds: selectedPhotos,
           claimId,
           reportType: aiReportType,
+          documentIds: aiReportType === 'demand-package' ? selectedDocs : [],
         },
       });
 
@@ -168,6 +233,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
 
       setAiReport(data.report);
       setAiPhotoUrls(data.photoUrls || []);
+      setAiSupportingDocs(data.supportingDocs || []);
       setWeatherData(data.weatherData || null);
       toast({ title: "Analysis complete" });
     } catch (error: any) {
@@ -295,6 +361,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       ` : '';
       
       // Table of Contents for demand package
+      const hasSupportingDocs = aiSupportingDocs.length > 0;
       const tocHtml = isDemandPackage ? `
         <div style="page-break-after: always;">
           <h2 style="color: #1e3a5f; font-size: 24px; text-align: center; margin-bottom: 30px;">TABLE OF CONTENTS</h2>
@@ -308,6 +375,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
             <p><strong>VII.</strong> Demand for Payment ........................... 11</p>
             <p><strong>EXHIBIT A:</strong> Photo Documentation ........................... 12</p>
             ${weatherData ? '<p><strong>EXHIBIT B:</strong> Weather Report ........................... 13</p>' : ''}
+            ${hasSupportingDocs ? `<p><strong>EXHIBIT ${weatherData ? 'C' : 'B'}:</strong> Supporting Evidence Documents ........................... ${weatherData ? '14' : '13'}</p>` : ''}
           </div>
         </div>
       ` : '';
@@ -364,6 +432,40 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   </div>
   ${photosHtml}
   ${weatherExhibitHtml}
+  ${isDemandPackage && hasSupportingDocs ? `
+  <div style="margin-top: 40px; page-break-before: always;">
+    <h2 style="color: #1e3a5f; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; font-size: 24px;">EXHIBIT ${weatherData ? 'C' : 'B'}: SUPPORTING EVIDENCE DOCUMENTS</h2>
+    <p style="margin-top: 20px; font-size: 14px; color: #666;">The following supporting documents from the claim file are attached as evidence:</p>
+    
+    <div style="margin-top: 30px;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <thead>
+          <tr style="background: #1e3a5f; color: white;">
+            <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">#</th>
+            <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Document Name</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${aiSupportingDocs.map((doc, i) => `
+            <tr style="background: ${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+              <td style="padding: 12px; border: 1px solid #ddd;">${i + 1}</td>
+              <td style="padding: 12px; border: 1px solid #ddd;">${doc.name}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top: 30px; padding: 15px; background: #eff6ff; border-left: 4px solid #1e3a5f; border-radius: 4px;">
+      <h4 style="color: #1e3a5f; margin-bottom: 10px;">Note</h4>
+      <p style="font-size: 13px; color: #374151;">
+        The documents listed above are included as supporting evidence for this claim. These documents are maintained 
+        in the claim file and are available upon request. Please refer to these documents in conjunction with the 
+        photo documentation and damage analysis provided in this demand package.
+      </p>
+    </div>
+  </div>
+  ` : ''}
 </div>`;
 
       // Generate PDF
@@ -597,6 +699,53 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
               </div>
             )}
 
+            {/* Supporting Documents Section for Demand Package */}
+            {aiReportType === 'demand-package' && (
+              <div className="border rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                  <Label className="text-sm font-medium">Supporting Evidence Documents</Label>
+                </div>
+                
+                {loadingDocs ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Loading documents...
+                  </div>
+                ) : supportingDocs.length > 0 ? (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-muted-foreground">
+                        {selectedDocs.length} of {supportingDocs.length} selected
+                      </span>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={selectAllDocs}>Select All</Button>
+                        <Button variant="outline" size="sm" onClick={clearDocs}>Clear</Button>
+                      </div>
+                    </div>
+                    <div className="grid gap-2 max-h-32 overflow-auto">
+                      {supportingDocs.map(doc => (
+                        <label 
+                          key={doc.id} 
+                          className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-muted/50 ${selectedDocs.includes(doc.id) ? 'bg-primary/10' : ''}`}
+                        >
+                          <Checkbox 
+                            checked={selectedDocs.includes(doc.id)}
+                            onCheckedChange={() => toggleDoc(doc.id)}
+                          />
+                          <File className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span className="text-sm truncate">{doc.file_name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No documents found in "Supporting Evidence" folder. Add documents there to include them in the demand package.
+                  </p>
+                )}
+              </div>
+            )}
             <PhotoSelector 
               photos={photos} 
               selectedPhotos={selectedPhotos} 
