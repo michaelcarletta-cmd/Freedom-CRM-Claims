@@ -50,6 +50,109 @@ async function searchWeb(query: string): Promise<string> {
   }
 }
 
+// Helper function to find leads based on recent storm activity and property records
+async function findLeads(location: string, damageType?: string): Promise<string> {
+  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
+  if (!PERPLEXITY_API_KEY) {
+    return "Lead search unavailable: Perplexity API key not configured";
+  }
+
+  try {
+    // First search for recent storm events in the area
+    const stormSearchQuery = `Recent severe weather events storms hail tornado hurricane wind damage in ${location} in the last 30 days. Include specific dates, areas affected, and severity of damage. Include news reports and weather service data.`;
+    
+    const stormResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a research assistant helping find recent storm damage events for insurance claim lead generation. Focus on factual weather reports, news articles about property damage, and affected neighborhoods. Be specific about dates, locations, and damage types.'
+          },
+          {
+            role: 'user',
+            content: stormSearchQuery
+          }
+        ],
+        temperature: 0.2,
+        max_tokens: 2000,
+      }),
+    });
+
+    if (!stormResponse.ok) {
+      console.error("Perplexity storm search error:", stormResponse.status);
+      return "Storm search temporarily unavailable";
+    }
+
+    const stormData = await stormResponse.json();
+    const stormInfo = stormData.choices[0].message.content;
+    const citations = stormData.citations || [];
+
+    // Second search for property owner information resources
+    const propertySearchQuery = `How to find property owner contact information in ${location}. Include county assessor websites, public property records databases, and resources for finding homeowner information in this area.`;
+    
+    const propertyResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a research assistant helping find public property records and homeowner contact information. Focus on legitimate public records, county assessor websites, and legal methods of finding property owner information.'
+          },
+          {
+            role: 'user',
+            content: propertySearchQuery
+          }
+        ],
+        temperature: 0.2,
+        max_tokens: 1500,
+      }),
+    });
+
+    let propertyInfo = "";
+    if (propertyResponse.ok) {
+      const propertyData = await propertyResponse.json();
+      propertyInfo = propertyData.choices[0].message.content;
+    }
+
+    let result = `
+LEAD RESEARCH RESULTS FOR: ${location}
+${damageType ? `Damage Type Focus: ${damageType}` : ''}
+
+=== RECENT STORM ACTIVITY ===
+${stormInfo}
+
+=== SOURCES ===
+${citations.length > 0 ? citations.map((c: string, i: number) => `${i + 1}. ${c}`).join('\n') : 'See embedded links in report above'}
+
+=== PUBLIC PROPERTY RECORDS RESOURCES ===
+${propertyInfo || 'Property record search resources not available for this area.'}
+
+=== RECOMMENDED NEXT STEPS ===
+1. Review the storm events above to identify affected neighborhoods
+2. Use the property records resources to find homeowner contact information
+3. Target your marketing/outreach to areas with confirmed damage
+4. Consider door-to-door canvassing in heavily affected areas
+5. Check local news for additional damage reports and affected communities
+`;
+
+    return result;
+  } catch (error) {
+    console.error("Error in lead search:", error);
+    return "Lead search failed. Please try again.";
+  }
+}
+
 // Helper function to get weather for a specific date and location
 async function getWeatherReport(location: string, date: string): Promise<string> {
   const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
@@ -570,6 +673,27 @@ const tools = [
         required: ["title"]
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "find_leads",
+      description: "Search for potential insurance claim leads in a specific location by finding recent storm activity, property damage events, and public property records. Use this when the user asks about finding leads, prospecting, or identifying potential clients in a specific city, county, or state.",
+      parameters: {
+        type: "object",
+        properties: {
+          location: {
+            type: "string",
+            description: "The city, county, and/or state to search for leads (e.g., 'Dallas, Texas', 'Atlantic County, New Jersey', 'Philadelphia, PA')"
+          },
+          damage_type: {
+            type: "string",
+            description: "Optional: specific type of damage to focus on (e.g., 'hail', 'wind', 'hurricane', 'tornado', 'roof')"
+          }
+        },
+        required: ["location"]
+      }
+    }
   }
 ];
 
@@ -856,7 +980,13 @@ IMPORTANT: You have the ability to CREATE TASKS. When the user asks you to creat
 3. Always include a clear title
 4. Set a due date if the user specifies one (use YYYY-MM-DD format with actual future dates based on CURRENT DATE above)
 5. Set priority based on urgency (low, medium, high)
-6. Assign to a staff member if requested (use their ID from the staff list)`;
+6. Assign to a staff member if requested (use their ID from the staff list)
+
+LEAD FINDER: You can FIND LEADS for potential clients! When the user asks about finding leads, prospecting, or identifying potential clients in a specific area:
+1. Use the find_leads function with the location (city, county, state)
+2. Optionally specify a damage type (hail, wind, hurricane, tornado, roof, etc.)
+3. The tool will search for recent storm events and provide public property records resources
+4. This helps identify areas with recent damage where homeowners may need public adjuster services`;
 
     const systemPrompt = reportType
       ? `You are an expert insurance claims report writer. Generate professional, detailed reports for property insurance claims. Your reports should be:
@@ -876,6 +1006,7 @@ FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting
 - Explaining insurance regulations and best practices
 - Suggesting negotiation strategies with carriers
 - Identifying claims that need attention
+- FINDING LEADS: Search for potential clients by identifying recent storm damage in specific cities/states
 ${toolInstructions}
 
 You have detailed training materials in your knowledge base about ACV policies, depreciation, and ordinance and law/code upgrades. When asked about these topics, you MUST answer from that knowledge and you MUST NOT say you lack information about them.
@@ -1053,6 +1184,17 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
           } catch (parseErr) {
             console.error("Error parsing tool call arguments:", parseErr);
             answer += `\n\n❌ **Error creating task:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "find_leads") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Finding leads for location:", params.location);
+            
+            const leadResults = await findLeads(params.location, params.damage_type);
+            answer = leadResults;
+          } catch (parseErr) {
+            console.error("Error parsing find_leads arguments:", parseErr);
+            answer += `\n\n❌ **Error finding leads:** Invalid parameters`;
           }
         }
       }
