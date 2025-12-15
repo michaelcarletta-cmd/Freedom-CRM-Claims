@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface Claim {
   id: string;
@@ -33,8 +35,6 @@ interface ClaimsTableConnectedProps {
 }
 
 export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) => {
-  const [claims, setClaims] = useState<Claim[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [lossTypeFilter, setLossTypeFilter] = useState<string>("all");
@@ -42,15 +42,89 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const [selectedClaims, setSelectedClaims] = useState<Set<string>>(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [activeStatuses, setActiveStatuses] = useState<string[]>([]);
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    fetchClaims();
-    fetchActiveStatuses();
-  }, [portalType, user]);
+  // Fetch claims with React Query for caching
+  const { data: claims = [], isLoading } = useQuery({
+    queryKey: ["claims", portalType, user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+
+      let query = supabase.from("claims").select("*");
+
+      if (portalType === "client") {
+        query = query.eq("client_id", user.id);
+      } else if (portalType === "contractor") {
+        const { data: assignments } = await supabase
+          .from("claim_contractors")
+          .select("claim_id")
+          .eq("contractor_id", user.id);
+
+        if (assignments && assignments.length > 0) {
+          const claimIds = assignments.map((a) => a.claim_id);
+          query = query.in("id", claimIds);
+        } else {
+          return [];
+        }
+      } else if (portalType === "referrer") {
+        const { data: referrerData } = await supabase
+          .from("referrers")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (referrerData?.id) {
+          query = query.eq("referrer_id", referrerData.id);
+        } else {
+          return [];
+        }
+      } else if (!portalType) {
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id);
+
+        const isAdmin = roles?.some((r) => r.role === "admin");
+        const isStaff = roles?.some((r) => r.role === "staff");
+
+        if (isStaff && !isAdmin) {
+          const { data: staffAssignments } = await supabase
+            .from("claim_staff")
+            .select("claim_id")
+            .eq("staff_id", user.id);
+
+          if (staffAssignments && staffAssignments.length > 0) {
+            const claimIds = staffAssignments.map((a) => a.claim_id);
+            query = query.in("id", claimIds);
+          } else {
+            return [];
+          }
+        }
+      }
+
+      const { data, error } = await query.order("updated_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as Claim[];
+    },
+    enabled: !!user?.id,
+    staleTime: 30000, // Cache for 30 seconds
+  });
+
+  // Fetch active statuses with React Query
+  const { data: activeStatuses = [] } = useQuery({
+    queryKey: ["claim-statuses"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_statuses")
+        .select("name, is_active");
+      if (error) throw error;
+      return (data || []).filter((s) => s.is_active).map((s) => s.name);
+    },
+    staleTime: 60000, // Cache for 1 minute
+  });
 
   // Use memoized filtering - no debounce needed for client-side filtering
   const filteredClaims = useMemo(() => {
@@ -120,7 +194,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
 
       setSelectedClaims(new Set());
       setShowDeleteDialog(false);
-      fetchClaims();
+      queryClient.invalidateQueries({ queryKey: ["claims"] });
     } catch (error) {
       console.error("Error deleting claims:", error);
       toast({
@@ -133,102 +207,56 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
     }
   };
 
-  const fetchClaims = async () => {
-    if (!user?.id) {
-      setLoading(false);
-      return;
-    }
+  // Skeleton loading component
+  const LoadingSkeleton = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle>All Claims</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-10 w-full" />
+          <div className="flex gap-3">
+            <Skeleton className="h-10 w-[200px]" />
+            <Skeleton className="h-10 w-[200px]" />
+          </div>
+        </div>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12"><Skeleton className="h-4 w-4" /></TableHead>
+                <TableHead><Skeleton className="h-4 w-20" /></TableHead>
+                <TableHead><Skeleton className="h-4 w-24" /></TableHead>
+                <TableHead><Skeleton className="h-4 w-32" /></TableHead>
+                <TableHead><Skeleton className="h-4 w-20" /></TableHead>
+                <TableHead><Skeleton className="h-4 w-20" /></TableHead>
+                <TableHead><Skeleton className="h-4 w-24" /></TableHead>
+                <TableHead><Skeleton className="h-4 w-16" /></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <TableRow key={i}>
+                  <TableCell><Skeleton className="h-4 w-4" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-6 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-8 w-16" /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
-    try {
-      let query = supabase.from("claims").select("*");
-
-      // Filter based on portal type
-      if (portalType === "client") {
-        query = query.eq("client_id", user.id);
-      } else if (portalType === "contractor") {
-        const { data: assignments } = await supabase
-          .from("claim_contractors")
-          .select("claim_id")
-          .eq("contractor_id", user.id);
-
-        if (assignments && assignments.length > 0) {
-          const claimIds = assignments.map((a) => a.claim_id);
-          query = query.in("id", claimIds);
-        } else {
-          setClaims([]);
-          setLoading(false);
-          return;
-        }
-      } else if (portalType === "referrer") {
-        // Find the referrer record linked to this user
-        const { data: referrerData } = await supabase
-          .from("referrers")
-          .select("id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (referrerData?.id) {
-          query = query.eq("referrer_id", referrerData.id);
-        } else {
-          setClaims([]);
-          setLoading(false);
-          return;
-        }
-      } else if (!portalType) {
-        const { data: roles } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id);
-
-        const isAdmin = roles?.some((r) => r.role === "admin");
-        const isStaff = roles?.some((r) => r.role === "staff");
-
-        if (isStaff && !isAdmin) {
-          const { data: staffAssignments } = await supabase
-            .from("claim_staff")
-            .select("claim_id")
-            .eq("staff_id", user.id);
-
-          if (staffAssignments && staffAssignments.length > 0) {
-            const claimIds = staffAssignments.map((a) => a.claim_id);
-            query = query.in("id", claimIds);
-          } else {
-            setClaims([]);
-            setLoading(false);
-            return;
-          }
-        }
-      }
-
-      const { data, error } = await query.order("updated_at", { ascending: false });
-
-      if (error) throw error;
-
-      setClaims(data || []);
-    } catch (error) {
-      console.error("Error fetching claims:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchActiveStatuses = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("claim_statuses")
-        .select("name, is_active");
-
-      if (error) throw error;
-
-      const active = (data || []).filter((s) => s.is_active).map((s) => s.name);
-      setActiveStatuses(active);
-    } catch (error) {
-      console.error("Error fetching active statuses:", error);
-    }
-  };
-
-  if (loading) {
-    return <div className="p-8">Loading claims...</div>;
+  if (isLoading) {
+    return <LoadingSkeleton />;
   }
 
   const uniqueStatuses = ["all", ...new Set(claims.map((c) => c.status).filter(Boolean))];
