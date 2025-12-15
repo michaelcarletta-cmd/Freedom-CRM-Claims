@@ -216,16 +216,36 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     setAiReport(null);
     
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-photos", {
-        body: {
-          photoIds: selectedPhotos,
-          claimId,
-          reportType: aiReportType,
-          documentIds: aiReportType === 'demand-package' ? selectedDocs : [],
-        },
-      });
-
-      if (error) throw error;
+      // Use fetch directly with extended timeout for large photo batches (10 minutes)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minute timeout
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-photos`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            photoIds: selectedPhotos,
+            claimId,
+            reportType: aiReportType,
+            documentIds: aiReportType === 'demand-package' ? selectedDocs : [],
+          }),
+          signal: controller.signal,
+        }
+      );
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Request failed with status ${response.status}`);
+      }
+      
+      const data = await response.json();
       
       if (data.error) {
         throw new Error(data.error);
@@ -238,9 +258,12 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       toast({ title: "Analysis complete" });
     } catch (error: any) {
       console.error("AI report error:", error);
+      const errorMessage = error.name === 'AbortError' 
+        ? "Request timed out. Try selecting fewer photos."
+        : error.message || "Please try again";
       toast({ 
         title: "Error generating AI report", 
-        description: error.message || "Please try again",
+        description: errorMessage,
         variant: "destructive" 
       });
     } finally {
