@@ -158,7 +158,20 @@ export function InvoiceDialog({
 
   const downloadInvoice = () => {
     if (generatedPdfUrl) {
-      window.open(generatedPdfUrl, "_blank");
+      // Fetch the HTML and open in a new window with print styling
+      fetch(generatedPdfUrl)
+        .then(res => res.text())
+        .then(html => {
+          const printWindow = window.open('', '_blank');
+          if (printWindow) {
+            printWindow.document.write(html);
+            printWindow.document.close();
+          }
+        })
+        .catch(() => {
+          // Fallback to direct open
+          window.open(generatedPdfUrl, "_blank");
+        });
     }
   };
 
