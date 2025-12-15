@@ -403,259 +403,35 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     if (!aiReport) return;
     
     try {
-      // Convert photo URLs to base64 for PDF embedding
-      const photoBase64s: { base64: string; photoNumber: number; category: string; description: string }[] = [];
+      toast({ title: "Generating Word document..." });
       
-      for (const photo of aiPhotoUrls) {
-        try {
-          const response = await fetch(photo.url);
-          const blob = await response.blob();
-          const base64 = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(blob);
-          });
-          photoBase64s.push({
-            base64,
-            photoNumber: photo.photoNumber,
-            category: photo.category,
-            description: photo.description
-          });
-        } catch (e) {
-          console.error("Failed to convert photo to base64:", e);
-        }
-      }
-
-      // Build photos HTML with base64 images and photo numbers - each photo on its own page for clean breaks
-      const photosHtml = photoBase64s.length > 0 ? `
-  <div style="page-break-before: always;">
-    <h2 style="color: #1e3a5f; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; font-size: 24px; margin-bottom: 30px;">EXHIBIT A: PHOTO DOCUMENTATION</h2>
-    ${photoBase64s.map((photo, index) => `
-      <div style="${index > 0 ? 'page-break-before: always;' : ''} padding-top: 20px;">
-        <div style="margin-bottom: 15px;">
-          <p style="font-weight: bold; font-size: 16px; margin-bottom: 5px; color: #1e3a5f;">Photo ${photo.photoNumber}</p>
-          <p style="font-size: 14px; color: #4b5563; margin-bottom: 15px;">${photo.category}</p>
-        </div>
-        <img src="${photo.base64}" style="width: 100%; max-width: 650px; height: auto; border-radius: 8px; border: 1px solid #ddd; display: block;" />
-        ${photo.description ? `<p style="margin-top: 15px; font-size: 13px; color: #374151; line-height: 1.6;">${photo.description}</p>` : ''}
-      </div>
-    `).join('')}
-  </div>` : '';
-
-      // Letterhead HTML
-      const letterheadHtml = companyBranding?.letterhead_url ? `
-        <div style="text-align: center; margin-bottom: 20px;">
-          <img src="${companyBranding.letterhead_url}" style="max-width: 100%; max-height: 150px; object-fit: contain;" />
-        </div>
-      ` : companyBranding?.company_name ? `
-        <div style="text-align: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 3px solid #1e3a5f;">
-          <h1 style="font-size: 28px; color: #1e3a5f; margin: 0;">${companyBranding.company_name}</h1>
-        </div>
-      ` : '';
-
-      // Check if this is a demand package - needs special formatting
-      const isDemandPackage = aiReportType === 'demand-package';
-      
-      // Weather Report Exhibit HTML
-      const weatherExhibitHtml = (isDemandPackage && weatherData && weatherData.daily) ? `
-  <div style="margin-top: 40px; page-break-before: always;">
-    <h2 style="color: #1e3a5f; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; font-size: 24px;">EXHIBIT B: WEATHER REPORT</h2>
-    <p style="margin-top: 20px; font-size: 14px; color: #666;">Historical weather data retrieved from Visual Crossing Weather Services</p>
-    
-    <div style="margin-top: 30px; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
-      <h3 style="color: #1e3a5f; margin-bottom: 15px;">Location Information</h3>
-      <p><strong>Property Address:</strong> ${weatherData.location || claim?.policyholder_address || 'N/A'}</p>
-      <p><strong>Coordinates:</strong> ${weatherData.latitude?.toFixed(4)}, ${weatherData.longitude?.toFixed(4)}</p>
-      <p><strong>Loss Date:</strong> ${weatherData.lossDate || claim?.loss_date || 'N/A'}</p>
-    </div>
-
-    <div style="margin-top: 30px;">
-      <h3 style="color: #1e3a5f; margin-bottom: 15px;">Weather Conditions Summary</h3>
-      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-        <thead>
-          <tr style="background: #1e3a5f; color: white;">
-            <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Date</th>
-            <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Conditions</th>
-            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">High / Low</th>
-            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Precipitation</th>
-            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Max Wind Speed</th>
-            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Max Wind Gusts</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${weatherData.daily.dates?.map((date: string, i: number) => `
-            <tr style="background: ${i === weatherData.dayIndex ? '#fef3c7' : (i % 2 === 0 ? '#ffffff' : '#f8fafc')}; ${i === weatherData.dayIndex ? 'font-weight: bold;' : ''}">
-              <td style="padding: 12px; border: 1px solid #ddd;">
-                ${date}
-                ${i === weatherData.dayIndex ? '<br><span style="color: #d97706; font-size: 12px;">(Loss Date)</span>' : ''}
-              </td>
-              <td style="padding: 12px; border: 1px solid #ddd;">${weatherData.daily.weatherDescription?.[i] || 'N/A'}</td>
-              <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.maxTemp?.[i]}°F / ${weatherData.daily.minTemp?.[i]}°F</td>
-              <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.precipitation?.[i]} in</td>
-              <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.maxWindSpeed?.[i]} mph</td>
-              <td style="padding: 12px; text-align: center; border: 1px solid #ddd;">${weatherData.daily.maxWindGusts?.[i]} mph</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-
-    <div style="margin-top: 30px; padding: 15px; background: #eff6ff; border-left: 4px solid #1e3a5f; border-radius: 4px;">
-      <h4 style="color: #1e3a5f; margin-bottom: 10px;">Data Source</h4>
-      <p style="font-size: 13px; color: #374151;">
-        Weather data sourced from Visual Crossing Weather Services. Data includes temperature, precipitation, 
-        wind speed, and wind gusts recorded at the property location for the loss date and surrounding days.
-        This historical weather documentation supports the cause of loss analysis.
-      </p>
-    </div>
-  </div>
-      ` : '';
-      
-      // Table of Contents for demand package
-      const hasSupportingDocs = aiSupportingDocs.length > 0;
-      const tocHtml = isDemandPackage ? `
-        <div style="page-break-after: always;">
-          <h2 style="color: #1e3a5f; font-size: 24px; text-align: center; margin-bottom: 30px;">TABLE OF CONTENTS</h2>
-          <div style="font-size: 14px; line-height: 2;">
-            <p><strong>I.</strong> Cover Letter / Final Demand ........................... 3</p>
-            <p><strong>II.</strong> Factual Background ........................... 4</p>
-            <p><strong>III.</strong> Damage Analysis ........................... 5</p>
-            <p><strong>IV.</strong> Proof of Loss / Valuation ........................... 6</p>
-            <p><strong>V.</strong> Restoration Requirements ........................... 8</p>
-            <p><strong>VI.</strong> Prospective Liability ........................... 10</p>
-            <p><strong>VII.</strong> Demand for Payment ........................... 11</p>
-            <p><strong>EXHIBIT A:</strong> Photo Documentation ........................... 12</p>
-            ${weatherData ? '<p><strong>EXHIBIT B:</strong> Weather Report ........................... 13</p>' : ''}
-            ${hasSupportingDocs ? `<p><strong>EXHIBIT ${weatherData ? 'C' : 'B'}:</strong> Supporting Evidence Documents ........................... ${weatherData ? '14' : '13'}</p>` : ''}
-          </div>
-        </div>
-      ` : '';
-
-      // Format report content with proper styling and page breaks for major sections
-      const formattedReport = aiReport
-        .replace(/\n/g, '<br>')
-        // Major sections get page breaks
-        .replace(/##\s+(I\.|II\.|III\.|IV\.|V\.|VI\.|VII\.|VIII\.)\s*(.*)/g, '<div style="page-break-before: always; padding-top: 20px;"><h2 style="color: #1e3a5f; margin-top: 0; font-size: 22px; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px;">$1 $2</h2></div>')
-        // Regular h2 headers
-        .replace(/##\s(.*)/g, '<h2 style="color: #1e3a5f; margin-top: 30px; font-size: 20px; border-bottom: 1px solid #ddd; padding-bottom: 8px; page-break-after: avoid;">$1</h2>')
-        // H3 headers should avoid breaking after
-        .replace(/###\s(.*)/g, '<h3 style="color: #374151; margin-top: 25px; font-size: 16px; page-break-after: avoid;">$1</h3>')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        // Keep paragraphs together
-        .replace(/<br><br>/g, '</p><p style="margin-top: 12px; page-break-inside: avoid;">');
-
-      // Create HTML content for PDF
-      const html = `
-<div style="font-family: 'Times New Roman', Times, serif; max-width: 800px; margin: 0 auto; padding: 40px; line-height: 1.8; color: #1f2937;">
-  ${letterheadHtml}
-  
-  ${isDemandPackage ? `
-    <div style="text-align: center; margin: 60px 0; page-break-after: always;">
-      <h1 style="font-size: 32px; color: #1e3a5f; margin-bottom: 20px;">NOTICE OF FINAL DEMAND</h1>
-      <h2 style="font-size: 18px; color: #4b5563; font-weight: normal;">AND</h2>
-      <h2 style="font-size: 24px; color: #1e3a5f; margin-top: 20px;">COMPLETE DEMAND PACKAGE</h2>
-      <div style="margin-top: 60px; text-align: left; padding: 20px; background: #f8fafc; border-radius: 8px;">
-        <p><strong>RE:</strong> ${claim?.policyholder_name || 'Policyholder'}</p>
-        <p><strong>Property:</strong> ${claim?.policyholder_address || 'Property Address'}</p>
-        <p><strong>Claim No.:</strong> ${claim?.claim_number || 'N/A'}</p>
-        <p><strong>Policy No.:</strong> ${claim?.policy_number || 'N/A'}</p>
-        <p><strong>Date of Loss:</strong> ${claim?.loss_date || 'N/A'}</p>
-        <p><strong>Insurance Company:</strong> ${claim?.insurance_company || 'N/A'}</p>
-      </div>
-      <p style="margin-top: 40px; font-size: 14px; color: #6b7280;">Prepared: ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-    </div>
-    ${tocHtml}
-  ` : `
-    <div style="margin-bottom: 30px;">
-      <h1 style="border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; color: #1e3a5f;">${reportTitle}</h1>
-      <p style="color: #666;">Generated on ${new Date().toLocaleString()}</p>
-    </div>
-    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-      <p><strong>Claim Number:</strong> ${claim?.claim_number || 'N/A'}</p>
-      <p><strong>Policyholder:</strong> ${claim?.policyholder_name || 'N/A'}</p>
-      <p><strong>Property:</strong> ${claim?.policyholder_address || 'N/A'}</p>
-      <p><strong>Loss Type:</strong> ${claim?.loss_type || 'N/A'}</p>
-    </div>
-  `}
-  
-  <div style="text-align: justify; orphans: 3; widows: 3;">
-    <p style="page-break-inside: avoid;">${formattedReport}</p>
-  </div>
-  ${photosHtml}
-  ${weatherExhibitHtml}
-  ${isDemandPackage && hasSupportingDocs ? `
-  <div style="margin-top: 40px; page-break-before: always;">
-    <h2 style="color: #1e3a5f; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; font-size: 24px;">EXHIBIT ${weatherData ? 'C' : 'B'}: SUPPORTING EVIDENCE DOCUMENTS</h2>
-    <p style="margin-top: 20px; font-size: 14px; color: #666;">The following supporting documents from the claim file are attached as evidence:</p>
-    
-    <div style="margin-top: 30px;">
-      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-        <thead>
-          <tr style="background: #1e3a5f; color: white;">
-            <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">#</th>
-            <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Document Name</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${aiSupportingDocs.map((doc, i) => `
-            <tr style="background: ${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-              <td style="padding: 12px; border: 1px solid #ddd;">${i + 1}</td>
-              <td style="padding: 12px; border: 1px solid #ddd;">${doc.name}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-
-    <div style="margin-top: 30px; padding: 15px; background: #eff6ff; border-left: 4px solid #1e3a5f; border-radius: 4px;">
-      <h4 style="color: #1e3a5f; margin-bottom: 10px;">Note</h4>
-      <p style="font-size: 13px; color: #374151;">
-        The documents listed above are included as supporting evidence for this claim. These documents are maintained 
-        in the claim file and are available upon request. Please refer to these documents in conjunction with the 
-        photo documentation and damage analysis provided in this demand package.
-      </p>
-    </div>
-  </div>
-  ` : ''}
-</div>`;
-
-      // Generate PDF
-      const container = document.createElement("div");
-      container.innerHTML = html;
-      document.body.appendChild(container);
-      
-      const pdfBlob = await html2pdf().from(container).set({
-        margin: [15, 15, 20, 15], // top, left, bottom, right - more margin for readability
-        filename: `${reportTitle.replace(/[^a-z0-9]/gi, "_")}.pdf`,
-        html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
-      } as any).outputPdf("blob");
-      
-      document.body.removeChild(container);
-      
-      const reportPath = `${claimId}/reports/ai_photo_report_${Date.now()}.pdf`;
-      
-      await supabase.storage.from("claim-files").upload(reportPath, pdfBlob);
-      
-      await supabase.from("claim_files").insert({
-        claim_id: claimId,
-        file_name: `AI Photo Report - ${new Date().toLocaleDateString()}.pdf`,
-        file_path: reportPath,
-        file_type: "application/pdf",
-        file_size: pdfBlob.size,
+      // Call the backend to generate Word document
+      const { data, error } = await supabase.functions.invoke("generate-photo-report-docx", {
+        body: {
+          reportContent: aiReport,
+          claimId,
+          reportTitle,
+          reportType: aiReportType,
+          photoUrls: aiPhotoUrls,
+          weatherData,
+          companyBranding,
+        },
       });
 
-      // Download the PDF
-      const url = URL.createObjectURL(pdfBlob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${reportTitle.replace(/[^a-z0-9]/gi, "_")}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
 
-      toast({ title: "Report saved to claim files and downloaded" });
+      // Download the Word document
+      if (data.downloadUrl) {
+        const a = document.createElement("a");
+        a.href = data.downloadUrl;
+        a.download = data.fileName || `${reportTitle.replace(/[^a-z0-9]/gi, "_")}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+
+      toast({ title: "Word document saved to claim files and downloaded" });
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error saving report:", error);
@@ -919,8 +695,8 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
               {aiReport ? (
                 <Button onClick={saveAIReport}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Save & Download Report
+                  <FileText className="h-4 w-4 mr-2" />
+                  Save as Word Document
                 </Button>
               ) : (
                 <div className="flex gap-2">
