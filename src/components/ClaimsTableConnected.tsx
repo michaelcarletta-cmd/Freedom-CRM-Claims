@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, Search, Trash2 } from "lucide-react";
+import { Eye, Search } from "lucide-react";
 import { ClaimStatusSelect } from "./ClaimStatusSelect";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,6 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { BulkClaimActions } from "./BulkClaimActions";
 
 interface Claim {
   id: string;
@@ -270,19 +271,11 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       <CardContent className="space-y-4">
         <div className="flex flex-col gap-3">
           {selectedClaims.size > 0 && (
-            <div className="flex items-center justify-between p-3 bg-muted rounded-md">
-              <span className="text-sm font-medium">
-                {selectedClaims.size} claim(s) selected
-              </span>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setShowDeleteDialog(true)}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Selected
-              </Button>
-            </div>
+            <BulkClaimActions
+              selectedClaims={selectedClaims}
+              onClearSelection={() => setSelectedClaims(new Set())}
+              onDeleteRequest={() => setShowDeleteDialog(true)}
+            />
           )}
           
           <div className="relative">
