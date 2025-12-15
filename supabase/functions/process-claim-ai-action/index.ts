@@ -96,20 +96,20 @@ ${email.body}
 
 Draft a clear, professional response addressing their inquiry. The response should be helpful and reference the claim context where appropriate.`;
 
-      // Call OpenAI API
-      const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-      if (!openaiApiKey) {
-        throw new Error('OPENAI_API_KEY not configured');
+      // Call Lovable AI
+      const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+      if (!lovableApiKey) {
+        throw new Error('LOVABLE_API_KEY not configured');
       }
 
-      const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
+          'Authorization': `Bearer ${lovableApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'google/gemini-2.5-flash',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
@@ -118,24 +118,31 @@ Draft a clear, professional response addressing their inquiry. The response shou
         }),
       });
 
-      const aiData = await aiResponse.json();
-      
       if (!aiResponse.ok) {
-        console.error('OpenAI error:', aiData);
+        if (aiResponse.status === 429) {
+          throw new Error('Rate limit exceeded. Please try again later.');
+        }
+        if (aiResponse.status === 402) {
+          throw new Error('AI credits exhausted. Please add credits.');
+        }
+        const errorText = await aiResponse.text();
+        console.error('AI error:', aiResponse.status, errorText);
         throw new Error('Failed to generate AI response');
       }
+
+      const aiData = await aiResponse.json();
 
       const draftResponse = aiData.choices[0].message.content;
 
       // Generate suggested subject line
-      const subjectResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      const subjectResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
+          'Authorization': `Bearer ${lovableApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'google/gemini-2.5-flash',
           messages: [
             { role: 'system', content: 'Generate a brief, professional email subject line for a reply. Return only the subject line, nothing else.' },
             { role: 'user', content: `Original subject: ${email.subject}\n\nResponse content: ${draftResponse.substring(0, 500)}` }
@@ -217,9 +224,9 @@ Draft a clear, professional response addressing their inquiry. The response shou
         .order('sent_at', { ascending: false })
         .limit(3);
 
-      const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-      if (!openaiApiKey) {
-        throw new Error('OPENAI_API_KEY not configured');
+      const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+      if (!lovableApiKey) {
+        throw new Error('LOVABLE_API_KEY not configured');
       }
 
       const systemPrompt = `You are a professional public adjuster assistant for Freedom Claims. Draft a brief, professional SMS message.
@@ -246,14 +253,14 @@ GUIDELINES:
 
       const userPrompt = `Draft a brief SMS update for the ${recipientType || 'policyholder'} about this claim. Provide a helpful status update or next steps based on recent activity.`;
 
-      const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
+          'Authorization': `Bearer ${lovableApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'google/gemini-2.5-flash',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
@@ -262,12 +269,19 @@ GUIDELINES:
         }),
       });
 
-      const aiData = await aiResponse.json();
-      
       if (!aiResponse.ok) {
-        console.error('OpenAI error:', aiData);
+        if (aiResponse.status === 429) {
+          throw new Error('Rate limit exceeded. Please try again later.');
+        }
+        if (aiResponse.status === 402) {
+          throw new Error('AI credits exhausted. Please add credits.');
+        }
+        const errorText = await aiResponse.text();
+        console.error('AI error:', aiResponse.status, errorText);
         throw new Error('Failed to generate AI response');
       }
+
+      const aiData = await aiResponse.json();
 
       const draftMessage = aiData.choices[0].message.content;
 
