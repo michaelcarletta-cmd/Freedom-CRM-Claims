@@ -123,37 +123,51 @@ serve(async (req) => {
       }
     );
 
-    // Create Supabase client with user's auth token for user data
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: authHeader },
-        },
-        auth: {
-          persistSession: false,
-        },
+    // Check if this is a service-to-service call (using service role key)
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const isServiceCall = authHeader === `Bearer ${serviceRoleKey}`;
+
+    let userId: string | null = null;
+    let emailSignature = '';
+
+    if (isServiceCall) {
+      // Service-to-service call - no user authentication needed
+      console.log('Service-to-service call detected, skipping user auth');
+    } else {
+      // Create Supabase client with user's auth token for user data
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        {
+          global: {
+            headers: { Authorization: authHeader },
+          },
+          auth: {
+            persistSession: false,
+          },
+        }
+      );
+
+      // Get current user from the JWT token
+      const { data: { user }, error: userError } = await supabase.auth.getUser(
+        authHeader.replace('Bearer ', '')
+      );
+      if (userError || !user) {
+        console.error('Auth error:', userError);
+        throw new Error('Unauthorized');
       }
-    );
 
-    // Get current user from the JWT token
-    const { data: { user }, error: userError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
-    if (userError || !user) {
-      console.error('Auth error:', userError);
-      throw new Error('Unauthorized');
+      userId = user.id;
+
+      // Fetch user's email signature from profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email_signature')
+        .eq('id', user.id)
+        .single();
+
+      emailSignature = (profile as any)?.email_signature || '';
     }
-
-    // Fetch user's email signature from profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('email_signature')
-      .eq('id', user.id)
-      .single();
-
-    const emailSignature = (profile as any)?.email_signature || '';
 
     // Append signature if available
     const fullBody = emailSignature 
@@ -245,11 +259,11 @@ serve(async (req) => {
     // Log email to database for each recipient if claimId provided
     if (claimId) {
       for (const recipient of recipients) {
-        const { error: dbError } = await supabase
+        const { error: dbError } = await supabaseAdmin
           .from('emails')
           .insert({
             claim_id: claimId,
-            sent_by: user.id,
+            sent_by: userId,
             recipient_email: recipient.email,
             recipient_name: recipient.name,
             recipient_type: recipient.type,
