@@ -699,7 +699,7 @@ const tools = [
     type: "function",
     function: {
       name: "bulk_update_status",
-      description: "Update the status of multiple claims at once. Use when user wants to change status for several claims.",
+      description: "Update the status of multiple claims at once. Can filter by current status (e.g., 'change all claims with status X to status Y') or specify claims by name/ID.",
       parameters: {
         type: "object",
         properties: {
@@ -712,6 +712,10 @@ const tools = [
             type: "array",
             items: { type: "string" },
             description: "Array of client/policyholder names to look up claims"
+          },
+          filter_by_status: {
+            type: "string",
+            description: "Filter claims by their current status (e.g., 'Claim Settled', 'Open', 'In Review'). All claims with this status will be updated."
           },
           new_status: {
             type: "string",
@@ -726,7 +730,7 @@ const tools = [
     type: "function",
     function: {
       name: "bulk_close_claims",
-      description: "Close multiple claims at once. Use when user wants to close several claims.",
+      description: "Close multiple claims at once. Can filter by current status (e.g., 'close all claims with status Claim Settled') or specify claims by name/ID.",
       parameters: {
         type: "object",
         properties: {
@@ -739,6 +743,10 @@ const tools = [
             type: "array",
             items: { type: "string" },
             description: "Array of client/policyholder names to look up claims"
+          },
+          filter_by_status: {
+            type: "string",
+            description: "Filter claims by their current status. All claims with this status will be closed."
           }
         }
       }
@@ -748,7 +756,7 @@ const tools = [
     type: "function",
     function: {
       name: "bulk_reopen_claims",
-      description: "Reopen multiple closed claims at once. Use when user wants to reopen several claims.",
+      description: "Reopen multiple closed claims at once. Can filter by current status or specify claims by name/ID.",
       parameters: {
         type: "object",
         properties: {
@@ -761,6 +769,10 @@ const tools = [
             type: "array",
             items: { type: "string" },
             description: "Array of client/policyholder names to look up claims"
+          },
+          filter_by_status: {
+            type: "string",
+            description: "Filter claims by their current status. All claims with this status will be reopened."
           }
         }
       }
@@ -770,7 +782,7 @@ const tools = [
     type: "function",
     function: {
       name: "bulk_assign_staff",
-      description: "Assign a staff member to multiple claims at once.",
+      description: "Assign a staff member to multiple claims at once. Can filter by current status or specify claims by name/ID.",
       parameters: {
         type: "object",
         properties: {
@@ -783,6 +795,10 @@ const tools = [
             type: "array",
             items: { type: "string" },
             description: "Array of client/policyholder names to look up claims"
+          },
+          filter_by_status: {
+            type: "string",
+            description: "Filter claims by their current status. All claims with this status will be assigned."
           },
           staff_id: {
             type: "string",
@@ -834,9 +850,24 @@ async function createTask(supabase: any, params: {
   }
 }
 
-// Helper function to resolve multiple claims from names
-async function resolveClaimIds(supabase: any, claimIds?: string[], clientNames?: string[]): Promise<{ id: string; name: string }[]> {
+// Helper function to resolve multiple claims from names or status filter
+async function resolveClaimIds(supabase: any, claimIds?: string[], clientNames?: string[], filterByStatus?: string): Promise<{ id: string; name: string }[]> {
   const resolved: { id: string; name: string }[] = [];
+  
+  // If filtering by status, fetch all matching claims
+  if (filterByStatus) {
+    const { data: claims, error } = await supabase
+      .from("claims")
+      .select("id, policyholder_name")
+      .ilike("status", filterByStatus);
+    
+    if (!error && claims) {
+      for (const claim of claims) {
+        resolved.push({ id: claim.id, name: claim.policyholder_name || "Unknown" });
+      }
+    }
+    return resolved;
+  }
   
   if (claimIds && claimIds.length > 0) {
     for (const id of claimIds) {
@@ -1198,15 +1229,18 @@ LEAD FINDER: You can FIND LEADS for potential clients! When the user asks about 
 4. This helps identify areas with recent damage where homeowners may need public adjuster services
 
 BULK CLAIM MANAGEMENT: You can help clean up and manage multiple claims at once!
-- bulk_update_status: Change the status of multiple claims. User can specify by name (e.g., "change Smith, Jones, and Williams claims to 'In Review'")
-- bulk_close_claims: Close multiple claims at once (e.g., "close the Smith and Jones claims")
-- bulk_reopen_claims: Reopen multiple closed claims (e.g., "reopen the Williams and Brown claims")
-- bulk_assign_staff: Assign a staff member to multiple claims (e.g., "assign John to all the hurricane claims")
+- bulk_update_status: Change the status of multiple claims
+- bulk_close_claims: Close multiple claims at once
+- bulk_reopen_claims: Reopen multiple closed claims
+- bulk_assign_staff: Assign a staff member to multiple claims
 
-When user asks to update, close, reopen, or assign staff to multiple claims:
-1. Use client_names array with the policyholder names mentioned
-2. For status updates, specify the new_status
-3. For staff assignment, use staff_name with the staff member's name`;
+IMPORTANT: You can filter claims by their CURRENT STATUS using filter_by_status parameter!
+Examples:
+- "close all claims with status Claim Settled" → use filter_by_status: "Claim Settled"
+- "change all Open claims to In Review" → use filter_by_status: "Open", new_status: "In Review"
+- "mark claims with Claim Settled status as closed" → use filter_by_status: "Claim Settled"
+
+You can also specify claims by name using client_names array, or by ID using claim_ids array.`;
 
     const systemPrompt = reportType
       ? `You are an expert insurance claims report writer. Generate professional, detailed reports for property insurance claims. Your reports should be:
@@ -1421,17 +1455,17 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
             const params = JSON.parse(toolCall.function.arguments);
             console.log("Bulk updating status:", params);
             
-            const resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names);
+            const resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names, params.filter_by_status);
             if (resolved.length === 0) {
-              answer += `\n\n❌ **No claims found** to update status.`;
+              answer += `\n\n❌ **No claims found** ${params.filter_by_status ? `with status "${params.filter_by_status}"` : "to update status"}.`;
               continue;
             }
             
             const claimIds = resolved.map(c => c.id);
             const result = await bulkUpdateStatus(supabase, claimIds, params.new_status);
             
-            const names = resolved.map(c => c.name).join(", ");
-            answer += `\n\n✅ **Bulk Status Update:** Changed ${result.success} claim(s) to "${params.new_status}"\nClaims: ${names}`;
+            const filterInfo = params.filter_by_status ? ` (filtered by status: "${params.filter_by_status}")` : "";
+            answer += `\n\n✅ **Bulk Status Update:** Changed ${result.success} claim(s) to "${params.new_status}"${filterInfo}`;
           } catch (parseErr) {
             console.error("Error in bulk_update_status:", parseErr);
             answer += `\n\n❌ **Error updating statuses:** Invalid parameters`;
@@ -1441,17 +1475,17 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
             const params = JSON.parse(toolCall.function.arguments);
             console.log("Bulk closing claims:", params);
             
-            const resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names);
+            const resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names, params.filter_by_status);
             if (resolved.length === 0) {
-              answer += `\n\n❌ **No claims found** to close.`;
+              answer += `\n\n❌ **No claims found** ${params.filter_by_status ? `with status "${params.filter_by_status}"` : "to close"}.`;
               continue;
             }
             
             const claimIds = resolved.map(c => c.id);
             const result = await bulkCloseClaims(supabase, claimIds);
             
-            const names = resolved.map(c => c.name).join(", ");
-            answer += `\n\n✅ **Claims Closed:** ${result.success} claim(s) closed successfully\nClaims: ${names}`;
+            const filterInfo = params.filter_by_status ? ` with status "${params.filter_by_status}"` : "";
+            answer += `\n\n✅ **Claims Closed:** ${result.success} claim(s)${filterInfo} closed successfully`;
           } catch (parseErr) {
             console.error("Error in bulk_close_claims:", parseErr);
             answer += `\n\n❌ **Error closing claims:** Invalid parameters`;
@@ -1461,17 +1495,17 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
             const params = JSON.parse(toolCall.function.arguments);
             console.log("Bulk reopening claims:", params);
             
-            const resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names);
+            const resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names, params.filter_by_status);
             if (resolved.length === 0) {
-              answer += `\n\n❌ **No claims found** to reopen.`;
+              answer += `\n\n❌ **No claims found** ${params.filter_by_status ? `with status "${params.filter_by_status}"` : "to reopen"}.`;
               continue;
             }
             
             const claimIds = resolved.map(c => c.id);
             const result = await bulkReopenClaims(supabase, claimIds);
             
-            const names = resolved.map(c => c.name).join(", ");
-            answer += `\n\n✅ **Claims Reopened:** ${result.success} claim(s) reopened successfully\nClaims: ${names}`;
+            const filterInfo = params.filter_by_status ? ` with status "${params.filter_by_status}"` : "";
+            answer += `\n\n✅ **Claims Reopened:** ${result.success} claim(s)${filterInfo} reopened successfully`;
           } catch (parseErr) {
             console.error("Error in bulk_reopen_claims:", parseErr);
             answer += `\n\n❌ **Error reopening claims:** Invalid parameters`;
@@ -1501,17 +1535,17 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
               continue;
             }
             
-            const resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names);
+            const resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names, params.filter_by_status);
             if (resolved.length === 0) {
-              answer += `\n\n❌ **No claims found** to assign staff.`;
+              answer += `\n\n❌ **No claims found** ${params.filter_by_status ? `with status "${params.filter_by_status}"` : "to assign staff"}.`;
               continue;
             }
             
             const claimIds = resolved.map(c => c.id);
             const result = await bulkAssignStaff(supabase, claimIds, staffId);
             
-            const claimNames = resolved.map(c => c.name).join(", ");
-            answer += `\n\n✅ **Staff Assigned:** ${staffName || "Staff member"} assigned to ${result.success} claim(s)${result.skipped > 0 ? ` (${result.skipped} already assigned)` : ""}\nClaims: ${claimNames}`;
+            const filterInfo = params.filter_by_status ? ` with status "${params.filter_by_status}"` : "";
+            answer += `\n\n✅ **Staff Assigned:** ${staffName || "Staff member"} assigned to ${result.success} claim(s)${filterInfo}${result.skipped > 0 ? ` (${result.skipped} already assigned)` : ""}`;
           } catch (parseErr) {
             console.error("Error in bulk_assign_staff:", parseErr);
             answer += `\n\n❌ **Error assigning staff:** Invalid parameters`;
