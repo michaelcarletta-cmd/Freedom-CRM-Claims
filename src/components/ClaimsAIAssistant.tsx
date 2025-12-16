@@ -8,6 +8,7 @@ import { Bot, Send, Loader2, Sparkles, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface AiMessage {
   role: "user" | "assistant";
@@ -20,6 +21,7 @@ export const ClaimsAIAssistant = () => {
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const queryClient = useQueryClient();
 
   const handleAskAI = async () => {
     if (!aiQuestion.trim()) return;
@@ -44,7 +46,7 @@ export const ClaimsAIAssistant = () => {
         body: {
           question: userMessage.content,
           messages: conversationHistory,
-          mode: "general", // Flag for general assistant mode
+          mode: "general",
         },
       });
 
@@ -54,6 +56,19 @@ export const ClaimsAIAssistant = () => {
       if (data.tasksCreated && data.tasksCreated.length > 0) {
         const taskCount = data.tasksCreated.length;
         toast.success(`${taskCount} task${taskCount > 1 ? 's' : ''} created successfully`);
+      }
+
+      // Check if bulk operations were performed (detect by response content)
+      const hasBulkOperation = data.answer && (
+        data.answer.includes("Bulk Status Update:") ||
+        data.answer.includes("Claims Closed:") ||
+        data.answer.includes("Claims Reopened:") ||
+        data.answer.includes("Staff Assigned:")
+      );
+
+      if (hasBulkOperation) {
+        toast.success("Bulk operation completed");
+        queryClient.invalidateQueries({ queryKey: ["claims"] });
       }
 
       const assistantMessage: AiMessage = {
@@ -121,7 +136,9 @@ export const ClaimsAIAssistant = () => {
                     <li>• Draft follow-up communications</li>
                     <li>• Summarize claim statuses</li>
                     <li>• <strong>Create tasks with due dates</strong></li>
-                    <li>• Suggest next steps for claims</li>
+                    <li>• <strong>Bulk update statuses</strong></li>
+                    <li>• <strong>Bulk close/reopen claims</strong></li>
+                    <li>• <strong>Bulk assign staff</strong></li>
                     <li>• Explain insurance terms & regulations</li>
                   </ul>
                 </div>
