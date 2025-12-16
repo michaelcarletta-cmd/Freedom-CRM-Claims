@@ -37,9 +37,9 @@ export const BulkClaimActions = ({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch claim statuses
+  // Fetch claim statuses - cached for 5 minutes
   const { data: statuses = [] } = useQuery({
-    queryKey: ["claim-statuses-all"],
+    queryKey: ["claim-statuses-bulk"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_statuses")
@@ -49,60 +49,52 @@ export const BulkClaimActions = ({
       if (error) throw error;
       return data || [];
     },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
   });
 
-  // Fetch staff members (admin and staff roles only)
+  // Fetch staff members (admin and staff roles only) - cached for 5 minutes
   const { data: staffMembers = [] } = useQuery({
-    queryKey: ["staff-members"],
+    queryKey: ["staff-members-bulk"],
     queryFn: async () => {
-      const { data: roles, error } = await supabase
-        .from("user_roles")
-        .select("user_id, role")
-        .in("role", ["admin", "staff"]);
-      if (error) throw error;
+      // Fetch all data in parallel
+      const [rolesRes, externalRolesRes, profilesRes] = await Promise.all([
+        supabase.from("user_roles").select("user_id, role").in("role", ["admin", "staff"]),
+        supabase.from("user_roles").select("user_id").in("role", ["client", "contractor", "referrer"]),
+        supabase.from("profiles").select("id, full_name, email"),
+      ]);
 
-      if (!roles?.length) return [];
+      if (rolesRes.error) throw rolesRes.error;
+      if (!rolesRes.data?.length) return [];
 
-      // Get profiles for these users
-      const userIds = [...new Set(roles.map(r => r.user_id))];
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .in("id", userIds);
-      if (profilesError) throw profilesError;
-
-      // Filter out users who also have external roles
-      const { data: externalRoles } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .in("role", ["client", "contractor", "referrer"]);
+      const staffUserIds = new Set(rolesRes.data.map(r => r.user_id));
+      const externalUserIds = new Set(externalRolesRes.data?.map(r => r.user_id) || []);
       
-      const externalUserIds = new Set(externalRoles?.map(r => r.user_id) || []);
-      
-      return (profiles || []).filter(p => !externalUserIds.has(p.id));
+      return (profilesRes.data || []).filter(p => 
+        staffUserIds.has(p.id) && !externalUserIds.has(p.id)
+      );
     },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
-  // Fetch contractors
+  // Fetch contractors - cached for 5 minutes
   const { data: contractors = [] } = useQuery({
-    queryKey: ["contractors-list"],
+    queryKey: ["contractors-bulk"],
     queryFn: async () => {
-      const { data: roles, error } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "contractor");
-      if (error) throw error;
+      const [rolesRes, profilesRes] = await Promise.all([
+        supabase.from("user_roles").select("user_id").eq("role", "contractor"),
+        supabase.from("profiles").select("id, full_name, email"),
+      ]);
 
-      if (!roles?.length) return [];
+      if (rolesRes.error) throw rolesRes.error;
+      if (!rolesRes.data?.length) return [];
 
-      const userIds = roles.map(r => r.user_id);
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, full_name, email");
-      if (profilesError) throw profilesError;
-
-      return (profiles || []).filter(p => userIds.includes(p.id));
+      const contractorIds = new Set(rolesRes.data.map(r => r.user_id));
+      return (profilesRes.data || []).filter(p => contractorIds.has(p.id));
     },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const handleBulkStatusUpdate = async (newStatus: string) => {
