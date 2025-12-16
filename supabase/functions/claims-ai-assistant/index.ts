@@ -694,6 +694,107 @@ const tools = [
         required: ["location"]
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "bulk_update_status",
+      description: "Update the status of multiple claims at once. Use when user wants to change status for several claims.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of claim IDs (UUIDs) to update"
+          },
+          client_names: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of client/policyholder names to look up claims"
+          },
+          new_status: {
+            type: "string",
+            description: "The new status to set for all selected claims"
+          }
+        },
+        required: ["new_status"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "bulk_close_claims",
+      description: "Close multiple claims at once. Use when user wants to close several claims.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of claim IDs (UUIDs) to close"
+          },
+          client_names: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of client/policyholder names to look up claims"
+          }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "bulk_reopen_claims",
+      description: "Reopen multiple closed claims at once. Use when user wants to reopen several claims.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of claim IDs (UUIDs) to reopen"
+          },
+          client_names: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of client/policyholder names to look up claims"
+          }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "bulk_assign_staff",
+      description: "Assign a staff member to multiple claims at once.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of claim IDs (UUIDs)"
+          },
+          client_names: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of client/policyholder names to look up claims"
+          },
+          staff_id: {
+            type: "string",
+            description: "UUID of the staff member to assign"
+          },
+          staff_name: {
+            type: "string",
+            description: "Name of the staff member to assign (will look up ID)"
+          }
+        }
+      }
+    }
   }
 ];
 
@@ -731,6 +832,114 @@ async function createTask(supabase: any, params: {
     console.error("Exception creating task:", err);
     return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
   }
+}
+
+// Helper function to resolve multiple claims from names
+async function resolveClaimIds(supabase: any, claimIds?: string[], clientNames?: string[]): Promise<{ id: string; name: string }[]> {
+  const resolved: { id: string; name: string }[] = [];
+  
+  if (claimIds && claimIds.length > 0) {
+    for (const id of claimIds) {
+      const { data } = await supabase
+        .from("claims")
+        .select("id, policyholder_name")
+        .eq("id", id)
+        .single();
+      if (data) resolved.push({ id: data.id, name: data.policyholder_name });
+    }
+  }
+  
+  if (clientNames && clientNames.length > 0) {
+    for (const name of clientNames) {
+      const claim = await findClaimByClientName(supabase, name);
+      if (claim) resolved.push({ id: claim.id, name: claim.policyholder_name });
+    }
+  }
+  
+  return resolved;
+}
+
+// Helper function for bulk status update
+async function bulkUpdateStatus(supabase: any, claimIds: string[], newStatus: string): Promise<{ success: number; failed: number }> {
+  const { error } = await supabase
+    .from("claims")
+    .update({ status: newStatus })
+    .in("id", claimIds);
+  
+  if (error) {
+    console.error("Error bulk updating status:", error);
+    return { success: 0, failed: claimIds.length };
+  }
+  return { success: claimIds.length, failed: 0 };
+}
+
+// Helper function for bulk close claims
+async function bulkCloseClaims(supabase: any, claimIds: string[]): Promise<{ success: number; failed: number }> {
+  const { error } = await supabase
+    .from("claims")
+    .update({ is_closed: true })
+    .in("id", claimIds);
+  
+  if (error) {
+    console.error("Error bulk closing claims:", error);
+    return { success: 0, failed: claimIds.length };
+  }
+  return { success: claimIds.length, failed: 0 };
+}
+
+// Helper function for bulk reopen claims
+async function bulkReopenClaims(supabase: any, claimIds: string[]): Promise<{ success: number; failed: number }> {
+  const { error } = await supabase
+    .from("claims")
+    .update({ is_closed: false })
+    .in("id", claimIds);
+  
+  if (error) {
+    console.error("Error bulk reopening claims:", error);
+    return { success: 0, failed: claimIds.length };
+  }
+  return { success: claimIds.length, failed: 0 };
+}
+
+// Helper function for bulk staff assignment
+async function bulkAssignStaff(supabase: any, claimIds: string[], staffId: string): Promise<{ success: number; failed: number; skipped: number }> {
+  // Get existing assignments
+  const { data: existing } = await supabase
+    .from("claim_staff")
+    .select("claim_id")
+    .eq("staff_id", staffId)
+    .in("claim_id", claimIds);
+  
+  const existingIds = new Set(existing?.map((e: any) => e.claim_id) || []);
+  const newClaimIds = claimIds.filter(id => !existingIds.has(id));
+  
+  if (newClaimIds.length === 0) {
+    return { success: 0, failed: 0, skipped: claimIds.length };
+  }
+  
+  const { error } = await supabase
+    .from("claim_staff")
+    .insert(newClaimIds.map(claimId => ({ claim_id: claimId, staff_id: staffId })));
+  
+  if (error) {
+    console.error("Error bulk assigning staff:", error);
+    return { success: 0, failed: newClaimIds.length, skipped: existingIds.size };
+  }
+  return { success: newClaimIds.length, failed: 0, skipped: existingIds.size };
+}
+
+// Helper function to find staff by name
+async function findStaffByName(supabase: any, staffName: string): Promise<{ id: string; name: string } | null> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .or(`full_name.ilike.%${staffName}%,email.ilike.%${staffName}%`)
+    .limit(1);
+  
+  if (data && data.length > 0) {
+    return { id: data[0].id, name: data[0].full_name || data[0].email };
+  }
+  return null;
 }
 
 // Helper function to get staff members for assignment
@@ -986,7 +1195,18 @@ LEAD FINDER: You can FIND LEADS for potential clients! When the user asks about 
 1. Use the find_leads function with the location (city, county, state)
 2. Optionally specify a damage type (hail, wind, hurricane, tornado, roof, etc.)
 3. The tool will search for recent storm events and provide public property records resources
-4. This helps identify areas with recent damage where homeowners may need public adjuster services`;
+4. This helps identify areas with recent damage where homeowners may need public adjuster services
+
+BULK CLAIM MANAGEMENT: You can help clean up and manage multiple claims at once!
+- bulk_update_status: Change the status of multiple claims. User can specify by name (e.g., "change Smith, Jones, and Williams claims to 'In Review'")
+- bulk_close_claims: Close multiple claims at once (e.g., "close the Smith and Jones claims")
+- bulk_reopen_claims: Reopen multiple closed claims (e.g., "reopen the Williams and Brown claims")
+- bulk_assign_staff: Assign a staff member to multiple claims (e.g., "assign John to all the hurricane claims")
+
+When user asks to update, close, reopen, or assign staff to multiple claims:
+1. Use client_names array with the policyholder names mentioned
+2. For status updates, specify the new_status
+3. For staff assignment, use staff_name with the staff member's name`;
 
     const systemPrompt = reportType
       ? `You are an expert insurance claims report writer. Generate professional, detailed reports for property insurance claims. Your reports should be:
@@ -1195,6 +1415,106 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
           } catch (parseErr) {
             console.error("Error parsing find_leads arguments:", parseErr);
             answer += `\n\n❌ **Error finding leads:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "bulk_update_status") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Bulk updating status:", params);
+            
+            const resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names);
+            if (resolved.length === 0) {
+              answer += `\n\n❌ **No claims found** to update status.`;
+              continue;
+            }
+            
+            const claimIds = resolved.map(c => c.id);
+            const result = await bulkUpdateStatus(supabase, claimIds, params.new_status);
+            
+            const names = resolved.map(c => c.name).join(", ");
+            answer += `\n\n✅ **Bulk Status Update:** Changed ${result.success} claim(s) to "${params.new_status}"\nClaims: ${names}`;
+          } catch (parseErr) {
+            console.error("Error in bulk_update_status:", parseErr);
+            answer += `\n\n❌ **Error updating statuses:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "bulk_close_claims") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Bulk closing claims:", params);
+            
+            const resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names);
+            if (resolved.length === 0) {
+              answer += `\n\n❌ **No claims found** to close.`;
+              continue;
+            }
+            
+            const claimIds = resolved.map(c => c.id);
+            const result = await bulkCloseClaims(supabase, claimIds);
+            
+            const names = resolved.map(c => c.name).join(", ");
+            answer += `\n\n✅ **Claims Closed:** ${result.success} claim(s) closed successfully\nClaims: ${names}`;
+          } catch (parseErr) {
+            console.error("Error in bulk_close_claims:", parseErr);
+            answer += `\n\n❌ **Error closing claims:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "bulk_reopen_claims") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Bulk reopening claims:", params);
+            
+            const resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names);
+            if (resolved.length === 0) {
+              answer += `\n\n❌ **No claims found** to reopen.`;
+              continue;
+            }
+            
+            const claimIds = resolved.map(c => c.id);
+            const result = await bulkReopenClaims(supabase, claimIds);
+            
+            const names = resolved.map(c => c.name).join(", ");
+            answer += `\n\n✅ **Claims Reopened:** ${result.success} claim(s) reopened successfully\nClaims: ${names}`;
+          } catch (parseErr) {
+            console.error("Error in bulk_reopen_claims:", parseErr);
+            answer += `\n\n❌ **Error reopening claims:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "bulk_assign_staff") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Bulk assigning staff:", params);
+            
+            // Resolve staff ID
+            let staffId = params.staff_id;
+            let staffName = "";
+            
+            if (!staffId && params.staff_name) {
+              const staff = await findStaffByName(supabase, params.staff_name);
+              if (staff) {
+                staffId = staff.id;
+                staffName = staff.name;
+              } else {
+                answer += `\n\n❌ **Staff member "${params.staff_name}" not found.**`;
+                continue;
+              }
+            }
+            
+            if (!staffId) {
+              answer += `\n\n❌ **No staff member specified.** Please provide a staff name or ID.`;
+              continue;
+            }
+            
+            const resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names);
+            if (resolved.length === 0) {
+              answer += `\n\n❌ **No claims found** to assign staff.`;
+              continue;
+            }
+            
+            const claimIds = resolved.map(c => c.id);
+            const result = await bulkAssignStaff(supabase, claimIds, staffId);
+            
+            const claimNames = resolved.map(c => c.name).join(", ");
+            answer += `\n\n✅ **Staff Assigned:** ${staffName || "Staff member"} assigned to ${result.success} claim(s)${result.skipped > 0 ? ` (${result.skipped} already assigned)` : ""}\nClaims: ${claimNames}`;
+          } catch (parseErr) {
+            console.error("Error in bulk_assign_staff:", parseErr);
+            answer += `\n\n❌ **Error assigning staff:** Invalid parameters`;
           }
         }
       }
