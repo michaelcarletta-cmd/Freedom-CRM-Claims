@@ -30,8 +30,9 @@ import { DarwinEngineerReportAnalyzer } from "@/components/claim-detail/DarwinEn
 import { DarwinClaimBriefing } from "@/components/claim-detail/DarwinClaimBriefing";
 import { DarwinDocumentCompiler } from "@/components/claim-detail/DarwinDocumentCompiler";
 import { DarwinDemandPackage } from "@/components/claim-detail/DarwinDemandPackage";
+import { ShareClaimDialog } from "@/components/claim-detail/ShareClaimDialog";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles, Share2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -54,6 +55,7 @@ const ClaimDetail = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
 
   // Check if user is a portal user (client, contractor)
@@ -229,6 +231,14 @@ const ClaimDetail = () => {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setShareDialogOpen(true)}
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Share
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setNotifyDialogOpen(true)}
             >
               <Bell className="h-4 w-4 mr-2" />
@@ -272,6 +282,14 @@ const ClaimDetail = () => {
             clientId={claim.client_id}
             contractors={contractors}
             policyholderName={claim.policyholder_name}
+          />
+
+          <ShareClaimDialog
+            isOpen={shareDialogOpen}
+            onClose={() => setShareDialogOpen(false)}
+            onShared={() => queryClient.invalidateQueries({ queryKey: ["claim", id] })}
+            claimId={claim.id}
+            claimNumber={claim.claim_number}
           />
         </>
       )}
