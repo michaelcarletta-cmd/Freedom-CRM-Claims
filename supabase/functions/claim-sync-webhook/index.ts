@@ -385,6 +385,35 @@ serve(async (req) => {
               }, { onConflict: 'claim_id' });
           }
         }
+
+        // Sync payments - convert released payments to received on this side
+        if (accounting_data.payments && accounting_data.payments.length > 0) {
+          console.log(`Syncing ${accounting_data.payments.length} payments as received`);
+          for (const payment of accounting_data.payments) {
+            // Check if payment already exists by amount and date
+            const { data: existingPayment } = await supabase
+              .from('claim_payments')
+              .select('id')
+              .eq('claim_id', claimId)
+              .eq('amount', payment.amount)
+              .eq('payment_date', payment.payment_date)
+              .eq('direction', 'received')
+              .maybeSingle();
+
+            if (!existingPayment) {
+              await supabase.from('claim_payments').insert({
+                claim_id: claimId,
+                amount: payment.amount,
+                payment_date: payment.payment_date,
+                payment_method: payment.payment_method,
+                check_number: payment.check_number,
+                recipient_type: payment.recipient_type,
+                notes: payment.notes ? `[Synced] ${payment.notes}` : '[Synced from workspace]',
+                direction: 'received', // Mark as received on this side
+              });
+            }
+          }
+        }
       }
 
       // Sync files - download from signed URLs

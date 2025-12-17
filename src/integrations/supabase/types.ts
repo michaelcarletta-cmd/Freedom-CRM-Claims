@@ -769,6 +769,7 @@ export type Database = {
           claim_id: string
           created_at: string
           created_by: string | null
+          direction: string | null
           id: string
           notes: string | null
           payment_date: string
@@ -783,6 +784,7 @@ export type Database = {
           claim_id: string
           created_at?: string
           created_by?: string | null
+          direction?: string | null
           id?: string
           notes?: string | null
           payment_date: string
@@ -797,6 +799,7 @@ export type Database = {
           claim_id?: string
           created_at?: string
           created_by?: string | null
+          direction?: string | null
           id?: string
           notes?: string | null
           payment_date?: string
