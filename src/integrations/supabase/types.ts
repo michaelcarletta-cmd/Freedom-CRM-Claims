@@ -1066,6 +1066,7 @@ export type Database = {
           claim_email_id: string | null
           claim_number: string | null
           client_id: string | null
+          construction_status: string | null
           created_at: string | null
           id: string
           insurance_company: string | null
@@ -1099,6 +1100,7 @@ export type Database = {
           claim_email_id?: string | null
           claim_number?: string | null
           client_id?: string | null
+          construction_status?: string | null
           created_at?: string | null
           id?: string
           insurance_company?: string | null
@@ -1132,6 +1134,7 @@ export type Database = {
           claim_email_id?: string | null
           claim_number?: string | null
           client_id?: string | null
+          construction_status?: string | null
           created_at?: string | null
           id?: string
           insurance_company?: string | null
@@ -2683,6 +2686,7 @@ export type Database = {
           claim_email_id: string | null
           claim_number: string | null
           client_id: string | null
+          construction_status: string | null
           created_at: string | null
           id: string
           insurance_company: string | null
