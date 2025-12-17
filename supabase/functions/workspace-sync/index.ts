@@ -269,12 +269,18 @@ serve(async (req) => {
 
       case "sync_all_workspaces": {
         // Automated sync of all linked workspaces - called by cron
+        // Accept either x-cron-secret header or Authorization with service role key
         const cronSecret = req.headers.get("x-cron-secret");
         const expectedCronSecret = Deno.env.get("CRON_SECRET");
+        const authHeader = req.headers.get("authorization");
+        const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-        if (cronSecret !== expectedCronSecret) {
+        const hasValidCronSecret = cronSecret && cronSecret === expectedCronSecret;
+        const hasValidServiceRole = authHeader && authHeader === `Bearer ${serviceRoleKey}`;
+
+        if (!hasValidCronSecret && !hasValidServiceRole) {
           return new Response(
-            JSON.stringify({ success: false, error: "Invalid cron secret" }),
+            JSON.stringify({ success: false, error: "Unauthorized" }),
             { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
