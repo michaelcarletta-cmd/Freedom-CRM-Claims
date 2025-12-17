@@ -1701,6 +1701,7 @@ export type Database = {
           last_synced_at: string | null
           sync_secret: string
           sync_status: string | null
+          target_workspace_id: string | null
           workspace_id: string
         }
         Insert: {
@@ -1712,6 +1713,7 @@ export type Database = {
           last_synced_at?: string | null
           sync_secret: string
           sync_status?: string | null
+          target_workspace_id?: string | null
           workspace_id: string
         }
         Update: {
@@ -1723,6 +1725,7 @@ export type Database = {
           last_synced_at?: string | null
           sync_secret?: string
           sync_status?: string | null
+          target_workspace_id?: string | null
           workspace_id?: string
         }
         Relationships: [

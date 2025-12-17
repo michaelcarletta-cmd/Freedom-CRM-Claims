@@ -68,7 +68,7 @@ serve(async (req) => {
 
       case "sync_claims": {
         // Sync claims from workspace to external instance
-        const { workspace_id, target_instance_url, sync_secret } = payload;
+        const { workspace_id, target_instance_url, target_workspace_id, sync_secret } = payload;
 
         // Verify sync secret
         const { data: linkData } = await supabase
@@ -106,6 +106,7 @@ serve(async (req) => {
                 claim_data: claim,
                 external_claim_id: claim.id,
                 source_instance_url: supabaseUrl,
+                target_workspace_id: target_workspace_id || linkData.target_workspace_id,
               }),
             });
 
