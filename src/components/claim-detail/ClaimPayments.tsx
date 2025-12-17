@@ -28,6 +28,7 @@ interface Payment {
   recipient_type: string;
   recipient_id: string | null;
   notes: string | null;
+  direction: string | null;
 }
 
 interface Contractor {
@@ -143,6 +144,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
         recipient_type: formData.recipient_type,
         recipient_id: formData.recipient_type === "client" ? null : formData.recipient_id,
         notes: formData.notes || null,
+        direction: 'released',
       },
     ]);
 
@@ -201,7 +203,10 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     return method;
   };
 
-  const totalPayments = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const releasedPayments = payments.filter(p => !p.direction || p.direction === 'released');
+  const receivedPayments = payments.filter(p => p.direction === 'received');
+  const totalReleased = releasedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const totalReceived = receivedPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
   const handleQuickBooksPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
     let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer'; stripeAccountId?: string } = { 
@@ -300,8 +305,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
       <CardContent className="space-y-4">
         <div className="flex justify-between items-center">
           <div>
-            <p className="text-sm text-muted-foreground">Total Payments</p>
-            <p className="text-2xl font-bold text-primary">${totalPayments.toLocaleString()}</p>
+            <p className="text-sm text-muted-foreground">Total Released</p>
+            <p className="text-2xl font-bold text-primary">${totalReleased.toLocaleString()}</p>
           </div>
           {isAdmin && (
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -533,11 +538,11 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           </div>
         )}
 
-        {payments.length === 0 ? (
-          <p className="text-center text-muted-foreground py-4">No payments recorded</p>
+        {releasedPayments.length === 0 ? (
+          <p className="text-center text-muted-foreground py-4">No payments released</p>
         ) : (
           <div className="space-y-2">
-            {payments.map((payment) => (
+            {releasedPayments.map((payment) => (
               <div
                 key={payment.id}
                 className="flex items-center justify-between p-3 border rounded-lg"
@@ -590,6 +595,53 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Payments Received Section */}
+        {receivedPayments.length > 0 && (
+          <div className="mt-6 pt-6 border-t">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <p className="text-lg font-semibold text-green-600">Payments Received</p>
+                <p className="text-sm text-muted-foreground">From workspace partners</p>
+              </div>
+              <p className="text-2xl font-bold text-green-600">${totalReceived.toLocaleString()}</p>
+            </div>
+            <div className="space-y-2">
+              {receivedPayments.map((payment) => (
+                <div
+                  key={payment.id}
+                  className="flex items-center justify-between p-3 border rounded-lg bg-green-50 dark:bg-green-950/20"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-green-600">
+                        ${payment.amount.toLocaleString()}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {getPaymentMethodLabel(payment.payment_method, payment.check_number)}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {format(new Date(payment.payment_date), "MMM dd, yyyy")}
+                    </div>
+                    {payment.notes && (
+                      <div className="text-xs text-muted-foreground mt-1">{payment.notes}</div>
+                    )}
+                  </div>
+                  {isAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(payment.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
