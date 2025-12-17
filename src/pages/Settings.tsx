@@ -37,6 +37,7 @@ import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { MakeIntegrationSettings } from "@/components/settings/MakeIntegrationSettings";
 import NotificationPreferencesSettings from "@/components/settings/NotificationPreferencesSettings";
+import { OrganizationSettings } from "@/components/settings/OrganizationSettings";
 import { useQuery } from "@tanstack/react-query";
 
 interface ClaimStatus {
@@ -315,6 +316,7 @@ export default function Settings() {
           <TabsTrigger value="ai-knowledge" className="w-full md:w-auto justify-start text-base font-medium px-4">AI Knowledge Base</TabsTrigger>
           <TabsTrigger value="integrations" className="w-full md:w-auto justify-start text-base font-medium px-4">Integrations</TabsTrigger>
           <TabsTrigger value="branding" className="w-full md:w-auto justify-start text-base font-medium px-4">Company Branding</TabsTrigger>
+          <TabsTrigger value="organization" className="w-full md:w-auto justify-start text-base font-medium px-4">Organization</TabsTrigger>
           {isAdmin && (
             <TabsTrigger value="backup" className="w-full md:w-auto justify-start text-base font-medium px-4">Backup Status</TabsTrigger>
           )}
@@ -423,6 +425,10 @@ export default function Settings() {
 
         <TabsContent value="branding" className="w-full">
           <CompanyBrandingSettings />
+        </TabsContent>
+
+        <TabsContent value="organization" className="w-full">
+          <OrganizationSettings />
         </TabsContent>
 
         {isAdmin && (
