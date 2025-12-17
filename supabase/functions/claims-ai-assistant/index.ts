@@ -811,10 +811,47 @@ const tools = [
         }
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "bulk_share_to_workspace",
+      description: "Share multiple claims to a workspace for collaboration with partner organizations. Can filter by contractor name, status, or specify claims directly.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of claim IDs (UUIDs) to share"
+          },
+          client_names: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of client/policyholder names to look up claims"
+          },
+          filter_by_contractor: {
+            type: "string",
+            description: "Filter claims by assigned contractor name (e.g., 'Condition One')"
+          },
+          filter_by_status: {
+            type: "string",
+            description: "Filter claims by their current status"
+          },
+          workspace_name: {
+            type: "string",
+            description: "Name of the workspace to share claims to"
+          },
+          workspace_id: {
+            type: "string",
+            description: "UUID of the workspace to share claims to"
+          }
+        },
+        required: []
+      }
+    }
   }
 ];
-
-// Helper function to create a task
 async function createTask(supabase: any, params: {
   claim_id: string;
   title: string;
@@ -971,6 +1008,64 @@ async function findStaffByName(supabase: any, staffName: string): Promise<{ id: 
     return { id: data[0].id, name: data[0].full_name || data[0].email };
   }
   return null;
+}
+
+// Helper function to find workspace by name
+async function findWorkspaceByName(supabase: any, workspaceName: string): Promise<{ id: string; name: string } | null> {
+  const { data } = await supabase
+    .from("workspaces")
+    .select("id, name")
+    .ilike("name", `%${workspaceName}%`)
+    .limit(1);
+  
+  if (data && data.length > 0) {
+    return { id: data[0].id, name: data[0].name };
+  }
+  return null;
+}
+
+// Helper function to resolve claims by contractor name
+async function resolveClaimsByContractor(supabase: any, contractorName: string): Promise<{ id: string; name: string }[]> {
+  // Find the contractor by name
+  const { data: contractors } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .ilike("full_name", `%${contractorName}%`);
+  
+  if (!contractors || contractors.length === 0) return [];
+  
+  const contractorIds = contractors.map((c: any) => c.id);
+  
+  // Get claims assigned to this contractor
+  const { data: assignments } = await supabase
+    .from("claim_contractors")
+    .select("claim_id")
+    .in("contractor_id", contractorIds);
+  
+  if (!assignments || assignments.length === 0) return [];
+  
+  const claimIds = assignments.map((a: any) => a.claim_id);
+  
+  const { data: claims } = await supabase
+    .from("claims")
+    .select("id, policyholder_name")
+    .in("id", claimIds);
+  
+  return (claims || []).map((c: any) => ({ id: c.id, name: c.policyholder_name || "Unknown" }));
+}
+
+// Helper function for bulk share to workspace
+async function bulkShareToWorkspace(supabase: any, claimIds: string[], workspaceId: string): Promise<{ success: number; failed: number }> {
+  const { error } = await supabase
+    .from("claims")
+    .update({ workspace_id: workspaceId })
+    .in("id", claimIds);
+  
+  if (error) {
+    console.error("Error bulk sharing to workspace:", error);
+    return { success: 0, failed: claimIds.length };
+  }
+  return { success: claimIds.length, failed: 0 };
 }
 
 // Helper function to get staff members for assignment
@@ -1233,6 +1328,7 @@ BULK CLAIM MANAGEMENT: You can help clean up and manage multiple claims at once!
 - bulk_close_claims: Close multiple claims at once
 - bulk_reopen_claims: Reopen multiple closed claims
 - bulk_assign_staff: Assign a staff member to multiple claims
+- bulk_share_to_workspace: Share multiple claims to a workspace for partner collaboration
 
 IMPORTANT: You can filter claims by their CURRENT STATUS using filter_by_status parameter!
 Examples:
@@ -1240,7 +1336,24 @@ Examples:
 - "change all Open claims to In Review" → use filter_by_status: "Open", new_status: "In Review"
 - "mark claims with Claim Settled status as closed" → use filter_by_status: "Claim Settled"
 
+WORKSPACE SHARING: You can share claims to workspaces for partner collaboration!
+- Use bulk_share_to_workspace with workspace_name (e.g., "Condition One Workspace")
+- Filter by contractor using filter_by_contractor (e.g., "Condition One")
+- Example: "share all claims with Condition One as contractor to Condition One workspace"
+  → use filter_by_contractor: "Condition One", workspace_name: "Condition One"
+
 You can also specify claims by name using client_names array, or by ID using claim_ids array.`;
+
+    // Fetch available workspaces for context
+    let workspacesContext = "";
+    const { data: allWorkspaces } = await supabase
+      .from("workspaces")
+      .select("id, name")
+      .limit(20);
+    
+    if (allWorkspaces && allWorkspaces.length > 0) {
+      workspacesContext = `\n\nAvailable Workspaces:\n${allWorkspaces.map(w => `- ${w.name} (ID: ${w.id})`).join("\n")}`;
+    }
 
     const systemPrompt = reportType
       ? `You are an expert insurance claims report writer. Generate professional, detailed reports for property insurance claims. Your reports should be:
@@ -1314,7 +1427,7 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
     
     conversationMessages.push({ 
       role: "system", 
-      content: `${systemPrompt}\n\nContext:\n${contextContent}${additionalContext}${staffListContext}`
+      content: `${systemPrompt}\n\nContext:\n${contextContent}${additionalContext}${staffListContext}${workspacesContext}`
     });
     
     // If we have knowledge base context, surface it explicitly as a separate assistant message
@@ -1549,6 +1662,61 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
           } catch (parseErr) {
             console.error("Error in bulk_assign_staff:", parseErr);
             answer += `\n\n❌ **Error assigning staff:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "bulk_share_to_workspace") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Bulk sharing to workspace:", params);
+            
+            // Resolve workspace
+            let workspaceId = params.workspace_id;
+            let workspaceName = "";
+            
+            if (!workspaceId && params.workspace_name) {
+              const workspace = await findWorkspaceByName(supabase, params.workspace_name);
+              if (workspace) {
+                workspaceId = workspace.id;
+                workspaceName = workspace.name;
+              } else {
+                answer += `\n\n❌ **Workspace "${params.workspace_name}" not found.**`;
+                continue;
+              }
+            }
+            
+            if (!workspaceId) {
+              answer += `\n\n❌ **No workspace specified.** Please provide a workspace name.`;
+              continue;
+            }
+            
+            // Resolve claims - check contractor filter first
+            let resolved: { id: string; name: string }[] = [];
+            
+            if (params.filter_by_contractor) {
+              resolved = await resolveClaimsByContractor(supabase, params.filter_by_contractor);
+              if (resolved.length === 0) {
+                answer += `\n\n❌ **No claims found** with contractor "${params.filter_by_contractor}".`;
+                continue;
+              }
+            } else {
+              resolved = await resolveClaimIds(supabase, params.claim_ids, params.client_names, params.filter_by_status);
+              if (resolved.length === 0) {
+                answer += `\n\n❌ **No claims found** to share.`;
+                continue;
+              }
+            }
+            
+            const claimIds = resolved.map(c => c.id);
+            const result = await bulkShareToWorkspace(supabase, claimIds, workspaceId);
+            
+            const filterInfo = params.filter_by_contractor 
+              ? ` with contractor "${params.filter_by_contractor}"` 
+              : params.filter_by_status 
+                ? ` with status "${params.filter_by_status}"` 
+                : "";
+            answer += `\n\n✅ **Claims Shared:** ${result.success} claim(s)${filterInfo} shared to workspace "${workspaceName || 'selected workspace'}"`;
+          } catch (parseErr) {
+            console.error("Error in bulk_share_to_workspace:", parseErr);
+            answer += `\n\n❌ **Error sharing to workspace:** Invalid parameters`;
           }
         }
       }

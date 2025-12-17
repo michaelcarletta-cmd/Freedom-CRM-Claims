@@ -2,7 +2,7 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, RefreshCw, Lock, Unlock, Users, UserPlus, CheckSquare } from "lucide-react";
+import { Trash2, RefreshCw, Lock, Unlock, Users, UserPlus, CheckSquare, Share2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
@@ -92,6 +92,37 @@ export const BulkClaimActions = ({
 
       const contractorIds = new Set(rolesRes.data.map(r => r.user_id));
       return (profilesRes.data || []).filter(p => contractorIds.has(p.id));
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  // Fetch workspaces user has access to
+  const { data: workspaces = [] } = useQuery({
+    queryKey: ["workspaces-bulk"],
+    queryFn: async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) return [];
+      
+      const { data: orgMember } = await supabase
+        .from("org_members")
+        .select("org_id")
+        .eq("user_id", userData.user.id)
+        .single();
+      
+      if (!orgMember) return [];
+      
+      const { data: workspaceMembers } = await supabase
+        .from("workspace_members")
+        .select("workspace_id, workspaces(id, name)")
+        .eq("org_id", orgMember.org_id)
+        .eq("status", "active");
+      
+      if (!workspaceMembers) return [];
+      
+      return workspaceMembers
+        .filter((wm: any) => wm.workspaces)
+        .map((wm: any) => ({ id: wm.workspaces.id, name: wm.workspaces.name }));
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
@@ -209,6 +240,36 @@ export const BulkClaimActions = ({
       toast({
         title: "Error",
         description: "Failed to assign contractor",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleBulkShareToWorkspace = async (workspaceId: string) => {
+    setUpdating(true);
+    try {
+      const { error } = await supabase
+        .from("claims")
+        .update({ workspace_id: workspaceId })
+        .in("id", Array.from(selectedClaims));
+
+      if (error) throw error;
+
+      const workspace = workspaces.find(w => w.id === workspaceId);
+      toast({
+        title: "Success",
+        description: `Shared ${selectedClaims.size} claim(s) to "${workspace?.name || 'workspace'}"`,
+      });
+
+      onClearSelection();
+      queryClient.invalidateQueries({ queryKey: ["claims"] });
+    } catch (error) {
+      console.error("Error sharing to workspace:", error);
+      toast({
+        title: "Error",
+        description: "Failed to share claims to workspace",
         variant: "destructive",
       });
     } finally {
@@ -352,6 +413,26 @@ export const BulkClaimActions = ({
                   )}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
+
+              {/* Share to Workspace */}
+              {workspaces.length > 0 && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Share2 className="h-4 w-4 mr-2" />
+                    Share to Workspace
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {workspaces.map((workspace) => (
+                      <DropdownMenuItem
+                        key={workspace.id}
+                        onClick={() => handleBulkShareToWorkspace(workspace.id)}
+                      >
+                        {workspace.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
 
               <DropdownMenuSeparator />
 
