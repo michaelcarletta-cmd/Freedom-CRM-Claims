@@ -45,6 +45,11 @@ interface MortgageCompany {
   name: string;
 }
 
+interface Workspace {
+  id: string;
+  name: string;
+}
+
 export function NewClaimDialog() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -53,7 +58,9 @@ export function NewClaimDialog() {
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [mortgageCompanies, setMortgageCompanies] = useState<MortgageCompany[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
   const [addInsuranceOpen, setAddInsuranceOpen] = useState(false);
   const [addMortgageOpen, setAddMortgageOpen] = useState(false);
   const [newInsuranceName, setNewInsuranceName] = useState("");
@@ -111,6 +118,31 @@ export function NewClaimDialog() {
       setReferrers(referrersRes.data || []);
       setClients(clientsRes.data || []);
       setMortgageCompanies(mortgageRes.data || []);
+      
+      // Fetch workspaces user has access to
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user) {
+        const { data: orgMember } = await supabase
+          .from("org_members")
+          .select("org_id")
+          .eq("user_id", userData.user.id)
+          .single();
+        
+        if (orgMember) {
+          const { data: workspaceMembers } = await supabase
+            .from("workspace_members")
+            .select("workspace_id, workspaces(id, name)")
+            .eq("org_id", orgMember.org_id)
+            .eq("status", "active");
+          
+          if (workspaceMembers) {
+            const ws = workspaceMembers
+              .filter((wm: any) => wm.workspaces)
+              .map((wm: any) => ({ id: wm.workspaces.id, name: wm.workspaces.name }));
+            setWorkspaces(ws);
+          }
+        }
+      }
     } catch (error: any) {
       console.error("Error fetching dropdown data:", error);
       toast({
@@ -338,13 +370,22 @@ export function NewClaimDialog() {
         }
       }
 
+      // Share to workspace if selected
+      if (claim?.id && selectedWorkspaceId) {
+        await supabase
+          .from("claims")
+          .update({ workspace_id: selectedWorkspaceId })
+          .eq("id", claim.id);
+      }
+
       toast({
         title: "Success",
-        description: "Claim created successfully",
+        description: selectedWorkspaceId ? "Claim created and shared to workspace" : "Claim created successfully",
       });
 
       setOpen(false);
       setSelectedClientId("");
+      setSelectedWorkspaceId("");
       setFormData({
         policyholderName: "",
         policyholderPhone: "",
@@ -647,6 +688,37 @@ export function NewClaimDialog() {
               </div>
             </div>
           </div>
+
+          {/* Share to Workspace Section */}
+          {workspaces.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2">
+                Share to Workspace (Optional)
+              </h3>
+              <div className="space-y-2">
+                <Label htmlFor="workspace">Share with Partner Organization</Label>
+                <Select
+                  value={selectedWorkspaceId}
+                  onValueChange={setSelectedWorkspaceId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select workspace to share" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Don't share</SelectItem>
+                    {workspaces.map((workspace) => (
+                      <SelectItem key={workspace.id} value={workspace.id}>
+                        {workspace.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Select a workspace to immediately share this claim with partner organizations
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
