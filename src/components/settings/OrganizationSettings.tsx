@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Building2, UserPlus, Trash2, Crown, Shield, User } from "lucide-react";
+import { Building2, UserPlus, Trash2, Crown, Shield, User, Pencil } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -25,6 +25,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface OrgMember {
   id: string;
@@ -51,6 +62,8 @@ export function OrganizationSettings() {
   const queryClient = useQueryClient();
   const [isCreating, setIsCreating] = useState(false);
   const [isAddingMember, setIsAddingMember] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [newOrgSlug, setNewOrgSlug] = useState("");
   const [newOrgDomain, setNewOrgDomain] = useState("");
@@ -58,6 +71,10 @@ export function OrganizationSettings() {
   const [newMemberRole, setNewMemberRole] = useState("member");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editOrgName, setEditOrgName] = useState("");
+  const [editOrgSlug, setEditOrgSlug] = useState("");
+  const [editOrgDomain, setEditOrgDomain] = useState("");
 
   // Get current user's organization
   const { data: userOrg, isLoading: loadingOrg } = useQuery({
@@ -160,6 +177,91 @@ export function OrganizationSettings() {
     } finally {
       setIsCreating(false);
     }
+  };
+
+  const handleEditOrg = async () => {
+    if (!editOrgName.trim() || !editOrgSlug.trim() || !userOrg?.org_id) {
+      toast({
+        title: "Error",
+        description: "Organization name and slug are required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsEditing(true);
+    try {
+      const { error } = await supabase
+        .from("orgs")
+        .update({
+          name: editOrgName.trim(),
+          slug: editOrgSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+          domain: editOrgDomain.trim() || null,
+        })
+        .eq("id", userOrg.org_id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Organization updated successfully",
+      });
+
+      setShowEditDialog(false);
+      queryClient.invalidateQueries({ queryKey: ["user-organization"] });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const handleDeleteOrg = async () => {
+    if (!userOrg?.org_id) return;
+
+    setIsDeleting(true);
+    try {
+      // Delete all org members first (cascade should handle this, but being explicit)
+      await supabase
+        .from("org_members")
+        .delete()
+        .eq("org_id", userOrg.org_id);
+
+      // Delete the organization
+      const { error } = await supabase
+        .from("orgs")
+        .delete()
+        .eq("id", userOrg.org_id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Organization deleted successfully",
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["user-organization"] });
+      queryClient.invalidateQueries({ queryKey: ["org-members"] });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const openEditDialog = (org: Org) => {
+    setEditOrgName(org.name);
+    setEditOrgSlug(org.slug);
+    setEditOrgDomain(org.domain || "");
+    setShowEditDialog(true);
   };
 
   const handleAddMember = async () => {
@@ -296,6 +398,7 @@ export function OrganizationSettings() {
   };
 
   const isOrgAdmin = userOrg?.role === "owner" || userOrg?.role === "admin";
+  const isOrgOwner = userOrg?.role === "owner";
 
   if (loadingOrg) {
     return (
@@ -385,14 +488,51 @@ export function OrganizationSettings() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            {org.name}
-          </CardTitle>
-          <CardDescription>
-            Manage your organization and team members
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              {org.name}
+            </CardTitle>
+            <CardDescription>
+              Manage your organization settings
+            </CardDescription>
+          </div>
+          {isOrgOwner && (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => openEditDialog(org)}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm">
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Organization</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete "{org.name}"? This action cannot be undone. 
+                      All team members will be removed and workspace memberships will be lost.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteOrg}
+                      disabled={isDeleting}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {isDeleting ? "Deleting..." : "Delete Organization"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -408,12 +548,61 @@ export function OrganizationSettings() {
         </CardContent>
       </Card>
 
+      {/* Edit Organization Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Organization</DialogTitle>
+            <DialogDescription>
+              Update your organization details
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Organization Name</Label>
+              <Input
+                placeholder="e.g., Freedom Claims"
+                value={editOrgName}
+                onChange={(e) => setEditOrgName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Slug (URL-friendly identifier)</Label>
+              <Input
+                placeholder="e.g., freedom-claims"
+                value={editOrgSlug}
+                onChange={(e) => setEditOrgSlug(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Partners use this slug to invite your organization to workspaces
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Domain (optional)</Label>
+              <Input
+                placeholder="e.g., freedomclaims.com"
+                value={editOrgDomain}
+                onChange={(e) => setEditOrgDomain(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleEditOrg} disabled={isEditing}>
+              {isEditing ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Team Members</CardTitle>
+            <CardTitle>Organization Members</CardTitle>
             <CardDescription>
-              People in your organization
+              Staff members in your organization who can access shared workspaces
             </CardDescription>
           </div>
           {isOrgAdmin && (
@@ -426,7 +615,7 @@ export function OrganizationSettings() {
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Add Team Member</DialogTitle>
+                  <DialogTitle>Add Organization Member</DialogTitle>
                   <DialogDescription>
                     Add an existing user to your organization
                   </DialogDescription>
