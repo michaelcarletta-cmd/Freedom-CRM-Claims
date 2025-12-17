@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, UserPlus, Trash2, MessageSquare, FileText, Send } from "lucide-react";
+import { Building2, UserPlus, Trash2, MessageSquare, FileText, Send, Link2, RefreshCw, Globe } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -36,11 +36,17 @@ export function WorkspaceDetail() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [showLinkInstanceDialog, setShowLinkInstanceDialog] = useState(false);
   const [inviteOrgSlug, setInviteOrgSlug] = useState("");
   const [inviteRole, setInviteRole] = useState("collaborator");
   const [isInviting, setIsInviting] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [externalInstanceUrl, setExternalInstanceUrl] = useState("");
+  const [externalInstanceName, setExternalInstanceName] = useState("");
+  const [syncSecret, setSyncSecret] = useState("");
+  const [isLinking, setIsLinking] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Get user's organization
   const { data: userOrg } = useQuery({
@@ -136,6 +142,23 @@ export function WorkspaceDetail() {
         `)
         .eq("workspace_id", workspaceId)
         .order("updated_at", { ascending: false });
+
+      return data || [];
+    },
+    enabled: !!workspaceId,
+  });
+
+  // Get linked external instances
+  const { data: linkedInstances } = useQuery({
+    queryKey: ["linked-workspaces", workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) return [];
+
+      const { data } = await supabase
+        .from("linked_workspaces")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .order("created_at", { ascending: false });
 
       return data || [];
     },
@@ -313,6 +336,119 @@ export function WorkspaceDetail() {
     }
   };
 
+  const handleLinkExternalInstance = async () => {
+    if (!externalInstanceUrl.trim() || !externalInstanceName.trim() || !syncSecret.trim() || !workspaceId) return;
+
+    setIsLinking(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Check if already linked
+      const { data: existing } = await supabase
+        .from("linked_workspaces")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .eq("external_instance_url", externalInstanceUrl.trim())
+        .maybeSingle();
+
+      if (existing) {
+        toast({
+          title: "Already linked",
+          description: "This instance is already linked to this workspace",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Create link record
+      const { error } = await supabase
+        .from("linked_workspaces")
+        .insert({
+          workspace_id: workspaceId,
+          external_instance_url: externalInstanceUrl.trim(),
+          instance_name: externalInstanceName.trim(),
+          sync_secret: syncSecret.trim(),
+          sync_status: "active",
+          created_by: user.id,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Instance linked",
+        description: `${externalInstanceName} has been linked to this workspace`,
+      });
+
+      setShowLinkInstanceDialog(false);
+      setExternalInstanceUrl("");
+      setExternalInstanceName("");
+      setSyncSecret("");
+      queryClient.invalidateQueries({ queryKey: ["linked-workspaces"] });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLinking(false);
+    }
+  };
+
+  const handleSyncToInstance = async (linkedWorkspace: any) => {
+    setIsSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("workspace-sync", {
+        body: {
+          action: "sync_claims",
+          workspace_id: workspaceId,
+          target_instance_url: linkedWorkspace.external_instance_url,
+          sync_secret: linkedWorkspace.sync_secret,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Sync complete",
+        description: `Claims synced to ${linkedWorkspace.instance_name}`,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["linked-workspaces"] });
+    } catch (error: any) {
+      toast({
+        title: "Sync failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleRemoveLinkedInstance = async (linkId: string) => {
+    try {
+      const { error } = await supabase
+        .from("linked_workspaces")
+        .delete()
+        .eq("id", linkId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Instance unlinked",
+      });
+      queryClient.invalidateQueries({ queryKey: ["linked-workspaces"] });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoading) {
     return <div className="text-center py-8">Loading...</div>;
   }
@@ -331,55 +467,118 @@ export function WorkspaceDetail() {
           </p>
         </div>
         {isOwner && (
-          <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
-            <DialogTrigger asChild>
-              <Button>
-                <UserPlus className="h-4 w-4 mr-2" />
-                Invite Organization
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Invite Organization</DialogTitle>
-                <DialogDescription>
-                  Invite another company to collaborate in this workspace
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Organization Slug</Label>
-                  <Input
-                    placeholder="e.g., condition-one"
-                    value={inviteOrgSlug}
-                    onChange={(e) => setInviteOrgSlug(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    The unique identifier of the organization
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Role</Label>
-                  <Select value={inviteRole} onValueChange={setInviteRole}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="collaborator">Collaborator</SelectItem>
-                      <SelectItem value="viewer">Viewer</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowInviteDialog(false)}>
-                  Cancel
+          <div className="flex gap-2">
+            <Dialog open={showLinkInstanceDialog} onOpenChange={setShowLinkInstanceDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Link2 className="h-4 w-4 mr-2" />
+                  Link External Instance
                 </Button>
-                <Button onClick={handleInviteOrg} disabled={isInviting}>
-                  {isInviting ? "Sending..." : "Send Invitation"}
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Link External Instance</DialogTitle>
+                  <DialogDescription>
+                    Connect an external Freedom Claims instance to sync workspace claims
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Instance Name</Label>
+                    <Input
+                      placeholder="e.g., Condition One Commercial"
+                      value={externalInstanceName}
+                      onChange={(e) => setExternalInstanceName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Instance URL</Label>
+                    <Input
+                      placeholder="https://xxx.supabase.co"
+                      value={externalInstanceUrl}
+                      onChange={(e) => setExternalInstanceUrl(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The Supabase URL of the external instance
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Sync Secret</Label>
+                    <Input
+                      type="password"
+                      placeholder="Shared secret for authentication"
+                      value={syncSecret}
+                      onChange={(e) => setSyncSecret(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Must match the CLAIM_SYNC_SECRET on the external instance
+                    </p>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowLinkInstanceDialog(false)}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleLinkExternalInstance} 
+                    disabled={isLinking || !externalInstanceUrl.trim() || !externalInstanceName.trim() || !syncSecret.trim()}
+                  >
+                    {isLinking ? "Linking..." : "Link Instance"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+              <DialogTrigger asChild>
+                <Button>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Invite Organization
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Invite Organization</DialogTitle>
+                  <DialogDescription>
+                    Invite another company to collaborate in this workspace
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Organization Slug</Label>
+                    <Input
+                      placeholder="e.g., condition-one"
+                      value={inviteOrgSlug}
+                      onChange={(e) => setInviteOrgSlug(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The unique identifier of the organization
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <Select value={inviteRole} onValueChange={setInviteRole}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="collaborator">Collaborator</SelectItem>
+                        <SelectItem value="viewer">Viewer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowInviteDialog(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleInviteOrg} disabled={isInviting}>
+                    {isInviting ? "Sending..." : "Send Invitation"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         )}
       </div>
 
@@ -396,6 +595,10 @@ export function WorkspaceDetail() {
           <TabsTrigger value="members">
             <Building2 className="h-4 w-4 mr-2" />
             Members
+          </TabsTrigger>
+          <TabsTrigger value="linked">
+            <Globe className="h-4 w-4 mr-2" />
+            Linked Instances
           </TabsTrigger>
         </TabsList>
 
@@ -550,6 +753,83 @@ export function WorkspaceDetail() {
                   ))}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="linked" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Linked External Instances</CardTitle>
+              <CardDescription>
+                External Freedom Claims instances that sync with this workspace
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {linkedInstances && linkedInstances.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Instance</TableHead>
+                      <TableHead>URL</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Last Synced</TableHead>
+                      <TableHead className="w-24"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {linkedInstances.map((linked: any) => (
+                      <TableRow key={linked.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <Globe className="h-4 w-4 text-muted-foreground" />
+                            {linked.instance_name}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {linked.external_instance_url}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={linked.sync_status === "active" ? "default" : "secondary"}>
+                            {linked.sync_status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {linked.last_synced_at
+                            ? format(new Date(linked.last_synced_at), "MMM d, h:mm a")
+                            : "Never"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleSyncToInstance(linked)}
+                              disabled={isSyncing}
+                              title="Sync claims to this instance"
+                            >
+                              <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
+                            </Button>
+                            {isOwner && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveLinkedInstance(linked.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No external instances linked yet. Click "Link External Instance" to connect one.
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

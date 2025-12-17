@@ -1691,6 +1691,50 @@ export type Database = {
           },
         ]
       }
+      linked_workspaces: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          external_instance_url: string
+          id: string
+          instance_name: string
+          last_synced_at: string | null
+          sync_secret: string
+          sync_status: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          external_instance_url: string
+          id?: string
+          instance_name: string
+          last_synced_at?: string | null
+          sync_secret: string
+          sync_status?: string | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          external_instance_url?: string
+          id?: string
+          instance_name?: string
+          last_synced_at?: string | null
+          sync_secret?: string
+          sync_status?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "linked_workspaces_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loss_types: {
         Row: {
           created_at: string

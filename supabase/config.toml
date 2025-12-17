@@ -101,3 +101,6 @@ verify_jwt = false
 
 [functions.generate-photo-report-docx]
 verify_jwt = true
+
+[functions.workspace-sync]
+verify_jwt = true
