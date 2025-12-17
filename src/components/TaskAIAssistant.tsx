@@ -182,20 +182,14 @@ const TaskAIAssistant = ({ task, claimId, onTaskUpdated }: TaskAIAssistantProps)
 
         if (error) throw error;
 
-        // Update task follow-up tracking without completing the task
-        // This marks that a follow-up was sent while keeping the task open for future automated follow-ups
+        // Mark task as completed since AI has sent the follow-up
         const now = new Date().toISOString();
-        const currentCount = task.follow_up_current_count || 0;
-        const intervalDays = task.follow_up_interval_days || 3;
-        const nextFollowUp = new Date();
-        nextFollowUp.setDate(nextFollowUp.getDate() + intervalDays);
-
         await supabase
           .from("tasks")
           .update({
-            follow_up_last_sent_at: now,
-            follow_up_current_count: currentCount + 1,
-            follow_up_next_at: task.follow_up_enabled ? nextFollowUp.toISOString() : null,
+            status: 'completed',
+            completed_at: now,
+            updated_at: now,
           })
           .eq("id", task.id);
 
@@ -203,8 +197,8 @@ const TaskAIAssistant = ({ task, claimId, onTaskUpdated }: TaskAIAssistantProps)
         onTaskUpdated?.();
 
         toast({
-          title: "Email sent",
-          description: `Follow-up email sent to ${recipientEmail}. Task updated for tracking.`,
+          title: "Email sent & task completed",
+          description: `Follow-up email sent to ${recipientEmail}. Task marked as completed.`,
         });
       } else if (action.type === "sms") {
         // Prioritize adjuster phone over client
