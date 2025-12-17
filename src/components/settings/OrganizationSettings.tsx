@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Building2, UserPlus, Trash2, Crown, Shield, User, Pencil } from "lucide-react";
+import { Building2, UserPlus, Trash2, Crown, Shield, User, Pencil, Check, ChevronsUpDown } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -36,6 +36,20 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface OrgMember {
   id: string;
@@ -67,7 +81,6 @@ export function OrganizationSettings() {
   const [newOrgName, setNewOrgName] = useState("");
   const [newOrgSlug, setNewOrgSlug] = useState("");
   const [newOrgDomain, setNewOrgDomain] = useState("");
-  const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberRole, setNewMemberRole] = useState("member");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
@@ -75,6 +88,8 @@ export function OrganizationSettings() {
   const [editOrgName, setEditOrgName] = useState("");
   const [editOrgSlug, setEditOrgSlug] = useState("");
   const [editOrgDomain, setEditOrgDomain] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [userSearchOpen, setUserSearchOpen] = useState(false);
 
   // Get current user's organization
   const { data: userOrg, isLoading: loadingOrg } = useQuery({
@@ -117,6 +132,35 @@ export function OrganizationSettings() {
       return data || [];
     },
     enabled: !!userOrg?.org_id,
+  });
+
+  // Get available staff/admin users who aren't already org members
+  const { data: availableUsers } = useQuery({
+    queryKey: ["available-org-users", userOrg?.org_id],
+    queryFn: async () => {
+      // Get staff and admin user IDs
+      const { data: staffRoles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .in("role", ["staff", "admin"]);
+
+      if (!staffRoles || staffRoles.length === 0) return [];
+
+      const staffUserIds = staffRoles.map(r => r.user_id);
+
+      // Get existing org member user IDs
+      const existingMemberIds = orgMembers?.map((m: any) => m.user_id) || [];
+
+      // Get profiles for staff/admin users who aren't already members
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, email, full_name")
+        .in("id", staffUserIds)
+        .not("id", "in", existingMemberIds.length > 0 ? `(${existingMemberIds.join(",")})` : "(00000000-0000-0000-0000-000000000000)");
+
+      return profiles || [];
+    },
+    enabled: !!userOrg?.org_id && !!orgMembers,
   });
 
   const handleCreateOrg = async () => {
@@ -265,10 +309,10 @@ export function OrganizationSettings() {
   };
 
   const handleAddMember = async () => {
-    if (!newMemberEmail.trim() || !userOrg?.org_id) {
+    if (!selectedUserId || !userOrg?.org_id) {
       toast({
         title: "Error",
-        description: "Email is required",
+        description: "Please select a user",
         variant: "destructive",
       });
       return;
@@ -276,45 +320,12 @@ export function OrganizationSettings() {
 
     setIsAddingMember(true);
     try {
-      // Find user by email
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("email", newMemberEmail.trim())
-        .maybeSingle();
-
-      if (!profile) {
-        toast({
-          title: "User not found",
-          description: "No user found with that email address",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Check if already a member
-      const { data: existing } = await supabase
-        .from("org_members")
-        .select("id")
-        .eq("org_id", userOrg.org_id)
-        .eq("user_id", profile.id)
-        .maybeSingle();
-
-      if (existing) {
-        toast({
-          title: "Already a member",
-          description: "This user is already a member of your organization",
-          variant: "destructive",
-        });
-        return;
-      }
-
       // Add member
       const { error } = await supabase
         .from("org_members")
         .insert({
           org_id: userOrg.org_id,
-          user_id: profile.id,
+          user_id: selectedUserId,
           role: newMemberRole,
         });
 
@@ -326,9 +337,10 @@ export function OrganizationSettings() {
       });
 
       setShowAddMemberDialog(false);
-      setNewMemberEmail("");
+      setSelectedUserId(null);
       setNewMemberRole("member");
       queryClient.invalidateQueries({ queryKey: ["org-members"] });
+      queryClient.invalidateQueries({ queryKey: ["available-org-users"] });
     } catch (error: any) {
       toast({
         title: "Error",
@@ -622,13 +634,54 @@ export function OrganizationSettings() {
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Email Address</Label>
-                    <Input
-                      type="email"
-                      placeholder="user@example.com"
-                      value={newMemberEmail}
-                      onChange={(e) => setNewMemberEmail(e.target.value)}
-                    />
+                    <Label>Select User</Label>
+                    <Popover open={userSearchOpen} onOpenChange={setUserSearchOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={userSearchOpen}
+                          className="w-full justify-between"
+                        >
+                          {selectedUserId
+                            ? availableUsers?.find((user) => user.id === selectedUserId)?.full_name ||
+                              availableUsers?.find((user) => user.id === selectedUserId)?.email
+                            : "Select a user..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-full p-0 bg-popover" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search users..." />
+                          <CommandList>
+                            <CommandEmpty>No users found.</CommandEmpty>
+                            <CommandGroup>
+                              {availableUsers?.map((user) => (
+                                <CommandItem
+                                  key={user.id}
+                                  value={`${user.full_name || ""} ${user.email}`}
+                                  onSelect={() => {
+                                    setSelectedUserId(user.id);
+                                    setUserSearchOpen(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      selectedUserId === user.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  <div className="flex flex-col">
+                                    <span>{user.full_name || "—"}</span>
+                                    <span className="text-xs text-muted-foreground">{user.email}</span>
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-2">
                     <Label>Role</Label>
