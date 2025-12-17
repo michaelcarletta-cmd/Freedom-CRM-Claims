@@ -32,9 +32,9 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, claim_data, external_claim_id, source_instance_url, files_data, accounting_data } = await req.json();
+    const { action, claim_data, external_claim_id, source_instance_url, target_workspace_id, files_data, accounting_data } = await req.json();
 
-    console.log(`Received sync request: action=${action}, external_claim_id=${external_claim_id}, source=${source_instance_url}`);
+    console.log(`Received sync request: action=${action}, external_claim_id=${external_claim_id}, source=${source_instance_url}, target_workspace_id=${target_workspace_id}`);
 
     if (action === 'create_or_update') {
       // Check if we already have this linked claim
@@ -69,6 +69,7 @@ serve(async (req) => {
             policy_number: claim_data.policy_number,
             status: claim_data.status,
             claim_amount: claim_data.claim_amount,
+            workspace_id: target_workspace_id || claim_data.workspace_id,
             updated_at: new Date().toISOString(),
           })
           .eq('id', claimId);
@@ -98,6 +99,7 @@ serve(async (req) => {
             policy_number: claim_data.policy_number,
             status: claim_data.status || 'open',
             claim_amount: claim_data.claim_amount,
+            workspace_id: target_workspace_id,
           })
           .select()
           .single();

@@ -45,6 +45,7 @@ export function WorkspaceDetail() {
   const [externalInstanceUrl, setExternalInstanceUrl] = useState("");
   const [externalInstanceName, setExternalInstanceName] = useState("");
   const [syncSecret, setSyncSecret] = useState("");
+  const [targetWorkspaceId, setTargetWorkspaceId] = useState("");
   const [isLinking, setIsLinking] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -369,6 +370,7 @@ export function WorkspaceDetail() {
           external_instance_url: externalInstanceUrl.trim(),
           instance_name: externalInstanceName.trim(),
           sync_secret: syncSecret.trim(),
+          target_workspace_id: targetWorkspaceId.trim() || null,
           sync_status: "active",
           created_by: user.id,
         });
@@ -384,6 +386,7 @@ export function WorkspaceDetail() {
       setExternalInstanceUrl("");
       setExternalInstanceName("");
       setSyncSecret("");
+      setTargetWorkspaceId("");
       queryClient.invalidateQueries({ queryKey: ["linked-workspaces"] });
     } catch (error: any) {
       toast({
@@ -404,6 +407,7 @@ export function WorkspaceDetail() {
           action: "sync_claims",
           workspace_id: workspaceId,
           target_instance_url: linkedWorkspace.external_instance_url,
+          target_workspace_id: linkedWorkspace.target_workspace_id,
           sync_secret: linkedWorkspace.sync_secret,
         },
       });
@@ -500,6 +504,17 @@ export function WorkspaceDetail() {
                     />
                     <p className="text-xs text-muted-foreground">
                       The Supabase URL of the external instance
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Target Workspace ID</Label>
+                    <Input
+                      placeholder="UUID of workspace on external instance"
+                      value={targetWorkspaceId}
+                      onChange={(e) => setTargetWorkspaceId(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The workspace ID on the external instance where claims will be synced
                     </p>
                   </div>
                   <div className="space-y-2">
