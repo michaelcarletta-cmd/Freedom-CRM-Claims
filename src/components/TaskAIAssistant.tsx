@@ -160,8 +160,16 @@ const TaskAIAssistant = ({ task, claimId, onTaskUpdated }: TaskAIAssistantProps)
           return;
         }
 
+        // Replace merge field placeholders in content
+        let processedContent = action.content
+          .replace(/\[Recipient Name\]/gi, recipientName)
+          .replace(/\[Policyholder Name\]/gi, claimData.policyholder_name || "")
+          .replace(/\[Adjuster Name\]/gi, adjusterName || "")
+          .replace(/\[Claim Number\]/gi, claimData.claim_number || "")
+          .replace(/Dear \[.*?\],/gi, `Dear ${recipientName},`);
+
         // Append signature to email content
-        const emailBody = `${action.content}\n\n${userSignature}`;
+        const emailBody = `${processedContent}\n\n${userSignature}`;
 
         const { error } = await supabase.functions.invoke("send-email", {
           body: {
