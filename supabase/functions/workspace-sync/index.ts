@@ -122,7 +122,65 @@ serve(async (req) => {
               supabase.from("emails").select("*").eq("claim_id", claim.id),
             ]);
 
-            console.log(`Syncing claim ${claim.id} with ${tasks?.length || 0} tasks, ${updates?.length || 0} updates, ${inspections?.length || 0} inspections`);
+            console.log(`Syncing claim ${claim.id} with ${tasks?.length || 0} tasks, ${updates?.length || 0} updates, ${inspections?.length || 0} inspections, ${files?.length || 0} files`);
+
+            // Download file contents and include as base64
+            const filesWithContent = [];
+            if (files && files.length > 0) {
+              for (const file of files) {
+                try {
+                  const { data: fileData, error: downloadError } = await supabase.storage
+                    .from('claim-files')
+                    .download(file.file_path);
+                  
+                  if (!downloadError && fileData) {
+                    const arrayBuffer = await fileData.arrayBuffer();
+                    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+                    filesWithContent.push({
+                      ...file,
+                      file_content: base64,
+                      content_type: fileData.type || file.file_type,
+                    });
+                    console.log(`Downloaded file: ${file.file_name}`);
+                  } else {
+                    console.error(`Failed to download file ${file.file_name}:`, downloadError);
+                    filesWithContent.push(file); // Include metadata only
+                  }
+                } catch (err) {
+                  console.error(`Error downloading file ${file.file_name}:`, err);
+                  filesWithContent.push(file); // Include metadata only
+                }
+              }
+            }
+
+            // Download photo contents
+            const photosWithContent = [];
+            if (photos && photos.length > 0) {
+              for (const photo of photos) {
+                try {
+                  const { data: photoData, error: downloadError } = await supabase.storage
+                    .from('claim-files')
+                    .download(photo.file_path);
+                  
+                  if (!downloadError && photoData) {
+                    const arrayBuffer = await photoData.arrayBuffer();
+                    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+                    photosWithContent.push({
+                      ...photo,
+                      file_content: base64,
+                      content_type: photoData.type || 'image/jpeg',
+                    });
+                    console.log(`Downloaded photo: ${photo.file_name}`);
+                  } else {
+                    console.error(`Failed to download photo ${photo.file_name}:`, downloadError);
+                    photosWithContent.push(photo);
+                  }
+                } catch (err) {
+                  console.error(`Error downloading photo ${photo.file_name}:`, err);
+                  photosWithContent.push(photo);
+                }
+              }
+            }
 
             const response = await fetch(`${target_instance_url}/functions/v1/claim-sync-webhook`, {
               method: "POST",
@@ -147,8 +205,8 @@ serve(async (req) => {
                   expenses: expenses || [],
                   fees: fees || [],
                 },
-                files_data: files || [],
-                photos_data: photos || [],
+                files_data: filesWithContent,
+                photos_data: photosWithContent,
                 emails_data: emails || [],
               }),
             });

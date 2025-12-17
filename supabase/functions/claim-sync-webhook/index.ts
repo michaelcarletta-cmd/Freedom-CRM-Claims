@@ -387,9 +387,9 @@ serve(async (req) => {
         }
       }
 
-      // Sync files metadata (not actual file content - that would need storage sync)
+      // Sync files with actual content transfer
       if (files_data && files_data.length > 0) {
-        console.log(`Syncing ${files_data.length} files metadata`);
+        console.log(`Syncing ${files_data.length} files with content`);
         for (const file of files_data) {
           const { data: existingFile } = await supabase
             .from('claim_files')
@@ -399,10 +399,43 @@ serve(async (req) => {
             .maybeSingle();
 
           if (!existingFile) {
+            let newFilePath = file.file_path;
+            
+            // If file content is included, upload to local storage
+            if (file.file_content) {
+              try {
+                // Decode base64 to binary
+                const binaryString = atob(file.file_content);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+                
+                // Create new path for this instance
+                newFilePath = `${claimId}/${Date.now()}-${file.file_name}`;
+                
+                const { error: uploadError } = await supabase.storage
+                  .from('claim-files')
+                  .upload(newFilePath, bytes, {
+                    contentType: file.content_type || file.file_type || 'application/octet-stream',
+                    upsert: true,
+                  });
+                
+                if (uploadError) {
+                  console.error(`Failed to upload file ${file.file_name}:`, uploadError);
+                  newFilePath = file.file_path; // Fall back to original path
+                } else {
+                  console.log(`Uploaded file: ${file.file_name} to ${newFilePath}`);
+                }
+              } catch (err) {
+                console.error(`Error uploading file ${file.file_name}:`, err);
+              }
+            }
+            
             await supabase.from('claim_files').insert({
               claim_id: claimId,
               file_name: file.file_name,
-              file_path: file.file_path,
+              file_path: newFilePath,
               file_type: file.file_type,
               file_size: file.file_size,
             });
@@ -410,9 +443,9 @@ serve(async (req) => {
         }
       }
 
-      // Sync photos metadata
+      // Sync photos with actual content transfer
       if (photos_data && photos_data.length > 0) {
-        console.log(`Syncing ${photos_data.length} photos metadata`);
+        console.log(`Syncing ${photos_data.length} photos with content`);
         for (const photo of photos_data) {
           const { data: existingPhoto } = await supabase
             .from('claim_photos')
@@ -422,10 +455,41 @@ serve(async (req) => {
             .maybeSingle();
 
           if (!existingPhoto) {
+            let newFilePath = photo.file_path;
+            
+            // If photo content is included, upload to local storage
+            if (photo.file_content) {
+              try {
+                const binaryString = atob(photo.file_content);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+                
+                newFilePath = `${claimId}/photos/${Date.now()}-${photo.file_name}`;
+                
+                const { error: uploadError } = await supabase.storage
+                  .from('claim-files')
+                  .upload(newFilePath, bytes, {
+                    contentType: photo.content_type || 'image/jpeg',
+                    upsert: true,
+                  });
+                
+                if (uploadError) {
+                  console.error(`Failed to upload photo ${photo.file_name}:`, uploadError);
+                  newFilePath = photo.file_path;
+                } else {
+                  console.log(`Uploaded photo: ${photo.file_name} to ${newFilePath}`);
+                }
+              } catch (err) {
+                console.error(`Error uploading photo ${photo.file_name}:`, err);
+              }
+            }
+            
             await supabase.from('claim_photos').insert({
               claim_id: claimId,
               file_name: photo.file_name,
-              file_path: photo.file_path,
+              file_path: newFilePath,
               description: photo.description,
               category: photo.category,
               file_size: photo.file_size,
