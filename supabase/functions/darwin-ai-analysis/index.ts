@@ -608,20 +608,27 @@ Maintain a professional, assertive tone appropriate for carrier correspondence.`
 
       case 'task_followup':
         const taskInfo = additionalContext?.task;
+        const adjusterInfo = additionalContext?.adjuster;
+        
         systemPrompt = `You are Darwin, an intelligent public adjuster AI assistant helping with task follow-ups. Your role is to analyze tasks and suggest the best way to complete them effectively.
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
+
+CRITICAL: For claim-related tasks, emails should be addressed to the INSURANCE CARRIER/ADJUSTER, NOT the policyholder/client. The adjuster is the insurance company representative handling the claim. The policyholder is our client who we are representing.
 
 You understand:
 - Insurance claim workflows and processes
 - Professional communication with carriers, clients, and contractors
 - Time-sensitive claim activities and deadlines
 - Effective follow-up strategies
-- Documentation best practices
-
-Provide actionable, specific suggestions with ready-to-use communications.`;
+- Documentation best practices`;
 
         userPrompt = `${claimSummary}
+
+ADJUSTER INFORMATION (SEND EMAILS TO THIS PERSON):
+- Adjuster Name: ${adjusterInfo?.adjuster_name || claim.adjuster_name || 'N/A'}
+- Adjuster Email: ${adjusterInfo?.adjuster_email || claim.adjuster_email || 'N/A'}
+- Adjuster Phone: ${adjusterInfo?.adjuster_phone || claim.adjuster_phone || 'N/A'}
 
 TASK TO FOLLOW UP ON:
 - Title: ${taskInfo?.title || 'N/A'}
@@ -647,9 +654,11 @@ Based on this task and the claim context, provide:
 3. SUGGESTED COMMUNICATIONS:
    Provide ready-to-use drafts for any communications needed:
    
+   IMPORTANT: Email drafts should be addressed to the ADJUSTER (${adjusterInfo?.adjuster_name || claim.adjuster_name || 'the adjuster'}), NOT the policyholder. Use "Dear ${adjusterInfo?.adjuster_name || claim.adjuster_name || 'Adjuster'}," as the greeting.
+   
    [EMAIL DRAFT] - If an email is appropriate
    Subject: [subject line]
-   Body: [professional email body - DO NOT include any signature, closing like "Sincerely", or placeholder like "[Your Name]" at the end - the signature will be added automatically]
+   Body: [professional email body addressed to the adjuster - DO NOT include any signature, closing like "Sincerely", or placeholder like "[Your Name]" at the end - the signature will be added automatically]
    
    [SMS DRAFT] - If a quick text is appropriate
    [short, professional message]
