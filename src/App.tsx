@@ -24,6 +24,8 @@ const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
 const Sign = lazy(() => import("./pages/Sign"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const Workspaces = lazy(() => import("./pages/Workspaces"));
+const WorkspaceDetailPage = lazy(() => import("./pages/WorkspaceDetailPage"));
 
 const queryClient = new QueryClient();
 
@@ -102,6 +104,8 @@ function AppRoutes() {
       <Route path="/networking" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Networking /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="/sales" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Sales /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="/templates" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Templates /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/workspaces" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Workspaces /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/workspaces/:workspaceId" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><WorkspaceDetailPage /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Settings /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
     </Routes>

@@ -1086,6 +1086,7 @@ export type Database = {
           ssn_last_four: string | null
           status: string | null
           updated_at: string | null
+          workspace_id: string | null
         }
         Insert: {
           adjuster_email?: string | null
@@ -1118,6 +1119,7 @@ export type Database = {
           ssn_last_four?: string | null
           status?: string | null
           updated_at?: string | null
+          workspace_id?: string | null
         }
         Update: {
           adjuster_email?: string | null
@@ -1150,6 +1152,7 @@ export type Database = {
           ssn_last_four?: string | null
           status?: string | null
           updated_at?: string | null
+          workspace_id?: string | null
         }
         Relationships: [
           {
@@ -1185,6 +1188,13 @@ export type Database = {
             columns: ["referrer_id"]
             isOneToOne: false
             referencedRelation: "referrers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -1477,6 +1487,38 @@ export type Database = {
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      file_comments: {
+        Row: {
+          body: string
+          created_at: string
+          file_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          file_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          file_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_comments_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
             referencedColumns: ["id"]
           },
         ]
@@ -1777,6 +1819,119 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      org_members: {
+        Row: {
+          created_at: string
+          id: string
+          org_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          org_id: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          org_id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_sales_commissions: {
+        Row: {
+          claim_id: string
+          commission_amount: number | null
+          commission_percentage: number | null
+          created_at: string
+          id: string
+          notes: string | null
+          org_id: string
+          sales_rep_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          claim_id: string
+          commission_amount?: number | null
+          commission_percentage?: number | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          org_id: string
+          sales_rep_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          claim_id?: string
+          commission_amount?: number | null
+          commission_percentage?: number | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          sales_rep_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_sales_commissions_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_sales_commissions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orgs: {
+        Row: {
+          created_at: string
+          domain: string | null
+          id: string
+          logo_url: string | null
+          name: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          domain?: string | null
+          id?: string
+          logo_url?: string | null
+          name: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          domain?: string | null
+          id?: string
+          logo_url?: string | null
+          name?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -2227,6 +2382,226 @@ export type Database = {
         }
         Relationships: []
       }
+      workspace_invites: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          invited_by: string | null
+          invited_domain: string | null
+          invited_email: string | null
+          invited_org_id: string | null
+          role: string
+          status: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          invited_by?: string | null
+          invited_domain?: string | null
+          invited_email?: string | null
+          invited_org_id?: string | null
+          role?: string
+          status?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          invited_by?: string | null
+          invited_domain?: string | null
+          invited_email?: string | null
+          invited_org_id?: string | null
+          role?: string
+          status?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_invites_invited_org_id_fkey"
+            columns: ["invited_org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_invites_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_members: {
+        Row: {
+          created_at: string
+          id: string
+          invited_by: string | null
+          joined_at: string | null
+          org_id: string
+          role: string
+          status: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invited_by?: string | null
+          joined_at?: string | null
+          org_id: string
+          role?: string
+          status?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invited_by?: string | null
+          joined_at?: string | null
+          org_id?: string
+          role?: string
+          status?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_members_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          sender_id: string
+          thread_id: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          sender_id: string
+          thread_id: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          sender_id?: string
+          thread_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_threads: {
+        Row: {
+          claim_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          subject: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          claim_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          subject?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          claim_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          subject?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_threads_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_threads_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspaces: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          owner_org_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          owner_org_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          owner_org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspaces_owner_org_id_fkey"
+            columns: ["owner_org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -2281,6 +2656,7 @@ export type Database = {
           ssn_last_four: string | null
           status: string | null
           updated_at: string | null
+          workspace_id: string | null
         }
         SetofOptions: {
           from: "*"
@@ -2314,6 +2690,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_workspace_access: {
+        Args: { _user_id: string; _workspace_id: string }
+        Returns: boolean
+      }
+      is_org_admin: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      user_org_id: { Args: { _user_id: string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "staff" | "client" | "contractor" | "referrer"
