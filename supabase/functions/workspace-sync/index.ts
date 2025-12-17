@@ -91,10 +91,39 @@ serve(async (req) => {
 
         if (claimsError) throw claimsError;
 
-        // Sync each claim to external instance
+        // Sync each claim to external instance with all related data
         const results = [];
         for (const claim of claims || []) {
           try {
+            // Fetch all related data for this claim
+            const [
+              { data: tasks },
+              { data: updates },
+              { data: inspections },
+              { data: adjusters },
+              { data: settlements },
+              { data: checks },
+              { data: expenses },
+              { data: fees },
+              { data: files },
+              { data: photos },
+              { data: emails },
+            ] = await Promise.all([
+              supabase.from("tasks").select("*").eq("claim_id", claim.id),
+              supabase.from("claim_updates").select("*").eq("claim_id", claim.id),
+              supabase.from("inspections").select("*").eq("claim_id", claim.id),
+              supabase.from("claim_adjusters").select("*").eq("claim_id", claim.id),
+              supabase.from("claim_settlements").select("*").eq("claim_id", claim.id),
+              supabase.from("claim_checks").select("*").eq("claim_id", claim.id),
+              supabase.from("claim_expenses").select("*").eq("claim_id", claim.id),
+              supabase.from("claim_fees").select("*").eq("claim_id", claim.id),
+              supabase.from("claim_files").select("*").eq("claim_id", claim.id),
+              supabase.from("claim_photos").select("*").eq("claim_id", claim.id),
+              supabase.from("emails").select("*").eq("claim_id", claim.id),
+            ]);
+
+            console.log(`Syncing claim ${claim.id} with ${tasks?.length || 0} tasks, ${updates?.length || 0} updates, ${inspections?.length || 0} inspections`);
+
             const response = await fetch(`${target_instance_url}/functions/v1/claim-sync-webhook`, {
               method: "POST",
               headers: {
@@ -107,12 +136,27 @@ serve(async (req) => {
                 external_claim_id: claim.id,
                 source_instance_url: supabaseUrl,
                 target_workspace_id: target_workspace_id || linkData.target_workspace_id,
+                // Include all related data
+                tasks_data: tasks || [],
+                updates_data: updates || [],
+                inspections_data: inspections || [],
+                adjusters_data: adjusters || [],
+                accounting_data: {
+                  settlements: settlements || [],
+                  checks: checks || [],
+                  expenses: expenses || [],
+                  fees: fees || [],
+                },
+                files_data: files || [],
+                photos_data: photos || [],
+                emails_data: emails || [],
               }),
             });
 
             const result = await response.json();
             results.push({ claim_id: claim.id, success: true, result });
           } catch (error: any) {
+            console.error(`Error syncing claim ${claim.id}:`, error);
             results.push({ claim_id: claim.id, success: false, error: error.message });
           }
         }

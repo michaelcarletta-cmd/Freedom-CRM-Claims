@@ -17,11 +17,10 @@ serve(async (req) => {
     const requestSecret = req.headers.get('x-claim-sync-secret');
 
     console.log(`Webhook received - has env secret: ${!!syncSecret}, has request secret: ${!!requestSecret}`);
-    console.log(`Env secret length: ${syncSecret?.length}, Request secret length: ${requestSecret?.length}`);
     
     // Validate sync secret
     if (!syncSecret || requestSecret !== syncSecret) {
-      console.error(`Secret mismatch - env first 4: ${syncSecret?.substring(0, 4)}, request first 4: ${requestSecret?.substring(0, 4)}`);
+      console.error(`Secret mismatch`);
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -32,7 +31,21 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, claim_data, external_claim_id, source_instance_url, target_workspace_id, files_data, accounting_data } = await req.json();
+    const { 
+      action, 
+      claim_data, 
+      external_claim_id, 
+      source_instance_url, 
+      target_workspace_id,
+      tasks_data,
+      updates_data,
+      inspections_data,
+      adjusters_data,
+      accounting_data,
+      files_data,
+      photos_data,
+      emails_data,
+    } = await req.json();
 
     console.log(`Received sync request: action=${action}, external_claim_id=${external_claim_id}, source=${source_instance_url}, target_workspace_id=${target_workspace_id}`);
 
@@ -139,12 +152,137 @@ serve(async (req) => {
         .eq('external_instance_url', source_instance_url)
         .eq('external_claim_id', external_claim_id);
 
-      // Sync accounting data if provided
+      // Sync tasks
+      if (tasks_data && tasks_data.length > 0) {
+        console.log(`Syncing ${tasks_data.length} tasks`);
+        for (const task of tasks_data) {
+          // Check if task already exists by title and claim
+          const { data: existingTask } = await supabase
+            .from('tasks')
+            .select('id')
+            .eq('claim_id', claimId)
+            .eq('title', task.title)
+            .maybeSingle();
+
+          if (!existingTask) {
+            await supabase.from('tasks').insert({
+              claim_id: claimId,
+              title: task.title,
+              description: task.description,
+              status: task.status,
+              priority: task.priority,
+              due_date: task.due_date,
+              completed_at: task.completed_at,
+            });
+          } else {
+            // Update existing task
+            await supabase.from('tasks').update({
+              description: task.description,
+              status: task.status,
+              priority: task.priority,
+              due_date: task.due_date,
+              completed_at: task.completed_at,
+            }).eq('id', existingTask.id);
+          }
+        }
+      }
+
+      // Sync notes/updates
+      if (updates_data && updates_data.length > 0) {
+        console.log(`Syncing ${updates_data.length} updates`);
+        for (const update of updates_data) {
+          // Check if update already exists by content and timestamp
+          const { data: existingUpdate } = await supabase
+            .from('claim_updates')
+            .select('id')
+            .eq('claim_id', claimId)
+            .eq('content', update.content)
+            .maybeSingle();
+
+          if (!existingUpdate) {
+            await supabase.from('claim_updates').insert({
+              claim_id: claimId,
+              content: update.content,
+              update_type: update.update_type,
+              recipients: update.recipients,
+              created_at: update.created_at,
+            });
+          }
+        }
+      }
+
+      // Sync inspections
+      if (inspections_data && inspections_data.length > 0) {
+        console.log(`Syncing ${inspections_data.length} inspections`);
+        for (const inspection of inspections_data) {
+          const { data: existingInspection } = await supabase
+            .from('inspections')
+            .select('id')
+            .eq('claim_id', claimId)
+            .eq('inspection_date', inspection.inspection_date)
+            .maybeSingle();
+
+          if (!existingInspection) {
+            await supabase.from('inspections').insert({
+              claim_id: claimId,
+              inspection_date: inspection.inspection_date,
+              inspection_time: inspection.inspection_time,
+              inspection_type: inspection.inspection_type,
+              inspector_name: inspection.inspector_name,
+              status: inspection.status,
+              notes: inspection.notes,
+            });
+          } else {
+            await supabase.from('inspections').update({
+              inspection_time: inspection.inspection_time,
+              inspection_type: inspection.inspection_type,
+              inspector_name: inspection.inspector_name,
+              status: inspection.status,
+              notes: inspection.notes,
+            }).eq('id', existingInspection.id);
+          }
+        }
+      }
+
+      // Sync adjusters
+      if (adjusters_data && adjusters_data.length > 0) {
+        console.log(`Syncing ${adjusters_data.length} adjusters`);
+        for (const adjuster of adjusters_data) {
+          const { data: existingAdjuster } = await supabase
+            .from('claim_adjusters')
+            .select('id')
+            .eq('claim_id', claimId)
+            .eq('adjuster_name', adjuster.adjuster_name)
+            .maybeSingle();
+
+          if (!existingAdjuster) {
+            await supabase.from('claim_adjusters').insert({
+              claim_id: claimId,
+              adjuster_name: adjuster.adjuster_name,
+              adjuster_email: adjuster.adjuster_email,
+              adjuster_phone: adjuster.adjuster_phone,
+              company: adjuster.company,
+              is_primary: adjuster.is_primary,
+              notes: adjuster.notes,
+            });
+          } else {
+            await supabase.from('claim_adjusters').update({
+              adjuster_email: adjuster.adjuster_email,
+              adjuster_phone: adjuster.adjuster_phone,
+              company: adjuster.company,
+              is_primary: adjuster.is_primary,
+              notes: adjuster.notes,
+            }).eq('id', existingAdjuster.id);
+          }
+        }
+      }
+
+      // Sync accounting data
       if (accounting_data) {
         console.log('Syncing accounting data');
         
         // Sync settlements
-        if (accounting_data.settlements) {
+        if (accounting_data.settlements && accounting_data.settlements.length > 0) {
           for (const settlement of accounting_data.settlements) {
             await supabase
               .from('claim_settlements')
@@ -156,34 +294,168 @@ serve(async (req) => {
                 deductible: settlement.deductible,
                 estimate_amount: settlement.estimate_amount,
                 total_settlement: settlement.total_settlement,
+                other_structures_rcv: settlement.other_structures_rcv,
+                other_structures_recoverable_depreciation: settlement.other_structures_recoverable_depreciation,
+                other_structures_non_recoverable_depreciation: settlement.other_structures_non_recoverable_depreciation,
+                other_structures_deductible: settlement.other_structures_deductible,
+                pwi_rcv: settlement.pwi_rcv,
+                pwi_recoverable_depreciation: settlement.pwi_recoverable_depreciation,
+                pwi_non_recoverable_depreciation: settlement.pwi_non_recoverable_depreciation,
+                pwi_deductible: settlement.pwi_deductible,
+                prior_offer: settlement.prior_offer,
                 notes: settlement.notes,
               }, { onConflict: 'claim_id' });
           }
         }
 
         // Sync checks
-        if (accounting_data.checks) {
+        if (accounting_data.checks && accounting_data.checks.length > 0) {
           for (const check of accounting_data.checks) {
             const { data: existingCheck } = await supabase
               .from('claim_checks')
               .select('id')
               .eq('claim_id', claimId)
               .eq('check_number', check.check_number)
-              .single();
+              .maybeSingle();
 
             if (!existingCheck) {
-              await supabase
-                .from('claim_checks')
-                .insert({
-                  claim_id: claimId,
-                  check_number: check.check_number,
-                  check_type: check.check_type,
-                  amount: check.amount,
-                  check_date: check.check_date,
-                  received_date: check.received_date,
-                  notes: check.notes,
-                });
+              await supabase.from('claim_checks').insert({
+                claim_id: claimId,
+                check_number: check.check_number,
+                check_type: check.check_type,
+                amount: check.amount,
+                check_date: check.check_date,
+                received_date: check.received_date,
+                notes: check.notes,
+              });
+            } else {
+              await supabase.from('claim_checks').update({
+                check_type: check.check_type,
+                amount: check.amount,
+                check_date: check.check_date,
+                received_date: check.received_date,
+                notes: check.notes,
+              }).eq('id', existingCheck.id);
             }
+          }
+        }
+
+        // Sync expenses
+        if (accounting_data.expenses && accounting_data.expenses.length > 0) {
+          for (const expense of accounting_data.expenses) {
+            const { data: existingExpense } = await supabase
+              .from('claim_expenses')
+              .select('id')
+              .eq('claim_id', claimId)
+              .eq('description', expense.description)
+              .eq('expense_date', expense.expense_date)
+              .maybeSingle();
+
+            if (!existingExpense) {
+              await supabase.from('claim_expenses').insert({
+                claim_id: claimId,
+                description: expense.description,
+                amount: expense.amount,
+                expense_date: expense.expense_date,
+                category: expense.category,
+                paid_to: expense.paid_to,
+                payment_method: expense.payment_method,
+                notes: expense.notes,
+              });
+            }
+          }
+        }
+
+        // Sync fees
+        if (accounting_data.fees && accounting_data.fees.length > 0) {
+          for (const fee of accounting_data.fees) {
+            await supabase
+              .from('claim_fees')
+              .upsert({
+                claim_id: claimId,
+                company_fee_percentage: fee.company_fee_percentage,
+                company_fee_amount: fee.company_fee_amount,
+                adjuster_fee_percentage: fee.adjuster_fee_percentage,
+                adjuster_fee_amount: fee.adjuster_fee_amount,
+                contractor_fee_percentage: fee.contractor_fee_percentage,
+                contractor_fee_amount: fee.contractor_fee_amount,
+                referrer_fee_percentage: fee.referrer_fee_percentage,
+                referrer_fee_amount: fee.referrer_fee_amount,
+                notes: fee.notes,
+              }, { onConflict: 'claim_id' });
+          }
+        }
+      }
+
+      // Sync files metadata (not actual file content - that would need storage sync)
+      if (files_data && files_data.length > 0) {
+        console.log(`Syncing ${files_data.length} files metadata`);
+        for (const file of files_data) {
+          const { data: existingFile } = await supabase
+            .from('claim_files')
+            .select('id')
+            .eq('claim_id', claimId)
+            .eq('file_name', file.file_name)
+            .maybeSingle();
+
+          if (!existingFile) {
+            await supabase.from('claim_files').insert({
+              claim_id: claimId,
+              file_name: file.file_name,
+              file_path: file.file_path,
+              file_type: file.file_type,
+              file_size: file.file_size,
+            });
+          }
+        }
+      }
+
+      // Sync photos metadata
+      if (photos_data && photos_data.length > 0) {
+        console.log(`Syncing ${photos_data.length} photos metadata`);
+        for (const photo of photos_data) {
+          const { data: existingPhoto } = await supabase
+            .from('claim_photos')
+            .select('id')
+            .eq('claim_id', claimId)
+            .eq('file_name', photo.file_name)
+            .maybeSingle();
+
+          if (!existingPhoto) {
+            await supabase.from('claim_photos').insert({
+              claim_id: claimId,
+              file_name: photo.file_name,
+              file_path: photo.file_path,
+              description: photo.description,
+              category: photo.category,
+              file_size: photo.file_size,
+            });
+          }
+        }
+      }
+
+      // Sync emails
+      if (emails_data && emails_data.length > 0) {
+        console.log(`Syncing ${emails_data.length} emails`);
+        for (const email of emails_data) {
+          const { data: existingEmail } = await supabase
+            .from('emails')
+            .select('id')
+            .eq('claim_id', claimId)
+            .eq('subject', email.subject)
+            .eq('recipient_email', email.recipient_email)
+            .maybeSingle();
+
+          if (!existingEmail) {
+            await supabase.from('emails').insert({
+              claim_id: claimId,
+              subject: email.subject,
+              body: email.body,
+              recipient_email: email.recipient_email,
+              recipient_name: email.recipient_name,
+              recipient_type: email.recipient_type,
+              sent_at: email.sent_at,
+            });
           }
         }
       }
@@ -193,17 +465,26 @@ serve(async (req) => {
         .from('claim_updates')
         .insert({
           claim_id: claimId,
-          content: `Claim synced from ${claim_data.instance_name || source_instance_url}`,
+          content: `Claim fully synced from ${claim_data.instance_name || source_instance_url} (tasks: ${tasks_data?.length || 0}, updates: ${updates_data?.length || 0}, inspections: ${inspections_data?.length || 0})`,
           update_type: 'sync',
         });
 
-      console.log(`Successfully synced claim ${claimId}`);
+      console.log(`Successfully synced claim ${claimId} with all related data`);
 
       return new Response(
         JSON.stringify({ 
           success: true, 
           claim_id: claimId,
-          message: existingLink ? 'Claim updated' : 'Claim created'
+          message: existingLink ? 'Claim updated' : 'Claim created',
+          synced: {
+            tasks: tasks_data?.length || 0,
+            updates: updates_data?.length || 0,
+            inspections: inspections_data?.length || 0,
+            adjusters: adjusters_data?.length || 0,
+            files: files_data?.length || 0,
+            photos: photos_data?.length || 0,
+            emails: emails_data?.length || 0,
+          }
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
