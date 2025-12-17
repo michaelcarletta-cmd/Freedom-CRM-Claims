@@ -204,15 +204,15 @@ const ClaimDetail = () => {
           <div className="flex-1">
             <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
               <h1 className="text-2xl md:text-3xl font-bold text-foreground">{claim.claim_number}</h1>
-              {isStaffOrAdmin && !isWorkspaceClaim && (
+              {isStaffOrAdmin && (
                 <ClaimStatusSelect 
                   claimId={claim.id} 
                   currentStatus={claim.status}
                   onStatusChange={handleStatusChange}
                 />
               )}
-              {/* Read-only status display for workspace claims and portal users */}
-              {(isPortalUser || (isStaffOrAdmin && isWorkspaceClaim)) && claim.status && (
+              {/* Read-only status display for portal users only */}
+              {isPortalUser && claim.status && (
                 <span className="px-3 py-1 text-sm rounded-none bg-primary text-primary-foreground w-fit">
                   {claim.status}
                 </span>
