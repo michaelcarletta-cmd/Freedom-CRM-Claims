@@ -267,6 +267,168 @@ serve(async (req) => {
         );
       }
 
+      case "sync_all_workspaces": {
+        // Automated sync of all linked workspaces - called by cron
+        const cronSecret = req.headers.get("x-cron-secret");
+        const expectedCronSecret = Deno.env.get("CRON_SECRET");
+
+        if (cronSecret !== expectedCronSecret) {
+          return new Response(
+            JSON.stringify({ success: false, error: "Invalid cron secret" }),
+            { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        console.log("Starting automatic workspace sync for all linked workspaces");
+
+        // Get all active linked workspaces
+        const { data: linkedWorkspaces, error: lwError } = await supabase
+          .from("linked_workspaces")
+          .select("*")
+          .eq("sync_status", "active");
+
+        if (lwError) throw lwError;
+
+        const syncResults = [];
+        for (const link of linkedWorkspaces || []) {
+          try {
+            console.log(`Auto-syncing workspace ${link.workspace_id} to ${link.instance_name}`);
+            
+            // Get all claims in workspace
+            const { data: claims } = await supabase
+              .from("claims")
+              .select("*")
+              .eq("workspace_id", link.workspace_id);
+
+            const claimResults = [];
+            for (const claim of claims || []) {
+              try {
+                // Fetch all related data
+                const [
+                  { data: tasks },
+                  { data: updates },
+                  { data: inspections },
+                  { data: adjusters },
+                  { data: settlements },
+                  { data: checks },
+                  { data: expenses },
+                  { data: fees },
+                  { data: files },
+                  { data: photos },
+                  { data: emails },
+                ] = await Promise.all([
+                  supabase.from("tasks").select("*").eq("claim_id", claim.id),
+                  supabase.from("claim_updates").select("*").eq("claim_id", claim.id),
+                  supabase.from("inspections").select("*").eq("claim_id", claim.id),
+                  supabase.from("claim_adjusters").select("*").eq("claim_id", claim.id),
+                  supabase.from("claim_settlements").select("*").eq("claim_id", claim.id),
+                  supabase.from("claim_checks").select("*").eq("claim_id", claim.id),
+                  supabase.from("claim_expenses").select("*").eq("claim_id", claim.id),
+                  supabase.from("claim_fees").select("*").eq("claim_id", claim.id),
+                  supabase.from("claim_files").select("*").eq("claim_id", claim.id),
+                  supabase.from("claim_photos").select("*").eq("claim_id", claim.id),
+                  supabase.from("emails").select("*").eq("claim_id", claim.id),
+                ]);
+
+                // Generate signed URLs for files
+                const filesWithUrls = [];
+                for (const file of files || []) {
+                  try {
+                    const { data: signedUrlData } = await supabase.storage
+                      .from('claim-files')
+                      .createSignedUrl(file.file_path, 3600);
+                    
+                    filesWithUrls.push({
+                      ...file,
+                      signed_url: signedUrlData?.signedUrl,
+                    });
+                  } catch {
+                    filesWithUrls.push(file);
+                  }
+                }
+
+                // Generate signed URLs for photos
+                const photosWithUrls = [];
+                for (const photo of photos || []) {
+                  try {
+                    const { data: signedUrlData } = await supabase.storage
+                      .from('claim-files')
+                      .createSignedUrl(photo.file_path, 3600);
+                    
+                    photosWithUrls.push({
+                      ...photo,
+                      signed_url: signedUrlData?.signedUrl,
+                    });
+                  } catch {
+                    photosWithUrls.push(photo);
+                  }
+                }
+
+                const response = await fetch(`${link.external_instance_url}/functions/v1/claim-sync-webhook`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-claim-sync-secret": link.sync_secret,
+                  },
+                  body: JSON.stringify({
+                    action: "create_or_update",
+                    claim_data: claim,
+                    external_claim_id: claim.id,
+                    source_instance_url: supabaseUrl,
+                    target_workspace_id: link.target_workspace_id,
+                    tasks_data: tasks || [],
+                    updates_data: updates || [],
+                    inspections_data: inspections || [],
+                    adjusters_data: adjusters || [],
+                    accounting_data: {
+                      settlements: settlements || [],
+                      checks: checks || [],
+                      expenses: expenses || [],
+                      fees: fees || [],
+                    },
+                    files_data: filesWithUrls,
+                    photos_data: photosWithUrls,
+                    emails_data: emails || [],
+                  }),
+                });
+
+                claimResults.push({ claim_id: claim.id, success: response.ok });
+              } catch (err: any) {
+                claimResults.push({ claim_id: claim.id, success: false, error: err.message });
+              }
+            }
+
+            // Update last synced timestamp
+            await supabase
+              .from("linked_workspaces")
+              .update({ last_synced_at: new Date().toISOString() })
+              .eq("id", link.id);
+
+            syncResults.push({
+              workspace_id: link.workspace_id,
+              instance_name: link.instance_name,
+              claims_synced: claimResults.length,
+              results: claimResults,
+            });
+          } catch (err: any) {
+            console.error(`Error syncing workspace ${link.workspace_id}:`, err);
+            syncResults.push({
+              workspace_id: link.workspace_id,
+              instance_name: link.instance_name,
+              success: false,
+              error: err.message,
+            });
+          }
+        }
+
+        console.log("Automatic workspace sync completed:", JSON.stringify(syncResults));
+
+        return new Response(
+          JSON.stringify({ success: true, synced_workspaces: syncResults.length, results: syncResults }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }
