@@ -152,17 +152,31 @@ export function WorkspaceDetail() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
+      const slugToSearch = inviteOrgSlug.trim().toLowerCase();
+      console.log("Searching for org with slug:", slugToSearch);
+
       // Find org by slug
-      const { data: targetOrg } = await supabase
+      const { data: targetOrg, error: orgError } = await supabase
         .from("orgs")
         .select("id, name")
-        .eq("slug", inviteOrgSlug.trim().toLowerCase())
+        .eq("slug", slugToSearch)
         .maybeSingle();
+
+      console.log("Org lookup result:", { targetOrg, orgError });
+
+      if (orgError) {
+        toast({
+          title: "Error looking up organization",
+          description: orgError.message,
+          variant: "destructive",
+        });
+        return;
+      }
 
       if (!targetOrg) {
         toast({
           title: "Organization not found",
-          description: "No organization found with that slug",
+          description: `No organization found with slug "${slugToSearch}"`,
           variant: "destructive",
         });
         return;
