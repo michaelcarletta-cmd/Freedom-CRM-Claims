@@ -124,60 +124,52 @@ serve(async (req) => {
 
             console.log(`Syncing claim ${claim.id} with ${tasks?.length || 0} tasks, ${updates?.length || 0} updates, ${inspections?.length || 0} inspections, ${files?.length || 0} files`);
 
-            // Download file contents and include as base64
-            const filesWithContent = [];
+            // Generate signed URLs for files instead of downloading content (saves memory)
+            const filesWithUrls = [];
             if (files && files.length > 0) {
               for (const file of files) {
                 try {
-                  const { data: fileData, error: downloadError } = await supabase.storage
+                  const { data: signedUrlData, error: signError } = await supabase.storage
                     .from('claim-files')
-                    .download(file.file_path);
+                    .createSignedUrl(file.file_path, 3600); // 1 hour expiry
                   
-                  if (!downloadError && fileData) {
-                    const arrayBuffer = await fileData.arrayBuffer();
-                    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-                    filesWithContent.push({
+                  if (!signError && signedUrlData) {
+                    filesWithUrls.push({
                       ...file,
-                      file_content: base64,
-                      content_type: fileData.type || file.file_type,
+                      signed_url: signedUrlData.signedUrl,
                     });
-                    console.log(`Downloaded file: ${file.file_name}`);
                   } else {
-                    console.error(`Failed to download file ${file.file_name}:`, downloadError);
-                    filesWithContent.push(file); // Include metadata only
+                    console.error(`Failed to get signed URL for ${file.file_name}:`, signError);
+                    filesWithUrls.push(file);
                   }
                 } catch (err) {
-                  console.error(`Error downloading file ${file.file_name}:`, err);
-                  filesWithContent.push(file); // Include metadata only
+                  console.error(`Error getting signed URL for ${file.file_name}:`, err);
+                  filesWithUrls.push(file);
                 }
               }
             }
 
-            // Download photo contents
-            const photosWithContent = [];
+            // Generate signed URLs for photos
+            const photosWithUrls = [];
             if (photos && photos.length > 0) {
               for (const photo of photos) {
                 try {
-                  const { data: photoData, error: downloadError } = await supabase.storage
+                  const { data: signedUrlData, error: signError } = await supabase.storage
                     .from('claim-files')
-                    .download(photo.file_path);
+                    .createSignedUrl(photo.file_path, 3600);
                   
-                  if (!downloadError && photoData) {
-                    const arrayBuffer = await photoData.arrayBuffer();
-                    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-                    photosWithContent.push({
+                  if (!signError && signedUrlData) {
+                    photosWithUrls.push({
                       ...photo,
-                      file_content: base64,
-                      content_type: photoData.type || 'image/jpeg',
+                      signed_url: signedUrlData.signedUrl,
                     });
-                    console.log(`Downloaded photo: ${photo.file_name}`);
                   } else {
-                    console.error(`Failed to download photo ${photo.file_name}:`, downloadError);
-                    photosWithContent.push(photo);
+                    console.error(`Failed to get signed URL for ${photo.file_name}:`, signError);
+                    photosWithUrls.push(photo);
                   }
                 } catch (err) {
-                  console.error(`Error downloading photo ${photo.file_name}:`, err);
-                  photosWithContent.push(photo);
+                  console.error(`Error getting signed URL for ${photo.file_name}:`, err);
+                  photosWithUrls.push(photo);
                 }
               }
             }
@@ -205,8 +197,8 @@ serve(async (req) => {
                   expenses: expenses || [],
                   fees: fees || [],
                 },
-                files_data: filesWithContent,
-                photos_data: photosWithContent,
+                files_data: filesWithUrls,
+                photos_data: photosWithUrls,
                 emails_data: emails || [],
               }),
             });
