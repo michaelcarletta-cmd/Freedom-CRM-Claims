@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClaimStatusSelect } from "@/components/ClaimStatusSelect";
+import { ConstructionStatusSelect } from "@/components/ConstructionStatusSelect";
 import { ClaimOverview } from "@/components/claim-detail/ClaimOverview";
 import { ClaimCommunicationTab } from "@/components/claim-detail/ClaimCommunicationTab";
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
@@ -115,6 +116,15 @@ const ClaimDetail = () => {
     );
   };
 
+  const handleConstructionStatusChange = (newStatus: string) => {
+    queryClient.setQueryData(["claim", id], (old: any) => 
+      old ? { ...old, construction_status: newStatus } : old
+    );
+  };
+
+  // Check if this is a workspace claim (synced from partner)
+  const isWorkspaceClaim = !!claim?.workspace_id;
+
   const handleClaimUpdated = (updatedClaim: any) => {
     queryClient.setQueryData(["claim", id], updatedClaim);
   };
@@ -194,17 +204,29 @@ const ClaimDetail = () => {
           <div className="flex-1">
             <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
               <h1 className="text-2xl md:text-3xl font-bold text-foreground">{claim.claim_number}</h1>
-              {isStaffOrAdmin && (
+              {isStaffOrAdmin && !isWorkspaceClaim && (
                 <ClaimStatusSelect 
                   claimId={claim.id} 
                   currentStatus={claim.status}
                   onStatusChange={handleStatusChange}
                 />
               )}
-              {isPortalUser && claim.status && (
+              {/* Read-only status display for workspace claims and portal users */}
+              {(isPortalUser || (isStaffOrAdmin && isWorkspaceClaim)) && claim.status && (
                 <span className="px-3 py-1 text-sm rounded-none bg-primary text-primary-foreground w-fit">
                   {claim.status}
                 </span>
+              )}
+              {/* Construction status for workspace claims - editable by workspace partners */}
+              {isWorkspaceClaim && isStaffOrAdmin && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Construction:</span>
+                  <ConstructionStatusSelect 
+                    claimId={claim.id}
+                    currentStatus={claim.construction_status}
+                    onStatusChange={handleConstructionStatusChange}
+                  />
+                </div>
               )}
             </div>
             <p className="text-muted-foreground mt-1 font-medium">{claim.policyholder_name}</p>
