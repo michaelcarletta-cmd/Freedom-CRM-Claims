@@ -13,6 +13,18 @@ function decodeQuotedPrintable(str: string): string {
     .replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 }
 
+// Decode base64 encoding
+function decodeBase64(str: string): string {
+  try {
+    // Remove any whitespace/newlines from base64 string
+    const cleaned = str.replace(/[\r\n\s]/g, '');
+    return atob(cleaned);
+  } catch (e) {
+    console.error('Base64 decode error:', e);
+    return str;
+  }
+}
+
 // Extract clean text from raw MIME email
 function extractEmailBody(rawContent: string): { text: string; html: string } {
   let text = '';
@@ -41,6 +53,8 @@ function extractEmailBody(rawContent: string): { text: string; html: string } {
           
           if (encoding === 'quoted-printable') {
             content = decodeQuotedPrintable(content);
+          } else if (encoding === 'base64') {
+            content = decodeBase64(content);
           }
           text = content;
         }
@@ -56,6 +70,8 @@ function extractEmailBody(rawContent: string): { text: string; html: string } {
           
           if (encoding === 'quoted-printable') {
             content = decodeQuotedPrintable(content);
+          } else if (encoding === 'base64') {
+            content = decodeBase64(content);
           }
           
           // Strip HTML tags to get plain text version if needed
@@ -65,11 +81,19 @@ function extractEmailBody(rawContent: string): { text: string; html: string } {
     }
   } else {
     // Single part message - check if it needs decoding
-    if (rawContent.includes('Content-Transfer-Encoding: quoted-printable')) {
-      const bodyMatch = rawContent.split(/\r?\n\r?\n/);
-      if (bodyMatch.length > 1) {
-        text = decodeQuotedPrintable(bodyMatch.slice(1).join('\n\n'));
+    const encodingMatch = rawContent.match(/Content-Transfer-Encoding:\s*(\S+)/i);
+    const encoding = encodingMatch ? encodingMatch[1].toLowerCase() : '';
+    
+    const bodyMatch = rawContent.split(/\r?\n\r?\n/);
+    if (bodyMatch.length > 1) {
+      let content = bodyMatch.slice(1).join('\n\n').trim();
+      
+      if (encoding === 'quoted-printable') {
+        content = decodeQuotedPrintable(content);
+      } else if (encoding === 'base64') {
+        content = decodeBase64(content);
       }
+      text = content;
     } else {
       text = rawContent;
     }
