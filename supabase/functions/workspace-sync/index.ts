@@ -153,8 +153,23 @@ serve(async (req) => {
               }),
             });
 
-            const result = await response.json();
-            results.push({ claim_id: claim.id, success: true, result });
+            const responseText = await response.text();
+            console.log(`Response from ${target_instance_url}: status=${response.status}, body=${responseText}`);
+            
+            let result;
+            try {
+              result = JSON.parse(responseText);
+            } catch {
+              result = { raw: responseText };
+            }
+            
+            if (!response.ok) {
+              console.error(`Sync failed for claim ${claim.id}: ${responseText}`);
+              results.push({ claim_id: claim.id, success: false, error: responseText });
+            } else {
+              console.log(`Sync result for claim ${claim.id}:`, JSON.stringify(result));
+              results.push({ claim_id: claim.id, success: true, result });
+            }
           } catch (error: any) {
             console.error(`Error syncing claim ${claim.id}:`, error);
             results.push({ claim_id: claim.id, success: false, error: error.message });
