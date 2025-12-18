@@ -937,6 +937,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
 // Expenses Section Component
 function ExpensesSection({ claimId, expenses, isAdmin }: any) {
   const [open, setOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<any>(null);
   const [formData, setFormData] = useState({
     expense_date: "",
     description: "",
@@ -949,36 +950,94 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const resetForm = () => {
+    setEditingExpense(null);
+    setFormData({
+      expense_date: "",
+      description: "",
+      amount: 0,
+      category: "other",
+      paid_to: "",
+      payment_method: "",
+      notes: "",
+    });
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase
-        .from("claim_expenses")
-        .insert({
-          ...formData,
-          claim_id: claimId,
-          created_by: user?.id,
-        });
-      if (error) throw error;
+      
+      if (editingExpense) {
+        const { error } = await supabase
+          .from("claim_expenses")
+          .update({
+            expense_date: formData.expense_date,
+            description: formData.description,
+            amount: formData.amount,
+            category: formData.category,
+            paid_to: formData.paid_to || null,
+            payment_method: formData.payment_method || null,
+            notes: formData.notes || null,
+          })
+          .eq("id", editingExpense.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("claim_expenses")
+          .insert({
+            ...formData,
+            claim_id: claimId,
+            created_by: user?.id,
+          });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["claim-expenses", claimId] });
       setOpen(false);
-      setFormData({
-        expense_date: "",
-        description: "",
-        amount: 0,
-        category: "other",
-        paid_to: "",
-        payment_method: "",
-        notes: "",
-      });
-      toast({ title: "Expense added successfully" });
+      resetForm();
+      toast({ title: editingExpense ? "Expense updated successfully" : "Expense added successfully" });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to add expense", variant: "destructive" });
+      toast({ title: "Error", description: editingExpense ? "Failed to update expense" : "Failed to add expense", variant: "destructive" });
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (expenseId: string) => {
+      const { error } = await supabase
+        .from("claim_expenses")
+        .delete()
+        .eq("id", expenseId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["claim-expenses", claimId] });
+      toast({ title: "Expense deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete expense", variant: "destructive" });
+    },
+  });
+
+  const handleEdit = (expense: any) => {
+    setEditingExpense(expense);
+    setFormData({
+      expense_date: expense.expense_date || "",
+      description: expense.description || "",
+      amount: Number(expense.amount) || 0,
+      category: expense.category || "other",
+      paid_to: expense.paid_to || "",
+      payment_method: expense.payment_method || "",
+      notes: expense.notes || "",
+    });
+    setOpen(true);
+  };
+
+  const handleOpenDialog = () => {
+    resetForm();
+    setOpen(true);
+  };
 
   return (
     <Card>
@@ -986,16 +1045,16 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
         <div className="flex justify-between items-center">
           <CardTitle>Expenses</CardTitle>
           {isAdmin && (
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) resetForm(); }}>
               <DialogTrigger asChild>
-                <Button>
+                <Button onClick={handleOpenDialog}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Expense
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add Expense</DialogTitle>
+                <DialogTitle>{editingExpense ? "Edit Expense" : "Add Expense"}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -1064,7 +1123,7 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
                   />
                 </div>
                 <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full">
-                  Add Expense
+                  {editingExpense ? "Update Expense" : "Add Expense"}
                 </Button>
               </div>
             </DialogContent>
@@ -1082,6 +1141,7 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
                 <TableHead>Category</TableHead>
                 <TableHead>Paid To</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
+                {isAdmin && <TableHead className="w-[80px]"></TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1094,6 +1154,23 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
                   <TableCell className="text-right font-semibold text-destructive">
                     ${Number(expense.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </TableCell>
+                  {isAdmin && (
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(expense)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => deleteMutation.mutate(expense.id)}
+                          disabled={deleteMutation.isPending}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
