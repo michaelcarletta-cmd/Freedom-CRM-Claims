@@ -332,7 +332,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
           <Table className="min-w-[800px]">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12">
+                <TableHead className="w-12 sticky left-0 bg-background z-10">
                   <Checkbox
                     checked={filteredClaims.length > 0 && selectedClaims.size === filteredClaims.length}
                     onCheckedChange={toggleAllClaims}
@@ -361,7 +361,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                     className="hover:bg-muted/50 transition-colors cursor-pointer"
                     onClick={() => navigate(`/claims/${claim.id}`)}
                   >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
+                    <TableCell onClick={(e) => e.stopPropagation()} className="sticky left-0 bg-background z-10">
                       <Checkbox
                         checked={selectedClaims.has(claim.id)}
                         onCheckedChange={() => toggleClaimSelection(claim.id)}
