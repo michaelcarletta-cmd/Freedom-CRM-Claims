@@ -83,6 +83,7 @@ serve(async (req) => {
             status: claim_data.status,
             claim_amount: claim_data.claim_amount,
             workspace_id: target_workspace_id || claim_data.workspace_id,
+            partner_construction_status: claim_data.construction_status,
             updated_at: new Date().toISOString(),
           })
           .eq('id', claimId);
@@ -113,6 +114,7 @@ serve(async (req) => {
             status: claim_data.status || 'open',
             claim_amount: claim_data.claim_amount,
             workspace_id: target_workspace_id,
+            partner_construction_status: claim_data.construction_status,
           })
           .select()
           .single();
