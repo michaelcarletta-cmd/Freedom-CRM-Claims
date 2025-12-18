@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Separator } from "@/components/ui/separator";
 import { FileText, Loader2, Download, Sparkles, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -187,8 +187,8 @@ Write in professional insurance claim language suitable for a Proof of Loss form
           Generate POL
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="max-w-3xl h-[85vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
             Proof of Loss Generator
@@ -200,7 +200,7 @@ Write in professional insurance claim language suitable for a Proof of Loss form
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : polData ? (
-          <ScrollArea className="flex-1 min-h-0 pr-4">
+          <div className="flex-1 overflow-y-auto pr-4">
             <div className="space-y-6">
               {/* Insured Information */}
               <Card className="p-4 space-y-4">
@@ -425,7 +425,7 @@ Write in professional insurance claim language suitable for a Proof of Loss form
                 </Button>
               </div>
             </div>
-          </ScrollArea>
+          </div>
         ) : null}
       </DialogContent>
     </Dialog>
