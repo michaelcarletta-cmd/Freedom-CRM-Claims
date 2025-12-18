@@ -104,3 +104,6 @@ verify_jwt = true
 
 [functions.workspace-sync]
 verify_jwt = true
+
+[functions.generate-pol-docx]
+verify_jwt = true

@@ -38,6 +38,7 @@ export const ProofOfLossGenerator = ({ claimId, claim }: ProofOfLossGeneratorPro
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [polData, setPolData] = useState<POLData | null>(null);
 
   const initializePOLData = async () => {
@@ -50,12 +51,12 @@ export const ProofOfLossGenerator = ({ claimId, claim }: ProofOfLossGeneratorPro
         .eq("claim_id", claimId)
         .maybeSingle();
 
-      // Initialize form with claim data
+      // Initialize form with claim data - fix timezone issue
       const initialData: POLData = {
         insured_name: claim.policyholder_name || "",
         policy_number: claim.policy_number || "",
         claim_number: claim.claim_number || "",
-        date_of_loss: claim.loss_date ? format(new Date(claim.loss_date), "MMMM d, yyyy") : "",
+        date_of_loss: claim.loss_date ? format(new Date(claim.loss_date + 'T12:00:00'), "MMMM d, yyyy") : "",
         property_address: claim.policyholder_address || "",
         insurance_company: claim.insurance_company || "",
         loss_type: claim.loss_type || "",
@@ -120,58 +121,30 @@ Write in professional insurance claim language suitable for a Proof of Loss form
     }
   };
 
-  const downloadPOL = () => {
+  const downloadPOL = async () => {
     if (!polData) return;
 
-    const polContent = `
-PROOF OF LOSS
+    setDownloading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-pol-docx", {
+        body: {
+          polData,
+          claimId,
+        },
+      });
 
-INSURED: ${polData.insured_name}
-POLICY NUMBER: ${polData.policy_number}
-CLAIM NUMBER: ${polData.claim_number}
-DATE OF LOSS: ${polData.date_of_loss}
-PROPERTY ADDRESS: ${polData.property_address}
-INSURANCE COMPANY: ${polData.insurance_company}
+      if (error) throw error;
 
-TYPE OF LOSS: ${polData.loss_type}
-
-DESCRIPTION OF LOSS:
-${polData.loss_description}
-
-DETAILED DAMAGE NARRATIVE:
-${polData.ai_damage_narrative || polData.loss_description}
-
-AMOUNT OF CLAIM:
-
-Building Damage: $${polData.building_damage || "0.00"}
-Contents Damage: $${polData.contents_damage || "0.00"}
-Additional Living Expense: $${polData.additional_living_expense || "0.00"}
-─────────────────────────────────────
-TOTAL AMOUNT CLAIMED: $${polData.total_claimed || "0.00"}
-
-The undersigned hereby certifies that the above amounts are correct and represent the actual cash value or replacement cost of the damaged property, and that no material information has been concealed or misrepresented.
-
-_______________________________     ________________
-Signature of Insured                Date
-
-_______________________________     ________________
-Signature of Adjuster               Date
-
-Generated on: ${format(new Date(), "MMMM d, yyyy 'at' h:mm a")}
-Freedom Claims CRM
-    `.trim();
-
-    const blob = new Blob([polContent], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `POL_${polData.claim_number || "draft"}_${format(new Date(), "yyyy-MM-dd")}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    toast.success("Proof of Loss downloaded");
+      if (data?.downloadUrl) {
+        window.open(data.downloadUrl, "_blank");
+        toast.success("Proof of Loss saved to claim files");
+      }
+    } catch (error: any) {
+      console.error("Error generating POL document:", error);
+      toast.error(error.message || "Failed to generate POL document");
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const updateField = (field: keyof POLData, value: string) => {
@@ -365,9 +338,13 @@ Freedom Claims CRM
                 <Button variant="outline" onClick={() => setOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={downloadPOL} className="gap-2">
-                  <Download className="h-4 w-4" />
-                  Download POL
+                <Button onClick={downloadPOL} disabled={downloading} className="gap-2">
+                  {downloading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  Download POL (.docx)
                 </Button>
               </div>
             </div>
