@@ -137,8 +137,7 @@ export function WorkspaceDetail() {
             id,
             body,
             created_at,
-            sender_id,
-            profiles:sender_id (full_name, email)
+            sender_id
           )
         `)
         .eq("workspace_id", workspaceId)
