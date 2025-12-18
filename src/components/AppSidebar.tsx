@@ -3,7 +3,7 @@ import { NavLink } from "@/components/NavLink";
 import logo from "@/assets/freedom-claims-logo.svg";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
+import { queryClient } from "@/App";
 
 import {
   Sidebar,
@@ -35,11 +35,11 @@ const accountItems: any[] = [];
 export function AppSidebar() {
   const { open } = useSidebar();
   const { signOut, user } = useAuth();
-  const navigate = useNavigate();
 
   const handleSignOut = async () => {
     await signOut();
-    navigate("/auth");
+    queryClient.clear();
+    window.location.href = "/auth";
   };
 
   return (
