@@ -179,9 +179,12 @@ GUIDELINES:
 
       console.log(`Follow-up #${followUpNumber} sent for task "${task.title}"`);
 
-      // Update the task record
+      // Update the task record - reset due_date so it doesn't show as overdue
       const nextFollowUpAt = new Date();
       nextFollowUpAt.setDate(nextFollowUpAt.getDate() + task.follow_up_interval_days);
+      
+      // Reset due_date to the next follow-up date so the task doesn't appear overdue
+      const newDueDate = nextFollowUpAt.toISOString().split('T')[0];
 
       await supabase
         .from('tasks')
@@ -189,6 +192,7 @@ GUIDELINES:
           follow_up_current_count: followUpNumber,
           follow_up_last_sent_at: new Date().toISOString(),
           follow_up_next_at: nextFollowUpAt.toISOString(),
+          due_date: newDueDate, // Reset due date when AI sends follow-up
         })
         .eq('id', task.id);
 
