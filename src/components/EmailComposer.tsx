@@ -242,29 +242,39 @@ export function EmailComposer({
     });
   }
 
-  // Fetch contractors
+  // Fetch contractors assigned to this claim
   const { data: contractors } = useQuery({
-    queryKey: ["claim-contractors", claimId],
+    queryKey: ["claim-contractors-email", claimId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // First get contractor IDs for this claim
+      const { data: assignments, error: assignmentError } = await supabase
         .from("claim_contractors")
-        .select(`
-          contractor_id,
-          profiles!inner(email, full_name)
-        `)
+        .select("contractor_id")
         .eq("claim_id", claimId);
-      if (error) throw error;
-      return data;
+      
+      if (assignmentError) throw assignmentError;
+      if (!assignments || assignments.length === 0) return [];
+      
+      const contractorIds = assignments.map(a => a.contractor_id);
+      
+      // Then fetch profiles for those contractors
+      const { data: profiles, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, email, full_name")
+        .in("id", contractorIds);
+      
+      if (profileError) throw profileError;
+      return profiles || [];
     },
     enabled: isOpen,
   });
 
   // Add contractors to recipients
   contractors?.forEach((contractor: any) => {
-    if (contractor.profiles?.email) {
+    if (contractor.email) {
       availableRecipients.push({
-        email: contractor.profiles.email,
-        name: contractor.profiles.full_name || "Contractor",
+        email: contractor.email,
+        name: contractor.full_name || "Contractor",
         type: "contractor"
       });
     }
