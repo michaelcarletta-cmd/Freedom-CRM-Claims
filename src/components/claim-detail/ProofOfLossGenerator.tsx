@@ -19,11 +19,18 @@ interface ProofOfLossGeneratorProps {
 
 interface POLData {
   insured_name: string;
+  insured_phone: string;
+  insured_email: string;
   policy_number: string;
   claim_number: string;
   date_of_loss: string;
   property_address: string;
   insurance_company: string;
+  insurance_phone: string;
+  insurance_email: string;
+  adjuster_name: string;
+  adjuster_phone: string;
+  adjuster_email: string;
   loss_type: string;
   loss_description: string;
   building_damage: string;
@@ -54,11 +61,18 @@ export const ProofOfLossGenerator = ({ claimId, claim }: ProofOfLossGeneratorPro
       // Initialize form with claim data - fix timezone issue
       const initialData: POLData = {
         insured_name: claim.policyholder_name || "",
+        insured_phone: claim.policyholder_phone || "",
+        insured_email: claim.policyholder_email || "",
         policy_number: claim.policy_number || "",
         claim_number: claim.claim_number || "",
         date_of_loss: claim.loss_date ? format(new Date(claim.loss_date + 'T12:00:00'), "MMMM d, yyyy") : "",
         property_address: claim.policyholder_address || "",
         insurance_company: claim.insurance_company || "",
+        insurance_phone: claim.insurance_phone || "",
+        insurance_email: claim.insurance_email || "",
+        adjuster_name: claim.adjuster_name || "",
+        adjuster_phone: claim.adjuster_phone || "",
+        adjuster_email: claim.adjuster_email || "",
         loss_type: claim.loss_type || "",
         loss_description: claim.loss_description || "",
         building_damage: settlement?.replacement_cost_value?.toString() || "",
@@ -200,6 +214,34 @@ Write in professional insurance claim language suitable for a Proof of Loss form
                     />
                   </div>
                   <div>
+                    <Label>Insured Phone</Label>
+                    <Input
+                      value={polData.insured_phone}
+                      onChange={(e) => updateField("insured_phone", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Insured Email</Label>
+                    <Input
+                      value={polData.insured_email}
+                      onChange={(e) => updateField("insured_email", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Property Address</Label>
+                    <Input
+                      value={polData.property_address}
+                      onChange={(e) => updateField("property_address", e.target.value)}
+                    />
+                  </div>
+                </div>
+              </Card>
+
+              {/* Policy & Claim Information */}
+              <Card className="p-4 space-y-4">
+                <h3 className="font-semibold">Policy & Claim Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
                     <Label>Policy Number</Label>
                     <Input
                       value={polData.policy_number}
@@ -220,13 +262,48 @@ Write in professional insurance claim language suitable for a Proof of Loss form
                       onChange={(e) => updateField("insurance_company", e.target.value)}
                     />
                   </div>
+                  <div>
+                    <Label>Insurance Phone</Label>
+                    <Input
+                      value={polData.insurance_phone}
+                      onChange={(e) => updateField("insurance_phone", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Insurance Email</Label>
+                    <Input
+                      value={polData.insurance_email}
+                      onChange={(e) => updateField("insurance_email", e.target.value)}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label>Property Address</Label>
-                  <Input
-                    value={polData.property_address}
-                    onChange={(e) => updateField("property_address", e.target.value)}
-                  />
+              </Card>
+
+              {/* Adjuster Information */}
+              <Card className="p-4 space-y-4">
+                <h3 className="font-semibold">Adjuster Information</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label>Adjuster Name</Label>
+                    <Input
+                      value={polData.adjuster_name}
+                      onChange={(e) => updateField("adjuster_name", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Adjuster Phone</Label>
+                    <Input
+                      value={polData.adjuster_phone}
+                      onChange={(e) => updateField("adjuster_phone", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Adjuster Email</Label>
+                    <Input
+                      value={polData.adjuster_email}
+                      onChange={(e) => updateField("adjuster_email", e.target.value)}
+                    />
+                  </div>
                 </div>
               </Card>
 
