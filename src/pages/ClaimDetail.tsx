@@ -219,13 +219,23 @@ const ClaimDetail = () => {
               )}
               {/* Construction status for workspace claims - editable by workspace partners */}
               {isWorkspaceClaim && isStaffOrAdmin && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Construction:</span>
-                  <ConstructionStatusSelect 
-                    claimId={claim.id}
-                    currentStatus={claim.construction_status}
-                    onStatusChange={handleConstructionStatusChange}
-                  />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Construction:</span>
+                    <ConstructionStatusSelect 
+                      claimId={claim.id}
+                      currentStatus={claim.construction_status}
+                      onStatusChange={handleConstructionStatusChange}
+                    />
+                  </div>
+                  {claim.partner_construction_status && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Partner:</span>
+                      <span className="px-2 py-1 text-xs rounded-sm bg-muted text-muted-foreground">
+                        {claim.partner_construction_status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
