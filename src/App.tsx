@@ -27,7 +27,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const Workspaces = lazy(() => import("./pages/Workspaces"));
 const WorkspaceDetailPage = lazy(() => import("./pages/WorkspaceDetailPage"));
 
-const queryClient = new QueryClient();
+export const queryClient = new QueryClient();
 
 // Loading fallback component
 const PageLoader = () => (
