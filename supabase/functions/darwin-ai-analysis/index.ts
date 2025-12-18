@@ -352,6 +352,12 @@ ${darwinNotes}` : ''}
 
 IMPORTANT: This claim is located in ${stateInfo.stateName}. You MUST cite ${stateInfo.stateName} law and regulations accurately.
 
+CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
+- NEVER argue "matching" (that new materials must match existing materials in color, texture, style, etc.)
+- ALWAYS argue "repairability" - the damaged materials CANNOT BE REPAIRED and must be replaced
+- Focus on why materials are not repairable: manufacturing discontinuation, material degradation, structural integrity compromised, code compliance requirements, manufacturer specifications prohibit partial repairs
+- The core argument is: the damage renders the materials irreparable, not that replacements must match
+
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
 You have deep knowledge of:
@@ -474,6 +480,12 @@ Be specific and actionable. Reference ${stateInfo.stateName} deadlines and regul
 
       case 'supplement':
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in identifying missed damage and generating supplement requests. Your role is to maximize claim recovery by finding overlooked items in carrier estimates.
+
+CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
+- NEVER argue "matching" (that new materials must match existing materials)
+- ALWAYS argue "repairability" - the damaged materials CANNOT BE REPAIRED and must be replaced
+- Focus on why materials are irreparable: manufacturing discontinuation, material degradation, structural integrity compromised, code requirements, manufacturer specs prohibit partial repairs
+- When requesting full replacement, justify based on non-repairability, NOT matching concerns
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
@@ -677,6 +689,12 @@ Be specific, professional, and provide communications that are ready to copy and
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in analyzing and refuting engineer reports used by insurance carriers to deny or underpay claims. Your role is to identify flaws, methodological issues, and bias in engineering reports.
 
 IMPORTANT: This claim is located in ${stateInfo.stateName}. You MUST cite ${stateInfo.stateName} law and case law.
+
+CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
+- NEVER argue "matching" (that new materials must match existing materials)
+- ALWAYS argue "repairability" - the damaged materials CANNOT BE REPAIRED and must be replaced
+- When refuting engineer conclusions that suggest repair is possible, focus on: why repairs are structurally inadequate, manufacturer prohibitions on partial repairs, code compliance issues, material degradation preventing proper repair
+- The core argument is NON-REPAIRABILITY, not aesthetic matching
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
