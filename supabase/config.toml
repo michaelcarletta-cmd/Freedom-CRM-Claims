@@ -107,3 +107,6 @@ verify_jwt = true
 
 [functions.generate-pol-docx]
 verify_jwt = true
+
+[functions.notify-client-claim-update]
+verify_jwt = true

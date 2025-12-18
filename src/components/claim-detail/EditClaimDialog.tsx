@@ -156,6 +156,8 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
     setLoading(true);
     try {
       const updateData: any = { ...formData };
+      const oldStatus = claim?.status;
+      const newStatus = formData.status;
       
       // Ensure insurance_company name is set if insurance_company_id is selected
       if (formData.insurance_company_id && !formData.insurance_company) {
@@ -195,6 +197,20 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
         .single();
 
       if (error) throw error;
+
+      // Trigger client notification if status changed
+      if (oldStatus !== newStatus && newStatus) {
+        supabase.functions.invoke("notify-client-claim-update", {
+          body: {
+            claimId: claim.id,
+            changeType: "status_change",
+            oldValue: oldStatus,
+            newValue: newStatus,
+          },
+        }).catch((err) => {
+          console.log("Client notification failed (may be disabled):", err);
+        });
+      }
 
       toast.success("Claim updated successfully");
       onClaimUpdated(data);

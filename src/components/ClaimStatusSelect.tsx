@@ -51,6 +51,7 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
 
   const handleStatusChange = async (newStatus: string) => {
     setLoading(true);
+    const oldStatus = currentStatus;
     try {
       const { error } = await supabase
         .from("claims")
@@ -58,6 +59,20 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
         .eq("id", claimId);
 
       if (error) throw error;
+
+      // Trigger client notification for status change
+      if (oldStatus !== newStatus) {
+        supabase.functions.invoke("notify-client-claim-update", {
+          body: {
+            claimId,
+            changeType: "status_change",
+            oldValue: oldStatus,
+            newValue: newStatus,
+          },
+        }).catch((err) => {
+          console.log("Client notification failed (may be disabled):", err);
+        });
+      }
 
       toast({
         title: "Success",

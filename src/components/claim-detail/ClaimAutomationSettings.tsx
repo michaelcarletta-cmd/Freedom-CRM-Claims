@@ -25,6 +25,7 @@ interface AutomationSettings {
   auto_respond_emails: boolean;
   auto_update_notes: boolean;
   auto_send_sms: boolean;
+  notify_client_on_updates: boolean;
 }
 
 interface ClaimAutomation {
@@ -337,6 +338,22 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
                   <Switch
                     checked={settings?.auto_send_sms ?? false}
                     onCheckedChange={(v) => handleSettingChange("auto_send_sms", v)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Send className="h-5 w-5 text-primary" />
+                    <div>
+                      <Label className="text-sm font-medium">Auto-Notify Client on Updates</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Automatically email client when claim status or key info changes
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={settings?.notify_client_on_updates ?? false}
+                    onCheckedChange={(v) => handleSettingChange("notify_client_on_updates", v)}
                   />
                 </div>
 
