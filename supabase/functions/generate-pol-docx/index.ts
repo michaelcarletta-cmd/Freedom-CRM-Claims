@@ -64,11 +64,18 @@ serve(async (req) => {
       company_email: branding?.company_email || "",
       generated_date: reportDate,
       insured_name: polData.insured_name || "",
+      insured_phone: polData.insured_phone || "",
+      insured_email: polData.insured_email || "",
       policy_number: polData.policy_number || "",
       claim_number: polData.claim_number || "",
       date_of_loss: polData.date_of_loss || "",
       property_address: polData.property_address || "",
       insurance_company: polData.insurance_company || "",
+      insurance_phone: polData.insurance_phone || "",
+      insurance_email: polData.insurance_email || "",
+      adjuster_name: polData.adjuster_name || "",
+      adjuster_phone: polData.adjuster_phone || "",
+      adjuster_email: polData.adjuster_email || "",
       loss_type: polData.loss_type || "",
       loss_description: polData.loss_description || "",
       damage_narrative: polData.ai_damage_narrative || polData.loss_description || "",
@@ -202,10 +209,23 @@ async function createPOLDocxTemplate(): Promise<Uint8Array> {
     
     <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>INSURED INFORMATION</w:t></w:r></w:p>
     <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Insured Name: </w:t></w:r><w:r><w:t>{insured_name}</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Phone: </w:t></w:r><w:r><w:t>{insured_phone}</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Email: </w:t></w:r><w:r><w:t>{insured_email}</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Property Address: </w:t></w:r><w:r><w:t>{property_address}</w:t></w:r></w:p>
+    <w:p/>
+    
+    <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>POLICY &amp; CLAIM INFORMATION</w:t></w:r></w:p>
     <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Policy Number: </w:t></w:r><w:r><w:t>{policy_number}</w:t></w:r></w:p>
     <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Claim Number: </w:t></w:r><w:r><w:t>{claim_number}</w:t></w:r></w:p>
-    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Property Address: </w:t></w:r><w:r><w:t>{property_address}</w:t></w:r></w:p>
     <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Insurance Company: </w:t></w:r><w:r><w:t>{insurance_company}</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Insurance Phone: </w:t></w:r><w:r><w:t>{insurance_phone}</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Insurance Email: </w:t></w:r><w:r><w:t>{insurance_email}</w:t></w:r></w:p>
+    <w:p/>
+    
+    <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>ADJUSTER INFORMATION</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Adjuster Name: </w:t></w:r><w:r><w:t>{adjuster_name}</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Adjuster Phone: </w:t></w:r><w:r><w:t>{adjuster_phone}</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Adjuster Email: </w:t></w:r><w:r><w:t>{adjuster_email}</w:t></w:r></w:p>
     <w:p/>
     
     <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>LOSS INFORMATION</w:t></w:r></w:p>
