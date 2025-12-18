@@ -278,7 +278,7 @@ export const DarwinClaimBriefing = ({ claimId, claim }: DarwinClaimBriefingProps
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Loss Date</span>
-              <span>{claim.loss_date ? format(new Date(claim.loss_date), 'MMM d, yyyy') : "Not specified"}</span>
+              <span>{claim.loss_date ? format(new Date(claim.loss_date + 'T12:00:00'), 'MMM d, yyyy') : "Not specified"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Insurance Company</span>
