@@ -260,7 +260,11 @@ const scenarioTemplates = {
   }
 };
 
-export function MakeIntegrationSettings() {
+interface MakeIntegrationSettingsProps {
+  embedded?: boolean;
+}
+
+export function MakeIntegrationSettings({ embedded }: MakeIntegrationSettingsProps) {
   const { toast } = useToast();
 
   const downloadTemplate = (templateKey: keyof typeof scenarioTemplates) => {
