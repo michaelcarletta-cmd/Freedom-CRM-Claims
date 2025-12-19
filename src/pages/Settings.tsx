@@ -37,6 +37,7 @@ import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
 import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings";
 import { MakeIntegrationSettings } from "@/components/settings/MakeIntegrationSettings";
 import { OrganizationSettings } from "@/components/settings/OrganizationSettings";
+import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { useQuery } from "@tanstack/react-query";
 
 interface ClaimStatus {
@@ -120,6 +121,7 @@ export default function Settings() {
   const [lossTypesOpen, setLossTypesOpen] = useState(false);
   const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
+  const [companyBrandingOpen, setCompanyBrandingOpen] = useState(false);
   const { toast } = useToast();
 
   // Check if current user is admin
@@ -499,8 +501,32 @@ export default function Settings() {
           <AIKnowledgeBaseSettings />
         </TabsContent>
 
-        <TabsContent value="organization" className="w-full">
+        <TabsContent value="organization" className="w-full space-y-4">
           <OrganizationSettings />
+          
+          {/* Company Branding - Collapsible */}
+          <Collapsible open={companyBrandingOpen} onOpenChange={setCompanyBrandingOpen}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Company Branding</CardTitle>
+                      <CardDescription>
+                        Configure company information, letterhead, and integrations
+                      </CardDescription>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 transition-transform ${companyBrandingOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent>
+                  <CompanyBrandingSettings />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         </TabsContent>
 
         <TabsContent value="import" className="w-full">
