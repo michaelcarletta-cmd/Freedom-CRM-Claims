@@ -693,6 +693,41 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
     setEditingCheck(null);
   };
 
+  // Helper function to recalculate and update fees based on new check totals
+  const recalculateFees = async (newTotalChecks: number) => {
+    // Fetch current fees and settlement for prior offer
+    const [feesResult, settlementResult] = await Promise.all([
+      supabase.from("claim_fees").select("*").eq("claim_id", claimId).maybeSingle(),
+      supabase.from("claim_settlements").select("prior_offer").eq("claim_id", claimId).maybeSingle()
+    ]);
+
+    const fees = feesResult.data;
+    const priorOffer = Number(settlementResult.data?.prior_offer || 0);
+
+    if (fees && (fees.company_fee_percentage > 0 || fees.adjuster_fee_percentage > 0 || fees.contractor_fee_percentage > 0)) {
+      const feeableAmount = Math.max(0, newTotalChecks - priorOffer);
+      
+      // Recalculate company fee
+      const companyFeeAmount = Math.round(feeableAmount * (fees.company_fee_percentage / 100) * 100) / 100;
+      
+      // Recalculate adjuster fee (percentage of company fee)
+      const adjusterFeeAmount = Math.round(companyFeeAmount * (fees.adjuster_fee_percentage / 100) * 100) / 100;
+      
+      // Recalculate contractor fee
+      const contractorFeeAmount = Math.round(feeableAmount * (fees.contractor_fee_percentage / 100) * 100) / 100;
+
+      // Update fees in database
+      await supabase
+        .from("claim_fees")
+        .update({
+          company_fee_amount: companyFeeAmount,
+          adjuster_fee_amount: adjusterFeeAmount,
+          contractor_fee_amount: contractorFeeAmount,
+        })
+        .eq("id", fees.id);
+    }
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -711,6 +746,15 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
           })
           .eq("id", editingCheck.id);
         if (error) throw error;
+        
+        // Calculate new total with the updated amount
+        const newTotal = checks.reduce((sum: number, check: any) => {
+          if (check.id === editingCheck.id) {
+            return sum + formData.amount;
+          }
+          return sum + Number(check.amount);
+        }, 0);
+        await recalculateFees(newTotal);
       } else {
         // Insert new check
         const { error } = await supabase
@@ -721,10 +765,15 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
             created_by: user?.id,
           });
         if (error) throw error;
+        
+        // Calculate new total including the new check
+        const newTotal = totalChecksReceived + formData.amount;
+        await recalculateFees(newTotal);
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["claim-checks", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["claim-fees", claimId] });
       setOpen(false);
       resetForm();
       toast({ title: editingCheck ? "Check updated successfully" : "Check added successfully" });
@@ -736,14 +785,23 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
 
   const deleteMutation = useMutation({
     mutationFn: async (checkId: string) => {
+      // Find the check being deleted to calculate new total
+      const checkToDelete = checks.find((c: any) => c.id === checkId);
+      const deletedAmount = checkToDelete ? Number(checkToDelete.amount) : 0;
+      
       const { error } = await supabase
         .from("claim_checks")
         .delete()
         .eq("id", checkId);
       if (error) throw error;
+      
+      // Recalculate fees with the check removed
+      const newTotal = totalChecksReceived - deletedAmount;
+      await recalculateFees(newTotal);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["claim-checks", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["claim-fees", claimId] });
       toast({ title: "Check deleted successfully" });
     },
     onError: () => {
