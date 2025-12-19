@@ -16,7 +16,11 @@ interface QuickBooksConnection {
   connectedAt: string;
 }
 
-export function QuickBooksSettings() {
+interface QuickBooksSettingsProps {
+  embedded?: boolean;
+}
+
+export function QuickBooksSettings({ embedded }: QuickBooksSettingsProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connection, setConnection] = useState<QuickBooksConnection | null>(null);
