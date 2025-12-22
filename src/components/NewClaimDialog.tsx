@@ -257,7 +257,7 @@ export function NewClaimDialog() {
             .from("clients")
             .select("id")
             .eq("email", formData.policyholderEmail)
-            .single();
+            .maybeSingle();
           
           if (existingClient) {
             clientId = existingClient.id;
