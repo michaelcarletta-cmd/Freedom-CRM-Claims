@@ -667,14 +667,14 @@ export function NewClaimDialog() {
               <div className="space-y-2">
                 <Label htmlFor="workspace">Share with Partner Organization</Label>
                 <Select
-                  value={selectedWorkspaceId}
-                  onValueChange={setSelectedWorkspaceId}
+                  value={selectedWorkspaceId || "__none__"}
+                  onValueChange={(value) => setSelectedWorkspaceId(value === "__none__" ? "" : value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select workspace to share" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Don't share</SelectItem>
+                    <SelectItem value="__none__">Don't share</SelectItem>
                     {workspaces.map((workspace) => (
                       <SelectItem key={workspace.id} value={workspace.id}>
                         {workspace.name}
