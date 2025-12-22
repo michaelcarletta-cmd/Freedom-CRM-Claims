@@ -192,30 +192,27 @@ export function ClaimTemplates({ claimId, claim }: ClaimTemplatesProps) {
             <div>{`\${policyholder}`}</div>
             <div>{`\${policyholder_email}`}</div>
             <div>{`\${policyholder_phone}`}</div>
-            <div>{`\${address.street}`}</div>
-            <div>{`\${address.city}`}</div>
-            <div>{`\${address.state}`}</div>
-            <div>{`\${address.zip}`}</div>
-            <div>{`\${policy}`}</div>
+            <div>{`\${property_address}`}</div>
+            <div>{`\${street}`}</div>
+            <div>{`\${city}`}</div>
+            <div>{`\${state}`}</div>
+            <div>{`\${zip}`}</div>
             <div>{`\${policy_number}`}</div>
-            <div>{`\${claim.claim_number}`}</div>
-            <div>{`\${claim.loss_date}`}</div>
-            <div>{`\${claim.loss_type}`}</div>
-            <div>{`\${claim.loss_description}`}</div>
-            <div>{`\${claim.amount}`}</div>
-            <div>{`\${claim.status}`}</div>
+            <div>{`\${claim_number}`}</div>
+            <div>{`\${loss_date}`}</div>
+            <div>{`\${loss_type}`}</div>
+            <div>{`\${loss_description}`}</div>
             <div>{`\${insurance_company}`}</div>
             <div>{`\${insurance_phone}`}</div>
             <div>{`\${insurance_email}`}</div>
-            <div>{`\${adjuster.name}`}</div>
-            <div>{`\${adjuster.phone}`}</div>
-            <div>{`\${adjuster.email}`}</div>
-            <div>{`\${mortgage.company}`}</div>
+            <div>{`\${adjuster_name}`}</div>
+            <div>{`\${adjuster_phone}`}</div>
+            <div>{`\${adjuster_email}`}</div>
             <div>{`\${mortgage_company}`}</div>
             <div>{`\${loan_number}`}</div>
             <div>{`\${ssn_last_four}`}</div>
-            <div>{`\${referrer.name}`}</div>
-            <div>{`\${referrer.company}`}</div>
+            <div>{`\${referrer_name}`}</div>
+            <div>{`\${referrer_company}`}</div>
             <div>{`\${date}`}</div>
             <div>{`\${today}`}</div>
           </div>

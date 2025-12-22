@@ -150,19 +150,41 @@ serve(async (req) => {
     const state = stateZip[0] || "";
     const zipCode = stateZip[1] || "";
 
+    // Format date safely - handle YYYY-MM-DD format without timezone issues
+    const formatDate = (dateStr: string | null): string => {
+      if (!dateStr) return "";
+      try {
+        // Parse YYYY-MM-DD format directly to avoid timezone issues
+        const parts = dateStr.split('T')[0].split('-');
+        if (parts.length === 3) {
+          const [year, month, day] = parts;
+          return `${parseInt(month)}/${parseInt(day)}/${year}`;
+        }
+        return dateStr;
+      } catch {
+        return dateStr || "";
+      }
+    };
+
     // Prepare data for template matching the ${field} format
     const templateData = {
       // Main claim info
       claim: {
         claim_number: claim.claim_number || "",
         loss_type: claim.loss_types?.name || claim.loss_type || "",
-        loss_date: claim.loss_date ? new Date(claim.loss_date).toLocaleDateString() : "",
+        loss_date: formatDate(claim.loss_date),
         loss_description: claim.loss_description || "",
         amount: claim.claim_amount ? `$${claim.claim_amount.toLocaleString()}` : "",
         status: claim.status || "",
       },
+      // Flat claim fields for simpler template usage
+      claim_number: claim.claim_number || "",
+      loss_type: claim.loss_types?.name || claim.loss_type || "",
+      loss_date: formatDate(claim.loss_date),
+      loss_description: claim.loss_description || "",
       // Policyholder info
       policyholder: claim.policyholder_name || "",
+      policyholder_name: claim.policyholder_name || "",
       policyholder_email: claim.policyholder_email || "",
       policyholder_phone: claim.policyholder_phone || "",
       // Address (nested object and full string)
@@ -173,6 +195,12 @@ serve(async (req) => {
         zip: zipCode,
         full: claim.policyholder_address || ""
       },
+      // Flat address fields for simpler template usage
+      property_address: claim.policyholder_address || "",
+      street: street,
+      city: city,
+      state: state,
+      zip: zipCode,
       // Insurance info
       insurance_company: claim.insurance_companies?.name || claim.insurance_company || "",
       insurance_phone: claim.insurance_phone || "",
@@ -193,6 +221,8 @@ serve(async (req) => {
         name: claim.referrers?.name || "",
         company: claim.referrers?.company || "",
       },
+      referrer_name: claim.referrers?.name || "",
+      referrer_company: claim.referrers?.company || "",
       // Mortgage info
       mortgage: {
         company: claim.mortgage_companies?.name || "",
@@ -236,6 +266,8 @@ serve(async (req) => {
         outstanding: formatCurrency(outstanding),
       },
     };
+
+    console.log("Template data being rendered:", JSON.stringify(templateData, null, 2));
 
     // Render the document
     doc.render(templateData);
