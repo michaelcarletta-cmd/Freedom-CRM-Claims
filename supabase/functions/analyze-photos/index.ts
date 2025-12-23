@@ -229,6 +229,80 @@ Create a single, unified report that incorporates all the above analyses.`;
   return result.choices?.[0]?.message?.content || batchResults.join('\n\n---\n\n');
 }
 
+// Extract referenced photo numbers and their context from the AI report
+async function extractPhotoReferences(
+  reportContent: string,
+  photoDescriptions: string[],
+  LOVABLE_API_KEY: string
+): Promise<{ photoNumber: number; aiContext: string }[]> {
+  console.log("Extracting photo references from AI report...");
+
+  const extractPrompt = `Analyze this forensic report and extract all photo references with their analysis context.
+
+REPORT:
+${reportContent}
+
+AVAILABLE PHOTOS:
+${photoDescriptions.join('\n')}
+
+For each photo mentioned in the report (Photo 1, Photo 2, etc.), extract:
+1. The photo number
+2. A brief summary of what the AI said about that photo (1-2 sentences capturing the key damage/finding)
+
+Return a JSON array like this:
+[
+  {"photoNumber": 1, "aiContext": "Shows severe hail impact damage on north-facing roof slope with granule loss and bruising."},
+  {"photoNumber": 3, "aiContext": "Documents displaced ridge cap shingles with visible nail pops from wind uplift."}
+]
+
+Only include photos that are actually referenced and analyzed in the report. Return ONLY the JSON array, no other text.`;
+
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite",
+        messages: [
+          { role: "system", content: "You extract photo references from forensic reports. Return only valid JSON arrays." },
+          { role: "user", content: extractPrompt }
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Photo reference extraction failed");
+      return [];
+    }
+
+    const result = await response.json();
+    const content = result.choices?.[0]?.message?.content || "";
+    
+    // Parse JSON from response (handle potential markdown code blocks)
+    let jsonStr = content.trim();
+    if (jsonStr.startsWith("```json")) {
+      jsonStr = jsonStr.slice(7);
+    }
+    if (jsonStr.startsWith("```")) {
+      jsonStr = jsonStr.slice(3);
+    }
+    if (jsonStr.endsWith("```")) {
+      jsonStr = jsonStr.slice(0, -3);
+    }
+    jsonStr = jsonStr.trim();
+
+    const references = JSON.parse(jsonStr);
+    console.log(`Extracted ${references.length} photo references`);
+    return references;
+  } catch (error) {
+    console.error("Error extracting photo references:", error);
+    return [];
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -689,6 +763,20 @@ ${claimContext}
 
     console.log("Photo analysis complete, final report length:", reportContent.length);
 
+    // Extract which photos the AI referenced in its analysis
+    const referencedPhotos = await extractPhotoReferences(reportContent, allPhotoDescriptions, LOVABLE_API_KEY);
+    
+    // Map referenced photo numbers to their full photo data with AI context
+    const referencedPhotoData = referencedPhotos.map(ref => {
+      const photoData = photoUrls.find(p => p.photoNumber === ref.photoNumber);
+      return photoData ? {
+        ...photoData,
+        aiContext: ref.aiContext
+      } : null;
+    }).filter(Boolean);
+
+    console.log(`AI referenced ${referencedPhotoData.length} photos in report`);
+
     // Save report to darwin_analysis_results so it persists even if connection drops
     const jobId = crypto.randomUUID();
     const { error: saveError } = await supabase
@@ -698,7 +786,7 @@ ${claimContext}
         claim_id: claimId,
         analysis_type: `photo_report_${reportType}`,
         result: reportContent,
-        input_summary: `${photos.length} photos analyzed`,
+        input_summary: `${photos.length} photos analyzed, ${referencedPhotoData.length} referenced`,
       });
     
     if (saveError) {
@@ -714,6 +802,7 @@ ${claimContext}
         photoCount: photos.length,
         reportType,
         photoUrls: photoUrls,
+        referencedPhotos: referencedPhotoData, // Photos the AI specifically cited with context
         weatherData: weatherData,
         supportingDocs: supportingDocsInfo,
         batchesProcessed: batchResults.length,
