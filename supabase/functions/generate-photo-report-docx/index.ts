@@ -6,10 +6,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Maximum photos to embed (to prevent memory issues)
-const MAX_PHOTOS_TO_EMBED = 8;
-// Maximum size per image (10MB - we'll allow larger files now)
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+// Maximum photos to embed (to prevent memory issues) - edge functions have ~150MB limit
+const MAX_PHOTOS_TO_EMBED = 2;
+// Maximum size per image (2MB to stay under memory limits with multiple images)
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
 
 // Use AI to select the most relevant photos for the report
 async function selectBestPhotos(
@@ -102,9 +102,9 @@ async function downloadImageAsBase64(url: string): Promise<{ base64: string; con
     const contentType = response.headers.get("content-type") || "image/jpeg";
     const arrayBuffer = await response.arrayBuffer();
     
-    // Skip images that are way too large (over 10MB)
+    // Skip images that are too large (over 2MB to prevent memory issues)
     if (arrayBuffer.byteLength > MAX_IMAGE_SIZE) {
-      console.log(`Skipping very large image (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB > 10MB limit)`);
+      console.log(`Skipping large image (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB > 2MB limit)`);
       return null;
     }
     
@@ -181,9 +181,9 @@ serve(async (req) => {
     
     console.log(`Processing ${photosToProcess.length} AI-selected photos (skipped: ${skippedPhotos})`);
     
-    // Download photos one at a time to manage memory - limit to 4 to stay under memory limits
+    // Download photos one at a time to manage memory - strict limit for edge function memory
     const downloadedImages: { base64: string; extension: string; photoNumber: number; fileName: string; category: string; description: string }[] = [];
-    const maxToDownload = 4; // Reduced to handle large files better
+    const maxToDownload = 2; // Keep very low to prevent memory issues
     
     for (const photo of photosToProcess) {
       if (photo.url && downloadedImages.length < maxToDownload) {
