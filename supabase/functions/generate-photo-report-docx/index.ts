@@ -6,8 +6,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Download image and convert to base64
-async function downloadImageAsBase64(url: string): Promise<{ base64: string; contentType: string } | null> {
+// Maximum photos to embed (to prevent memory issues)
+const MAX_PHOTOS_TO_EMBED = 8;
+
+// Download image and convert to base64 with size limit
+async function downloadImageAsBase64(url: string, maxSizeBytes: number = 500000): Promise<{ base64: string; contentType: string } | null> {
   try {
     const response = await fetch(url);
     if (!response.ok) {
@@ -17,6 +20,13 @@ async function downloadImageAsBase64(url: string): Promise<{ base64: string; con
     
     const contentType = response.headers.get("content-type") || "image/jpeg";
     const arrayBuffer = await response.arrayBuffer();
+    
+    // Skip images that are too large
+    if (arrayBuffer.byteLength > maxSizeBytes) {
+      console.log(`Skipping large image (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB > ${(maxSizeBytes / 1024 / 1024).toFixed(2)}MB limit)`);
+      return null;
+    }
+    
     const uint8Array = new Uint8Array(arrayBuffer);
     
     // Convert to base64
@@ -71,25 +81,28 @@ serve(async (req) => {
       claimData = claim;
     }
 
-    // Download all photos for embedding
-    console.log(`Downloading ${photoUrls?.length || 0} photos for embedding...`);
+    // Limit photos to prevent memory issues
+    const photosToProcess = (photoUrls || []).slice(0, MAX_PHOTOS_TO_EMBED);
+    const skippedPhotos = (photoUrls || []).length - photosToProcess.length;
+    
+    console.log(`Processing ${photosToProcess.length} photos for embedding (max: ${MAX_PHOTOS_TO_EMBED}, skipped: ${skippedPhotos})`);
+    
+    // Download photos one at a time to manage memory
     const downloadedImages: { base64: string; extension: string; photoNumber: number; fileName: string; category: string; description: string }[] = [];
     
-    if (photoUrls && photoUrls.length > 0) {
-      for (const photo of photoUrls) {
-        if (photo.url) {
-          const imageData = await downloadImageAsBase64(photo.url);
-          if (imageData) {
-            downloadedImages.push({
-              base64: imageData.base64,
-              extension: getImageExtension(imageData.contentType),
-              photoNumber: photo.photoNumber || downloadedImages.length + 1,
-              fileName: photo.fileName || `Photo ${photo.photoNumber}`,
-              category: photo.category || "General",
-              description: photo.description || "",
-            });
-            console.log(`Downloaded photo ${photo.photoNumber}: ${photo.fileName}`);
-          }
+    for (const photo of photosToProcess) {
+      if (photo.url && downloadedImages.length < MAX_PHOTOS_TO_EMBED) {
+        const imageData = await downloadImageAsBase64(photo.url, 500000); // 500KB limit per image
+        if (imageData) {
+          downloadedImages.push({
+            base64: imageData.base64,
+            extension: getImageExtension(imageData.contentType),
+            photoNumber: photo.photoNumber || downloadedImages.length + 1,
+            fileName: photo.fileName || `Photo ${photo.photoNumber}`,
+            category: photo.category || "General",
+            description: photo.description || "",
+          });
+          console.log(`Downloaded photo ${photo.photoNumber}: ${photo.fileName} (${(imageData.base64.length * 0.75 / 1024).toFixed(0)}KB)`);
         }
       }
     }
@@ -161,6 +174,8 @@ serve(async (req) => {
         bytes[j] = binaryString.charCodeAt(j);
       }
       zip.file(`word/media/image${i + 1}.${img.extension}`, bytes);
+      // Clear the base64 string to free memory
+      img.base64 = '';
     }
     
     // word/styles.xml
@@ -219,10 +234,10 @@ serve(async (req) => {
       return `<w:p><w:r><w:t>${escapeXml(trimmed)}</w:t></w:r></w:p>`;
     }).join('\n    ');
 
-    // Build photo gallery section with embedded images
-    // Image dimensions: width = 5 inches = 4572000 EMUs, height proportional (assuming 4:3 aspect)
-    const imageWidth = 4572000; // 5 inches in EMUs
-    const imageHeight = 3429000; // ~3.75 inches in EMUs (4:3 aspect ratio)
+    // Build photo gallery section with embedded images - smaller size
+    // Image dimensions: width = 4 inches = 3657600 EMUs, height proportional (4:3 aspect)
+    const imageWidth = 3657600; // 4 inches in EMUs
+    const imageHeight = 2743200; // 3 inches in EMUs (4:3 aspect ratio)
     
     const photoGalleryXml = downloadedImages.map((img, idx) => {
       return `
@@ -262,6 +277,10 @@ serve(async (req) => {
     </w:p>
     <w:p/>`;
     }).join('\n');
+
+    // Note about skipped photos
+    const skippedNote = skippedPhotos > 0 ? 
+      `<w:p><w:r><w:rPr><w:i/><w:color w:val="999999"/></w:rPr><w:t>Note: ${skippedPhotos} additional photos were referenced in the analysis but not embedded due to document size limits. Please refer to the Photos tab for the complete set.</w:t></w:r></w:p>` : '';
     
     // word/document.xml - Main content with embedded images
     zip.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -285,7 +304,8 @@ serve(async (req) => {
     ${downloadedImages.length > 0 ? `
     <w:p><w:r><w:br w:type="page"/></w:r></w:p>
     <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Photo Documentation</w:t></w:r></w:p>
-    <w:p><w:r><w:rPr><w:i/><w:color w:val="666666"/></w:rPr><w:t>The following ${downloadedImages.length} photos are referenced in this report:</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:i/><w:color w:val="666666"/></w:rPr><w:t>The following ${downloadedImages.length} photos are embedded in this report:</w:t></w:r></w:p>
+    ${skippedNote}
     ${photoGalleryXml}
     ` : ''}
     <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
@@ -325,7 +345,7 @@ serve(async (req) => {
       .from("claim-files")
       .createSignedUrl(fileName, 3600);
 
-    console.log(`Report generated with ${downloadedImages.length} embedded photos`);
+    console.log(`Report generated with ${downloadedImages.length} embedded photos (${skippedPhotos} skipped)`);
 
     return new Response(
       JSON.stringify({ 
@@ -333,6 +353,7 @@ serve(async (req) => {
         downloadUrl: signedUrlData?.signedUrl,
         fileName: `AI Photo Report - ${new Date().toLocaleDateString()}.docx`,
         photosEmbedded: downloadedImages.length,
+        photosSkipped: skippedPhotos,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
