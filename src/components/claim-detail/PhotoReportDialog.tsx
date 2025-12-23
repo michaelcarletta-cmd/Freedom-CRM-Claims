@@ -144,11 +144,13 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
 
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [aiPhotoUrls, setAiPhotoUrls] = useState<{ url: string; fileName: string; category: string; description: string; photoNumber: number }[]>([]);
+  const [aiReferencedPhotos, setAiReferencedPhotos] = useState<{ url: string; fileName: string; category: string; description: string; photoNumber: number; aiContext: string }[]>([]);
   const [aiSupportingDocs, setAiSupportingDocs] = useState<{ name: string; url: string }[]>([]);
   const [weatherData, setWeatherData] = useState<any>(null);
   const [previewingWeather, setPreviewingWeather] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [pollingForResult, setPollingForResult] = useState(false);
+  const [generatingReferencedPdf, setGeneratingReferencedPdf] = useState(false);
   const { toast } = useToast();
 
   // Check for recently completed photo reports when dialog opens
@@ -186,11 +188,13 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       setSelectedDocs([]);
       setAiReport(null);
       setAiPhotoUrls([]);
+      setAiReferencedPhotos([]);
       setAiSupportingDocs([]);
       setWeatherData(null);
       setPreviewingWeather(false);
       setCurrentJobId(null);
       setPollingForResult(false);
+      setGeneratingReferencedPdf(false);
     }
   }, [open, claim, photos]);
 
@@ -300,14 +304,20 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
 
       setAiReport(data.report);
       setAiPhotoUrls(data.photoUrls || []);
+      setAiReferencedPhotos(data.referencedPhotos || []);
       setAiSupportingDocs(data.supportingDocs || []);
       setWeatherData(data.weatherData || null);
       if (data.jobId) {
         setCurrentJobId(data.jobId);
       }
       
-      // Notify if photos were limited
-      if (data.wasLimited) {
+      // Notify about referenced photos
+      if (data.referencedPhotos?.length > 0) {
+        toast({ 
+          title: "Analysis complete", 
+          description: `AI cited ${data.referencedPhotos.length} photos in the report. You can download a PDF with just those photos.`
+        });
+      } else if (data.wasLimited) {
         toast({ 
           title: "Analysis complete", 
           description: `Analyzed ${data.photoCount} of ${data.originalPhotoCount} photos (limited to prevent timeout)`
@@ -440,6 +450,62 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
         description: error.message || "Please try again",
         variant: "destructive" 
       });
+    }
+  };
+
+  // Generate PDF with AI-referenced photos and their AI context
+  const generateReferencedPhotoPdf = async () => {
+    if (aiReferencedPhotos.length === 0) {
+      toast({ title: "No AI-referenced photos available", variant: "destructive" });
+      return;
+    }
+
+    setGeneratingReferencedPdf(true);
+    try {
+      toast({ title: "Generating AI-referenced photo PDF..." });
+      
+      // Call edge function to generate HTML with AI context
+      const { data, error } = await supabase.functions.invoke("generate-photo-report-pdf", {
+        body: {
+          claimId,
+          reportTitle: `${reportTitle} - AI Referenced Photos`,
+          photoUrls: aiReferencedPhotos,
+          companyBranding,
+          includeAiContext: true, // Flag to include AI analysis snippets
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      // Use html2pdf to convert HTML to PDF on client side
+      const container = document.createElement("div");
+      container.innerHTML = data.html;
+      document.body.appendChild(container);
+
+      await html2pdf()
+        .set({
+          margin: 0.25,
+          filename: `${reportTitle.replace(/[^a-z0-9]/gi, "_")}_ai_referenced.pdf`,
+          image: { type: "jpeg", quality: 0.85 },
+          html2canvas: { scale: 1.5, useCORS: true, logging: false },
+          jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
+        })
+        .from(container)
+        .save();
+
+      document.body.removeChild(container);
+
+      toast({ title: "AI-referenced photo PDF generated successfully" });
+    } catch (error: any) {
+      console.error("Referenced photo PDF error:", error);
+      toast({ 
+        title: "Error generating referenced photo PDF", 
+        description: error.message || "Please try again",
+        variant: "destructive" 
+      });
+    } finally {
+      setGeneratingReferencedPdf(false);
     }
   };
 
@@ -755,26 +821,58 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
             />
 
             {aiReport && (
-              <div className="bg-muted/50 rounded-lg p-4 max-h-64 overflow-auto">
-                <h4 className="font-medium mb-2 flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  AI Analysis Result
-                </h4>
-                <div className="text-sm whitespace-pre-wrap">{aiReport}</div>
+              <div className="space-y-3">
+                {aiReferencedPhotos.length > 0 && (
+                  <div className="border border-primary/20 bg-primary/5 rounded-lg p-4">
+                    <h4 className="font-medium mb-2 flex items-center gap-2 text-primary">
+                      <Sparkles className="h-4 w-4" />
+                      AI-Referenced Photos ({aiReferencedPhotos.length})
+                    </h4>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      These photos were specifically cited in the AI analysis. Download the "AI Referenced PDF" to get a photo report with just these photos and their AI analysis context.
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-32 overflow-auto">
+                      {aiReferencedPhotos.map((photo) => (
+                        <div key={photo.photoNumber} className="text-xs bg-background rounded p-2 border">
+                          <span className="font-medium">Photo {photo.photoNumber}</span>
+                          <p className="text-muted-foreground line-clamp-2 mt-1">{photo.aiContext}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="bg-muted/50 rounded-lg p-4 max-h-64 overflow-auto">
+                  <h4 className="font-medium mb-2 flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" />
+                    AI Analysis Report
+                  </h4>
+                  <div className="text-sm whitespace-pre-wrap">{aiReport}</div>
+                </div>
               </div>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
               {aiReport ? (
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {aiReferencedPhotos.length > 0 && (
+                    <Button 
+                      variant="default" 
+                      onClick={generateReferencedPhotoPdf} 
+                      disabled={generatingReferencedPdf}
+                      className="bg-primary"
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      {generatingReferencedPdf ? "Generating..." : `AI Referenced PDF (${aiReferencedPhotos.length})`}
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={generatePhotoPdf} disabled={generating}>
                     <Image className="h-4 w-4 mr-2" />
-                    {generating ? "Generating..." : "Download Photo PDF"}
+                    {generating ? "Generating..." : "All Selected Photos PDF"}
                   </Button>
                   <Button onClick={saveAIReport} disabled={generating}>
                     <FileText className="h-4 w-4 mr-2" />
-                    Save as Word Document
+                    Save Word Doc
                   </Button>
                 </div>
               ) : (

@@ -15,7 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    const { claimId, reportTitle, photoUrls, companyBranding } = await req.json();
+    const { claimId, reportTitle, photoUrls, companyBranding, includeAiContext } = await req.json();
 
     if (!claimId) {
       return new Response(
@@ -38,7 +38,7 @@ serve(async (req) => {
     const allPhotos = photoUrls || [];
     const photosToInclude = allPhotos.slice(0, MAX_PHOTOS);
     
-    console.log(`Generating PDF photo report with ${photosToInclude.length} photos`);
+    console.log(`Generating PDF photo report with ${photosToInclude.length} photos, includeAiContext: ${includeAiContext}`);
 
     const reportDate = new Date().toLocaleDateString('en-US', { 
       year: 'numeric', 
@@ -59,6 +59,12 @@ serve(async (req) => {
         <div class="photo-details">
           <div class="photo-filename">${escapeHtml(photo.fileName || `Photo ${idx + 1}`)}</div>
           ${photo.description ? `<div class="photo-description">${escapeHtml(photo.description)}</div>` : ''}
+          ${includeAiContext && photo.aiContext ? `
+            <div class="ai-context">
+              <span class="ai-label">AI Analysis:</span>
+              <span class="ai-text">${escapeHtml(photo.aiContext)}</span>
+            </div>
+          ` : ''}
         </div>
       </div>
     `).join('');
@@ -142,7 +148,27 @@ serve(async (req) => {
     }
     .photo-details { padding: 16px; }
     .photo-filename { font-weight: 500; margin-bottom: 4px; }
-    .photo-description { font-size: 14px; color: #666; }
+    .photo-description { font-size: 14px; color: #666; margin-bottom: 8px; }
+    .ai-context {
+      margin-top: 10px;
+      padding: 12px;
+      background: linear-gradient(135deg, #f0f7ff 0%, #e8f4f8 100%);
+      border-left: 3px solid #2196f3;
+      border-radius: 4px;
+    }
+    .ai-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #1976d2;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .ai-text {
+      font-size: 13px;
+      color: #333;
+      line-height: 1.5;
+    }
     .footer {
       text-align: center;
       padding: 20px;
