@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Download, Grid, Columns, Sparkles, Loader2, Cloud, Wind, Droplets, Thermometer, File, FolderOpen } from "lucide-react";
+import { FileText, Download, Grid, Columns, Sparkles, Loader2, Cloud, Wind, Droplets, Thermometer, File, FolderOpen, Image } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import html2pdf from "html2pdf.js";
@@ -443,6 +443,79 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     }
   };
 
+  const generatePhotoPdf = async () => {
+    if (selectedPhotos.length === 0) {
+      toast({ title: "Please select at least one photo", variant: "destructive" });
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      toast({ title: "Generating photo PDF..." });
+      
+      const selectedPhotoData = photos.filter(p => selectedPhotos.includes(p.id));
+      
+      // Get signed URLs for all selected photos
+      const photoUrls = await Promise.all(
+        selectedPhotoData.map(async (photo, idx) => {
+          const path = photo.annotated_file_path || photo.file_path;
+          const { data } = await supabase.storage
+            .from("claim-files")
+            .createSignedUrl(path, 3600);
+          return {
+            url: data?.signedUrl || "",
+            fileName: photo.file_name,
+            category: photo.category || "General",
+            description: photo.description || "",
+            photoNumber: idx + 1,
+          };
+        })
+      );
+
+      // Call edge function to generate HTML
+      const { data, error } = await supabase.functions.invoke("generate-photo-report-pdf", {
+        body: {
+          claimId,
+          reportTitle,
+          photoUrls,
+          companyBranding,
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      // Use html2pdf to convert HTML to PDF on client side
+      const container = document.createElement("div");
+      container.innerHTML = data.html;
+      document.body.appendChild(container);
+
+      await html2pdf()
+        .set({
+          margin: 0.25,
+          filename: `${reportTitle.replace(/[^a-z0-9]/gi, "_")}_photos.pdf`,
+          image: { type: "jpeg", quality: 0.85 },
+          html2canvas: { scale: 1.5, useCORS: true, logging: false },
+          jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
+        })
+        .from(container)
+        .save();
+
+      document.body.removeChild(container);
+
+      toast({ title: "Photo PDF generated successfully" });
+    } catch (error: any) {
+      console.error("Photo PDF error:", error);
+      toast({ 
+        title: "Error generating photo PDF", 
+        description: error.message || "Please try again",
+        variant: "destructive" 
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const generateStandardReport = async () => {
     if (selectedPhotos.length === 0) {
       toast({ title: "Please select at least one photo", variant: "destructive" });
@@ -694,10 +767,16 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
               {aiReport ? (
-                <Button onClick={saveAIReport}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Save as Word Document
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={generatePhotoPdf} disabled={generating}>
+                    <Image className="h-4 w-4 mr-2" />
+                    {generating ? "Generating..." : "Download Photo PDF"}
+                  </Button>
+                  <Button onClick={saveAIReport} disabled={generating}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Save as Word Document
+                  </Button>
+                </div>
               ) : (
                 <div className="flex gap-2">
                   {(generating || pollingForResult) && (
