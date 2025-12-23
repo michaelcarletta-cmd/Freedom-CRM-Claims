@@ -9,6 +9,85 @@ const corsHeaders = {
 // Maximum photos to embed (to prevent memory issues)
 const MAX_PHOTOS_TO_EMBED = 8;
 
+// Use AI to select the most relevant photos for the report
+async function selectBestPhotos(
+  reportContent: string,
+  allPhotos: { photoNumber: number; fileName: string; category: string; description: string; url: string }[],
+  maxPhotos: number
+): Promise<number[]> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  
+  if (!LOVABLE_API_KEY || allPhotos.length <= maxPhotos) {
+    // If no API key or fewer photos than max, return first N photos
+    return allPhotos.slice(0, maxPhotos).map(p => p.photoNumber);
+  }
+
+  try {
+    // Build photo summary for AI
+    const photoSummary = allPhotos.map(p => 
+      `Photo ${p.photoNumber}: "${p.fileName}" - Category: ${p.category}${p.description ? `, Description: ${p.description}` : ''}`
+    ).join('\n');
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "system",
+            content: `You are a photo selection assistant for insurance claim reports. Your job is to select the most relevant photos to include in a report based on the report content. Select photos that:
+1. Are specifically referenced or discussed in the report
+2. Show the most significant damage
+3. Provide the best visual documentation of key findings
+4. Cover different aspects of the damage (variety is good)
+
+Return ONLY a JSON array of photo numbers to include, like: [1, 3, 5, 7]. Select up to ${maxPhotos} photos maximum.`
+          },
+          {
+            role: "user",
+            content: `Based on this report content, select the ${maxPhotos} most relevant photos to embed in the document.
+
+REPORT CONTENT:
+${reportContent.substring(0, 4000)}
+
+AVAILABLE PHOTOS:
+${photoSummary}
+
+Return ONLY a JSON array of photo numbers (e.g., [1, 3, 5, 7]). No other text.`
+          }
+        ],
+        temperature: 0.1,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("AI selection failed:", response.status);
+      return allPhotos.slice(0, maxPhotos).map(p => p.photoNumber);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    
+    // Extract JSON array from response
+    const match = content.match(/\[[\d,\s]+\]/);
+    if (match) {
+      const selectedNumbers = JSON.parse(match[0]) as number[];
+      console.log(`AI selected photos: ${selectedNumbers.join(', ')}`);
+      return selectedNumbers.slice(0, maxPhotos);
+    }
+    
+    // Fallback to first N photos
+    return allPhotos.slice(0, maxPhotos).map(p => p.photoNumber);
+  } catch (error) {
+    console.error("Error in AI photo selection:", error);
+    return allPhotos.slice(0, maxPhotos).map(p => p.photoNumber);
+  }
+}
+
 // Download image and convert to base64 with size limit
 async function downloadImageAsBase64(url: string, maxSizeBytes: number = 500000): Promise<{ base64: string; contentType: string } | null> {
   try {
@@ -81,11 +160,22 @@ serve(async (req) => {
       claimData = claim;
     }
 
-    // Limit photos to prevent memory issues
-    const photosToProcess = (photoUrls || []).slice(0, MAX_PHOTOS_TO_EMBED);
-    const skippedPhotos = (photoUrls || []).length - photosToProcess.length;
+    const allPhotos = photoUrls || [];
+    console.log(`Total photos available: ${allPhotos.length}`);
     
-    console.log(`Processing ${photosToProcess.length} photos for embedding (max: ${MAX_PHOTOS_TO_EMBED}, skipped: ${skippedPhotos})`);
+    // Use AI to select the best photos for the report
+    let selectedPhotoNumbers: number[] = [];
+    if (allPhotos.length > 0) {
+      console.log("Using AI to select best photos for report...");
+      selectedPhotoNumbers = await selectBestPhotos(reportContent, allPhotos, MAX_PHOTOS_TO_EMBED);
+      console.log(`AI selected ${selectedPhotoNumbers.length} photos: ${selectedPhotoNumbers.join(', ')}`);
+    }
+    
+    // Filter photos to only include AI-selected ones
+    const photosToProcess = allPhotos.filter((p: any) => selectedPhotoNumbers.includes(p.photoNumber));
+    const skippedPhotos = allPhotos.length - photosToProcess.length;
+    
+    console.log(`Processing ${photosToProcess.length} AI-selected photos (skipped: ${skippedPhotos})`);
     
     // Download photos one at a time to manage memory
     const downloadedImages: { base64: string; extension: string; photoNumber: number; fileName: string; category: string; description: string }[] = [];
@@ -278,9 +368,9 @@ serve(async (req) => {
     <w:p/>`;
     }).join('\n');
 
-    // Note about skipped photos
-    const skippedNote = skippedPhotos > 0 ? 
-      `<w:p><w:r><w:rPr><w:i/><w:color w:val="999999"/></w:rPr><w:t>Note: ${skippedPhotos} additional photos were referenced in the analysis but not embedded due to document size limits. Please refer to the Photos tab for the complete set.</w:t></w:r></w:p>` : '';
+    // Note about AI selection
+    const selectionNote = skippedPhotos > 0 ? 
+      `<w:p><w:r><w:rPr><w:i/><w:color w:val="666666"/></w:rPr><w:t>Note: AI selected the ${downloadedImages.length} most relevant photos from ${allPhotos.length} available. See the Photos tab for the complete set.</w:t></w:r></w:p>` : '';
     
     // word/document.xml - Main content with embedded images
     zip.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -304,8 +394,8 @@ serve(async (req) => {
     ${downloadedImages.length > 0 ? `
     <w:p><w:r><w:br w:type="page"/></w:r></w:p>
     <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Photo Documentation</w:t></w:r></w:p>
-    <w:p><w:r><w:rPr><w:i/><w:color w:val="666666"/></w:rPr><w:t>The following ${downloadedImages.length} photos are embedded in this report:</w:t></w:r></w:p>
-    ${skippedNote}
+    <w:p><w:r><w:rPr><w:i/><w:color w:val="666666"/></w:rPr><w:t>The following ${downloadedImages.length} photos were selected by AI as most relevant to this report:</w:t></w:r></w:p>
+    ${selectionNote}
     ${photoGalleryXml}
     ` : ''}
     <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
@@ -345,7 +435,7 @@ serve(async (req) => {
       .from("claim-files")
       .createSignedUrl(fileName, 3600);
 
-    console.log(`Report generated with ${downloadedImages.length} embedded photos (${skippedPhotos} skipped)`);
+    console.log(`Report generated with ${downloadedImages.length} AI-selected photos (${skippedPhotos} not selected)`);
 
     return new Response(
       JSON.stringify({ 
@@ -354,6 +444,7 @@ serve(async (req) => {
         fileName: `AI Photo Report - ${new Date().toLocaleDateString()}.docx`,
         photosEmbedded: downloadedImages.length,
         photosSkipped: skippedPhotos,
+        aiSelected: true,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
