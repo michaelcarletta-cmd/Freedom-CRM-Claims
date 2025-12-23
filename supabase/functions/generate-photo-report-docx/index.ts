@@ -6,10 +6,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Maximum photos to embed (to prevent memory issues) - edge functions have ~150MB limit
-const MAX_PHOTOS_TO_EMBED = 2;
-// Maximum size per image (2MB to stay under memory limits with multiple images)
-const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+// Maximum photos to embed - set to 0 to skip embedding (prevents memory issues with large photos)
+const MAX_PHOTOS_TO_EMBED = 0;
+// Maximum size per image (500KB - most photos exceed this so we skip them)
+const MAX_IMAGE_SIZE = 500 * 1024;
 
 // Use AI to select the most relevant photos for the report
 async function selectBestPhotos(
@@ -167,42 +167,12 @@ serve(async (req) => {
     const allPhotos = photoUrls || [];
     console.log(`Total photos available: ${allPhotos.length}`);
     
-    // Use AI to select the best photos for the report
-    let selectedPhotoNumbers: number[] = [];
-    if (allPhotos.length > 0) {
-      console.log("Using AI to select best photos for report...");
-      selectedPhotoNumbers = await selectBestPhotos(reportContent, allPhotos, MAX_PHOTOS_TO_EMBED);
-      console.log(`AI selected ${selectedPhotoNumbers.length} photos: ${selectedPhotoNumbers.join(', ')}`);
-    }
-    
-    // Filter photos to only include AI-selected ones
-    const photosToProcess = allPhotos.filter((p: any) => selectedPhotoNumbers.includes(p.photoNumber));
-    const skippedPhotos = allPhotos.length - photosToProcess.length;
-    
-    console.log(`Processing ${photosToProcess.length} AI-selected photos (skipped: ${skippedPhotos})`);
-    
-    // Download photos one at a time to manage memory - strict limit for edge function memory
+    // Skip photo embedding entirely to prevent memory issues - photos are typically 4MB+ each
+    // The report will include text references to photos instead
     const downloadedImages: { base64: string; extension: string; photoNumber: number; fileName: string; category: string; description: string }[] = [];
-    const maxToDownload = 2; // Keep very low to prevent memory issues
+    const skippedPhotos = allPhotos.length;
     
-    for (const photo of photosToProcess) {
-      if (photo.url && downloadedImages.length < maxToDownload) {
-        console.log(`Downloading photo ${photo.photoNumber}: ${photo.fileName}...`);
-        const imageData = await downloadImageAsBase64(photo.url);
-        if (imageData) {
-          downloadedImages.push({
-            base64: imageData.base64,
-            extension: getImageExtension(imageData.contentType),
-            photoNumber: photo.photoNumber || downloadedImages.length + 1,
-            fileName: photo.fileName || `Photo ${photo.photoNumber}`,
-            category: photo.category || "General",
-            description: photo.description || "",
-          });
-          console.log(`Added photo ${photo.photoNumber}: ${photo.fileName} (${(imageData.base64.length * 0.75 / 1024 / 1024).toFixed(2)}MB)`);
-        }
-      }
-    }
-    console.log(`Successfully downloaded ${downloadedImages.length} images`);
+    console.log(`Skipping photo embedding to prevent memory issues. ${skippedPhotos} photos referenced in text only.`);
 
     // Use PizZip to create the Word document
     const PizZip = (await import("https://esm.sh/pizzip@3.1.4")).default;
