@@ -8,6 +8,8 @@ const corsHeaders = {
 
 // Maximum photos to embed (to prevent memory issues)
 const MAX_PHOTOS_TO_EMBED = 8;
+// Maximum size per image (10MB - we'll allow larger files now)
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
 // Use AI to select the most relevant photos for the report
 async function selectBestPhotos(
@@ -88,8 +90,8 @@ Return ONLY a JSON array of photo numbers (e.g., [1, 3, 5, 7]). No other text.`
   }
 }
 
-// Download image and convert to base64 with size limit
-async function downloadImageAsBase64(url: string, maxSizeBytes: number = 500000): Promise<{ base64: string; contentType: string } | null> {
+// Download image and convert to base64 - resize if needed
+async function downloadImageAsBase64(url: string): Promise<{ base64: string; contentType: string } | null> {
   try {
     const response = await fetch(url);
     if (!response.ok) {
@@ -100,11 +102,13 @@ async function downloadImageAsBase64(url: string, maxSizeBytes: number = 500000)
     const contentType = response.headers.get("content-type") || "image/jpeg";
     const arrayBuffer = await response.arrayBuffer();
     
-    // Skip images that are too large
-    if (arrayBuffer.byteLength > maxSizeBytes) {
-      console.log(`Skipping large image (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB > ${(maxSizeBytes / 1024 / 1024).toFixed(2)}MB limit)`);
+    // Skip images that are way too large (over 10MB)
+    if (arrayBuffer.byteLength > MAX_IMAGE_SIZE) {
+      console.log(`Skipping very large image (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB > 10MB limit)`);
       return null;
     }
+    
+    console.log(`Downloaded image: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB`);
     
     const uint8Array = new Uint8Array(arrayBuffer);
     
@@ -177,12 +181,14 @@ serve(async (req) => {
     
     console.log(`Processing ${photosToProcess.length} AI-selected photos (skipped: ${skippedPhotos})`);
     
-    // Download photos one at a time to manage memory
+    // Download photos one at a time to manage memory - limit to 4 to stay under memory limits
     const downloadedImages: { base64: string; extension: string; photoNumber: number; fileName: string; category: string; description: string }[] = [];
+    const maxToDownload = 4; // Reduced to handle large files better
     
     for (const photo of photosToProcess) {
-      if (photo.url && downloadedImages.length < MAX_PHOTOS_TO_EMBED) {
-        const imageData = await downloadImageAsBase64(photo.url, 500000); // 500KB limit per image
+      if (photo.url && downloadedImages.length < maxToDownload) {
+        console.log(`Downloading photo ${photo.photoNumber}: ${photo.fileName}...`);
+        const imageData = await downloadImageAsBase64(photo.url);
         if (imageData) {
           downloadedImages.push({
             base64: imageData.base64,
@@ -192,7 +198,7 @@ serve(async (req) => {
             category: photo.category || "General",
             description: photo.description || "",
           });
-          console.log(`Downloaded photo ${photo.photoNumber}: ${photo.fileName} (${(imageData.base64.length * 0.75 / 1024).toFixed(0)}KB)`);
+          console.log(`Added photo ${photo.photoNumber}: ${photo.fileName} (${(imageData.base64.length * 0.75 / 1024 / 1024).toFixed(2)}MB)`);
         }
       }
     }
@@ -369,8 +375,10 @@ serve(async (req) => {
     }).join('\n');
 
     // Note about AI selection
-    const selectionNote = skippedPhotos > 0 ? 
-      `<w:p><w:r><w:rPr><w:i/><w:color w:val="666666"/></w:rPr><w:t>Note: AI selected the ${downloadedImages.length} most relevant photos from ${allPhotos.length} available. See the Photos tab for the complete set.</w:t></w:r></w:p>` : '';
+    const totalPhotos = allPhotos.length;
+    const embeddedCount = downloadedImages.length;
+    const selectionNote = totalPhotos > embeddedCount ? 
+      `<w:p><w:r><w:rPr><w:i/><w:color w:val="666666"/></w:rPr><w:t>Note: AI selected the ${embeddedCount} most relevant photos from ${totalPhotos} available. See the Photos tab for the complete set.</w:t></w:r></w:p>` : '';
     
     // word/document.xml - Main content with embedded images
     zip.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -397,7 +405,10 @@ serve(async (req) => {
     <w:p><w:r><w:rPr><w:i/><w:color w:val="666666"/></w:rPr><w:t>The following ${downloadedImages.length} photos were selected by AI as most relevant to this report:</w:t></w:r></w:p>
     ${selectionNote}
     ${photoGalleryXml}
-    ` : ''}
+    ` : `
+    <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Photo Documentation</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:i/><w:color w:val="666666"/></w:rPr><w:t>Photos could not be embedded due to file size limitations. Please refer to the Photos tab in the application for full resolution images.</w:t></w:r></w:p>
+    `}
     <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
   </w:body>
 </w:document>`);
@@ -435,7 +446,7 @@ serve(async (req) => {
       .from("claim-files")
       .createSignedUrl(fileName, 3600);
 
-    console.log(`Report generated with ${downloadedImages.length} AI-selected photos (${skippedPhotos} not selected)`);
+    console.log(`Report generated with ${downloadedImages.length} AI-selected photos (${allPhotos.length - downloadedImages.length} not included)`);
 
     return new Response(
       JSON.stringify({ 
@@ -443,7 +454,7 @@ serve(async (req) => {
         downloadUrl: signedUrlData?.signedUrl,
         fileName: `AI Photo Report - ${new Date().toLocaleDateString()}.docx`,
         photosEmbedded: downloadedImages.length,
-        photosSkipped: skippedPhotos,
+        photosSkipped: allPhotos.length - downloadedImages.length,
         aiSelected: true,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
