@@ -64,20 +64,30 @@ const ClaimDetail = () => {
   const isStaffOrAdmin = userRole === "admin" || userRole === "staff";
 
   // Fetch claim with React Query for caching
-  const { data: claim, isLoading } = useQuery({
+  const { data: claim, isLoading, error: claimError } = useQuery({
     queryKey: ["claim", id],
     queryFn: async () => {
+      console.log("Fetching claim with id:", id, "userRole:", userRole);
       const { data, error } = await supabase
         .from("claims")
         .select("*")
         .eq("id", id)
         .single();
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching claim:", error);
+        throw error;
+      }
+      console.log("Claim fetched successfully:", data?.claim_number);
       return data;
     },
     enabled: !!id,
     staleTime: 30000, // Cache for 30 seconds
   });
+
+  // Log any claim fetch errors
+  if (claimError) {
+    console.error("ClaimDetail query error:", claimError);
+  }
 
   // Fetch contractors with React Query
   const { data: contractors = [] } = useQuery({
