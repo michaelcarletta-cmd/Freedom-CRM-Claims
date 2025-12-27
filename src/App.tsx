@@ -85,6 +85,7 @@ function AppRoutes() {
       <Routes>
         {publicRoutes}
         <Route path="/contractor-portal" element={<Suspense fallback={<PageLoader />}><ContractorPortal /></Suspense>} />
+        <Route path="/claims/:id" element={<Suspense fallback={<PageLoader />}><ClaimDetail /></Suspense>} />
         <Route path="*" element={<Navigate to="/contractor-portal" replace />} />
       </Routes>
     );
