@@ -57,7 +57,18 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       let query = supabase.from("claims").select("*");
 
       if (portalType === "client") {
-        query = query.eq("client_id", user.id);
+        // Find the client record linked to this user
+        const { data: clientData } = await supabase
+          .from("clients")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (clientData?.id) {
+          query = query.eq("client_id", clientData.id);
+        } else {
+          return [];
+        }
       } else if (portalType === "contractor") {
         const { data: assignments } = await supabase
           .from("claim_contractors")
