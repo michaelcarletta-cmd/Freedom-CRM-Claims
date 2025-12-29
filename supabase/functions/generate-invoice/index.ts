@@ -12,7 +12,7 @@ const logStep = (step: string, details?: any) => {
 };
 
 function generateInvoiceHtml(data: any): string {
-  const { invoiceNumber, invoiceDate, dueDate, sender, recipient, lineItems, subtotal, notes, claimNumber, policyholderName, workDescription, settlementBreakdown } = data;
+  const { invoiceNumber, invoiceDate, dueDate, sender, recipient, lineItems, subtotal, notes, claimNumber, policyholderName, workDescription, settlementBreakdown, supplementAmount } = data;
 
   const itemsHtml = lineItems.map((item: any) => `
     <tr>
@@ -137,6 +137,12 @@ function generateInvoiceHtml(data: any): string {
       <div class="breakdown-item">
         <span class="label">Non-Recoverable Depreciation</span>
         <span class="value">$${settlementBreakdown.nonRecoverableDepreciation?.toFixed(2) || '0.00'}</span>
+      </div>
+      ` : ''}
+      ${settlementBreakdown.supplement > 0 ? `
+      <div class="breakdown-item highlight">
+        <span class="label">Supplement Amount</span>
+        <span class="value">$${settlementBreakdown.supplement?.toFixed(2) || '0.00'}</span>
       </div>
       ` : ''}
       <div class="breakdown-item highlight">

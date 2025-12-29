@@ -90,6 +90,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
     invoiceDate: format(new Date(), "yyyy-MM-dd"),
     dueDate: format(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
     notes: "Request for release of recoverable depreciation upon completion of repairs.",
+    supplementAmount: 0,
   });
 
   useEffect(() => {
@@ -347,6 +348,9 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
 
     setLoading(true);
     try {
+      const supplementAmount = Number(invoiceData.supplementAmount) || 0;
+      const totalAmount = totalRD + supplementAmount;
+
       // Generate the invoice
       const lineItems = [
         {
@@ -355,6 +359,15 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           unitPrice: totalRD,
         }
       ];
+
+      // Add supplement if present
+      if (supplementAmount > 0) {
+        lineItems.push({
+          description: 'Supplement Amount',
+          quantity: 1,
+          unitPrice: supplementAmount,
+        });
+      }
 
       // Add breakdown items as informational
       if (settlement.recoverable_depreciation && settlement.recoverable_depreciation > 0) {
@@ -406,11 +419,12 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
             address: '',
           },
           lineItems: lineItems.filter(item => item.unitPrice > 0),
-          subtotal: totalRD,
+          subtotal: totalAmount,
           notes: invoiceData.notes,
           claimNumber: claim.claim_number,
           policyholderName: claim.policyholder_name,
           workDescription: workDescription || undefined,
+          supplementAmount: supplementAmount > 0 ? supplementAmount : undefined,
           // Settlement breakdown
           settlementBreakdown: {
             rcv,
@@ -420,6 +434,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
             paymentsOutstanding: paymentsOutstanding > 0 ? paymentsOutstanding : 0,
             recoverableDepreciation: totalRD,
             nonRecoverableDepreciation,
+            supplement: supplementAmount > 0 ? supplementAmount : undefined,
           },
           claimId,
         },
@@ -575,7 +590,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
         </div>
 
         {/* Invoice Details */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <Label>Invoice Number</Label>
             <Input
@@ -598,6 +613,21 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
               value={invoiceData.dueDate}
               onChange={(e) => setInvoiceData({ ...invoiceData, dueDate: e.target.value })}
             />
+          </div>
+          <div>
+            <Label>Supplement Amount</Label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                className="pl-8"
+                value={invoiceData.supplementAmount || ''}
+                onChange={(e) => setInvoiceData({ ...invoiceData, supplementAmount: parseFloat(e.target.value) || 0 })}
+                placeholder="0.00"
+              />
+            </div>
           </div>
         </div>
 
