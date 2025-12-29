@@ -12,7 +12,7 @@ const logStep = (step: string, details?: any) => {
 };
 
 function generateInvoiceHtml(data: any): string {
-  const { invoiceNumber, invoiceDate, dueDate, sender, recipient, lineItems, subtotal, notes, claimNumber, policyholderName } = data;
+  const { invoiceNumber, invoiceDate, dueDate, sender, recipient, lineItems, subtotal, notes, claimNumber, policyholderName, workDescription } = data;
 
   const itemsHtml = lineItems.map((item: any) => `
     <tr>
@@ -91,6 +91,13 @@ function generateInvoiceHtml(data: any): string {
   <div class="property-section">
     <h3>Property Owner / Insured</h3>
     <p><strong>${policyholderName}</strong></p>
+  </div>
+  ` : ''}
+
+  ${workDescription ? `
+  <div style="margin-bottom: 30px; padding: 20px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #22c55e;">
+    <h3 style="margin: 0 0 12px 0; color: #166534; font-size: 14px; text-transform: uppercase;">Work Completed</h3>
+    <p style="margin: 0; color: #15803d; line-height: 1.6;">${workDescription}</p>
   </div>
   ` : ''}
 

@@ -164,7 +164,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -1168,6 +1168,30 @@ Create a professional, comprehensive demand package that thoroughly uses the evi
         break;
       }
 
+      case 'estimate_work_summary': {
+        systemPrompt = `You are Darwin, an expert public adjuster AI. Your task is to analyze an insurance estimate document and provide a clear, concise summary of the work that was performed or needs to be performed.
+
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Keep the summary brief and professional.
+
+Your summary should:
+- List the main repairs or replacements in simple, understandable terms
+- Focus on what was actually done or what needs to be done (e.g., "roof replacement", "siding repairs", "interior water damage restoration")
+- Keep it concise - 2-4 sentences maximum
+- Use language appropriate for an invoice description
+- Do NOT include dollar amounts, line item codes, or technical Xactimate codes
+- Write as if describing completed work on an invoice`;
+
+        userPrompt = `${claimSummary}
+
+${pdfContent ? `An estimate PDF has been provided for analysis. Review it and provide a brief summary of the work described.` : `ESTIMATE CONTENT:
+${content || 'No estimate content provided'}`}
+
+Based on the estimate, write a 2-4 sentence summary describing the repairs/replacements that were completed. This will be used in the description section of an invoice for recoverable depreciation. Keep it professional and straightforward. Example format:
+
+"Complete roof system replacement including removal and disposal of existing shingles, installation of new underlayment and architectural shingles. Repairs to damaged gutters and downspouts. Interior water damage restoration including drywall replacement and painting in affected areas."`;
+        break;
+      }
+
       default:
         throw new Error(`Unknown analysis type: ${analysisType}`);
 
@@ -1202,7 +1226,7 @@ Create a professional, comprehensive demand package that thoroughly uses the evi
       ];
       
       console.log(`Demand package with ${pdfContents.length} PDFs (processing ${Math.min(pdfContents.length, 5)})`);
-    } else if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'supplement' || analysisType === 'document_compilation')) {
+    } else if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'supplement' || analysisType === 'document_compilation' || analysisType === 'estimate_work_summary')) {
       // Use multimodal format for PDF analysis with Gemini-compatible inline_data format
       messages = [
         { role: 'system', content: systemPrompt },

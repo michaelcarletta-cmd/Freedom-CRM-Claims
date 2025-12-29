@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { FileText, Image, Loader2, Download, Camera, File, CheckSquare, DollarSign, Package, Send, Building2, AlertCircle } from "lucide-react";
+import { FileText, Image, Loader2, Download, Camera, File, CheckSquare, DollarSign, Package, Send, Building2, AlertCircle, Sparkles, FileSearch } from "lucide-react";
 import { format } from "date-fns";
 
 interface RecoverableDepreciationInvoiceProps {
@@ -64,12 +65,16 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
   const [photos, setPhotos] = useState<ClaimPhoto[]>([]);
   const [files, setFiles] = useState<ClaimFile[]>([]);
   const [allFiles, setAllFiles] = useState<ClaimFile[]>([]);
+  const [estimateFiles, setEstimateFiles] = useState<ClaimFile[]>([]);
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [selectedEstimateId, setSelectedEstimateId] = useState<string>("");
   const [settlement, setSettlement] = useState<Settlement | null>(null);
   const [contractor, setContractor] = useState<Contractor | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
+  const [analyzingEstimate, setAnalyzingEstimate] = useState(false);
+  const [workDescription, setWorkDescription] = useState("");
   const [generatedPackageUrl, setGeneratedPackageUrl] = useState<string | null>(null);
   
   // Invoice form data
@@ -140,6 +145,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
       if (foldersError) throw foldersError;
 
       const certFolder = foldersData?.find(f => f.name.toLowerCase().includes('certificate'));
+      const estimateFolder = foldersData?.find(f => f.name.toLowerCase().includes('estimate'));
       
       // Load files from Certificate of Completion folder
       const { data: filesData, error: filesError } = await supabase
@@ -165,6 +171,21 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
       } else {
         // If no cert folder, show all files
         setFiles(filesWithFolders);
+      }
+
+      // Filter to Estimate folder files (PDFs only for Darwin analysis)
+      if (estimateFolder) {
+        const estFiles = filesWithFolders.filter(f => 
+          f.folder_id === estimateFolder.id && 
+          (f.file_type?.includes('pdf') || f.file_name.toLowerCase().endsWith('.pdf'))
+        );
+        setEstimateFiles(estFiles);
+      } else {
+        // If no estimate folder, show all PDFs
+        const pdfFiles = filesWithFolders.filter(f => 
+          f.file_type?.includes('pdf') || f.file_name.toLowerCase().endsWith('.pdf')
+        );
+        setEstimateFiles(pdfFiles);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -217,6 +238,60 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
     const pwi = Number(settlement.pwi_recoverable_depreciation) || 0;
     const other = Number(settlement.other_structures_recoverable_depreciation) || 0;
     return main + pwi + other;
+  };
+
+  // Analyze selected estimate with Darwin AI
+  const analyzeEstimate = async () => {
+    if (!selectedEstimateId) {
+      toast.error('Please select an estimate file first');
+      return;
+    }
+
+    const selectedFile = estimateFiles.find(f => f.id === selectedEstimateId);
+    if (!selectedFile) {
+      toast.error('Selected file not found');
+      return;
+    }
+
+    setAnalyzingEstimate(true);
+    try {
+      // Download the file and convert to base64
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('claim-files')
+        .download(selectedFile.file_path);
+
+      if (downloadError) throw downloadError;
+
+      // Convert to base64
+      const arrayBuffer = await fileData.arrayBuffer();
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      );
+
+      // Call Darwin AI analysis
+      const { data: analysisResult, error: analysisError } = await supabase.functions.invoke('darwin-ai-analysis', {
+        body: {
+          claimId,
+          analysisType: 'estimate_work_summary',
+          pdfContent: base64,
+          pdfFileName: selectedFile.file_name,
+        },
+      });
+
+      if (analysisError) throw analysisError;
+
+      if (analysisResult?.result) {
+        setWorkDescription(analysisResult.result);
+        toast.success('Darwin analyzed the estimate and generated work description');
+      } else {
+        toast.error('No analysis result received');
+      }
+    } catch (error: any) {
+      console.error('Error analyzing estimate:', error);
+      toast.error(error.message || 'Failed to analyze estimate');
+    } finally {
+      setAnalyzingEstimate(false);
+    }
   };
 
   const handleGeneratePackage = async () => {
@@ -287,6 +362,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           notes: invoiceData.notes,
           claimNumber: claim.claim_number,
           policyholderName: claim.policyholder_name,
+          workDescription: workDescription || undefined,
           claimId,
         },
       });
@@ -475,6 +551,70 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
             rows={2}
             placeholder="Additional notes for the invoice..."
           />
+        </div>
+
+        {/* Estimate Analysis Section */}
+        <div className="p-4 bg-purple-50 dark:bg-purple-950/30 rounded-lg space-y-3 border border-purple-200 dark:border-purple-800">
+          <h3 className="font-medium flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-purple-600" />
+            Darwin AI - Work Description
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Select an estimate file and let Darwin analyze it to generate a description of the work completed.
+          </p>
+          
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Select value={selectedEstimateId} onValueChange={setSelectedEstimateId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select estimate file..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {estimateFiles.length === 0 ? (
+                    <SelectItem value="none" disabled>No PDF files found</SelectItem>
+                  ) : (
+                    estimateFiles.map(file => (
+                      <SelectItem key={file.id} value={file.id}>
+                        <span className="flex items-center gap-2">
+                          <FileSearch className="h-4 w-4" />
+                          {file.file_name}
+                        </span>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button 
+              variant="outline" 
+              onClick={analyzeEstimate}
+              disabled={!selectedEstimateId || analyzingEstimate}
+              className="border-purple-300 text-purple-700 hover:bg-purple-100 dark:border-purple-700 dark:text-purple-300"
+            >
+              {analyzingEstimate ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Analyze Estimate
+                </>
+              )}
+            </Button>
+          </div>
+
+          <div>
+            <Label>Work Description (for invoice)</Label>
+            <Textarea
+              value={workDescription}
+              onChange={(e) => setWorkDescription(e.target.value)}
+              rows={3}
+              placeholder="Darwin will generate a description of the work completed based on the estimate..."
+              className="mt-1"
+            />
+          </div>
         </div>
 
         {/* Document Selection Tabs */}
