@@ -12,7 +12,7 @@ const logStep = (step: string, details?: any) => {
 };
 
 function generateInvoiceHtml(data: any): string {
-  const { invoiceNumber, invoiceDate, dueDate, recipient, lineItems, subtotal, notes, claimNumber } = data;
+  const { invoiceNumber, invoiceDate, dueDate, sender, recipient, lineItems, subtotal, notes, claimNumber, policyholderName } = data;
 
   const itemsHtml = lineItems.map((item: any) => `
     <tr>
@@ -23,20 +23,10 @@ function generateInvoiceHtml(data: any): string {
     </tr>
   `).join('');
 
-  // Freedom Claims logo as inline SVG (grayscale version)
-  const logoSvg = `<svg viewBox="153 184 400 80" width="200" height="40" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <filter id="grayscale" color-interpolation-filters="sRGB">
-        <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
-      </filter>
-    </defs>
-    <g filter="url(#grayscale)">
-      <text x="153" y="240" font-family="Georgia, serif" font-size="42" font-weight="bold" fill="#333">
-        <tspan fill="#CCA55D">FREEDOM</tspan>
-        <tspan dx="8" fill="#333">CLAIMS</tspan>
-      </text>
-    </g>
-  </svg>`;
+  // Use contractor name if provided, otherwise fall back to generic
+  const companyName = sender?.name || 'Contractor Services';
+  const companyEmail = sender?.email || '';
+  const companyPhone = sender?.phone || '';
 
   return `
 <!DOCTYPE html>
@@ -48,7 +38,7 @@ function generateInvoiceHtml(data: any): string {
     body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; color: #1f2937; }
     .invoice-header { display: flex; justify-content: space-between; margin-bottom: 40px; align-items: flex-start; }
     .company-info { display: flex; flex-direction: column; gap: 8px; }
-    .company-logo { margin-bottom: 8px; }
+    .company-name { font-size: 28px; font-weight: bold; color: #1f2937; margin-bottom: 8px; }
     .company-info p { margin: 4px 0; color: #6b7280; }
     .invoice-details { text-align: right; }
     .invoice-details h2 { margin: 0 0 12px 0; font-size: 32px; color: #111827; }
@@ -57,6 +47,9 @@ function generateInvoiceHtml(data: any): string {
     .recipient-section { margin-bottom: 30px; padding: 20px; background: #f9fafb; border-radius: 8px; }
     .recipient-section h3 { margin: 0 0 12px 0; color: #374151; font-size: 14px; text-transform: uppercase; }
     .recipient-section p { margin: 4px 0; color: #1f2937; }
+    .property-section { margin-bottom: 30px; padding: 15px 20px; background: #eff6ff; border-radius: 8px; border-left: 4px solid #3b82f6; }
+    .property-section h3 { margin: 0 0 8px 0; color: #1e40af; font-size: 14px; text-transform: uppercase; }
+    .property-section p { margin: 4px 0; color: #1e3a8a; }
     table { width: 100%; border-collapse: collapse; margin: 30px 0; }
     th { background: #1f2937; color: white; padding: 14px 12px; text-align: left; font-weight: 600; }
     th:nth-child(2), th:nth-child(3), th:nth-child(4) { text-align: center; }
@@ -74,8 +67,9 @@ function generateInvoiceHtml(data: any): string {
 <body>
   <div class="invoice-header">
     <div class="company-info">
-      <div class="company-logo">${logoSvg}</div>
-      <p>Public Adjusting Services</p>
+      <div class="company-name">${companyName}</div>
+      ${companyPhone ? `<p>Phone: ${companyPhone}</p>` : ''}
+      ${companyEmail ? `<p>Email: ${companyEmail}</p>` : ''}
       ${claimNumber ? `<span class="claim-badge">Claim #${claimNumber}</span>` : ''}
     </div>
     <div class="invoice-details">
@@ -92,6 +86,13 @@ function generateInvoiceHtml(data: any): string {
     ${recipient.email ? `<p>${recipient.email}</p>` : ''}
     ${recipient.address ? `<p>${recipient.address.replace(/\n/g, '<br>')}</p>` : ''}
   </div>
+
+  ${policyholderName ? `
+  <div class="property-section">
+    <h3>Property Owner / Insured</h3>
+    <p><strong>${policyholderName}</strong></p>
+  </div>
+  ` : ''}
 
   <table>
     <thead>
@@ -127,7 +128,7 @@ function generateInvoiceHtml(data: any): string {
 
   <div class="footer">
     <p>Thank you for your business!</p>
-    <p>Questions? Contact us at support@freedomclaims.com</p>
+    ${companyEmail ? `<p>Questions? Contact us at ${companyEmail}</p>` : ''}
   </div>
 </body>
 </html>
@@ -141,7 +142,11 @@ serve(async (req) => {
 
   try {
     const data = await req.json();
-    logStep("Received invoice data", { invoiceNumber: data.invoiceNumber, recipient: data.recipient?.name });
+    logStep("Received invoice data", { 
+      invoiceNumber: data.invoiceNumber, 
+      sender: data.sender?.name,
+      recipient: data.recipient?.name 
+    });
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

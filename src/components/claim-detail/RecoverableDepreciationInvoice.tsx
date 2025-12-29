@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { FileText, Image, Loader2, Download, Camera, File, CheckSquare, DollarSign, Package, Send } from "lucide-react";
+import { FileText, Image, Loader2, Download, Camera, File, CheckSquare, DollarSign, Package, Send, Building2, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 
 interface RecoverableDepreciationInvoiceProps {
@@ -53,6 +53,13 @@ const formatCurrency = (amount: number | null | undefined): string => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
 
+interface Contractor {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
 export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDepreciationInvoiceProps) => {
   const [photos, setPhotos] = useState<ClaimPhoto[]>([]);
   const [files, setFiles] = useState<ClaimFile[]>([]);
@@ -60,6 +67,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [settlement, setSettlement] = useState<Settlement | null>(null);
+  const [contractor, setContractor] = useState<Contractor | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [generatedPackageUrl, setGeneratedPackageUrl] = useState<string | null>(null);
@@ -92,6 +100,26 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
         console.error('Error loading settlement:', settlementError);
       }
       setSettlement(settlementData);
+
+      // Load assigned contractor
+      const { data: contractorAssignment } = await supabase
+        .from('claim_contractors')
+        .select('contractor_id')
+        .eq('claim_id', claimId)
+        .limit(1)
+        .single();
+
+      if (contractorAssignment?.contractor_id) {
+        const { data: contractorProfile } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, phone')
+          .eq('id', contractorAssignment.contractor_id)
+          .single();
+        
+        if (contractorProfile) {
+          setContractor(contractorProfile);
+        }
+      }
 
       // Load photos
       const { data: photosData, error: photosError } = await supabase
@@ -242,6 +270,13 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           invoiceNumber: invoiceData.invoiceNumber,
           invoiceDate: invoiceData.invoiceDate,
           dueDate: invoiceData.dueDate,
+          // Contractor is the sender (from)
+          sender: contractor ? {
+            name: contractor.full_name || 'Contractor',
+            email: contractor.email || '',
+            phone: contractor.phone || '',
+          } : null,
+          // Insurance company is the recipient (to)
           recipient: {
             name: claim.insurance_company || 'Insurance Company',
             email: claim.insurance_email || '',
@@ -251,6 +286,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           subtotal: totalRD,
           notes: invoiceData.notes,
           claimNumber: claim.claim_number,
+          policyholderName: claim.policyholder_name,
           claimId,
         },
       });
@@ -381,6 +417,26 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
             <p className="text-sm text-muted-foreground">
               No settlement data found. Please add settlement information in the Accounting tab first.
             </p>
+          )}
+        </div>
+
+        {/* Contractor Info (Invoice From) */}
+        <div className="p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg space-y-2 border border-blue-200 dark:border-blue-800">
+          <h3 className="font-medium flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-blue-600" />
+            Invoice From (Contractor)
+          </h3>
+          {contractor ? (
+            <div className="text-sm">
+              <p className="font-semibold text-blue-900 dark:text-blue-100">{contractor.full_name}</p>
+              {contractor.email && <p className="text-blue-700 dark:text-blue-300">{contractor.email}</p>}
+              {contractor.phone && <p className="text-blue-700 dark:text-blue-300">{contractor.phone}</p>}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
+              <AlertCircle className="h-4 w-4" />
+              <span>No contractor assigned. Please assign a contractor in the Assignments tab first.</span>
+            </div>
           )}
         </div>
 
