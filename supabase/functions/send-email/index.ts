@@ -176,21 +176,35 @@ serve(async (req) => {
 
     // Process attachments if provided
     const emailAttachments: ResendAttachment[] = [];
+    const attachmentErrors: string[] = [];
     
     if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-      console.log(`Processing ${attachments.length} attachments`);
+      console.log(`Processing ${attachments.length} attachments:`, JSON.stringify(attachments));
       
       for (const attachment of attachments as Attachment[]) {
         try {
+          console.log(`Downloading attachment: ${attachment.fileName} from path: ${attachment.filePath}`);
+          
           // Download file from storage
           const { data: fileData, error: downloadError } = await supabaseAdmin.storage
             .from('claim-files')
             .download(attachment.filePath);
           
           if (downloadError) {
-            console.error(`Failed to download file ${attachment.fileName}:`, downloadError);
+            const errorMsg = `Failed to download ${attachment.fileName}: ${downloadError.message}`;
+            console.error(errorMsg);
+            attachmentErrors.push(errorMsg);
             continue;
           }
+          
+          if (!fileData) {
+            const errorMsg = `No file data returned for ${attachment.fileName}`;
+            console.error(errorMsg);
+            attachmentErrors.push(errorMsg);
+            continue;
+          }
+          
+          console.log(`Downloaded ${attachment.fileName}, size: ${fileData.size} bytes`);
           
           // Convert to base64 using chunked approach (memory efficient)
           const arrayBuffer = await fileData.arrayBuffer();
@@ -198,7 +212,9 @@ serve(async (req) => {
           
           // Check file size - skip files over 5MB to prevent memory issues
           if (uint8Array.length > 5 * 1024 * 1024) {
-            console.log(`Skipping attachment ${attachment.fileName} - file too large (${uint8Array.length} bytes)`);
+            const errorMsg = `Skipping ${attachment.fileName} - file too large (${(uint8Array.length / 1024 / 1024).toFixed(2)} MB, max 5MB)`;
+            console.log(errorMsg);
+            attachmentErrors.push(errorMsg);
             continue;
           }
           
@@ -216,10 +232,17 @@ serve(async (req) => {
             content: base64Content,
           });
           
-          console.log(`Successfully processed attachment: ${attachment.fileName}`);
+          console.log(`Successfully processed attachment: ${attachment.fileName} (${(uint8Array.length / 1024).toFixed(2)} KB, base64 length: ${base64Content.length})`);
         } catch (err) {
-          console.error(`Error processing attachment ${attachment.fileName}:`, err);
+          const errorMsg = `Error processing ${attachment.fileName}: ${err instanceof Error ? err.message : String(err)}`;
+          console.error(errorMsg);
+          attachmentErrors.push(errorMsg);
         }
+      }
+      
+      console.log(`Attachment processing complete: ${emailAttachments.length}/${attachments.length} successful`);
+      if (attachmentErrors.length > 0) {
+        console.warn(`Attachment errors: ${attachmentErrors.join('; ')}`);
       }
     }
 
@@ -282,6 +305,8 @@ serve(async (req) => {
         success: true, 
         recipientCount: recipients.length,
         attachmentCount: emailAttachments.length,
+        attachmentsRequested: attachments?.length || 0,
+        attachmentErrors: attachmentErrors.length > 0 ? attachmentErrors : undefined,
         messageId: emailResponse.id
       }),
       {

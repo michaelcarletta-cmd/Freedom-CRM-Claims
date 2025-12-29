@@ -355,7 +355,7 @@ export function EmailComposer({
         : claim.id.slice(0, 8);
       const claimEmail = `claim-${sanitizedPolicyNumber}@claims.freedomclaims.work`;
 
-      const { error } = await supabase.functions.invoke("send-email", {
+      const { data, error } = await supabase.functions.invoke("send-email", {
         body: {
           recipients: selectedRecipients.map(r => ({
             email: r.email,
@@ -376,7 +376,32 @@ export function EmailComposer({
 
       if (error) throw error;
 
-      toast.success(`Email sent to ${selectedRecipients.length} recipient(s)`);
+      // Check attachment status in response
+      const response = data as { 
+        success: boolean; 
+        attachmentCount: number; 
+        attachmentsRequested: number;
+        attachmentErrors?: string[];
+      };
+      
+      if (selectedFiles.length > 0) {
+        if (response.attachmentCount === response.attachmentsRequested) {
+          toast.success(`Email sent to ${selectedRecipients.length} recipient(s) with ${response.attachmentCount} attachment(s)`);
+        } else if (response.attachmentCount > 0) {
+          toast.warning(`Email sent but only ${response.attachmentCount}/${response.attachmentsRequested} attachments were included`);
+          if (response.attachmentErrors) {
+            console.warn("Attachment errors:", response.attachmentErrors);
+          }
+        } else {
+          toast.warning(`Email sent but attachments could not be included`);
+          if (response.attachmentErrors) {
+            console.warn("Attachment errors:", response.attachmentErrors);
+          }
+        }
+      } else {
+        toast.success(`Email sent to ${selectedRecipients.length} recipient(s)`);
+      }
+      
       onClose();
       setSelectedRecipients([]);
       setEmailSubject("");
