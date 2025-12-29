@@ -1169,6 +1169,8 @@ Create a professional, comprehensive demand package that thoroughly uses the evi
       }
 
       case 'estimate_work_summary': {
+        const userInput = additionalContext?.userInput as string | undefined;
+        
         systemPrompt = `You are Darwin, an expert public adjuster AI. Your task is to analyze an insurance estimate document and provide a clear, concise summary of the work that was performed or needs to be performed.
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Keep the summary brief and professional.
@@ -1179,9 +1181,27 @@ Your summary should:
 - Keep it concise - 2-4 sentences maximum
 - Use language appropriate for an invoice description
 - Do NOT include dollar amounts, line item codes, or technical Xactimate codes
-- Write as if describing completed work on an invoice`;
+- Write as if describing completed work on an invoice
+${userInput ? `- The user has provided a brief description that you should EXPAND upon using details from the estimate` : ''}`;
 
-        userPrompt = `${claimSummary}
+        if (userInput) {
+          // User provided input to expand on
+          userPrompt = `${claimSummary}
+
+${pdfContent ? `An estimate PDF has been provided for analysis.` : `ESTIMATE CONTENT:
+${content || 'No estimate content provided'}`}
+
+THE USER WROTE: "${userInput}"
+
+Your task: Expand on the user's brief description above using specific details from the estimate document. Look at what line items, materials, and work scope are included in the estimate that relate to "${userInput}" and write a professional 2-4 sentence description suitable for an invoice.
+
+For example, if the user wrote "roof replacement", you would look at the estimate and expand it to something like:
+"Complete roof system replacement including removal and disposal of existing shingles, installation of ice and water shield, synthetic underlayment, and GAF Timberline HDZ architectural shingles. Ridge vent installation and replacement of damaged drip edge and flashing."
+
+Now expand "${userInput}" using the actual details from this estimate:`;
+        } else {
+          // Auto-generate from scratch
+          userPrompt = `${claimSummary}
 
 ${pdfContent ? `An estimate PDF has been provided for analysis. Review it and provide a brief summary of the work described.` : `ESTIMATE CONTENT:
 ${content || 'No estimate content provided'}`}
@@ -1189,6 +1209,7 @@ ${content || 'No estimate content provided'}`}
 Based on the estimate, write a 2-4 sentence summary describing the repairs/replacements that were completed. This will be used in the description section of an invoice for recoverable depreciation. Keep it professional and straightforward. Example format:
 
 "Complete roof system replacement including removal and disposal of existing shingles, installation of new underlayment and architectural shingles. Repairs to damaged gutters and downspouts. Interior water damage restoration including drywall replacement and painting in affected areas."`;
+        }
         break;
       }
 
