@@ -241,7 +241,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
   };
 
   // Analyze selected estimate with Darwin AI
-  const analyzeEstimate = async () => {
+  const analyzeEstimate = async (expandUserInput?: string) => {
     if (!selectedEstimateId) {
       toast.error('Please select an estimate file first');
       return;
@@ -275,6 +275,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           analysisType: 'estimate_work_summary',
           pdfContent: base64,
           pdfFileName: selectedFile.file_name,
+          additionalContext: expandUserInput ? { userInput: expandUserInput } : undefined,
         },
       });
 
@@ -282,7 +283,10 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
 
       if (analysisResult?.result) {
         setWorkDescription(analysisResult.result);
-        toast.success('Darwin analyzed the estimate and generated work description');
+        toast.success(expandUserInput 
+          ? 'Darwin expanded your description using the estimate' 
+          : 'Darwin analyzed the estimate and generated work description'
+        );
       } else {
         toast.error('No analysis result received');
       }
@@ -292,6 +296,14 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
     } finally {
       setAnalyzingEstimate(false);
     }
+  };
+
+  const expandDescription = () => {
+    if (!workDescription.trim()) {
+      toast.error('Please enter a brief work description to expand');
+      return;
+    }
+    analyzeEstimate(workDescription);
   };
 
   const handleGeneratePackage = async () => {
@@ -587,7 +599,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
             </div>
             <Button 
               variant="outline" 
-              onClick={analyzeEstimate}
+              onClick={() => analyzeEstimate()}
               disabled={!selectedEstimateId || analyzingEstimate}
               className="border-purple-300 text-purple-700 hover:bg-purple-100 dark:border-purple-700 dark:text-purple-300"
             >
@@ -599,21 +611,40 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
               ) : (
                 <>
                   <Sparkles className="h-4 w-4 mr-2" />
-                  Analyze Estimate
+                  Auto-Generate
                 </>
               )}
             </Button>
           </div>
 
-          <div>
-            <Label>Work Description (for invoice)</Label>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Work Description (for invoice)</Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={expandDescription}
+                disabled={!selectedEstimateId || !workDescription.trim() || analyzingEstimate}
+                className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+              >
+                {analyzingEstimate ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-1" />
+                )}
+                Expand with Darwin
+              </Button>
+            </div>
             <Textarea
               value={workDescription}
               onChange={(e) => setWorkDescription(e.target.value)}
               rows={3}
-              placeholder="Darwin will generate a description of the work completed based on the estimate..."
+              placeholder="Type a brief description (e.g., 'roof replacement') and click 'Expand with Darwin' to elaborate using the estimate..."
               className="mt-1"
             />
+            <p className="text-xs text-muted-foreground">
+              Tip: Type a brief description like "roof replacement" then click "Expand with Darwin" to generate detailed invoice text from the estimate.
+            </p>
           </div>
         </div>
 
