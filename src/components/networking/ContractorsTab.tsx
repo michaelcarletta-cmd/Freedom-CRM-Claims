@@ -17,7 +17,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { UserPlus, Mail, Phone, Search, Trash2, Link2, Send, Pencil } from "lucide-react";
+import { UserPlus, Mail, Phone, Search, Trash2, Link2, Send, Pencil, Upload, X, Image } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { Switch } from "@/components/ui/switch";
 import { formatPhoneNumber } from "@/lib/utils";
@@ -27,6 +28,7 @@ interface Contractor {
   full_name: string | null;
   email: string;
   phone: string | null;
+  logo_url?: string | null;
   jobnimbus_api_key?: string | null;
   jobnimbus_enabled?: boolean;
   external_instance_url?: string | null;
@@ -59,6 +61,8 @@ export const ContractorsTab = () => {
     full_name: "",
     phone: "",
   });
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [editLogoUrl, setEditLogoUrl] = useState<string | null>(null);
 
   const handleSendPortalInvite = async (contractor: Contractor) => {
     if (!contractor.email) {
@@ -138,7 +142,7 @@ export const ContractorsTab = () => {
     // Fetch profiles for these users
     const { data: profileData, error: profileError } = await supabase
       .from("profiles")
-      .select("id, full_name, email, phone, jobnimbus_api_key, jobnimbus_enabled, external_instance_url, external_instance_name")
+      .select("id, full_name, email, phone, logo_url, jobnimbus_api_key, jobnimbus_enabled, external_instance_url, external_instance_name")
       .in("id", contractorIds);
 
     if (profileError) {
@@ -231,7 +235,57 @@ export const ContractorsTab = () => {
       full_name: contractor.full_name || "",
       phone: contractor.phone || "",
     });
+    setEditLogoUrl(contractor.logo_url || null);
     setEditDialogOpen(true);
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingContractor) return;
+
+    // Validate file type
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Please upload a PNG, JPG, or SVG file");
+      return;
+    }
+
+    // Validate file size (2MB max)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("File size must be less than 2MB");
+      return;
+    }
+
+    setUploadingLogo(true);
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${editingContractor.id}/logo.${fileExt}`;
+
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('company-branding')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('company-branding')
+        .getPublicUrl(filePath);
+
+      setEditLogoUrl(urlData.publicUrl);
+      toast.success("Logo uploaded successfully");
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      toast.error("Failed to upload logo: " + error.message);
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setEditLogoUrl(null);
   };
 
   const handleSaveEdit = async () => {
@@ -242,6 +296,7 @@ export const ContractorsTab = () => {
       .update({
         full_name: editFormData.full_name || null,
         phone: editFormData.phone || null,
+        logo_url: editLogoUrl,
       })
       .eq("id", editingContractor.id);
 
@@ -356,7 +411,15 @@ export const ContractorsTab = () => {
               {filteredContractors.map((contractor) => (
                 <TableRow key={contractor.id}>
                   <TableCell className="font-medium">
-                    {contractor.full_name || "No name"}
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={contractor.logo_url || undefined} alt={contractor.full_name || "Contractor"} />
+                        <AvatarFallback className="text-xs">
+                          {contractor.full_name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??'}
+                        </AvatarFallback>
+                      </Avatar>
+                      {contractor.full_name || "No name"}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -528,6 +591,51 @@ export const ContractorsTab = () => {
             <DialogTitle>Edit Contractor</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Logo Upload */}
+            <div>
+              <Label>Company Logo</Label>
+              <div className="mt-2">
+                {editLogoUrl ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={editLogoUrl}
+                      alt="Company logo"
+                      className="h-20 w-auto max-w-[200px] object-contain border rounded"
+                    />
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-2 -right-2 h-6 w-6"
+                      onClick={handleRemoveLogo}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <div className="flex items-center justify-center h-20 w-20 border-2 border-dashed rounded hover:border-primary transition-colors">
+                      {uploadingLogo ? (
+                        <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
+                      ) : (
+                        <div className="flex flex-col items-center text-muted-foreground">
+                          <Upload className="h-5 w-5" />
+                          <span className="text-xs mt-1">Upload</span>
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".png,.jpg,.jpeg,.svg"
+                      onChange={handleLogoUpload}
+                      disabled={uploadingLogo}
+                    />
+                  </label>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">PNG, JPG, or SVG (max 2MB)</p>
+            </div>
+            
             <div>
               <Label>Email</Label>
               <Input
