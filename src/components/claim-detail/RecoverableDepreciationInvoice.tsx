@@ -134,20 +134,16 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
         }
       }
 
-      // Load payments received for this claim
-      const { data: paymentsData } = await supabase
-        .from('claim_payments')
-        .select('amount, direction, recipient_type')
+      // Load checks received from insurance for this claim
+      const { data: checksData } = await supabase
+        .from('claim_checks')
+        .select('amount, check_type')
         .eq('claim_id', claimId);
 
-      if (paymentsData) {
-        // Sum payments received (direction = 'received' or no direction means received from insurance)
-        const received = paymentsData
-          .filter(p => p.direction === 'received' || !p.direction)
-          .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      if (checksData) {
+        // Sum all checks received from insurance
+        const received = checksData.reduce((sum, check) => sum + Number(check.amount || 0), 0);
         
-        // Check if deductible was paid (look for client/policyholder payments or specific notes)
-        // For now, we'll assume deductible is from settlement data
         setPaymentSummary({
           totalReceived: received,
           deductiblePaid: 0, // User can track this separately
