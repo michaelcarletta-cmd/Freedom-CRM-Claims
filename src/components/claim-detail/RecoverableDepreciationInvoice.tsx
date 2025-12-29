@@ -62,6 +62,11 @@ interface Contractor {
   logo_url: string | null;
 }
 
+interface PaymentSummary {
+  totalReceived: number;
+  deductiblePaid: number;
+}
+
 export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDepreciationInvoiceProps) => {
   const [photos, setPhotos] = useState<ClaimPhoto[]>([]);
   const [files, setFiles] = useState<ClaimFile[]>([]);
@@ -72,6 +77,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
   const [selectedEstimateId, setSelectedEstimateId] = useState<string>("");
   const [settlement, setSettlement] = useState<Settlement | null>(null);
   const [contractor, setContractor] = useState<Contractor | null>(null);
+  const [paymentSummary, setPaymentSummary] = useState<PaymentSummary>({ totalReceived: 0, deductiblePaid: 0 });
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [analyzingEstimate, setAnalyzingEstimate] = useState(false);
@@ -125,6 +131,26 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
         if (contractorProfile) {
           setContractor(contractorProfile);
         }
+      }
+
+      // Load payments received for this claim
+      const { data: paymentsData } = await supabase
+        .from('claim_payments')
+        .select('amount, direction, recipient_type')
+        .eq('claim_id', claimId);
+
+      if (paymentsData) {
+        // Sum payments received (direction = 'received' or no direction means received from insurance)
+        const received = paymentsData
+          .filter(p => p.direction === 'received' || !p.direction)
+          .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+        
+        // Check if deductible was paid (look for client/policyholder payments or specific notes)
+        // For now, we'll assume deductible is from settlement data
+        setPaymentSummary({
+          totalReceived: received,
+          deductiblePaid: 0, // User can track this separately
+        });
       }
 
       // Load photos
@@ -353,6 +379,14 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
         });
       }
 
+      // Calculate breakdown values
+      const rcv = Number(settlement.replacement_cost_value) || 0;
+      const deductible = Number(settlement.deductible) || 0;
+      const nonRecoverableDepreciation = Number(settlement.non_recoverable_depreciation) || 0;
+      const acv = rcv - totalRD - nonRecoverableDepreciation; // ACV = RCV - Total Depreciation
+      const paymentsReceived = paymentSummary.totalReceived;
+      const paymentsOutstanding = acv - deductible - paymentsReceived; // What's still owed before depreciation
+
       const { data: invoiceResult, error: invoiceError } = await supabase.functions.invoke("generate-invoice", {
         body: {
           invoiceNumber: invoiceData.invoiceNumber,
@@ -377,6 +411,16 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           claimNumber: claim.claim_number,
           policyholderName: claim.policyholder_name,
           workDescription: workDescription || undefined,
+          // Settlement breakdown
+          settlementBreakdown: {
+            rcv,
+            acv,
+            deductible,
+            paymentsReceived,
+            paymentsOutstanding: paymentsOutstanding > 0 ? paymentsOutstanding : 0,
+            recoverableDepreciation: totalRD,
+            nonRecoverableDepreciation,
+          },
           claimId,
         },
       });
