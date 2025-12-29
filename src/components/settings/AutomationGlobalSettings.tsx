@@ -252,48 +252,68 @@ const CleanupTasksButton = ({
 
   const cleanupMutation = useMutation({
     mutationFn: async () => {
-      // Get claim IDs that match the exclusion criteria
-      let claimsQuery = supabase.from("claims").select("id, status, created_at");
+      const claimIdsSet = new Set<string>();
 
-      const claimIds: string[] = [];
-
-      // Get claims by excluded statuses
+      // Get claims by excluded statuses (paginate to avoid limits)
       if (excludeStatuses.length > 0) {
-        const { data: statusClaims, error: statusError } = await supabase
-          .from("claims")
-          .select("id")
-          .in("status", excludeStatuses);
-        if (statusError) throw statusError;
-        statusClaims?.forEach(c => claimIds.push(c.id));
+        let from = 0;
+        const pageSize = 1000;
+        while (true) {
+          const { data: statusClaims, error: statusError } = await supabase
+            .from("claims")
+            .select("id")
+            .in("status", excludeStatuses)
+            .range(from, from + pageSize - 1);
+          if (statusError) throw statusError;
+          if (!statusClaims || statusClaims.length === 0) break;
+          statusClaims.forEach(c => claimIdsSet.add(c.id));
+          if (statusClaims.length < pageSize) break;
+          from += pageSize;
+        }
       }
 
-      // Get claims older than threshold
+      // Get claims older than threshold (paginate to avoid limits)
       if (excludeOlderThanDays) {
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - parseInt(excludeOlderThanDays, 10));
-        const { data: oldClaims, error: oldError } = await supabase
-          .from("claims")
-          .select("id")
-          .lt("created_at", cutoffDate.toISOString());
-        if (oldError) throw oldError;
-        oldClaims?.forEach(c => {
-          if (!claimIds.includes(c.id)) claimIds.push(c.id);
-        });
+        let from = 0;
+        const pageSize = 1000;
+        while (true) {
+          const { data: oldClaims, error: oldError } = await supabase
+            .from("claims")
+            .select("id")
+            .lt("created_at", cutoffDate.toISOString())
+            .range(from, from + pageSize - 1);
+          if (oldError) throw oldError;
+          if (!oldClaims || oldClaims.length === 0) break;
+          oldClaims.forEach(c => claimIdsSet.add(c.id));
+          if (oldClaims.length < pageSize) break;
+          from += pageSize;
+        }
       }
 
+      const claimIds = Array.from(claimIdsSet);
       if (claimIds.length === 0) {
         return { deleted: 0 };
       }
 
-      // Delete incomplete tasks for these claims
-      const { error: deleteError, count } = await supabase
-        .from("tasks")
-        .delete({ count: "exact" })
-        .in("claim_id", claimIds)
-        .neq("status", "completed");
+      // Delete in batches to avoid URL length limits
+      const batchSize = 50;
+      let totalDeleted = 0;
 
-      if (deleteError) throw deleteError;
-      return { deleted: count || 0 };
+      for (let i = 0; i < claimIds.length; i += batchSize) {
+        const batch = claimIds.slice(i, i + batchSize);
+        const { error: deleteError, count } = await supabase
+          .from("tasks")
+          .delete({ count: "exact" })
+          .in("claim_id", batch)
+          .neq("status", "completed");
+
+        if (deleteError) throw deleteError;
+        totalDeleted += count || 0;
+      }
+
+      return { deleted: totalDeleted };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
