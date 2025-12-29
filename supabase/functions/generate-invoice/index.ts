@@ -12,7 +12,7 @@ const logStep = (step: string, details?: any) => {
 };
 
 function generateInvoiceHtml(data: any): string {
-  const { invoiceNumber, invoiceDate, dueDate, sender, recipient, lineItems, subtotal, notes, claimNumber, policyholderName, workDescription } = data;
+  const { invoiceNumber, invoiceDate, dueDate, sender, recipient, lineItems, subtotal, notes, claimNumber, policyholderName, workDescription, settlementBreakdown } = data;
 
   const itemsHtml = lineItems.map((item: any) => `
     <tr>
@@ -64,6 +64,16 @@ function generateInvoiceHtml(data: any): string {
     .notes p { margin: 0; color: #78350f; }
     .footer { margin-top: 60px; text-align: center; color: #9ca3af; font-size: 12px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
     .claim-badge { display: inline-block; background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 20px; font-size: 12px; }
+    .breakdown-section { margin-bottom: 30px; padding: 20px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+    .breakdown-section h3 { margin: 0 0 16px 0; color: #334155; font-size: 14px; text-transform: uppercase; font-weight: 600; }
+    .breakdown-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .breakdown-item { display: flex; justify-content: space-between; padding: 8px 12px; background: white; border-radius: 6px; border: 1px solid #e2e8f0; }
+    .breakdown-item.highlight { background: #ecfdf5; border-color: #10b981; }
+    .breakdown-item.outstanding { background: #fef2f2; border-color: #ef4444; }
+    .breakdown-item .label { color: #64748b; font-size: 13px; }
+    .breakdown-item .value { font-weight: 600; color: #1e293b; }
+    .breakdown-item.highlight .value { color: #059669; }
+    .breakdown-item.outstanding .value { color: #dc2626; }
   </style>
 </head>
 <body>
@@ -94,6 +104,46 @@ function generateInvoiceHtml(data: any): string {
   <div class="property-section">
     <h3>Property Owner / Insured</h3>
     <p><strong>${policyholderName}</strong></p>
+  </div>
+  ` : ''}
+
+  ${settlementBreakdown ? `
+  <div class="breakdown-section">
+    <h3>Settlement Breakdown</h3>
+    <div class="breakdown-grid">
+      <div class="breakdown-item">
+        <span class="label">Replacement Cost Value (RCV)</span>
+        <span class="value">$${settlementBreakdown.rcv?.toFixed(2) || '0.00'}</span>
+      </div>
+      <div class="breakdown-item">
+        <span class="label">Actual Cash Value (ACV)</span>
+        <span class="value">$${settlementBreakdown.acv?.toFixed(2) || '0.00'}</span>
+      </div>
+      <div class="breakdown-item">
+        <span class="label">Deductible</span>
+        <span class="value">$${settlementBreakdown.deductible?.toFixed(2) || '0.00'}</span>
+      </div>
+      <div class="breakdown-item">
+        <span class="label">Payments Received</span>
+        <span class="value">$${settlementBreakdown.paymentsReceived?.toFixed(2) || '0.00'}</span>
+      </div>
+      ${settlementBreakdown.paymentsOutstanding > 0 ? `
+      <div class="breakdown-item outstanding">
+        <span class="label">ACV Payments Outstanding</span>
+        <span class="value">$${settlementBreakdown.paymentsOutstanding?.toFixed(2) || '0.00'}</span>
+      </div>
+      ` : ''}
+      ${settlementBreakdown.nonRecoverableDepreciation > 0 ? `
+      <div class="breakdown-item">
+        <span class="label">Non-Recoverable Depreciation</span>
+        <span class="value">$${settlementBreakdown.nonRecoverableDepreciation?.toFixed(2) || '0.00'}</span>
+      </div>
+      ` : ''}
+      <div class="breakdown-item highlight">
+        <span class="label">Recoverable Depreciation Owed</span>
+        <span class="value">$${settlementBreakdown.recoverableDepreciation?.toFixed(2) || '0.00'}</span>
+      </div>
+    </div>
   </div>
   ` : ''}
 
