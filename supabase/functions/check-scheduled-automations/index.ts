@@ -30,6 +30,27 @@ serve(async (req) => {
 
     console.log('Checking scheduled automations...');
 
+    // Get global automation settings
+    const { data: brandingSettings } = await supabase
+      .from('company_branding')
+      .select('automations_enabled, automation_exclude_statuses, automation_exclude_claims_older_than_days')
+      .limit(1)
+      .single();
+
+    // Check if automations are globally disabled
+    if (brandingSettings && brandingSettings.automations_enabled === false) {
+      console.log('Automations are globally disabled');
+      return new Response(
+        JSON.stringify({ message: 'Automations are globally disabled', checked: 0 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const excludeStatuses = brandingSettings?.automation_exclude_statuses || [];
+    const excludeOlderThanDays = brandingSettings?.automation_exclude_claims_older_than_days;
+
+    console.log('Automation settings:', { excludeStatuses, excludeOlderThanDays });
+
     // Get all active automations with scheduled or inactivity triggers
     const { data: automations, error: automationsError } = await supabase
       .from('automations')
@@ -46,10 +67,10 @@ serve(async (req) => {
     for (const automation of automations || []) {
       try {
         if (automation.trigger_type === 'scheduled') {
-          const scheduled = await processScheduledAutomation(supabase, automation);
+          const scheduled = await processScheduledAutomation(supabase, automation, excludeStatuses, excludeOlderThanDays);
           results.push({ automation_id: automation.id, type: 'scheduled', ...scheduled });
         } else if (automation.trigger_type === 'inactivity') {
-          const inactivity = await processInactivityAutomation(supabase, automation);
+          const inactivity = await processInactivityAutomation(supabase, automation, excludeStatuses, excludeOlderThanDays);
           results.push({ automation_id: automation.id, type: 'inactivity', ...inactivity });
         }
       } catch (error: any) {
@@ -84,7 +105,7 @@ serve(async (req) => {
   }
 });
 
-async function processScheduledAutomation(supabase: any, automation: any) {
+async function processScheduledAutomation(supabase: any, automation: any, excludeStatuses: string[], excludeOlderThanDays: number | null) {
   const config = automation.trigger_config || {};
   const createdExecutions = [];
 
@@ -95,17 +116,36 @@ async function processScheduledAutomation(supabase: any, automation: any) {
     targetDate.setDate(targetDate.getDate() - daysAgo);
     const targetDateStr = targetDate.toISOString().split('T')[0];
 
-    // Get claims created on the target date
-    const { data: claims, error: claimsError } = await supabase
+    // Build query for claims
+    let query = supabase
       .from('claims')
-      .select('id, claim_number, created_at')
+      .select('id, claim_number, created_at, status')
       .eq('is_closed', false)
       .gte('created_at', targetDateStr + 'T00:00:00')
       .lt('created_at', targetDateStr + 'T23:59:59');
 
+    // Exclude specific statuses
+    if (excludeStatuses && excludeStatuses.length > 0) {
+      query = query.not('status', 'in', `(${excludeStatuses.join(',')})`);
+    }
+
+    const { data: claims, error: claimsError } = await query;
+
     if (claimsError) throw claimsError;
 
-    for (const claim of claims || []) {
+    // Further filter by age if configured
+    const filteredClaims = (claims || []).filter((claim: any) => {
+      if (excludeOlderThanDays) {
+        const claimAge = Math.floor((Date.now() - new Date(claim.created_at).getTime()) / (1000 * 60 * 60 * 24));
+        if (claimAge > excludeOlderThanDays) {
+          console.log(`Skipping claim ${claim.id} - older than ${excludeOlderThanDays} days (${claimAge} days old)`);
+          return false;
+        }
+      }
+      return true;
+    });
+
+    for (const claim of filteredClaims) {
       // Check if this automation already ran for this claim
       const { data: existing } = await supabase
         .from('automation_executions')
@@ -141,7 +181,7 @@ async function processScheduledAutomation(supabase: any, automation: any) {
   return { created: createdExecutions.length, execution_ids: createdExecutions };
 }
 
-async function processInactivityAutomation(supabase: any, automation: any) {
+async function processInactivityAutomation(supabase: any, automation: any, excludeStatuses: string[], excludeOlderThanDays: number | null) {
   const config = automation.trigger_config || {};
   const inactivityDays = config.inactivity_days || 14;
   const cutoffDate = new Date();
@@ -150,15 +190,34 @@ async function processInactivityAutomation(supabase: any, automation: any) {
 
   const createdExecutions = [];
 
-  // Get all open claims
-  const { data: claims, error: claimsError } = await supabase
+  // Build query for claims
+  let query = supabase
     .from('claims')
-    .select('id, claim_number, updated_at')
+    .select('id, claim_number, updated_at, created_at, status')
     .eq('is_closed', false);
+
+  // Exclude specific statuses
+  if (excludeStatuses && excludeStatuses.length > 0) {
+    query = query.not('status', 'in', `(${excludeStatuses.join(',')})`);
+  }
+
+  const { data: claims, error: claimsError } = await query;
 
   if (claimsError) throw claimsError;
 
-  for (const claim of claims || []) {
+  // Further filter by age if configured
+  const filteredClaims = (claims || []).filter((claim: any) => {
+    if (excludeOlderThanDays) {
+      const claimAge = Math.floor((Date.now() - new Date(claim.created_at).getTime()) / (1000 * 60 * 60 * 24));
+      if (claimAge > excludeOlderThanDays) {
+        console.log(`Skipping claim ${claim.id} - older than ${excludeOlderThanDays} days (${claimAge} days old)`);
+        return false;
+      }
+    }
+    return true;
+  });
+
+  for (const claim of filteredClaims) {
     // Check the most recent activity for this claim
     const [updatesResult, filesResult, tasksResult] = await Promise.all([
       supabase
