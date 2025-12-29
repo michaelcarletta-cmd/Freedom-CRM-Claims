@@ -59,6 +59,7 @@ interface Contractor {
   full_name: string | null;
   email: string | null;
   phone: string | null;
+  logo_url: string | null;
 }
 
 export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDepreciationInvoiceProps) => {
@@ -117,7 +118,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
       if (contractorAssignment?.contractor_id) {
         const { data: contractorProfile } = await supabase
           .from('profiles')
-          .select('id, full_name, email, phone')
+          .select('id, full_name, email, phone, logo_url')
           .eq('id', contractorAssignment.contractor_id)
           .single();
         
@@ -362,6 +363,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
             name: contractor.full_name || 'Contractor',
             email: contractor.email || '',
             phone: contractor.phone || '',
+            logoUrl: contractor.logo_url || '',
           } : null,
           // Insurance company is the recipient (to)
           recipient: {

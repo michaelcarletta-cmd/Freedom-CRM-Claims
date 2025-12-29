@@ -2012,6 +2012,7 @@ export type Database = {
           jobnimbus_enabled: boolean | null
           license_number: string | null
           license_state: string | null
+          logo_url: string | null
           phone: string | null
           stripe_account_id: string | null
           title: string | null
@@ -2030,6 +2031,7 @@ export type Database = {
           jobnimbus_enabled?: boolean | null
           license_number?: string | null
           license_state?: string | null
+          logo_url?: string | null
           phone?: string | null
           stripe_account_id?: string | null
           title?: string | null
@@ -2048,6 +2050,7 @@ export type Database = {
           jobnimbus_enabled?: boolean | null
           license_number?: string | null
           license_state?: string | null
+          logo_url?: string | null
           phone?: string | null
           stripe_account_id?: string | null
           title?: string | null
