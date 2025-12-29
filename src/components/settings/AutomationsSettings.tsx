@@ -12,8 +12,9 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Play, Trash2, Clock, Mail, MessageSquare, CheckSquare, AlertCircle, Zap, ListTodo, Pencil } from "lucide-react";
+import { Loader2, Plus, Play, Trash2, Clock, Mail, MessageSquare, CheckSquare, AlertCircle, Zap, ListTodo, Pencil, Settings } from "lucide-react";
 import { TaskAutomationsSettings } from "./TaskAutomationsSettings";
+import { AutomationGlobalSettings } from "./AutomationGlobalSettings";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 
 interface TriggerConfig {
@@ -375,6 +376,10 @@ export const AutomationsSettings = () => {
           <TabsTrigger value="task-automations" className="w-full md:w-auto justify-start text-base font-medium px-4 flex items-center gap-2">
             <ListTodo className="h-4 w-4" />
             Task Automations
+          </TabsTrigger>
+          <TabsTrigger value="global-settings" className="w-full md:w-auto justify-start text-base font-medium px-4 flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Global Settings
           </TabsTrigger>
         </TabsList>
 
@@ -1214,6 +1219,10 @@ export const AutomationsSettings = () => {
 
         <TabsContent value="task-automations">
           <TaskAutomationsSettings />
+        </TabsContent>
+
+        <TabsContent value="global-settings">
+          <AutomationGlobalSettings />
         </TabsContent>
       </Tabs>
     </div>

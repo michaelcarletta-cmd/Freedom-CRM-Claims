@@ -1255,6 +1255,9 @@ export type Database = {
       }
       company_branding: {
         Row: {
+          automation_exclude_claims_older_than_days: number | null
+          automation_exclude_statuses: string[] | null
+          automations_enabled: boolean | null
           company_address: string | null
           company_email: string | null
           company_name: string | null
@@ -1267,6 +1270,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          automation_exclude_claims_older_than_days?: number | null
+          automation_exclude_statuses?: string[] | null
+          automations_enabled?: boolean | null
           company_address?: string | null
           company_email?: string | null
           company_name?: string | null
@@ -1279,6 +1285,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          automation_exclude_claims_older_than_days?: number | null
+          automation_exclude_statuses?: string[] | null
+          automations_enabled?: boolean | null
           company_address?: string | null
           company_email?: string | null
           company_name?: string | null
