@@ -210,10 +210,10 @@ serve(async (req) => {
           const arrayBuffer = await fileData.arrayBuffer();
           const uint8Array = new Uint8Array(arrayBuffer);
           
-          // Check file size - skip files over 5MB to prevent memory issues
-          if (uint8Array.length > 5 * 1024 * 1024) {
-            const errorMsg = `Skipping ${attachment.fileName} - file too large (${(uint8Array.length / 1024 / 1024).toFixed(2)} MB, max 5MB)`;
-            console.log(errorMsg);
+          // Check file size - skip files over 25MB (Resend's limit is 40MB total)
+          if (uint8Array.length > 25 * 1024 * 1024) {
+            const errorMsg = `Skipping ${attachment.fileName} - file too large (${(uint8Array.length / 1024 / 1024).toFixed(2)} MB, max 25MB)`;
+            console.warn(errorMsg);
             attachmentErrors.push(errorMsg);
             continue;
           }
