@@ -31,6 +31,7 @@ import { DarwinEngineerReportAnalyzer } from "@/components/claim-detail/DarwinEn
 import { DarwinClaimBriefing } from "@/components/claim-detail/DarwinClaimBriefing";
 import { DarwinDocumentCompiler } from "@/components/claim-detail/DarwinDocumentCompiler";
 import { DarwinDemandPackage } from "@/components/claim-detail/DarwinDemandPackage";
+import { RecoverableDepreciationInvoice } from "@/components/claim-detail/RecoverableDepreciationInvoice";
 import { ShareClaimDialog } from "@/components/claim-detail/ShareClaimDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles, Share2 } from "lucide-react";
@@ -464,6 +465,9 @@ const ClaimDetail = () => {
               
               {/* Demand Package Builder - Primary tool for building cases from evidence */}
               <DarwinDemandPackage claimId={claim.id} claim={claim} />
+              
+              {/* Recoverable Depreciation Invoice - Generate RD invoice with Certificate of Completion docs */}
+              <RecoverableDepreciationInvoice claimId={claim.id} claim={claim} />
               
               {/* Document Compiler - Legacy tool for compiling photos and documents */}
               <DarwinDocumentCompiler claimId={claim.id} claim={claim} />
