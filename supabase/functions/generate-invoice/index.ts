@@ -27,6 +27,7 @@ function generateInvoiceHtml(data: any): string {
   const companyName = sender?.name || 'Contractor Services';
   const companyEmail = sender?.email || '';
   const companyPhone = sender?.phone || '';
+  const companyLogo = sender?.logoUrl || '';
 
   return `
 <!DOCTYPE html>
@@ -38,6 +39,7 @@ function generateInvoiceHtml(data: any): string {
     body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; color: #1f2937; }
     .invoice-header { display: flex; justify-content: space-between; margin-bottom: 40px; align-items: flex-start; }
     .company-info { display: flex; flex-direction: column; gap: 8px; }
+    .company-logo { max-height: 80px; max-width: 200px; margin-bottom: 12px; object-fit: contain; }
     .company-name { font-size: 28px; font-weight: bold; color: #1f2937; margin-bottom: 8px; }
     .company-info p { margin: 4px 0; color: #6b7280; }
     .invoice-details { text-align: right; }
@@ -67,6 +69,7 @@ function generateInvoiceHtml(data: any): string {
 <body>
   <div class="invoice-header">
     <div class="company-info">
+      ${companyLogo ? `<img src="${companyLogo}" alt="${companyName} Logo" class="company-logo" />` : ''}
       <div class="company-name">${companyName}</div>
       ${companyPhone ? `<p>Phone: ${companyPhone}</p>` : ''}
       ${companyEmail ? `<p>Email: ${companyEmail}</p>` : ''}
