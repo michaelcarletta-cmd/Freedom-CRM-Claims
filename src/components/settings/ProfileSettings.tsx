@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Save, User, Bell, Mail, MessageSquare, ChevronDown, Loader2 } from "lucide-react";
+import { Save, User, Bell, Mail, MessageSquare, ChevronDown, Loader2, Upload, Building2, X } from "lucide-react";
 import { formatPhoneNumber } from "@/lib/utils";
 
 interface ProfileData {
@@ -20,6 +20,7 @@ interface ProfileData {
   license_number: string | null;
   license_state: string | null;
   email_signature: string | null;
+  logo_url: string | null;
 }
 
 interface NotificationPreferences {
@@ -32,7 +33,9 @@ export function ProfileSettings() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [savingNotifications, setSavingNotifications] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profile, setProfile] = useState<ProfileData>({
     full_name: "",
@@ -42,6 +45,7 @@ export function ProfileSettings() {
     license_number: "",
     license_state: "",
     email_signature: "",
+    logo_url: null,
   });
   const [preferences, setPreferences] = useState<NotificationPreferences>({
     in_app_enabled: true,
@@ -76,6 +80,7 @@ export function ProfileSettings() {
         license_number: (data as any).license_number || "",
         license_state: (data as any).license_state || "",
         email_signature: (data as any).email_signature || "",
+        logo_url: (data as any).logo_url || null,
       });
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -120,6 +125,7 @@ export function ProfileSettings() {
           license_number: profile.license_number,
           license_state: profile.license_state,
           email_signature: profile.email_signature,
+          logo_url: profile.logo_url,
         } as any)
         .eq("id", user.id);
 
@@ -164,6 +170,74 @@ export function ProfileSettings() {
       ...prev,
       [key]: !prev[key],
     }));
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Logo must be less than 2MB');
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/logo.${fileExt}`;
+
+      // Upload to company-branding bucket (public)
+      const { error: uploadError } = await supabase.storage
+        .from('company-branding')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('company-branding')
+        .getPublicUrl(fileName);
+
+      const logoUrl = urlData.publicUrl;
+      setProfile(prev => ({ ...prev, logo_url: logoUrl }));
+      
+      // Also save to profile immediately
+      await supabase
+        .from("profiles")
+        .update({ logo_url: logoUrl } as any)
+        .eq("id", user.id);
+
+      toast.success('Logo uploaded successfully');
+    } catch (error: any) {
+      console.error('Error uploading logo:', error);
+      toast.error(error.message || 'Failed to upload logo');
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!user) return;
+    
+    try {
+      await supabase
+        .from("profiles")
+        .update({ logo_url: null } as any)
+        .eq("id", user.id);
+
+      setProfile(prev => ({ ...prev, logo_url: null }));
+      toast.success('Logo removed');
+    } catch (error) {
+      console.error('Error removing logo:', error);
+      toast.error('Failed to remove logo');
+    }
   };
 
   if (loading) {
@@ -220,6 +294,67 @@ export function ProfileSettings() {
                 onChange={(e) => setProfile({ ...profile, phone: formatPhoneNumber(e.target.value) })}
                 placeholder="123-456-7890"
               />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5" />
+            Company Logo
+          </CardTitle>
+          <CardDescription>
+            Upload your company logo for invoices and documents
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start gap-6">
+            {profile.logo_url ? (
+              <div className="relative">
+                <img 
+                  src={profile.logo_url} 
+                  alt="Company logo" 
+                  className="h-24 w-auto max-w-[200px] object-contain border rounded-lg p-2 bg-white"
+                />
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="absolute -top-2 -right-2 h-6 w-6"
+                  onClick={handleRemoveLogo}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <div className="h-24 w-32 border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/50">
+                <Building2 className="h-8 w-8 text-muted-foreground" />
+              </div>
+            )}
+            <div className="space-y-2">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleLogoUpload}
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={uploadingLogo}
+              >
+                {uploadingLogo ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4 mr-2" />
+                )}
+                {uploadingLogo ? 'Uploading...' : 'Upload Logo'}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                PNG, JPG, or SVG. Max 2MB. Used on invoices.
+              </p>
             </div>
           </div>
         </CardContent>
