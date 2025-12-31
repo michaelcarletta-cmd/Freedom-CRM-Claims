@@ -1719,6 +1719,8 @@ export type Database = {
           last_synced_at: string | null
           sync_secret: string
           sync_status: string | null
+          target_sales_rep_id: string | null
+          target_sales_rep_name: string | null
           target_workspace_id: string | null
           workspace_id: string
         }
@@ -1731,6 +1733,8 @@ export type Database = {
           last_synced_at?: string | null
           sync_secret: string
           sync_status?: string | null
+          target_sales_rep_id?: string | null
+          target_sales_rep_name?: string | null
           target_workspace_id?: string | null
           workspace_id: string
         }
@@ -1743,6 +1747,8 @@ export type Database = {
           last_synced_at?: string | null
           sync_secret?: string
           sync_status?: string | null
+          target_sales_rep_id?: string | null
+          target_sales_rep_name?: string | null
           target_workspace_id?: string | null
           workspace_id?: string
         }
