@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, UserPlus, Trash2, MessageSquare, FileText, Send, Link2, RefreshCw, Globe } from "lucide-react";
+import { Building2, UserPlus, Trash2, MessageSquare, FileText, Send, Link2, RefreshCw, Globe, Pencil, Check, X, Users } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -46,8 +46,13 @@ export function WorkspaceDetail() {
   const [externalInstanceName, setExternalInstanceName] = useState("");
   const [syncSecret, setSyncSecret] = useState("");
   const [targetWorkspaceId, setTargetWorkspaceId] = useState("");
+  const [targetSalesRepId, setTargetSalesRepId] = useState("");
+  const [targetSalesRepName, setTargetSalesRepName] = useState("");
   const [isLinking, setIsLinking] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [editingSalesRep, setEditingSalesRep] = useState<string | null>(null);
+  const [editSalesRepName, setEditSalesRepName] = useState("");
+  const [editSalesRepId, setEditSalesRepId] = useState("");
 
   // Get user's organization
   const { data: userOrg } = useQuery({
@@ -370,6 +375,8 @@ export function WorkspaceDetail() {
           instance_name: externalInstanceName.trim(),
           sync_secret: syncSecret.trim(),
           target_workspace_id: targetWorkspaceId.trim() || null,
+          target_sales_rep_id: targetSalesRepId.trim() || null,
+          target_sales_rep_name: targetSalesRepName.trim() || null,
           sync_status: "active",
           created_by: user.id,
         });
@@ -386,6 +393,8 @@ export function WorkspaceDetail() {
       setExternalInstanceName("");
       setSyncSecret("");
       setTargetWorkspaceId("");
+      setTargetSalesRepId("");
+      setTargetSalesRepName("");
       queryClient.invalidateQueries({ queryKey: ["linked-workspaces"] });
     } catch (error: any) {
       toast({
@@ -407,6 +416,8 @@ export function WorkspaceDetail() {
           workspace_id: workspaceId,
           target_instance_url: linkedWorkspace.external_instance_url,
           target_workspace_id: linkedWorkspace.target_workspace_id,
+          target_sales_rep_id: linkedWorkspace.target_sales_rep_id,
+          target_sales_rep_name: linkedWorkspace.target_sales_rep_name,
           sync_secret: linkedWorkspace.sync_secret,
         },
       });
@@ -450,6 +461,46 @@ export function WorkspaceDetail() {
         variant: "destructive",
       });
     }
+  };
+
+  const handleUpdateSalesRep = async (linkId: string) => {
+    try {
+      const { error } = await supabase
+        .from("linked_workspaces")
+        .update({
+          target_sales_rep_id: editSalesRepId.trim() || null,
+          target_sales_rep_name: editSalesRepName.trim() || null,
+        })
+        .eq("id", linkId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Sales rep updated",
+      });
+      setEditingSalesRep(null);
+      setEditSalesRepName("");
+      setEditSalesRepId("");
+      queryClient.invalidateQueries({ queryKey: ["linked-workspaces"] });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const startEditingSalesRep = (linked: any) => {
+    setEditingSalesRep(linked.id);
+    setEditSalesRepName(linked.target_sales_rep_name || "");
+    setEditSalesRepId(linked.target_sales_rep_id || "");
+  };
+
+  const cancelEditingSalesRep = () => {
+    setEditingSalesRep(null);
+    setEditSalesRepName("");
+    setEditSalesRepId("");
   };
 
   if (isLoading) {
@@ -514,6 +565,28 @@ export function WorkspaceDetail() {
                     />
                     <p className="text-xs text-muted-foreground">
                       The workspace ID on the external instance where claims will be synced
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Target Sales Rep Name</Label>
+                    <Input
+                      placeholder="Name of sales rep on their end"
+                      value={targetSalesRepName}
+                      onChange={(e) => setTargetSalesRepName(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The sales rep from the partner organization to assign synced claims to
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Target Sales Rep ID (Optional)</Label>
+                    <Input
+                      placeholder="UUID of sales rep on external instance"
+                      value={targetSalesRepId}
+                      onChange={(e) => setTargetSalesRepId(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The user ID of the sales rep on the partner's system (if known)
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -785,23 +858,83 @@ export function WorkspaceDetail() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Instance</TableHead>
-                      <TableHead>URL</TableHead>
+                      <TableHead>Sales Rep</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Last Synced</TableHead>
-                      <TableHead className="w-24"></TableHead>
+                      <TableHead className="w-32"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {linkedInstances.map((linked: any) => (
                       <TableRow key={linked.id}>
                         <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            <Globe className="h-4 w-4 text-muted-foreground" />
-                            {linked.instance_name}
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <Globe className="h-4 w-4 text-muted-foreground" />
+                              {linked.instance_name}
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {linked.external_instance_url}
+                            </span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {linked.external_instance_url}
+                        <TableCell>
+                          {editingSalesRep === linked.id ? (
+                            <div className="flex flex-col gap-2">
+                              <Input
+                                placeholder="Sales Rep Name"
+                                value={editSalesRepName}
+                                onChange={(e) => setEditSalesRepName(e.target.value)}
+                                className="h-8 text-sm"
+                              />
+                              <Input
+                                placeholder="Sales Rep ID (optional)"
+                                value={editSalesRepId}
+                                onChange={(e) => setEditSalesRepId(e.target.value)}
+                                className="h-8 text-sm"
+                              />
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => handleUpdateSalesRep(linked.id)}
+                                  title="Save"
+                                >
+                                  <Check className="h-4 w-4 text-success" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={cancelEditingSalesRep}
+                                  title="Cancel"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              {linked.target_sales_rep_name ? (
+                                <div className="flex items-center gap-2">
+                                  <Users className="h-4 w-4 text-muted-foreground" />
+                                  <span>{linked.target_sales_rep_name}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">Not assigned</span>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => startEditingSalesRep(linked)}
+                                title="Edit sales rep"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Badge variant={linked.sync_status === "active" ? "default" : "secondary"}>
