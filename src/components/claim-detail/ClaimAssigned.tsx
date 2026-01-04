@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { User, MapPin, Plus, Trash2, Edit, Search, Check, ChevronsUpDown } from "lucide-react";
 import { ClaimAssignments } from "./ClaimAssignments";
+import { ClaimPartnerAssignment } from "./ClaimPartnerAssignment";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -362,6 +363,9 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
         loanNumber={claim.loan_number}
         ssnLastFour={claim.ssn_last_four}
       />
+
+      {/* Partner Sales Rep Assignment */}
+      <ClaimPartnerAssignment claimId={claim.id} />
 
       {/* Add/Edit Adjuster Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={handleCloseDialog}>
