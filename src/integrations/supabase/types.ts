@@ -1129,6 +1129,9 @@ export type Database = {
           loss_type: string | null
           loss_type_id: string | null
           mortgage_company_id: string | null
+          partner_assigned_user_email: string | null
+          partner_assigned_user_id: string | null
+          partner_assigned_user_name: string | null
           partner_construction_status: string | null
           policy_number: string | null
           policyholder_address: string | null
@@ -1164,6 +1167,9 @@ export type Database = {
           loss_type?: string | null
           loss_type_id?: string | null
           mortgage_company_id?: string | null
+          partner_assigned_user_email?: string | null
+          partner_assigned_user_id?: string | null
+          partner_assigned_user_name?: string | null
           partner_construction_status?: string | null
           policy_number?: string | null
           policyholder_address?: string | null
@@ -1199,6 +1205,9 @@ export type Database = {
           loss_type?: string | null
           loss_type_id?: string | null
           mortgage_company_id?: string | null
+          partner_assigned_user_email?: string | null
+          partner_assigned_user_id?: string | null
+          partner_assigned_user_name?: string | null
           partner_construction_status?: string | null
           policy_number?: string | null
           policyholder_address?: string | null
@@ -2770,6 +2779,9 @@ export type Database = {
           loss_type: string | null
           loss_type_id: string | null
           mortgage_company_id: string | null
+          partner_assigned_user_email: string | null
+          partner_assigned_user_id: string | null
+          partner_assigned_user_name: string | null
           partner_construction_status: string | null
           policy_number: string | null
           policyholder_address: string | null

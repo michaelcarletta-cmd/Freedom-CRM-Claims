@@ -95,7 +95,7 @@ serve(async (req) => {
         const results = [];
         for (const claim of claims || []) {
           try {
-            // Fetch all related data for this claim
+            // Fetch all related data for this claim including partner assignments
             const [
               { data: tasks },
               { data: updates },
@@ -109,6 +109,7 @@ serve(async (req) => {
               { data: files },
               { data: photos },
               { data: emails },
+              { data: partnerAssignments },
             ] = await Promise.all([
               supabase.from("tasks").select("*").eq("claim_id", claim.id),
               supabase.from("claim_updates").select("*").eq("claim_id", claim.id),
@@ -122,9 +123,13 @@ serve(async (req) => {
               supabase.from("claim_files").select("*").eq("claim_id", claim.id),
               supabase.from("claim_photos").select("*").eq("claim_id", claim.id),
               supabase.from("emails").select("*").eq("claim_id", claim.id),
+              supabase.from("claim_partner_assignments").select("*").eq("claim_id", claim.id).eq("linked_workspace_id", linkData.id),
             ]);
 
-            console.log(`Syncing claim ${claim.id} with ${tasks?.length || 0} tasks, ${updates?.length || 0} updates, ${inspections?.length || 0} inspections, ${files?.length || 0} files`);
+            // Get the partner assignment for this specific linked workspace
+            const partnerAssignment = partnerAssignments && partnerAssignments.length > 0 ? partnerAssignments[0] : null;
+
+            console.log(`Syncing claim ${claim.id} with ${tasks?.length || 0} tasks, ${updates?.length || 0} updates, ${inspections?.length || 0} inspections, ${files?.length || 0} files, partner assignment: ${partnerAssignment ? partnerAssignment.sales_rep_name : 'none'}`);
 
             // Generate signed URLs for files instead of downloading content (saves memory)
             const filesWithUrls = [];
@@ -203,6 +208,12 @@ serve(async (req) => {
                 files_data: filesWithUrls,
                 photos_data: photosWithUrls,
                 emails_data: emails || [],
+                // Include partner assignment for this workspace
+                partner_assignment: partnerAssignment ? {
+                  sales_rep_id: partnerAssignment.sales_rep_id,
+                  sales_rep_email: partnerAssignment.sales_rep_email,
+                  sales_rep_name: partnerAssignment.sales_rep_name,
+                } : null,
               }),
             });
 
@@ -312,7 +323,7 @@ serve(async (req) => {
             const claimResults = [];
             for (const claim of claims || []) {
               try {
-                // Fetch all related data
+                // Fetch all related data including partner assignments
                 const [
                   { data: tasks },
                   { data: updates },
@@ -326,6 +337,7 @@ serve(async (req) => {
                   { data: files },
                   { data: photos },
                   { data: emails },
+                  { data: partnerAssignments },
                 ] = await Promise.all([
                   supabase.from("tasks").select("*").eq("claim_id", claim.id),
                   supabase.from("claim_updates").select("*").eq("claim_id", claim.id),
@@ -339,7 +351,11 @@ serve(async (req) => {
                   supabase.from("claim_files").select("*").eq("claim_id", claim.id),
                   supabase.from("claim_photos").select("*").eq("claim_id", claim.id),
                   supabase.from("emails").select("*").eq("claim_id", claim.id),
+                  supabase.from("claim_partner_assignments").select("*").eq("claim_id", claim.id).eq("linked_workspace_id", link.id),
                 ]);
+
+                // Get the partner assignment for this specific linked workspace
+                const partnerAssignment = partnerAssignments && partnerAssignments.length > 0 ? partnerAssignments[0] : null;
 
                 // Generate signed URLs for files
                 const filesWithUrls = [];
@@ -401,6 +417,12 @@ serve(async (req) => {
                     files_data: filesWithUrls,
                     photos_data: photosWithUrls,
                     emails_data: emails || [],
+                    // Include partner assignment for this workspace
+                    partner_assignment: partnerAssignment ? {
+                      sales_rep_id: partnerAssignment.sales_rep_id,
+                      sales_rep_email: partnerAssignment.sales_rep_email,
+                      sales_rep_name: partnerAssignment.sales_rep_name,
+                    } : null,
                   }),
                 });
 
