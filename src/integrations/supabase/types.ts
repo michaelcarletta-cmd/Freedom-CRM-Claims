@@ -762,6 +762,54 @@ export type Database = {
           },
         ]
       }
+      claim_partner_assignments: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string | null
+          claim_id: string
+          id: string
+          linked_workspace_id: string
+          sales_rep_email: string | null
+          sales_rep_id: string | null
+          sales_rep_name: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          claim_id: string
+          id?: string
+          linked_workspace_id: string
+          sales_rep_email?: string | null
+          sales_rep_id?: string | null
+          sales_rep_name: string
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          claim_id?: string
+          id?: string
+          linked_workspace_id?: string
+          sales_rep_email?: string | null
+          sales_rep_id?: string | null
+          sales_rep_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_partner_assignments_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_partner_assignments_linked_workspace_id_fkey"
+            columns: ["linked_workspace_id"]
+            isOneToOne: false
+            referencedRelation: "linked_workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_payments: {
         Row: {
           amount: number
