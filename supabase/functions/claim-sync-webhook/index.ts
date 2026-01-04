@@ -45,9 +45,10 @@ serve(async (req) => {
       files_data,
       photos_data,
       emails_data,
+      partner_assignment,
     } = await req.json();
 
-    console.log(`Received sync request: action=${action}, external_claim_id=${external_claim_id}, source=${source_instance_url}, target_workspace_id=${target_workspace_id}`);
+    console.log(`Received sync request: action=${action}, external_claim_id=${external_claim_id}, source=${source_instance_url}, target_workspace_id=${target_workspace_id}, partner_assignment=${partner_assignment ? partner_assignment.sales_rep_name : 'none'}`);
 
     if (action === 'create_or_update') {
       // Check if we already have this linked claim
@@ -84,6 +85,10 @@ serve(async (req) => {
             claim_amount: claim_data.claim_amount,
             workspace_id: target_workspace_id || claim_data.workspace_id,
             partner_construction_status: claim_data.construction_status,
+            // Update partner assignment fields
+            partner_assigned_user_id: partner_assignment?.sales_rep_id || null,
+            partner_assigned_user_email: partner_assignment?.sales_rep_email || null,
+            partner_assigned_user_name: partner_assignment?.sales_rep_name || null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', claimId);
@@ -115,6 +120,10 @@ serve(async (req) => {
             claim_amount: claim_data.claim_amount,
             workspace_id: target_workspace_id,
             partner_construction_status: claim_data.construction_status,
+            // Set partner assignment fields
+            partner_assigned_user_id: partner_assignment?.sales_rep_id || null,
+            partner_assigned_user_email: partner_assignment?.sales_rep_email || null,
+            partner_assigned_user_name: partner_assignment?.sales_rep_name || null,
           })
           .select()
           .single();
