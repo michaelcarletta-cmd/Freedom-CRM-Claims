@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2 } from "lucide-react";
+import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2, Sofa } from "lucide-react";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -207,7 +207,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
 function SettlementSection({ claimId, settlement, isAdmin }: any) {
   const [activeTab, setActiveTab] = useState("dwelling");
   const [open, setOpen] = useState(false);
-  const [editingType, setEditingType] = useState<"dwelling" | "other_structures" | "pwi">("dwelling");
+  const [editingType, setEditingType] = useState<"dwelling" | "other_structures" | "pwi" | "personal_property">("dwelling");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -230,12 +230,20 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
         recoverable_depreciation: settlement?.other_structures_recoverable_depreciation || 0,
         deductible: settlement?.other_structures_deductible || 0,
       };
-    } else {
+    } else if (type === "pwi") {
       return {
         replacement_cost_value: settlement?.pwi_rcv || 0,
         non_recoverable_depreciation: settlement?.pwi_non_recoverable_depreciation || 0,
         recoverable_depreciation: settlement?.pwi_recoverable_depreciation || 0,
-        deductible: settlement?.pwi_deductible || 0,
+        deductible: 0, // PWI has no deductible
+      };
+    } else {
+      // personal_property
+      return {
+        replacement_cost_value: settlement?.personal_property_rcv || 0,
+        non_recoverable_depreciation: settlement?.personal_property_non_recoverable_depreciation || 0,
+        recoverable_depreciation: settlement?.personal_property_recoverable_depreciation || 0,
+        deductible: 0, // Personal property has no deductible
       };
     }
   };
@@ -246,7 +254,8 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
   const dwellingRcv = Number(settlement?.replacement_cost_value || 0);
   const otherStructuresRcv = Number(settlement?.other_structures_rcv || 0);
   const pwiRcv = Number(settlement?.pwi_rcv || 0);
-  const totalRcv = dwellingRcv + otherStructuresRcv + pwiRcv;
+  const personalPropertyRcv = Number(settlement?.personal_property_rcv || 0);
+  const totalRcv = dwellingRcv + otherStructuresRcv + pwiRcv + personalPropertyRcv;
 
   const calculateAcv = (rcv: number, recDep: number, nonRecDep: number, deductible: number) => {
     return rcv - recDep - nonRecDep - deductible;
@@ -270,7 +279,14 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
     pwiRcv,
     Number(settlement?.pwi_recoverable_depreciation || 0),
     Number(settlement?.pwi_non_recoverable_depreciation || 0),
-    Number(settlement?.pwi_deductible || 0)
+    0  // PWI has no deductible
+  );
+
+  const personalPropertyAcv = calculateAcv(
+    personalPropertyRcv,
+    Number(settlement?.personal_property_recoverable_depreciation || 0),
+    Number(settlement?.personal_property_non_recoverable_depreciation || 0),
+    0  // Personal property has no deductible
   );
 
   const saveMutation = useMutation({
@@ -296,12 +312,18 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
           other_structures_recoverable_depreciation: formData.recoverable_depreciation,
           other_structures_deductible: formData.deductible,
         };
-      } else {
+      } else if (editingType === "pwi") {
         updateData = {
           pwi_rcv: formData.replacement_cost_value,
           pwi_non_recoverable_depreciation: formData.non_recoverable_depreciation,
           pwi_recoverable_depreciation: formData.recoverable_depreciation,
-          pwi_deductible: formData.deductible,
+        };
+      } else {
+        // personal_property
+        updateData = {
+          personal_property_rcv: formData.replacement_cost_value,
+          personal_property_non_recoverable_depreciation: formData.non_recoverable_depreciation,
+          personal_property_recoverable_depreciation: formData.recoverable_depreciation,
         };
       }
 
@@ -338,7 +360,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
     Number(formData.non_recoverable_depreciation) - 
     Number(formData.deductible);
 
-  const openEditDialog = (type: "dwelling" | "other_structures" | "pwi") => {
+  const openEditDialog = (type: "dwelling" | "other_structures" | "pwi" | "personal_property") => {
     setEditingType(type);
     setFormData(getFormDataForType(type));
     setOpen(true);
@@ -347,7 +369,8 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
   const getTypeLabel = (type: string) => {
     if (type === "dwelling") return "Dwelling";
     if (type === "other_structures") return "Other Structures";
-    return "PWI Items";
+    if (type === "pwi") return "PWI Items";
+    return "Personal Property";
   };
 
   const renderSettlementContent = (
@@ -356,7 +379,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
     nonRecDep: number,
     deductible: number,
     acv: number,
-    type: "dwelling" | "other_structures" | "pwi",
+    type: "dwelling" | "other_structures" | "pwi" | "personal_property",
     estimateAmount?: number,
     priorOffer?: number,
     notes?: string
@@ -455,6 +478,10 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
               <Package className="h-4 w-4" />
               PWI Items
             </TabsTrigger>
+            <TabsTrigger value="personal_property" className="inline-flex items-center gap-2 whitespace-nowrap">
+              <Sofa className="h-4 w-4" />
+              Personal Property
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="dwelling">
@@ -511,9 +538,28 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
               pwiRcv,
               Number(settlement?.pwi_recoverable_depreciation || 0),
               Number(settlement?.pwi_non_recoverable_depreciation || 0),
-              Number(settlement?.pwi_deductible || 0),
+              0,
               pwiAcv,
               "pwi"
+            )}
+          </TabsContent>
+
+          <TabsContent value="personal_property">
+            {isAdmin && (
+              <div className="flex justify-end mb-4">
+                <Button onClick={() => openEditDialog("personal_property")}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {settlement?.personal_property_rcv ? "Edit" : "Add"} Personal Property
+                </Button>
+              </div>
+            )}
+            {renderSettlementContent(
+              personalPropertyRcv,
+              Number(settlement?.personal_property_recoverable_depreciation || 0),
+              Number(settlement?.personal_property_non_recoverable_depreciation || 0),
+              0,
+              personalPropertyAcv,
+              "personal_property"
             )}
           </TabsContent>
         </Tabs>
@@ -522,7 +568,8 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
         {(() => {
           const totalRecDep = Number(settlement?.recoverable_depreciation || 0) + 
                               Number(settlement?.other_structures_recoverable_depreciation || 0) + 
-                              Number(settlement?.pwi_recoverable_depreciation || 0);
+                              Number(settlement?.pwi_recoverable_depreciation || 0) +
+                              Number(settlement?.personal_property_recoverable_depreciation || 0);
           return totalRecDep > 0 ? (
             <div className="mt-4 p-4 bg-amber-500/10 rounded-lg border border-amber-500/20">
               <div className="flex justify-between items-center">
