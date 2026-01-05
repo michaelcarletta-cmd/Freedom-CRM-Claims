@@ -143,57 +143,62 @@ const Inbox = () => {
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-2">
-              {emails.map((email) => (
-                <Card
-                  key={email.id}
-                  className="bg-card border-border hover:border-primary/50 cursor-pointer transition-colors"
-                  onClick={() => email.claims && handleEmailClick(email.claims.id)}
-                >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-primary" />
-                          <CardTitle className="text-base text-foreground">
-                            {email.subject}
-                          </CardTitle>
+          <div className="space-y-2">
+              {emails.map((email) => {
+                const isInbound = email.recipient_type === 'inbound';
+                return (
+                  <Card
+                    key={email.id}
+                    className="bg-card border-border hover:border-primary/50 cursor-pointer transition-colors"
+                    onClick={() => email.claims && handleEmailClick(email.claims.id)}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Mail className={`h-4 w-4 ${isInbound ? 'text-green-500' : 'text-primary'}`} />
+                            {isInbound && (
+                              <Badge className="bg-green-500/20 text-green-500 border-green-500/30 border text-xs">
+                                Inbound
+                              </Badge>
+                            )}
+                            <CardTitle className="text-base text-foreground">
+                              {email.subject}
+                            </CardTitle>
+                          </div>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <span>
+                              {isInbound ? 'From: ' : 'To: '}
+                              {email.recipient_name || email.recipient_email}
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {format(new Date(email.sent_at || email.created_at), "MMM d, yyyy 'at' h:mm a")}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span>To: {email.recipient_name || email.recipient_email}</span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {format(new Date(email.sent_at || email.created_at), "MMM d, yyyy 'at' h:mm a")}
-                          </span>
-                        </div>
+                        {email.claims && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Badge variant="outline" className="border-primary/30 text-primary">
+                              {email.claims.claim_number || "No Claim #"}
+                            </Badge>
+                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        )}
                       </div>
+                    </CardHeader>
+                    <CardContent>
                       {email.claims && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Badge variant="outline" className="border-primary/30 text-primary">
-                            {email.claims.claim_number || "No Claim #"}
-                          </Badge>
-                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        <div className="text-sm text-muted-foreground">
+                          <span className="font-medium text-foreground">Claim: </span>
+                          {email.claims.policyholder_name}
                         </div>
                       )}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {email.claims && (
-                      <div className="text-sm text-muted-foreground">
-                        <span className="font-medium text-foreground">Claim: </span>
-                        {email.claims.policyholder_name}
-                      </div>
-                    )}
-                    {email.recipient_type && (
-                      <div className="text-sm text-muted-foreground mt-1">
-                        <span className="font-medium text-foreground">Type: </span>
-                        {email.recipient_type}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>
