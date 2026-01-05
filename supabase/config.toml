@@ -113,3 +113,9 @@ verify_jwt = true
 
 [functions.generate-photo-report-pdf]
 verify_jwt = true
+
+[functions.get-instance-users]
+verify_jwt = true
+
+[functions.list-instance-users]
+verify_jwt = false
