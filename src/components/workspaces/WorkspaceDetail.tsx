@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -8,9 +8,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, UserPlus, Trash2, MessageSquare, FileText, Send, Link2, RefreshCw, Globe, Pencil, Check, X, Users } from "lucide-react";
+import { Building2, UserPlus, Trash2, MessageSquare, FileText, Send, Link2, RefreshCw, Globe, Pencil, Check, X, Users, Loader2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
+
+interface ExternalUser {
+  id: string;
+  full_name: string | null;
+  email: string;
+  roles: string[];
+}
 import {
   Dialog,
   DialogContent,
@@ -53,6 +60,9 @@ export function WorkspaceDetail() {
   const [editingSalesRep, setEditingSalesRep] = useState<string | null>(null);
   const [editSalesRepName, setEditSalesRepName] = useState("");
   const [editSalesRepId, setEditSalesRepId] = useState("");
+  const [externalUsers, setExternalUsers] = useState<ExternalUser[]>([]);
+  const [isFetchingUsers, setIsFetchingUsers] = useState(false);
+  const [fetchUsersError, setFetchUsersError] = useState<string | null>(null);
 
   // Get user's organization
   const { data: userOrg } = useQuery({
@@ -491,16 +501,72 @@ export function WorkspaceDetail() {
     }
   };
 
-  const startEditingSalesRep = (linked: any) => {
+  const startEditingSalesRep = async (linked: any) => {
     setEditingSalesRep(linked.id);
     setEditSalesRepName(linked.target_sales_rep_name || "");
     setEditSalesRepId(linked.target_sales_rep_id || "");
+    // Fetch users from external instance
+    await fetchExternalUsers(linked.external_instance_url, linked.sync_secret);
   };
 
   const cancelEditingSalesRep = () => {
     setEditingSalesRep(null);
     setEditSalesRepName("");
     setEditSalesRepId("");
+    setExternalUsers([]);
+    setFetchUsersError(null);
+  };
+
+  const fetchExternalUsers = async (instanceUrl: string, secret: string) => {
+    if (!instanceUrl || !secret) return;
+    
+    setIsFetchingUsers(true);
+    setFetchUsersError(null);
+    setExternalUsers([]);
+    
+    try {
+      const response = await fetch(`${instanceUrl}/functions/v1/get-instance-users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-workspace-sync-secret": secret,
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch users: ${errorText}`);
+      }
+
+      const data = await response.json();
+      if (data.success && data.users) {
+        setExternalUsers(data.users);
+      } else {
+        throw new Error(data.error || "Unknown error");
+      }
+    } catch (error: any) {
+      console.error("Error fetching external users:", error);
+      setFetchUsersError(error.message);
+    } finally {
+      setIsFetchingUsers(false);
+    }
+  };
+
+  const handleSelectExternalUser = (userId: string) => {
+    const user = externalUsers.find((u) => u.id === userId);
+    if (user) {
+      setTargetSalesRepId(user.id);
+      setTargetSalesRepName(user.full_name || user.email);
+    }
+  };
+
+  const handleSelectExternalUserForEdit = (userId: string) => {
+    const user = externalUsers.find((u) => u.id === userId);
+    if (user) {
+      setEditSalesRepId(user.id);
+      setEditSalesRepName(user.full_name || user.email);
+    }
   };
 
   if (isLoading) {
@@ -568,25 +634,54 @@ export function WorkspaceDetail() {
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label>Target Sales Rep Name</Label>
-                    <Input
-                      placeholder="Name of sales rep on their end"
-                      value={targetSalesRepName}
-                      onChange={(e) => setTargetSalesRepName(e.target.value)}
-                    />
+                    <div className="flex items-center justify-between">
+                      <Label>Target Sales Rep</Label>
+                      <Button 
+                        type="button"
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => fetchExternalUsers(externalInstanceUrl, syncSecret)}
+                        disabled={!externalInstanceUrl || !syncSecret || isFetchingUsers}
+                      >
+                        {isFetchingUsers ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                        <span className="ml-1">Load Users</span>
+                      </Button>
+                    </div>
+                    {externalUsers.length > 0 ? (
+                      <Select value={targetSalesRepId} onValueChange={handleSelectExternalUser}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a sales rep" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {externalUsers.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                              <div className="flex flex-col">
+                                <span>{user.full_name || user.email}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {user.email} • {user.roles.join(", ")}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        placeholder="Enter Instance URL and Sync Secret, then click Load Users"
+                        value={targetSalesRepName}
+                        onChange={(e) => setTargetSalesRepName(e.target.value)}
+                        disabled={isFetchingUsers}
+                      />
+                    )}
+                    {fetchUsersError && (
+                      <p className="text-xs text-destructive">{fetchUsersError}</p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       The sales rep from the partner organization to assign synced claims to
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Target Sales Rep ID (Optional)</Label>
-                    <Input
-                      placeholder="UUID of sales rep on external instance"
-                      value={targetSalesRepId}
-                      onChange={(e) => setTargetSalesRepId(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      The user ID of the sales rep on the partner's system (if known)
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -880,19 +975,51 @@ export function WorkspaceDetail() {
                         </TableCell>
                         <TableCell>
                           {editingSalesRep === linked.id ? (
-                            <div className="flex flex-col gap-2">
-                              <Input
-                                placeholder="Sales Rep Name"
-                                value={editSalesRepName}
-                                onChange={(e) => setEditSalesRepName(e.target.value)}
-                                className="h-8 text-sm"
-                              />
-                              <Input
-                                placeholder="Sales Rep ID (optional)"
-                                value={editSalesRepId}
-                                onChange={(e) => setEditSalesRepId(e.target.value)}
-                                className="h-8 text-sm"
-                              />
+                            <div className="flex flex-col gap-2 min-w-[200px]">
+                              {isFetchingUsers ? (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Loading users...
+                                </div>
+                              ) : externalUsers.length > 0 ? (
+                                <Select value={editSalesRepId} onValueChange={handleSelectExternalUserForEdit}>
+                                  <SelectTrigger className="h-8 text-sm">
+                                    <SelectValue placeholder="Select sales rep" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="">
+                                      <span className="text-muted-foreground">None</span>
+                                    </SelectItem>
+                                    {externalUsers.map((user) => (
+                                      <SelectItem key={user.id} value={user.id}>
+                                        <div className="flex flex-col">
+                                          <span>{user.full_name || user.email}</span>
+                                          <span className="text-xs text-muted-foreground">
+                                            {user.roles.join(", ")}
+                                          </span>
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : fetchUsersError ? (
+                                <div className="space-y-2">
+                                  <p className="text-xs text-destructive">{fetchUsersError}</p>
+                                  <Input
+                                    placeholder="Sales Rep Name"
+                                    value={editSalesRepName}
+                                    onChange={(e) => setEditSalesRepName(e.target.value)}
+                                    className="h-8 text-sm"
+                                  />
+                                </div>
+                              ) : (
+                                <Input
+                                  placeholder="Sales Rep Name"
+                                  value={editSalesRepName}
+                                  onChange={(e) => setEditSalesRepName(e.target.value)}
+                                  className="h-8 text-sm"
+                                />
+                              )}
                               <div className="flex gap-1">
                                 <Button
                                   variant="ghost"
