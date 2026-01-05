@@ -965,7 +965,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                   <TableCell className="capitalize">{check.check_type.replace("_", " ")}</TableCell>
                   <TableCell>{format(new Date(check.check_date), "MMM dd, yyyy")}</TableCell>
                   <TableCell>{check.received_date ? format(new Date(check.received_date), "MMM dd, yyyy") : "—"}</TableCell>
-                  <TableCell className="text-right font-semibold text-success">
+                  <TableCell className="text-right font-semibold text-primary">
                     ${Number(check.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </TableCell>
                   {isAdmin && (
