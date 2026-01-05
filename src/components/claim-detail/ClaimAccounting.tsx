@@ -135,7 +135,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-success">${totalChecksReceived.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <p className="text-2xl font-bold text-primary">${totalChecksReceived.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </CardContent>
         </Card>
 
@@ -393,15 +393,15 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
             <span>Replacement Cost Value (RCV):</span>
             <span className="font-semibold">${rcv.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
-          <div className="flex justify-between text-sm text-destructive">
+          <div className="flex justify-between text-sm text-amber-600 dark:text-amber-400">
             <span>- Recoverable Depreciation:</span>
             <span className="font-semibold">-${recDep.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
-          <div className="flex justify-between text-sm text-destructive">
+          <div className="flex justify-between text-sm text-rose-600 dark:text-rose-400">
             <span>- Non-Recoverable Depreciation:</span>
             <span className="font-semibold">-${nonRecDep.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
-          <div className="flex justify-between text-sm text-destructive">
+          <div className="flex justify-between text-sm text-muted-foreground">
             <span>- Deductible:</span>
             <span className="font-semibold">-${deductible.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
@@ -524,13 +524,13 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
                               Number(settlement?.other_structures_recoverable_depreciation || 0) + 
                               Number(settlement?.pwi_recoverable_depreciation || 0);
           return totalRecDep > 0 ? (
-            <div className="mt-4 p-4 bg-success/10 rounded-lg border border-success/20">
+            <div className="mt-4 p-4 bg-amber-500/10 rounded-lg border border-amber-500/20">
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="text-sm font-medium text-success">Total Recoverable Depreciation</p>
+                  <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Total Recoverable Depreciation</p>
                   <p className="text-xs text-muted-foreground">Paid when work is completed</p>
                 </div>
-                <p className="text-xl font-bold text-success">
+                <p className="text-xl font-bold text-amber-600 dark:text-amber-400">
                   ${totalRecDep.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
               </div>
@@ -625,15 +625,15 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
                     <span>Replacement Cost Value (RCV):</span>
                     <span className="font-semibold">${Number(formData.replacement_cost_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className="flex justify-between text-destructive">
+                  <div className="flex justify-between text-amber-600 dark:text-amber-400">
                     <span>- Recoverable Depreciation:</span>
                     <span className="font-semibold">-${Number(formData.recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className="flex justify-between text-destructive">
+                  <div className="flex justify-between text-rose-600 dark:text-rose-400">
                     <span>- Non-Recoverable Depreciation:</span>
                     <span className="font-semibold">-${Number(formData.non_recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className="flex justify-between text-destructive">
+                  <div className="flex justify-between text-muted-foreground">
                     <span>- Deductible:</span>
                     <span className="font-semibold">-${Number(formData.deductible).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
@@ -645,7 +645,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
                   </div>
                 </div>
                 <div className="border-t pt-3 mt-3">
-                  <div className="flex justify-between text-success">
+                  <div className="flex justify-between text-amber-600 dark:text-amber-400">
                     <span className="font-medium">Recoverable Depreciation (paid at completion):</span>
                     <span className="text-lg font-bold">
                       ${Number(formData.recoverable_depreciation).toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -851,7 +851,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
           <div>
             <CardTitle>Insurance Checks Received</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Outstanding: <span className={outstandingAmount > 0 ? "text-amber-500 font-semibold" : "text-success font-semibold"}>
+              Outstanding: <span className={outstandingAmount > 0 ? "text-amber-500 font-semibold" : "text-primary font-semibold"}>
                 ${outstandingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </p>
@@ -1209,7 +1209,7 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
                   <TableCell>{expense.description}</TableCell>
                   <TableCell className="capitalize">{expense.category}</TableCell>
                   <TableCell>{expense.paid_to || "—"}</TableCell>
-                  <TableCell className="text-right font-semibold text-destructive">
+                  <TableCell className="text-right font-semibold text-rose-600 dark:text-rose-400">
                     ${Number(expense.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </TableCell>
                   {isAdmin && (
