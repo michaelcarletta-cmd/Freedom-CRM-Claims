@@ -1,9 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-workspace-sync-secret",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -12,71 +11,47 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const { instanceUrl, syncSecret } = await req.json();
 
-    // Validate sync secret
-    const syncSecret = req.headers.get("x-workspace-sync-secret");
-    const expectedSecret = Deno.env.get("CLAIM_SYNC_SECRET");
-
-    if (!syncSecret || syncSecret !== expectedSecret) {
+    if (!instanceUrl || !syncSecret) {
       return new Response(
-        JSON.stringify({ success: false, error: "Invalid sync secret" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: false, error: "Missing instanceUrl or syncSecret" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log("Fetching staff and admin users for external instance");
+    console.log(`Fetching users from external instance: ${instanceUrl}`);
 
-    // Get all users who have staff or admin roles and are approved
-    const { data: userRoles, error: rolesError } = await supabase
-      .from("user_roles")
-      .select("user_id, role")
-      .in("role", ["admin", "staff"]);
+    // Call the external instance's endpoint to get their users
+    // The external instance should have a "list-instance-users" function that validates the sync secret
+    const externalUrl = `${instanceUrl}/functions/v1/list-instance-users`;
+    
+    const response = await fetch(externalUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-workspace-sync-secret": syncSecret,
+      },
+      body: JSON.stringify({}),
+    });
 
-    if (rolesError) {
-      console.error("Error fetching user roles:", rolesError);
-      throw rolesError;
-    }
-
-    // Get unique user IDs
-    const userIds = [...new Set(userRoles?.map((r) => r.user_id) || [])];
-
-    if (userIds.length === 0) {
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`External instance error: ${response.status} - ${errorText}`);
       return new Response(
-        JSON.stringify({ success: true, users: [] }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ 
+          success: false, 
+          error: `Failed to fetch users from partner instance: ${response.status}` 
+        }),
+        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Get profile info for these users
-    const { data: profiles, error: profilesError } = await supabase
-      .from("profiles")
-      .select("id, full_name, email")
-      .in("id", userIds)
-      .eq("approval_status", "approved");
-
-    if (profilesError) {
-      console.error("Error fetching profiles:", profilesError);
-      throw profilesError;
-    }
-
-    // Combine profile info with roles
-    const users = profiles?.map((profile) => {
-      const roles = userRoles?.filter((r) => r.user_id === profile.id).map((r) => r.role) || [];
-      return {
-        id: profile.id,
-        full_name: profile.full_name,
-        email: profile.email,
-        roles,
-      };
-    }) || [];
-
-    console.log(`Found ${users.length} staff/admin users`);
+    const data = await response.json();
+    console.log(`Received ${data.users?.length || 0} users from external instance`);
 
     return new Response(
-      JSON.stringify({ success: true, users }),
+      JSON.stringify({ success: true, users: data.users || [] }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
