@@ -165,7 +165,7 @@ export function OutstandingChecksTracker() {
   const bankBalance = bankBalanceData?.balance || 0;
   const businessLoans = bankBalanceData?.business_loans || 0;
   const totalOutstandingChecks = checks?.reduce((sum, c) => sum + Number(c.amount), 0) || 0;
-  const trueBankBalance = bankBalance - totalOutstandingChecks;
+  const trueBankBalance = bankBalance - totalOutstandingChecks - businessLoans;
 
   const handleSaveBankBalance = () => {
     const balance = parseFloat(tempBankBalance);
@@ -337,7 +337,7 @@ export function OutstandingChecksTracker() {
             <div className={`text-2xl font-bold ${trueBankBalance >= 0 ? 'text-primary' : 'text-destructive'}`}>
               {formatCurrency(trueBankBalance)}
             </div>
-            <p className="text-xs text-muted-foreground">Bank Balance - Outstanding Checks</p>
+            <p className="text-xs text-muted-foreground">Bank Balance - Outstanding Checks - Business Loans</p>
           </div>
         </div>
 
