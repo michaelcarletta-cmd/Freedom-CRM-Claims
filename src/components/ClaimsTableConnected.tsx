@@ -125,15 +125,17 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
     staleTime: 30000, // Cache for 30 seconds
   });
 
-  // Fetch active statuses with React Query
+  // Fetch active statuses with React Query - ordered by display_order to match Settings
   const { data: activeStatuses = [] } = useQuery({
     queryKey: ["claim-statuses"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_statuses")
-        .select("name, is_active");
+        .select("name, is_active")
+        .eq("is_active", true)
+        .order("display_order");
       if (error) throw error;
-      return (data || []).filter((s) => s.is_active).map((s) => s.name);
+      return (data || []).map((s) => s.name);
     },
     staleTime: 60000, // Cache for 1 minute
   });
