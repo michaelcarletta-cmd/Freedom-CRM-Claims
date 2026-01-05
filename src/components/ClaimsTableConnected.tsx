@@ -273,7 +273,8 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
     return <LoadingSkeleton />;
   }
 
-  const uniqueStatuses = ["all", ...new Set(claims.map((c) => c.status).filter(Boolean))];
+  // Use activeStatuses from the ordered query instead of deriving from claims
+  const uniqueStatuses = ["all", ...activeStatuses];
   const uniqueLossTypes = ["all", ...new Set(claims.map((c) => c.loss_type).filter(Boolean))];
 
   return (
