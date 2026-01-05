@@ -229,6 +229,24 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_balance: {
+        Row: {
+          balance: number
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          balance?: number
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          balance?: number
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       claim_adjusters: {
         Row: {
           adjuster_email: string | null
@@ -2066,6 +2084,33 @@ export type Database = {
           logo_url?: string | null
           name?: string
           slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      outstanding_checks: {
+        Row: {
+          amount: number
+          check_number: string | null
+          created_at: string
+          id: string
+          payee: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          check_number?: string | null
+          created_at?: string
+          id?: string
+          payee: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          check_number?: string | null
+          created_at?: string
+          id?: string
+          payee?: string
           updated_at?: string
         }
         Relationships: []
