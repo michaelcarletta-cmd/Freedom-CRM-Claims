@@ -25,23 +25,38 @@ function decodeBase64(str: string): string {
   }
 }
 
+// Detect if content is base64 encoded
+function isBase64Encoded(str: string): boolean {
+  // Check if string looks like base64 (only base64 chars, length is multiple of 4, etc.)
+  const cleaned = str.replace(/[\r\n\s]/g, '');
+  if (cleaned.length === 0 || cleaned.length % 4 !== 0) return false;
+  return /^[A-Za-z0-9+/=]+$/.test(cleaned) && cleaned.length > 50;
+}
+
 // Extract clean text from raw MIME email
 function extractEmailBody(rawContent: string): { text: string; html: string } {
   let text = '';
   let html = '';
+
+  console.log("extractEmailBody: Processing content of length", rawContent.length);
 
   // Check if it's a multipart message
   const boundaryMatch = rawContent.match(/boundary="?([^"\s;]+)"?/i);
   
   if (boundaryMatch) {
     const boundary = boundaryMatch[1];
+    console.log("Found multipart boundary:", boundary);
     const parts = rawContent.split(new RegExp(`--${boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     
     for (const part of parts) {
-      if (part.includes('Content-Type: text/plain')) {
-        // Extract plain text content
+      const isPlainText = part.includes('Content-Type: text/plain');
+      const isHtml = part.includes('Content-Type: text/html');
+      
+      if (isPlainText || isHtml) {
+        // Extract encoding
         const contentMatch = part.match(/Content-Transfer-Encoding:\s*(\S+)/i);
         const encoding = contentMatch ? contentMatch[1].toLowerCase() : '';
+        console.log(`Found ${isPlainText ? 'text/plain' : 'text/html'} part with encoding:`, encoding);
         
         // Find the actual content (after the headers, separated by double newline)
         const bodyMatch = part.split(/\r?\n\r?\n/);
@@ -50,32 +65,21 @@ function extractEmailBody(rawContent: string): { text: string; html: string } {
           
           // Remove trailing boundary markers
           content = content.replace(/--$/, '').trim();
+          // Also remove any trailing boundary content
+          content = content.replace(/\r?\n--_[^\n]+$/g, '').trim();
           
           if (encoding === 'quoted-printable') {
             content = decodeQuotedPrintable(content);
-          } else if (encoding === 'base64') {
-            content = decodeBase64(content);
-          }
-          text = content;
-        }
-      } else if (part.includes('Content-Type: text/html')) {
-        // Extract HTML content
-        const contentMatch = part.match(/Content-Transfer-Encoding:\s*(\S+)/i);
-        const encoding = contentMatch ? contentMatch[1].toLowerCase() : '';
-        
-        const bodyMatch = part.split(/\r?\n\r?\n/);
-        if (bodyMatch.length > 1) {
-          let content = bodyMatch.slice(1).join('\n\n').trim();
-          content = content.replace(/--$/, '').trim();
-          
-          if (encoding === 'quoted-printable') {
-            content = decodeQuotedPrintable(content);
-          } else if (encoding === 'base64') {
+          } else if (encoding === 'base64' || isBase64Encoded(content)) {
+            console.log("Decoding base64 content of length:", content.length);
             content = decodeBase64(content);
           }
           
-          // Strip HTML tags to get plain text version if needed
-          html = content;
+          if (isPlainText && !text) {
+            text = content;
+          } else if (isHtml && !html) {
+            html = content;
+          }
         }
       }
     }
@@ -90,7 +94,7 @@ function extractEmailBody(rawContent: string): { text: string; html: string } {
       
       if (encoding === 'quoted-printable') {
         content = decodeQuotedPrintable(content);
-      } else if (encoding === 'base64') {
+      } else if (encoding === 'base64' || isBase64Encoded(content)) {
         content = decodeBase64(content);
       }
       text = content;
@@ -99,6 +103,7 @@ function extractEmailBody(rawContent: string): { text: string; html: string } {
     }
   }
 
+  console.log("Extracted text length:", text.length, "html length:", html.length);
   return { text, html };
 }
 
