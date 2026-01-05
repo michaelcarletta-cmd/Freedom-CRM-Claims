@@ -117,5 +117,5 @@ verify_jwt = true
 [functions.get-instance-users]
 verify_jwt = true
 
-[functions.list-instance-users]
-verify_jwt = false
+[functions.sync-claim-to-partner]
+verify_jwt = true
