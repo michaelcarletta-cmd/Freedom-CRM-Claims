@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Save, DollarSign, Loader2 } from "lucide-react";
+import { Plus, Trash2, Save, DollarSign, Loader2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 interface OutstandingCheck {
@@ -18,12 +18,15 @@ interface OutstandingCheck {
 interface BankBalance {
   id: string;
   balance: number;
+  business_loans: number;
 }
 
 export function OutstandingChecksTracker() {
   const queryClient = useQueryClient();
   const [editingBankBalance, setEditingBankBalance] = useState(false);
   const [tempBankBalance, setTempBankBalance] = useState("");
+  const [editingBusinessLoans, setEditingBusinessLoans] = useState(false);
+  const [tempBusinessLoans, setTempBusinessLoans] = useState("");
   const [newCheck, setNewCheck] = useState({ check_number: "", payee: "", amount: "" });
   const [editingCheckId, setEditingCheckId] = useState<string | null>(null);
   const [editingCheck, setEditingCheck] = useState<OutstandingCheck | null>(null);
@@ -59,27 +62,35 @@ export function OutstandingChecksTracker() {
 
   // Mutations
   const updateBankBalanceMutation = useMutation({
-    mutationFn: async (balance: number) => {
+    mutationFn: async ({ balance, business_loans }: { balance?: number; business_loans?: number }) => {
+      const updateData: Record<string, number> = {};
+      if (balance !== undefined) updateData.balance = balance;
+      if (business_loans !== undefined) updateData.business_loans = business_loans;
+      
       if (bankBalanceData?.id) {
         const { error } = await supabase
           .from("bank_balance")
-          .update({ balance })
+          .update(updateData)
           .eq("id", bankBalanceData.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from("bank_balance")
-          .insert({ balance });
+          .insert({ 
+            balance: balance ?? 0, 
+            business_loans: business_loans ?? 0 
+          });
         if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bank-balance"] });
       setEditingBankBalance(false);
-      toast.success("Bank balance updated");
+      setEditingBusinessLoans(false);
+      toast.success("Updated successfully");
     },
     onError: () => {
-      toast.error("Failed to update bank balance");
+      toast.error("Failed to update");
     },
   });
 
@@ -152,6 +163,7 @@ export function OutstandingChecksTracker() {
   };
 
   const bankBalance = bankBalanceData?.balance || 0;
+  const businessLoans = bankBalanceData?.business_loans || 0;
   const totalOutstandingChecks = checks?.reduce((sum, c) => sum + Number(c.amount), 0) || 0;
   const trueBankBalance = bankBalance - totalOutstandingChecks;
 
@@ -161,7 +173,16 @@ export function OutstandingChecksTracker() {
       toast.error("Please enter a valid amount");
       return;
     }
-    updateBankBalanceMutation.mutate(balance);
+    updateBankBalanceMutation.mutate({ balance });
+  };
+
+  const handleSaveBusinessLoans = () => {
+    const loans = parseFloat(tempBusinessLoans);
+    if (isNaN(loans)) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
+    updateBankBalanceMutation.mutate({ business_loans: loans });
   };
 
   const handleAddCheck = () => {
@@ -222,6 +243,48 @@ export function OutstandingChecksTracker() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Business Loans Section */}
+        <div className="p-4 bg-muted/30 rounded-lg border border-border">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-muted-foreground">Outstanding Business Loans</label>
+            {editingBusinessLoans ? (
+              <div className="flex gap-2 max-w-md">
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={tempBusinessLoans}
+                  onChange={(e) => setTempBusinessLoans(e.target.value)}
+                  className="bg-background"
+                  placeholder="Enter loan amount..."
+                />
+                <Button size="sm" onClick={handleSaveBusinessLoans} disabled={updateBankBalanceMutation.isPending}>
+                  <Save className="h-4 w-4" />
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setEditingBusinessLoans(false)}>
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+                  {formatCurrency(businessLoans)}
+                </div>
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={() => {
+                    setTempBusinessLoans(businessLoans.toString());
+                    setEditingBusinessLoans(true);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">Track total outstanding business loan balances</p>
+          </div>
+        </div>
+
         {/* Bank Balance Section */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/30 rounded-lg border border-border">
           <div className="space-y-2">
@@ -244,14 +307,20 @@ export function OutstandingChecksTracker() {
                 </Button>
               </div>
             ) : (
-              <div 
-                className="text-2xl font-bold text-foreground cursor-pointer hover:text-primary transition-colors"
-                onClick={() => {
-                  setTempBankBalance(bankBalance.toString());
-                  setEditingBankBalance(true);
-                }}
-              >
-                {formatCurrency(bankBalance)}
+              <div className="flex items-center gap-2">
+                <div className="text-2xl font-bold text-foreground">
+                  {formatCurrency(bankBalance)}
+                </div>
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={() => {
+                    setTempBankBalance(bankBalance.toString());
+                    setEditingBankBalance(true);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
               </div>
             )}
           </div>
@@ -285,6 +354,14 @@ export function OutstandingChecksTracker() {
             value={newCheck.payee}
             onChange={(e) => setNewCheck({ ...newCheck, payee: e.target.value })}
             className="bg-background flex-1"
+          />
+          <Input
+            type="number"
+            step="0.01"
+            placeholder="Amount *"
+            value={newCheck.amount}
+            onChange={(e) => setNewCheck({ ...newCheck, amount: e.target.value })}
+            className="bg-background sm:w-32"
           />
           <Input
             type="number"
@@ -353,34 +430,34 @@ export function OutstandingChecksTracker() {
                       </>
                     ) : (
                       <>
-                        <TableCell 
-                          className="cursor-pointer hover:text-primary transition-colors"
-                          onClick={() => handleStartEdit(check)}
-                        >
+                        <TableCell>
                           {check.check_number || "-"}
                         </TableCell>
-                        <TableCell 
-                          className="cursor-pointer hover:text-primary transition-colors"
-                          onClick={() => handleStartEdit(check)}
-                        >
+                        <TableCell>
                           {check.payee}
                         </TableCell>
-                        <TableCell 
-                          className="text-right cursor-pointer hover:text-primary transition-colors"
-                          onClick={() => handleStartEdit(check)}
-                        >
+                        <TableCell className="text-right">
                           {formatCurrency(Number(check.amount))}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => deleteCheckMutation.mutate(check.id)}
-                            disabled={deleteCheckMutation.isPending}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex justify-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleStartEdit(check)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => deleteCheckMutation.mutate(check.id)}
+                              disabled={deleteCheckMutation.isPending}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </>
                     )}

@@ -232,16 +232,19 @@ export type Database = {
       bank_balance: {
         Row: {
           balance: number
+          business_loans: number
           id: string
           updated_at: string
         }
         Insert: {
           balance?: number
+          business_loans?: number
           id?: string
           updated_at?: string
         }
         Update: {
           balance?: number
+          business_loans?: number
           id?: string
           updated_at?: string
         }
