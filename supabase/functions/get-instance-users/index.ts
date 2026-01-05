@@ -22,17 +22,17 @@ serve(async (req) => {
 
     console.log(`Fetching users from external instance: ${instanceUrl}`);
 
-    // Call the external instance's endpoint to get their users
-    // The external instance should have a "list-instance-users" function that validates the sync secret
-    const externalUrl = `${instanceUrl}/functions/v1/list-instance-users`;
+    // Call the external instance's claim-sync-webhook with get_users action
+    // This endpoint already exists on all instances for workspace sync
+    const externalUrl = `${instanceUrl}/functions/v1/claim-sync-webhook`;
     
     const response = await fetch(externalUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-workspace-sync-secret": syncSecret,
+        "x-claim-sync-secret": syncSecret,
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ action: "get_users" }),
     });
 
     if (!response.ok) {

@@ -50,6 +50,62 @@ serve(async (req) => {
 
     console.log(`Received sync request: action=${action}, external_claim_id=${external_claim_id}, source=${source_instance_url}, target_workspace_id=${target_workspace_id}, partner_assignment=${partner_assignment ? partner_assignment.sales_rep_name : 'none'}`);
 
+    // Handle get_users action - returns staff and admin users for partner assignment
+    if (action === 'get_users') {
+      console.log('Handling get_users action');
+      
+      // Get all users who have staff or admin roles
+      const { data: userRoles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .in("role", ["admin", "staff"]);
+
+      if (rolesError) {
+        console.error("Error fetching user roles:", rolesError);
+        throw rolesError;
+      }
+
+      // Get unique user IDs
+      const userIds = [...new Set(userRoles?.map((r) => r.user_id) || [])];
+
+      if (userIds.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, users: [] }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Get profile info for these users
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", userIds)
+        .eq("approval_status", "approved");
+
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+        throw profilesError;
+      }
+
+      // Combine profile info with roles
+      const users = profiles?.map((profile: any) => {
+        const roles = userRoles?.filter((r) => r.user_id === profile.id).map((r) => r.role) || [];
+        return {
+          id: profile.id,
+          full_name: profile.full_name,
+          email: profile.email,
+          roles,
+        };
+      }) || [];
+
+      console.log(`Found ${users.length} staff/admin users`);
+
+      return new Response(
+        JSON.stringify({ success: true, users }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (action === 'create_or_update') {
       // Check if we already have this linked claim
       const { data: existingLink } = await supabase
