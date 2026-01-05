@@ -151,10 +151,27 @@ export function ClaimPartnerAssignment({ claimId }: ClaimPartnerAssignmentProps)
         sales_rep_id: data.sales_rep_id || null,
       });
       if (error) throw error;
+
+      // Trigger sync to partner instance
+      const { error: syncError } = await supabase.functions.invoke("sync-claim-to-partner", {
+        body: {
+          claim_id: claimId,
+          linked_workspace_id: data.linked_workspace_id,
+          partner_assignment: {
+            sales_rep_id: data.sales_rep_id,
+            sales_rep_email: data.sales_rep_email,
+            sales_rep_name: data.sales_rep_name,
+          },
+        },
+      });
+      if (syncError) {
+        console.error("Sync error (assignment created but sync failed):", syncError);
+        toast.warning("Assignment saved but sync to partner failed. Try manual sync.");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["claim-partner-assignments", claimId] });
-      toast.success("Partner sales rep assigned");
+      toast.success("Partner sales rep assigned and claim synced");
       handleCloseDialog();
     },
     onError: (error: any) => {
