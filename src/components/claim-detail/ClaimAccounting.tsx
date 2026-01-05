@@ -647,15 +647,17 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
                   />
                 </div>
               </div>
-              <div>
-                <Label>Deductible</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={formData.deductible}
-                  onChange={(e) => setFormData({ ...formData, deductible: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
+              {(editingType === "dwelling" || editingType === "other_structures") && (
+                <div>
+                  <Label>Deductible</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.deductible}
+                    onChange={(e) => setFormData({ ...formData, deductible: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+              )}
               {editingType === "dwelling" && (
                 <div>
                   <Label>Notes</Label>
