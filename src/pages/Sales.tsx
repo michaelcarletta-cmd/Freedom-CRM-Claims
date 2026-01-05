@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useState, useEffect } from "react";
 import { QuickBooksPaymentDialog } from "@/components/QuickBooksPaymentDialog";
 import { InvoiceDialog } from "@/components/InvoiceDialog";
+import { OutstandingChecksTracker } from "@/components/sales/OutstandingChecksTracker";
 
 const Sales = () => {
   const { userRole, user } = useAuth();
@@ -473,6 +474,9 @@ const Sales = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Outstanding Checks Tracker */}
+      <OutstandingChecksTracker />
 
       {paymentRecipient && (
         <QuickBooksPaymentDialog
