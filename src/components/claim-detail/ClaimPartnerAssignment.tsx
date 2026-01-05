@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -21,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Users, Plus, Trash2, Edit, Link2 } from "lucide-react";
+import { Users, Plus, Trash2, Edit, Link2, Loader2, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 
 interface ClaimPartnerAssignmentProps {
@@ -33,6 +32,7 @@ interface LinkedWorkspace {
   workspace_id: string;
   instance_name: string;
   external_instance_url: string;
+  sync_secret: string;
   target_sales_rep_id: string | null;
   target_sales_rep_name: string | null;
 }
@@ -51,24 +51,30 @@ interface PartnerAssignment {
   };
 }
 
+interface ExternalUser {
+  id: string;
+  full_name: string | null;
+  email: string;
+  roles: string[];
+}
+
 export function ClaimPartnerAssignment({ claimId }: ClaimPartnerAssignmentProps) {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<PartnerAssignment | null>(null);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
-  const [formData, setFormData] = useState({
-    sales_rep_name: "",
-    sales_rep_email: "",
-    sales_rep_id: "",
-  });
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [externalUsers, setExternalUsers] = useState<ExternalUser[]>([]);
+  const [isFetchingUsers, setIsFetchingUsers] = useState(false);
+  const [fetchUsersError, setFetchUsersError] = useState<string | null>(null);
 
-  // Fetch linked workspaces (partner instances)
+  // Fetch linked workspaces (partner instances) with sync_secret
   const { data: linkedWorkspaces = [] } = useQuery({
     queryKey: ["linked-workspaces-for-assignment"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("linked_workspaces")
-        .select("id, workspace_id, instance_name, external_instance_url, target_sales_rep_id, target_sales_rep_name")
+        .select("id, workspace_id, instance_name, external_instance_url, sync_secret, target_sales_rep_id, target_sales_rep_name")
         .order("instance_name");
       if (error) throw error;
       return data as LinkedWorkspace[];
@@ -100,6 +106,35 @@ export function ClaimPartnerAssignment({ claimId }: ClaimPartnerAssignmentProps)
     (ws) => !assignments.some((a) => a.linked_workspace_id === ws.id) || 
             (editingAssignment && editingAssignment.linked_workspace_id === ws.id)
   );
+
+  // Fetch external users from partner instance
+  const fetchExternalUsers = async (workspaceId: string) => {
+    const workspace = linkedWorkspaces.find((ws) => ws.id === workspaceId);
+    if (!workspace) return;
+
+    setIsFetchingUsers(true);
+    setFetchUsersError(null);
+    setExternalUsers([]);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("get-instance-users", {
+        body: {
+          instanceUrl: workspace.external_instance_url,
+          syncSecret: workspace.sync_secret,
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      setExternalUsers(data.users || []);
+    } catch (err: any) {
+      console.error("Failed to fetch external users:", err);
+      setFetchUsersError(err.message || "Failed to load users");
+    } finally {
+      setIsFetchingUsers(false);
+    }
+  };
 
   const addMutation = useMutation({
     mutationFn: async (data: {
@@ -180,47 +215,50 @@ export function ClaimPartnerAssignment({ claimId }: ClaimPartnerAssignmentProps)
     setIsDialogOpen(false);
     setEditingAssignment(null);
     setSelectedWorkspaceId("");
-    setFormData({
-      sales_rep_name: "",
-      sales_rep_email: "",
-      sales_rep_id: "",
-    });
+    setSelectedUserId("");
+    setExternalUsers([]);
+    setFetchUsersError(null);
   };
 
   const handleOpenEdit = (assignment: PartnerAssignment) => {
     setEditingAssignment(assignment);
     setSelectedWorkspaceId(assignment.linked_workspace_id);
-    setFormData({
-      sales_rep_name: assignment.sales_rep_name,
-      sales_rep_email: assignment.sales_rep_email || "",
-      sales_rep_id: assignment.sales_rep_id || "",
-    });
+    setSelectedUserId(assignment.sales_rep_id || "");
     setIsDialogOpen(true);
+    // Fetch users for this workspace
+    fetchExternalUsers(assignment.linked_workspace_id);
   };
 
   const handleSelectWorkspace = (workspaceId: string) => {
     setSelectedWorkspaceId(workspaceId);
-    // Pre-fill with default sales rep if workspace has one
-    const workspace = linkedWorkspaces.find((ws) => ws.id === workspaceId);
-    if (workspace?.target_sales_rep_name) {
-      setFormData({
-        sales_rep_name: workspace.target_sales_rep_name,
-        sales_rep_email: "",
-        sales_rep_id: workspace.target_sales_rep_id || "",
-      });
-    }
+    setSelectedUserId("");
+    setExternalUsers([]);
+    // Automatically fetch users when workspace is selected
+    fetchExternalUsers(workspaceId);
+  };
+
+  const handleSelectUser = (userId: string) => {
+    setSelectedUserId(userId);
   };
 
   const handleSubmit = () => {
-    if (!formData.sales_rep_name.trim()) {
-      toast.error("Sales rep name is required");
+    const selectedUser = externalUsers.find((u) => u.id === selectedUserId);
+    
+    if (!selectedUser) {
+      toast.error("Please select a sales rep");
       return;
     }
+
+    const salesRepName = selectedUser.full_name || selectedUser.email;
 
     if (editingAssignment) {
       updateMutation.mutate({
         id: editingAssignment.id,
-        data: formData,
+        data: {
+          sales_rep_name: salesRepName,
+          sales_rep_email: selectedUser.email,
+          sales_rep_id: selectedUser.id,
+        },
       });
     } else {
       if (!selectedWorkspaceId) {
@@ -229,7 +267,9 @@ export function ClaimPartnerAssignment({ claimId }: ClaimPartnerAssignmentProps)
       }
       addMutation.mutate({
         linked_workspace_id: selectedWorkspaceId,
-        ...formData,
+        sales_rep_name: salesRepName,
+        sales_rep_email: selectedUser.email,
+        sales_rep_id: selectedUser.id,
       });
     }
   };
@@ -343,39 +383,68 @@ export function ClaimPartnerAssignment({ claimId }: ClaimPartnerAssignmentProps)
               </div>
             )}
 
-            <div className="grid gap-2">
-              <Label htmlFor="sales_rep_name">Sales Rep Name *</Label>
-              <Input
-                id="sales_rep_name"
-                value={formData.sales_rep_name}
-                onChange={(e) => setFormData({ ...formData, sales_rep_name: e.target.value })}
-                placeholder="Enter sales rep name"
-              />
-            </div>
+            {/* Sales Rep Selection */}
+            {selectedWorkspaceId && (
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between">
+                  <Label>Sales Rep *</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => fetchExternalUsers(selectedWorkspaceId)}
+                    disabled={isFetchingUsers}
+                  >
+                    <RefreshCw className={`h-3 w-3 mr-1 ${isFetchingUsers ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="sales_rep_email">Sales Rep Email</Label>
-              <Input
-                id="sales_rep_email"
-                type="email"
-                value={formData.sales_rep_email}
-                onChange={(e) => setFormData({ ...formData, sales_rep_email: e.target.value })}
-                placeholder="Enter email address"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="sales_rep_id">Sales Rep ID (Optional)</Label>
-              <Input
-                id="sales_rep_id"
-                value={formData.sales_rep_id}
-                onChange={(e) => setFormData({ ...formData, sales_rep_id: e.target.value })}
-                placeholder="User ID from partner instance"
-              />
-              <p className="text-xs text-muted-foreground">
-                The user ID of the sales rep on the partner instance for automatic access
-              </p>
-            </div>
+                {isFetchingUsers ? (
+                  <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm text-muted-foreground">Loading users from partner instance...</span>
+                  </div>
+                ) : fetchUsersError ? (
+                  <div className="p-3 border border-destructive/50 rounded-md bg-destructive/10">
+                    <p className="text-sm text-destructive">{fetchUsersError}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => fetchExternalUsers(selectedWorkspaceId)}
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                ) : externalUsers.length > 0 ? (
+                  <Select value={selectedUserId} onValueChange={handleSelectUser}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a sales rep..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {externalUsers.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          <div className="flex items-center gap-2">
+                            <span>{user.full_name || user.email}</span>
+                            {user.roles.length > 0 && (
+                              <Badge variant="secondary" className="text-xs">
+                                {user.roles.join(", ")}
+                              </Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-muted-foreground p-3 border rounded-md">
+                    No staff or admin users found in this partner instance.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseDialog}>
@@ -383,7 +452,7 @@ export function ClaimPartnerAssignment({ claimId }: ClaimPartnerAssignmentProps)
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={addMutation.isPending || updateMutation.isPending}
+              disabled={addMutation.isPending || updateMutation.isPending || !selectedUserId}
             >
               {editingAssignment ? "Update" : "Assign"}
             </Button>
