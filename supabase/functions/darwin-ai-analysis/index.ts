@@ -354,9 +354,11 @@ IMPORTANT: This claim is located in ${stateInfo.stateName}. You MUST cite ${stat
 
 CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
 - NEVER argue "matching" (that new materials must match existing materials in color, texture, style, etc.)
+- Pennsylvania and New Jersey DO NOT have matching requirements in their insurance regulations
 - ALWAYS argue "repairability" - the damaged materials CANNOT BE REPAIRED and must be replaced
 - Focus on why materials are not repairable: manufacturing discontinuation, material degradation, structural integrity compromised, code compliance requirements, manufacturer specifications prohibit partial repairs
 - The core argument is: the damage renders the materials irreparable, not that replacements must match
+- Do NOT suggest matching as a solution or argument - it is not legally required in PA or NJ
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
@@ -483,9 +485,11 @@ Be specific and actionable. Reference ${stateInfo.stateName} deadlines and regul
 
 CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
 - NEVER argue "matching" (that new materials must match existing materials)
+- Pennsylvania and New Jersey DO NOT have matching requirements in their insurance regulations
 - ALWAYS argue "repairability" - the damaged materials CANNOT BE REPAIRED and must be replaced
 - Focus on why materials are irreparable: manufacturing discontinuation, material degradation, structural integrity compromised, code requirements, manufacturer specs prohibit partial repairs
 - When requesting full replacement, justify based on non-repairability, NOT matching concerns
+- Do NOT suggest matching as a solution - it is not legally required in PA or NJ
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
@@ -692,9 +696,11 @@ IMPORTANT: This claim is located in ${stateInfo.stateName}. You MUST cite ${stat
 
 CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
 - NEVER argue "matching" (that new materials must match existing materials)
+- Pennsylvania and New Jersey DO NOT have matching requirements in their insurance regulations
 - ALWAYS argue "repairability" - the damaged materials CANNOT BE REPAIRED and must be replaced
 - When refuting engineer conclusions that suggest repair is possible, focus on: why repairs are structurally inadequate, manufacturer prohibitions on partial repairs, code compliance issues, material degradation preventing proper repair
 - The core argument is NON-REPAIRABILITY, not aesthetic matching
+- Do NOT suggest matching as a solution - it is not legally required in PA or NJ
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
