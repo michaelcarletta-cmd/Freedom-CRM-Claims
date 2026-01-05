@@ -7,75 +7,113 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 
+// Decode base64 to UTF-8 string properly
+function base64ToUtf8(base64: string): string {
+  try {
+    const cleaned = base64.replace(/[\r\n\s]/g, '');
+    const binaryString = atob(cleaned);
+    // Convert binary string to Uint8Array for proper UTF-8 decoding
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    // Use TextDecoder for proper UTF-8 handling
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch (e) {
+    console.error('Base64 UTF-8 decode error:', e);
+    return base64;
+  }
+}
+
+// Clean up email text for display
+function cleanEmailText(text: string): string {
+  return text
+    // Convert Windows line endings to Unix
+    .replace(/\r\n/g, '\n')
+    // Remove email reply/thread content (everything after "From:" header in replies)
+    .replace(/\n\nFrom:[\s\S]*$/m, '')
+    // Remove image placeholders like [A computer and phone with a screen...]
+    .replace(/\[[^\]]*Description automatically generated\][^\n]*/g, '')
+    // Remove CID image references
+    .replace(/\[cid:[^\]]+\]/g, '')
+    // Remove mailto: links embedded in text
+    .replace(/<mailto:[^>]+>/g, '')
+    // Remove http/https links embedded in text  
+    .replace(/<https?:\/\/[^>]+>/g, '')
+    // Clean up multiple newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // Decode base64 encoded email body (for legacy incorrectly stored emails)
 function decodeEmailBody(body: string): string {
   if (!body) return '';
   
-  // Check if body looks like raw MIME content with base64
-  const hasBase64Content = body.includes('Content-Transfer-Encoding: base64') || 
-    body.includes('Content-Transfer-Encoding:base64');
+  // Check if body contains MIME boundary markers (multipart message)
+  const boundaryMatch = body.match(/--_[A-Za-z0-9]+_/);
   
-  if (hasBase64Content) {
-    // Try to extract the base64 portion after Content-Transfer-Encoding: base64
-    const parts = body.split(/Content-Transfer-Encoding:\s*base64/i);
-    if (parts.length > 1) {
-      // Find the text/plain section first
-      const textPlainMatch = body.match(/Content-Type: text\/plain[^\n]*\nContent-Transfer-Encoding:\s*base64\s*\n\n([A-Za-z0-9+/=\s]+)/i);
-      if (textPlainMatch) {
-        try {
-          const cleaned = textPlainMatch[1].replace(/[\r\n\s]/g, '');
-          return atob(cleaned);
-        } catch (e) {
-          console.error('Base64 decode failed for text/plain:', e);
-        }
-      }
+  if (boundaryMatch) {
+    // This is raw MIME content - the text before the first boundary is base64 encoded plain text
+    const boundary = boundaryMatch[0];
+    const parts = body.split(boundary);
+    
+    if (parts.length > 0 && parts[0].trim()) {
+      // First part before boundary is usually the text/plain base64 content
+      const firstPart = parts[0].trim();
       
-      // Fall back to first base64 block
-      const base64Match = parts[1].match(/\n\n([A-Za-z0-9+/=\s]+)/);
-      if (base64Match) {
-        try {
-          const cleaned = base64Match[1].replace(/[\r\n\s]/g, '');
-          // Check if it looks like valid base64
-          if (cleaned.length > 0 && cleaned.length % 4 === 0) {
-            const decoded = atob(cleaned);
-            // Check if result looks like HTML - if so, strip tags
-            if (decoded.startsWith('<html') || decoded.startsWith('<!DOCTYPE')) {
-              return decoded
-                .replace(/<br\s*\/?>/gi, '\n')
-                .replace(/<\/p>/gi, '\n\n')
-                .replace(/<\/div>/gi, '\n')
-                .replace(/<[^>]*>/g, '')
-                .replace(/&nbsp;/g, ' ')
-                .replace(/&amp;/g, '&')
-                .replace(/&lt;/g, '<')
-                .replace(/&gt;/g, '>')
-                .replace(/\n{3,}/g, '\n\n')
-                .trim();
-            }
-            return decoded;
+      // Check if it looks like base64 (only base64 chars)
+      const cleaned = firstPart.replace(/[\r\n\s]/g, '');
+      if (/^[A-Za-z0-9+/=]+$/.test(cleaned) && cleaned.length > 50) {
+        const decoded = base64ToUtf8(cleaned);
+        return cleanEmailText(decoded);
+      }
+    }
+    
+    // Try to find text/plain section in MIME parts
+    for (const part of parts) {
+      if (part.includes('Content-Type: text/plain')) {
+        const encodingMatch = part.match(/Content-Transfer-Encoding:\s*(\S+)/i);
+        const encoding = encodingMatch ? encodingMatch[1].toLowerCase() : '';
+        
+        // Get content after headers (double newline)
+        const contentParts = part.split(/\n\n/);
+        if (contentParts.length > 1) {
+          let content = contentParts.slice(1).join('\n\n').trim();
+          // Remove trailing boundary
+          content = content.replace(/\n--_[A-Za-z0-9_]+--?\s*$/g, '').trim();
+          
+          if (encoding === 'base64') {
+            return cleanEmailText(base64ToUtf8(content));
           }
-        } catch (e) {
-          console.error('Base64 decode failed:', e);
+          return cleanEmailText(content);
         }
       }
     }
   }
   
-  // Also check for pure base64 strings (no headers)
+  // Check if body looks like pure base64 (no MIME structure)
   const cleaned = body.replace(/[\r\n\s]/g, '');
   if (/^[A-Za-z0-9+/=]+$/.test(cleaned) && cleaned.length > 100 && cleaned.length % 4 === 0) {
     try {
-      const decoded = atob(cleaned);
+      const decoded = base64ToUtf8(cleaned);
       // Validate it's readable text
-      if (/^[\x20-\x7E\n\r\t]+$/.test(decoded.substring(0, 100))) {
-        return decoded;
+      if (decoded && !decoded.includes('\x00')) {
+        return cleanEmailText(decoded);
       }
     } catch (e) {
-      // Not valid base64, return original
+      // Not valid base64
     }
   }
   
-  return body;
+  // Check for Content-Transfer-Encoding header in the body
+  if (body.includes('Content-Transfer-Encoding: base64') || body.includes('Content-Transfer-Encoding:base64')) {
+    const base64Match = body.match(/Content-Transfer-Encoding:\s*base64\s*\n\n([A-Za-z0-9+/=\s]+)/i);
+    if (base64Match) {
+      return cleanEmailText(base64ToUtf8(base64Match[1]));
+    }
+  }
+  
+  return cleanEmailText(body);
 }
 
 interface ClaimEmailsProps {
