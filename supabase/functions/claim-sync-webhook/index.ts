@@ -122,31 +122,44 @@ serve(async (req) => {
         claimId = existingLink.claim_id;
         console.log(`Updating existing linked claim: ${claimId}`);
         
+        // Build update object - only update fields that are provided
+        const updateData: Record<string, any> = {
+          updated_at: new Date().toISOString(),
+        };
+        
+        // Always sync these core fields if claim_data exists
+        if (claim_data) {
+          if (claim_data.claim_number !== undefined) updateData.claim_number = claim_data.claim_number;
+          if (claim_data.policyholder_name !== undefined) updateData.policyholder_name = claim_data.policyholder_name;
+          if (claim_data.policyholder_email !== undefined) updateData.policyholder_email = claim_data.policyholder_email;
+          if (claim_data.policyholder_phone !== undefined) updateData.policyholder_phone = claim_data.policyholder_phone;
+          if (claim_data.policyholder_address !== undefined) updateData.policyholder_address = claim_data.policyholder_address;
+          if (claim_data.insurance_company !== undefined) updateData.insurance_company = claim_data.insurance_company;
+          if (claim_data.insurance_phone !== undefined) updateData.insurance_phone = claim_data.insurance_phone;
+          if (claim_data.insurance_email !== undefined) updateData.insurance_email = claim_data.insurance_email;
+          if (claim_data.loss_type !== undefined) updateData.loss_type = claim_data.loss_type;
+          if (claim_data.loss_date !== undefined) updateData.loss_date = claim_data.loss_date;
+          if (claim_data.loss_description !== undefined) updateData.loss_description = claim_data.loss_description;
+          if (claim_data.policy_number !== undefined) updateData.policy_number = claim_data.policy_number;
+          if (claim_data.claim_amount !== undefined) updateData.claim_amount = claim_data.claim_amount;
+          // Store partner's construction status in the partner_construction_status field
+          if (claim_data.construction_status !== undefined) updateData.partner_construction_status = claim_data.construction_status;
+        }
+        
+        if (target_workspace_id) updateData.workspace_id = target_workspace_id;
+        
+        // Update partner assignment fields if provided
+        if (partner_assignment) {
+          updateData.partner_assigned_user_id = partner_assignment.sales_rep_id || null;
+          updateData.partner_assigned_user_email = partner_assignment.sales_rep_email || null;
+          updateData.partner_assigned_user_name = partner_assignment.sales_rep_name || null;
+        }
+        
+        console.log(`Updating claim ${claimId} with fields:`, Object.keys(updateData));
+        
         const { error: updateError } = await supabase
           .from('claims')
-          .update({
-            claim_number: claim_data.claim_number,
-            policyholder_name: claim_data.policyholder_name,
-            policyholder_email: claim_data.policyholder_email,
-            policyholder_phone: claim_data.policyholder_phone,
-            policyholder_address: claim_data.policyholder_address,
-            insurance_company: claim_data.insurance_company,
-            insurance_phone: claim_data.insurance_phone,
-            insurance_email: claim_data.insurance_email,
-            loss_type: claim_data.loss_type,
-            loss_date: claim_data.loss_date,
-            loss_description: claim_data.loss_description,
-            policy_number: claim_data.policy_number,
-            status: claim_data.status,
-            claim_amount: claim_data.claim_amount,
-            workspace_id: target_workspace_id || claim_data.workspace_id,
-            partner_construction_status: claim_data.construction_status,
-            // Update partner assignment fields
-            partner_assigned_user_id: partner_assignment?.sales_rep_id || null,
-            partner_assigned_user_email: partner_assignment?.sales_rep_email || null,
-            partner_assigned_user_name: partner_assignment?.sales_rep_name || null,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq('id', claimId);
 
         if (updateError) {
