@@ -38,6 +38,7 @@ import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings
 import { MakeIntegrationSettings } from "@/components/settings/MakeIntegrationSettings";
 import { OrganizationSettings } from "@/components/settings/OrganizationSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
+import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
 import { useQuery } from "@tanstack/react-query";
 
 interface ClaimStatus {
@@ -330,6 +331,9 @@ export default function Settings() {
           <TabsTrigger value="organization" className="w-full md:w-auto justify-start text-base font-medium px-4">Organization</TabsTrigger>
           <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
           {isAdmin && (
+            <TabsTrigger value="audit-logs" className="w-full md:w-auto justify-start text-base font-medium px-4">Audit Logs</TabsTrigger>
+          )}
+          {isAdmin && (
             <TabsTrigger value="backup" className="w-full md:w-auto justify-start text-base font-medium px-4">Backup Status</TabsTrigger>
           )}
         </TabsList>
@@ -532,6 +536,12 @@ export default function Settings() {
         <TabsContent value="import" className="w-full">
           <ImportSettings />
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="audit-logs" className="w-full">
+            <AuditLogSettings />
+          </TabsContent>
+        )}
 
         {isAdmin && (
           <TabsContent value="backup" className="w-full">

@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BulkClaimActions } from "./BulkClaimActions";
+import { MaskedField } from "@/components/ui/masked-field";
 
 interface Claim {
   id: string;
@@ -381,10 +382,29 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                         onCheckedChange={() => toggleClaimSelection(claim.id)}
                       />
                     </TableCell>
-                    <TableCell className="font-medium">{claim.claim_number}</TableCell>
-                    <TableCell>{claim.policyholder_name}</TableCell>
-                    <TableCell className="max-w-[200px] truncate">
-                      {claim.policyholder_address || "N/A"}
+                    <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
+                      <MaskedField
+                        value={claim.claim_number}
+                        fieldName="claim_number"
+                        recordType="claim"
+                        recordId={claim.id}
+                      />
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <MaskedField
+                        value={claim.policyholder_name}
+                        fieldName="policyholder_name"
+                        recordType="claim"
+                        recordId={claim.id}
+                      />
+                    </TableCell>
+                    <TableCell className="max-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                      <MaskedField
+                        value={claim.policyholder_address || "N/A"}
+                        fieldName="policyholder_address"
+                        recordType="claim"
+                        recordId={claim.id}
+                      />
                     </TableCell>
                     <TableCell>{claim.loss_type || "N/A"}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
