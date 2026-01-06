@@ -228,6 +228,31 @@ export function ClaimPartnerAssignment({ claimId }: ClaimPartnerAssignmentProps)
     },
   });
 
+  const syncMutation = useMutation({
+    mutationFn: async (assignment: PartnerAssignment) => {
+      const { data, error } = await supabase.functions.invoke("sync-claim-to-partner", {
+        body: {
+          claim_id: claimId,
+          linked_workspace_id: assignment.linked_workspace_id,
+          partner_assignment: {
+            sales_rep_id: assignment.sales_rep_id,
+            sales_rep_email: assignment.sales_rep_email,
+            sales_rep_name: assignment.sales_rep_name,
+          },
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Claim synced to partner successfully");
+    },
+    onError: (error: any) => {
+      toast.error(`Sync failed: ${error.message}`);
+    },
+  });
+
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
     setEditingAssignment(null);
@@ -344,6 +369,16 @@ export function ClaimPartnerAssignment({ claimId }: ClaimPartnerAssignmentProps)
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => syncMutation.mutate(assignment)}
+                    disabled={syncMutation.isPending}
+                    title="Sync claim to partner"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
