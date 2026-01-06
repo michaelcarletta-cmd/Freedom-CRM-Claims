@@ -45,7 +45,8 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
+  const isPrivilegedUser = userRole === "admin" || userRole === "staff";
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -382,29 +383,41 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                         onCheckedChange={() => toggleClaimSelection(claim.id)}
                       />
                     </TableCell>
-                    <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
-                      <MaskedField
-                        value={claim.claim_number}
-                        fieldName="claim_number"
-                        recordType="claim"
-                        recordId={claim.id}
-                      />
+                    <TableCell className="font-medium" onClick={isPrivilegedUser ? undefined : (e) => e.stopPropagation()}>
+                      {isPrivilegedUser ? (
+                        <span className="font-mono text-sm">{claim.claim_number || "—"}</span>
+                      ) : (
+                        <MaskedField
+                          value={claim.claim_number}
+                          fieldName="claim_number"
+                          recordType="claim"
+                          recordId={claim.id}
+                        />
+                      )}
                     </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <MaskedField
-                        value={claim.policyholder_name}
-                        fieldName="policyholder_name"
-                        recordType="claim"
-                        recordId={claim.id}
-                      />
+                    <TableCell onClick={isPrivilegedUser ? undefined : (e) => e.stopPropagation()}>
+                      {isPrivilegedUser ? (
+                        <span className="font-mono text-sm">{claim.policyholder_name || "—"}</span>
+                      ) : (
+                        <MaskedField
+                          value={claim.policyholder_name}
+                          fieldName="policyholder_name"
+                          recordType="claim"
+                          recordId={claim.id}
+                        />
+                      )}
                     </TableCell>
-                    <TableCell className="max-w-[200px]" onClick={(e) => e.stopPropagation()}>
-                      <MaskedField
-                        value={claim.policyholder_address || "N/A"}
-                        fieldName="policyholder_address"
-                        recordType="claim"
-                        recordId={claim.id}
-                      />
+                    <TableCell className="max-w-[200px]" onClick={isPrivilegedUser ? undefined : (e) => e.stopPropagation()}>
+                      {isPrivilegedUser ? (
+                        <span className="font-mono text-sm truncate">{claim.policyholder_address || "N/A"}</span>
+                      ) : (
+                        <MaskedField
+                          value={claim.policyholder_address || "N/A"}
+                          fieldName="policyholder_address"
+                          recordType="claim"
+                          recordId={claim.id}
+                        />
+                      )}
                     </TableCell>
                     <TableCell>{claim.loss_type || "N/A"}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
