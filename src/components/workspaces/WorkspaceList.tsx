@@ -43,7 +43,11 @@ interface Workspace {
   }[];
 }
 
-export function WorkspaceList() {
+interface WorkspaceListProps {
+  embedded?: boolean;
+}
+
+export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
