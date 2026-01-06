@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,21 +23,31 @@ import { ClaimAutomationSettings } from "@/components/claim-detail/ClaimAutomati
 import { ClaimTimeline } from "@/components/claim-detail/ClaimTimeline";
 import { ProofOfLossGenerator } from "@/components/claim-detail/ProofOfLossGenerator";
 import { EnhancedEstimateBuilder } from "@/components/claim-detail/EnhancedEstimateBuilder";
-import { DarwinDenialAnalyzer } from "@/components/claim-detail/DarwinDenialAnalyzer";
-import { DarwinNextSteps } from "@/components/claim-detail/DarwinNextSteps";
-import { DarwinSupplementGenerator } from "@/components/claim-detail/DarwinSupplementGenerator";
-import { DarwinCorrespondenceAnalyzer } from "@/components/claim-detail/DarwinCorrespondenceAnalyzer";
-import { DarwinEngineerReportAnalyzer } from "@/components/claim-detail/DarwinEngineerReportAnalyzer";
-import { DarwinClaimBriefing } from "@/components/claim-detail/DarwinClaimBriefing";
-import { DarwinDocumentCompiler } from "@/components/claim-detail/DarwinDocumentCompiler";
-import { DarwinDemandPackage } from "@/components/claim-detail/DarwinDemandPackage";
 import { RecoverableDepreciationInvoice } from "@/components/claim-detail/RecoverableDepreciationInvoice";
 import { ShareClaimDialog } from "@/components/claim-detail/ShareClaimDialog";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles, Share2 } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles, Share2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+// Lazy load Darwin components - they're heavy and only needed when Darwin tab is active
+const DarwinDenialAnalyzer = lazy(() => import("@/components/claim-detail/DarwinDenialAnalyzer").then(m => ({ default: m.DarwinDenialAnalyzer })));
+const DarwinNextSteps = lazy(() => import("@/components/claim-detail/DarwinNextSteps").then(m => ({ default: m.DarwinNextSteps })));
+const DarwinSupplementGenerator = lazy(() => import("@/components/claim-detail/DarwinSupplementGenerator").then(m => ({ default: m.DarwinSupplementGenerator })));
+const DarwinCorrespondenceAnalyzer = lazy(() => import("@/components/claim-detail/DarwinCorrespondenceAnalyzer").then(m => ({ default: m.DarwinCorrespondenceAnalyzer })));
+const DarwinEngineerReportAnalyzer = lazy(() => import("@/components/claim-detail/DarwinEngineerReportAnalyzer").then(m => ({ default: m.DarwinEngineerReportAnalyzer })));
+const DarwinClaimBriefing = lazy(() => import("@/components/claim-detail/DarwinClaimBriefing").then(m => ({ default: m.DarwinClaimBriefing })));
+const DarwinDocumentCompiler = lazy(() => import("@/components/claim-detail/DarwinDocumentCompiler").then(m => ({ default: m.DarwinDocumentCompiler })));
+const DarwinDemandPackage = lazy(() => import("@/components/claim-detail/DarwinDemandPackage").then(m => ({ default: m.DarwinDemandPackage })));
+
+// Loading fallback for Darwin components
+const DarwinLoadingFallback = () => (
+  <div className="flex items-center justify-center p-8">
+    <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
+    <span className="text-muted-foreground">Loading Darwin AI...</span>
+  </div>
+);
 
 interface Contractor {
   contractor_id: string;
@@ -439,57 +449,59 @@ const ClaimDetail = () => {
 
         {isStaffOrAdmin && (
           <TabsContent value="darwin" className="mt-6">
-            <div className="space-y-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Brain className="h-6 w-6 text-primary" />
-                <h2 className="text-xl font-semibold">Darwin AI</h2>
-                <span className="text-sm text-muted-foreground">Your intelligent claims assistant</span>
-              </div>
-              
-              {/* Claim Briefing - Get caught up first */}
-              <DarwinClaimBriefing claimId={claim.id} claim={claim} />
-              
-              {/* Next Steps Predictor */}
-              <DarwinNextSteps claimId={claim.id} claim={claim} />
-              
-              {/* AI Analysis Tools */}
-              <div className="grid gap-6 lg:grid-cols-2">
-                <DarwinDenialAnalyzer claimId={claim.id} claim={claim} />
-                <DarwinSupplementGenerator claimId={claim.id} claim={claim} />
-              </div>
-              
-              <div className="grid gap-6 lg:grid-cols-2">
-                <DarwinEngineerReportAnalyzer claimId={claim.id} claim={claim} />
-                <DarwinCorrespondenceAnalyzer claimId={claim.id} claim={claim} />
-              </div>
-              
-              {/* Demand Package Builder - Primary tool for building cases from evidence */}
-              <DarwinDemandPackage claimId={claim.id} claim={claim} />
-              
-              {/* Recoverable Depreciation Invoice - Generate RD invoice with Certificate of Completion docs */}
-              <RecoverableDepreciationInvoice claimId={claim.id} claim={claim} />
-              
-              {/* Document Compiler - Legacy tool for compiling photos and documents */}
-              <DarwinDocumentCompiler claimId={claim.id} claim={claim} />
-              
-              {/* Document Generation Tools */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  Document Generation
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  <ProofOfLossGenerator claimId={claim.id} claim={claim} />
-                  <EnhancedEstimateBuilder claimId={claim.id} claim={claim} />
+            <Suspense fallback={<DarwinLoadingFallback />}>
+              <div className="space-y-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Brain className="h-6 w-6 text-primary" />
+                  <h2 className="text-xl font-semibold">Darwin AI</h2>
+                  <span className="text-sm text-muted-foreground">Your intelligent claims assistant</span>
                 </div>
+                
+                {/* Claim Briefing - Get caught up first */}
+                <DarwinClaimBriefing claimId={claim.id} claim={claim} />
+                
+                {/* Next Steps Predictor */}
+                <DarwinNextSteps claimId={claim.id} claim={claim} />
+                
+                {/* AI Analysis Tools */}
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <DarwinDenialAnalyzer claimId={claim.id} claim={claim} />
+                  <DarwinSupplementGenerator claimId={claim.id} claim={claim} />
+                </div>
+                
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <DarwinEngineerReportAnalyzer claimId={claim.id} claim={claim} />
+                  <DarwinCorrespondenceAnalyzer claimId={claim.id} claim={claim} />
+                </div>
+                
+                {/* Demand Package Builder - Primary tool for building cases from evidence */}
+                <DarwinDemandPackage claimId={claim.id} claim={claim} />
+                
+                {/* Recoverable Depreciation Invoice - Generate RD invoice with Certificate of Completion docs */}
+                <RecoverableDepreciationInvoice claimId={claim.id} claim={claim} />
+                
+                {/* Document Compiler - Legacy tool for compiling photos and documents */}
+                <DarwinDocumentCompiler claimId={claim.id} claim={claim} />
+                
+                {/* Document Generation Tools */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    Document Generation
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    <ProofOfLossGenerator claimId={claim.id} claim={claim} />
+                    <EnhancedEstimateBuilder claimId={claim.id} claim={claim} />
+                  </div>
+                </div>
+                
+                {/* AI Claim Timeline */}
+                <ClaimTimeline claimId={id || ""} claim={claim} />
+                
+                {/* AI Automation Settings */}
+                <ClaimAutomationSettings claimId={id!} />
               </div>
-              
-              {/* AI Claim Timeline */}
-              <ClaimTimeline claimId={id || ""} claim={claim} />
-              
-              {/* AI Automation Settings */}
-              <ClaimAutomationSettings claimId={id!} />
-            </div>
+            </Suspense>
           </TabsContent>
         )}
       </Tabs>
