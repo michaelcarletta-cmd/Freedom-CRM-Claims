@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { ClaimStatusSelect } from "./ClaimStatusSelect";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -360,13 +360,12 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                 <TableHead className="whitespace-nowrap">Loss Type</TableHead>
                 <TableHead className="whitespace-nowrap">Status</TableHead>
                 <TableHead className="whitespace-nowrap">Date Submitted</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredClaims.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     No claims found
                   </TableCell>
                 </TableRow>
@@ -428,16 +427,6 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                     </TableCell>
                     <TableCell>
                       {format(new Date(claim.created_at), "MMM dd, yyyy")}
-                    </TableCell>
-                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => navigate(`/claims/${claim.id}`)}
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        View
-                      </Button>
                     </TableCell>
                   </TableRow>
                 ))
