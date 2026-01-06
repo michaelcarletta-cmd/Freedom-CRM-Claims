@@ -2,11 +2,45 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
+const ROLE_CACHE_KEY = "cached_user_role";
+
+function getCachedRole(): string | null {
+  try {
+    const cached = localStorage.getItem(ROLE_CACHE_KEY);
+    if (cached) {
+      const { role, userId, expiry } = JSON.parse(cached);
+      if (Date.now() < expiry) {
+        return role;
+      }
+      localStorage.removeItem(ROLE_CACHE_KEY);
+    }
+  } catch {
+    localStorage.removeItem(ROLE_CACHE_KEY);
+  }
+  return null;
+}
+
+function setCachedRole(role: string | null, userId: string) {
+  try {
+    if (role) {
+      localStorage.setItem(ROLE_CACHE_KEY, JSON.stringify({
+        role,
+        userId,
+        expiry: Date.now() + 30 * 60 * 1000, // 30 minutes
+      }));
+    } else {
+      localStorage.removeItem(ROLE_CACHE_KEY);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(getCachedRole);
   const [sessionExpiredReason, setSessionExpiredReason] = useState<string | null>(null);
   const sessionRegisteredRef = useRef(false);
 
@@ -26,8 +60,11 @@ export function useAuth() {
       if (error) {
         console.error("Error fetching user role:", error);
         setUserRole(null);
+        setCachedRole(null, userId);
       } else {
-        setUserRole(data?.role ?? null);
+        const role = data?.role ?? null;
+        setUserRole(role);
+        setCachedRole(role, userId);
       }
     } catch (error) {
       console.error("Error in fetchUserRole:", error);
@@ -39,6 +76,7 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     sessionRegisteredRef.current = false;
+    localStorage.removeItem(ROLE_CACHE_KEY);
     await supabase.auth.signOut();
   }, []);
 
@@ -65,6 +103,7 @@ export function useAuth() {
           fetchUserRole(session.user.id);
         } else if (event === 'SIGNED_OUT') {
           setUserRole(null);
+          localStorage.removeItem(ROLE_CACHE_KEY);
           setLoading(false);
         } else if (session?.user) {
           fetchUserRole(session.user.id);
