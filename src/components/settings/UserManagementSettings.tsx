@@ -18,7 +18,7 @@ interface Profile {
 interface UserRole {
   id: string;
   user_id: string;
-  role: "admin" | "staff" | "client" | "contractor" | "referrer";
+  role: "admin" | "staff" | "client" | "contractor" | "referrer" | "read_only";
 }
 
 interface UserWithRoles extends Profile {
@@ -31,6 +31,7 @@ const ROLE_LABELS = {
   client: "Client",
   contractor: "Contractor",
   referrer: "Referrer",
+  read_only: "Read Only",
 };
 
 const ROLE_COLORS = {
@@ -39,6 +40,7 @@ const ROLE_COLORS = {
   client: "secondary",
   contractor: "outline",
   referrer: "outline",
+  read_only: "secondary",
 } as const;
 
 export function UserManagementSettings() {

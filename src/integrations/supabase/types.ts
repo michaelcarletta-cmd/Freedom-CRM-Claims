@@ -133,6 +133,48 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          ip_address: string | null
+          metadata: Json | null
+          new_values: Json | null
+          old_values: Json | null
+          record_id: string | null
+          record_type: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          new_values?: Json | null
+          old_values?: Json | null
+          record_id?: string | null
+          record_type: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          new_values?: Json | null
+          old_values?: Json | null
+          record_id?: string | null
+          record_type?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       automation_executions: {
         Row: {
           automation_id: string
@@ -2118,6 +2160,33 @@ export type Database = {
         }
         Relationships: []
       }
+      pii_reveal_logs: {
+        Row: {
+          created_at: string
+          field_name: string
+          id: string
+          record_id: string
+          record_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          field_name: string
+          id?: string
+          record_id: string
+          record_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          field_name?: string
+          id?: string
+          record_id?: string
+          record_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           approval_status: string
@@ -2876,6 +2945,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      has_permission: {
+        Args: { _permission: string; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2891,10 +2964,28 @@ export type Database = {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
+      is_read_only: { Args: { _user_id: string }; Returns: boolean }
+      log_audit: {
+        Args: {
+          p_action: string
+          p_metadata?: Json
+          p_new_values?: Json
+          p_old_values?: Json
+          p_record_id?: string
+          p_record_type: string
+        }
+        Returns: string
+      }
       user_org_id: { Args: { _user_id: string }; Returns: string }
     }
     Enums: {
-      app_role: "admin" | "staff" | "client" | "contractor" | "referrer"
+      app_role:
+        | "admin"
+        | "staff"
+        | "client"
+        | "contractor"
+        | "referrer"
+        | "read_only"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3022,7 +3113,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "staff", "client", "contractor", "referrer"],
+      app_role: [
+        "admin",
+        "staff",
+        "client",
+        "contractor",
+        "referrer",
+        "read_only",
+      ],
     },
   },
 } as const
