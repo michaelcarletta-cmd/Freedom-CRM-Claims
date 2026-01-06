@@ -50,6 +50,60 @@ export function ConstructionStatusSelect({
       });
 
       onStatusChange?.(newStatus);
+
+      // Automatically sync to any linked partner workspaces
+      // First check if this claim has any linked_claims (meaning it came FROM a partner)
+      const { data: linkedClaim } = await supabase
+        .from("linked_claims")
+        .select("external_instance_url, external_claim_id")
+        .eq("claim_id", claimId)
+        .maybeSingle();
+
+      if (linkedClaim) {
+        // This claim was synced FROM a partner - need to sync status back
+        // Find the linked_workspace that matches the source
+        const { data: linkedWorkspace } = await supabase
+          .from("linked_workspaces")
+          .select("id")
+          .eq("external_instance_url", linkedClaim.external_instance_url)
+          .maybeSingle();
+
+        if (linkedWorkspace) {
+          console.log("Syncing construction status back to partner...");
+          const { error: syncError } = await supabase.functions.invoke("sync-claim-to-partner", {
+            body: {
+              claim_id: claimId,
+              linked_workspace_id: linkedWorkspace.id,
+            },
+          });
+          if (syncError) {
+            console.error("Failed to sync status to partner:", syncError);
+          } else {
+            console.log("Status synced to partner successfully");
+          }
+        }
+      }
+
+      // Also check if this claim has partner assignments (meaning we pushed TO a partner)
+      const { data: partnerAssignments } = await supabase
+        .from("claim_partner_assignments")
+        .select("linked_workspace_id")
+        .eq("claim_id", claimId);
+
+      if (partnerAssignments && partnerAssignments.length > 0) {
+        for (const assignment of partnerAssignments) {
+          console.log("Syncing construction status to partner workspace...");
+          const { error: syncError } = await supabase.functions.invoke("sync-claim-to-partner", {
+            body: {
+              claim_id: claimId,
+              linked_workspace_id: assignment.linked_workspace_id,
+            },
+          });
+          if (syncError) {
+            console.error("Failed to sync status to partner:", syncError);
+          }
+        }
+      }
     } catch (error: any) {
       toast({
         title: "Error",
