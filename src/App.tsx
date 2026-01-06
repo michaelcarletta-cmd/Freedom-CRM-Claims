@@ -113,6 +113,7 @@ function AppRoutes() {
   );
 }
 
+// App component - updated to force cache refresh
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
