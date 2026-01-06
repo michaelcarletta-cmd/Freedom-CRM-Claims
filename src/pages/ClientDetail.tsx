@@ -27,6 +27,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { EditClientDialog } from "@/components/EditClientDialog";
 import { toast } from "sonner";
+import { MaskedField } from "@/components/ui/masked-field";
 
 interface Client {
   id: string;
@@ -285,7 +286,12 @@ const ClientDetail = () => {
                 <Mail className="h-5 w-5 text-primary" />
                 <div>
                   <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="text-sm font-medium">{mockClient.email}</p>
+                  <MaskedField
+                    value={mockClient.email}
+                    fieldName="email"
+                    recordType="client"
+                    recordId={mockClient.id}
+                  />
                 </div>
               </div>
               <Separator />
@@ -293,7 +299,12 @@ const ClientDetail = () => {
                 <Phone className="h-5 w-5 text-primary" />
                 <div>
                   <p className="text-sm text-muted-foreground">Phone</p>
-                  <p className="text-sm font-medium">{mockClient.phone}</p>
+                  <MaskedField
+                    value={mockClient.phone}
+                    fieldName="phone"
+                    recordType="client"
+                    recordId={mockClient.id}
+                  />
                 </div>
               </div>
               <Separator />
@@ -301,11 +312,14 @@ const ClientDetail = () => {
                 <MapPin className="h-5 w-5 text-primary" />
                 <div>
                   <p className="text-sm text-muted-foreground">Address</p>
-                  <p className="text-sm font-medium">
-                    {[mockClient.street, mockClient.city, mockClient.state, mockClient.zip_code]
+                  <MaskedField
+                    value={[mockClient.street, mockClient.city, mockClient.state, mockClient.zip_code]
                       .filter(Boolean)
-                      .join(", ") || "—"}
-                  </p>
+                      .join(", ") || null}
+                    fieldName="address"
+                    recordType="client"
+                    recordId={mockClient.id}
+                  />
                 </div>
               </div>
             </CardContent>
