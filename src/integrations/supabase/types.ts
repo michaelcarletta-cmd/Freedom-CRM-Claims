@@ -1638,6 +1638,33 @@ export type Database = {
           },
         ]
       }
+      encryption_keys: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          key_id: string
+          key_name: string
+          rotated_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key_id: string
+          key_name: string
+          rotated_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key_id?: string
+          key_name?: string
+          rotated_at?: string | null
+        }
+        Relationships: []
+      }
       file_comments: {
         Row: {
           body: string
@@ -2286,6 +2313,24 @@ export type Database = {
         }
         Relationships: []
       }
+      role_version_tracker: {
+        Row: {
+          updated_at: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          updated_at?: string
+          user_id: string
+          version?: number
+        }
+        Update: {
+          updated_at?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: []
+      }
       signature_field_templates: {
         Row: {
           created_at: string | null
@@ -2639,6 +2684,45 @@ export type Database = {
         }
         Relationships: []
       }
+      user_sessions: {
+        Row: {
+          created_at: string
+          device_info: string | null
+          expires_at: string
+          id: string
+          ip_address: string | null
+          is_active: boolean
+          last_activity_at: string
+          role_version: number
+          session_token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_info?: string | null
+          expires_at?: string
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean
+          last_activity_at?: string
+          role_version?: number
+          session_token: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_info?: string | null
+          expires_at?: string
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean
+          last_activity_at?: string
+          role_version?: number
+          session_token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       workspace_invites: {
         Row: {
           created_at: string
@@ -2927,6 +3011,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      decrypt_pii: {
+        Args: { p_ciphertext: string; p_key_name?: string }
+        Returns: string
+      }
+      encrypt_pii: {
+        Args: { p_key_name?: string; p_plaintext: string }
+        Returns: string
+      }
       get_or_create_notification_preferences: {
         Args: { p_user_id: string }
         Returns: {
@@ -2960,6 +3052,11 @@ export type Database = {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
       }
+      invalidate_all_sessions: { Args: { p_user_id?: string }; Returns: number }
+      invalidate_session: {
+        Args: { p_session_token: string }
+        Returns: boolean
+      }
       is_org_admin: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
@@ -2976,7 +3073,23 @@ export type Database = {
         }
         Returns: string
       }
+      register_session: {
+        Args: {
+          p_device_info?: string
+          p_ip_address?: string
+          p_session_token: string
+        }
+        Returns: string
+      }
       user_org_id: { Args: { _user_id: string }; Returns: string }
+      validate_session: {
+        Args: { p_session_token: string }
+        Returns: {
+          is_valid: boolean
+          reason: string
+          user_id: string
+        }[]
+      }
     }
     Enums: {
       app_role:
