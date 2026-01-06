@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, Trash2, GripVertical, ChevronDown } from "lucide-react";
+import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -40,6 +40,7 @@ import { OrganizationSettings } from "@/components/settings/OrganizationSettings
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
 import { useQuery } from "@tanstack/react-query";
+import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
 
 interface ClaimStatus {
   id: string;
@@ -123,6 +124,7 @@ export default function Settings() {
   const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [companyBrandingOpen, setCompanyBrandingOpen] = useState(false);
+  const [workspacesOpen, setWorkspacesOpen] = useState(false);
   const { toast } = useToast();
 
   // Check if current user is admin
@@ -507,6 +509,33 @@ export default function Settings() {
 
         <TabsContent value="organization" className="w-full space-y-4">
           <OrganizationSettings />
+          
+          {/* Workspaces - Collapsible */}
+          <Collapsible open={workspacesOpen} onOpenChange={setWorkspacesOpen}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FolderKanban className="h-5 w-5" />
+                      <div>
+                        <CardTitle>Workspaces</CardTitle>
+                        <CardDescription>
+                          Manage workspaces and linked partner instances
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 transition-transform ${workspacesOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent>
+                  <WorkspaceList embedded />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
           
           {/* Company Branding - Collapsible */}
           <Collapsible open={companyBrandingOpen} onOpenChange={setCompanyBrandingOpen}>
