@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "./components/AppLayout";
 import { useAuth } from "./hooks/useAuth";
+import { useToast } from "./hooks/use-toast";
 
 // Lazy load all page components for code splitting
 const Index = lazy(() => import("./pages/Index"));
@@ -55,7 +56,20 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
 }
 
 function AppRoutes() {
-  const { user, userRole, loading } = useAuth();
+  const { user, userRole, loading, sessionExpiredReason, clearSessionExpiredReason } = useAuth();
+  const { toast } = useToast();
+
+  // Show session expired toast
+  useEffect(() => {
+    if (sessionExpiredReason) {
+      toast({
+        title: "Session Expired",
+        description: sessionExpiredReason,
+        variant: "destructive",
+      });
+      clearSessionExpiredReason();
+    }
+  }, [sessionExpiredReason, clearSessionExpiredReason, toast]);
 
   if (loading) {
     return <PageLoader />;
@@ -95,19 +109,19 @@ function AppRoutes() {
   return (
     <Routes>
       {publicRoutes}
-      <Route path="/" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Index /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/claims" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Claims /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/claims/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><ClaimDetail /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/tasks" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Tasks /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/inbox" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Inbox /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/clients" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Clients /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/clients/:id" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><ClientDetail /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/networking" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Networking /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/sales" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Sales /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/templates" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Templates /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/workspaces" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Workspaces /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/workspaces/:workspaceId" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><WorkspaceDetailPage /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><Settings /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Index /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/claims" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Claims /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/claims/:id" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><ClaimDetail /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/tasks" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Tasks /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/inbox" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Inbox /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/clients" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Clients /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/clients/:id" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><ClientDetail /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/networking" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Networking /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/sales" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Sales /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/templates" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Templates /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/workspaces" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Workspaces /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/workspaces/:workspaceId" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><WorkspaceDetailPage /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Settings /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
     </Routes>
   );

@@ -1,19 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
 
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const ACTIVITY_CHECK_INTERVAL = 60 * 1000; // Check every minute
 
 export function useAuth() {
+  // All hooks must be called unconditionally and in the same order
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [sessionExpiredReason, setSessionExpiredReason] = useState<string | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
   const sessionTokenRef = useRef<string | null>(null);
-  const { toast } = useToast();
 
   // Generate a unique session token
   const generateSessionToken = useCallback(() => {
@@ -80,25 +80,25 @@ export function useAuth() {
 
   // Handle session expiration
   const handleSessionExpired = useCallback(async (reason: string) => {
-    toast({
-      title: "Session Expired",
-      description: reason,
-      variant: "destructive",
-    });
-    
+    setSessionExpiredReason(reason);
     await invalidateSession();
     await supabase.auth.signOut();
-  }, [invalidateSession, toast]);
+  }, [invalidateSession]);
 
   // Update activity timestamp
   const updateActivity = useCallback(() => {
     lastActivityRef.current = Date.now();
   }, []);
 
+  // Clear expired reason
+  const clearSessionExpiredReason = useCallback(() => {
+    setSessionExpiredReason(null);
+  }, []);
+
   useEffect(() => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         
@@ -210,5 +210,7 @@ export function useAuth() {
     userRole,
     loading,
     signOut,
+    sessionExpiredReason,
+    clearSessionExpiredReason,
   };
 }
