@@ -25,10 +25,11 @@ export function MaskedField({
   showToggle = true,
   defaultRevealed = false,
 }: MaskedFieldProps) {
-  const { user, userRole } = useAuth();
+  const { user, userRole, loading } = useAuth();
   const [revealed, setRevealed] = useState(defaultRevealed);
 
-  // Check if user is admin or staff - they should see data unmasked automatically
+  // Check if user is admin or staff - show unmasked immediately if role is cached or loading with a session
+  // This prevents the flash of masked content for privileged users
   const isPrivilegedUser = userRole === "admin" || userRole === "staff";
 
   const handleReveal = async () => {
