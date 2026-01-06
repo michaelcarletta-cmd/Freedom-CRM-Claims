@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "./button";
 import { cn } from "@/lib/utils";
@@ -27,45 +27,9 @@ export function MaskedField({
 }: MaskedFieldProps) {
   const { user, userRole } = useAuth();
   const [revealed, setRevealed] = useState(defaultRevealed);
-  const [isPrivilegedUser, setIsPrivilegedUser] = useState<boolean | null>(null);
 
-  // Check if user is admin or staff - they should see data unmasked by default
-  useEffect(() => {
-    const checkUserRole = async () => {
-      if (!user?.id) {
-        setIsPrivilegedUser(false);
-        return;
-      }
-
-      // If userRole is already available from useAuth, use it
-      if (userRole === "admin" || userRole === "staff") {
-        setIsPrivilegedUser(true);
-        setRevealed(true);
-        return;
-      }
-
-      // Fallback: check directly in database
-      try {
-        const { data: roles } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id);
-
-        const hasPrivilege = roles?.some(
-          (r) => r.role === "admin" || r.role === "staff"
-        );
-        setIsPrivilegedUser(hasPrivilege ?? false);
-        if (hasPrivilege) {
-          setRevealed(true);
-        }
-      } catch (error) {
-        console.error("Failed to check user role:", error);
-        setIsPrivilegedUser(false);
-      }
-    };
-
-    checkUserRole();
-  }, [user?.id, userRole]);
+  // Check if user is admin or staff - they should see data unmasked automatically
+  const isPrivilegedUser = userRole === "admin" || userRole === "staff";
 
   const handleReveal = async () => {
     if (!revealed) {
@@ -95,15 +59,6 @@ export function MaskedField({
     }
     setRevealed(!revealed);
   };
-
-  // While checking role, show masked data for security
-  if (isPrivilegedUser === null) {
-    return (
-      <span className={cn("font-mono text-sm text-muted-foreground", className)}>
-        {getMaskedValue(fieldName, value)}
-      </span>
-    );
-  }
 
   // For privileged users (admin/staff), always show unmasked
   if (isPrivilegedUser) {
