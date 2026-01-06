@@ -407,9 +407,9 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                         />
                       )}
                     </TableCell>
-                    <TableCell className="max-w-[200px]" onClick={isPrivilegedUser ? undefined : (e) => e.stopPropagation()}>
+                    <TableCell className="max-w-[250px] min-w-[150px]" onClick={isPrivilegedUser ? undefined : (e) => e.stopPropagation()}>
                       {isPrivilegedUser ? (
-                        <span className="font-mono text-sm truncate">{claim.policyholder_address || "N/A"}</span>
+                        <span className="font-mono text-sm block truncate" title={claim.policyholder_address || "N/A"}>{claim.policyholder_address || "N/A"}</span>
                       ) : (
                         <MaskedField
                           value={claim.policyholder_address || "N/A"}
@@ -419,7 +419,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                         />
                       )}
                     </TableCell>
-                    <TableCell>{claim.loss_type || "N/A"}</TableCell>
+                    <TableCell className="min-w-[100px] whitespace-nowrap">{claim.loss_type || "N/A"}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <ClaimStatusSelect 
                         claimId={claim.id} 
