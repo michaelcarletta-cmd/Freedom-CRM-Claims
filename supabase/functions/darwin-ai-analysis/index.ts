@@ -481,7 +481,7 @@ Be specific and actionable. Reference ${stateInfo.stateName} deadlines and regul
       }
 
       case 'supplement':
-        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in identifying missed damage and generating supplement requests. Your role is to maximize claim recovery by finding overlooked items in carrier estimates.
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in identifying missed damage and generating supplement requests. Your role is to maximize claim recovery by comparing estimates and finding overlooked items.
 
 CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
 - NEVER argue "matching" (that new materials must match existing materials)
@@ -502,29 +502,59 @@ You have expertise in:
 - Overhead and profit calculations
 - Comparing carrier estimates against proper scope of work
 - Identifying underpayment tactics and missing line items
+- Line-by-line comparison of competing estimates
 
-When analyzing carrier estimates, look for:
-1. Missing trades or scopes of work
-2. Undervalued or incorrect unit pricing
-3. Insufficient quantities
+When comparing estimates, look for:
+1. Missing trades or scopes of work in the insurance estimate
+2. Undervalued or incorrect unit pricing compared to our estimate
+3. Insufficient quantities vs what we have documented
 4. Missing code-required items
 5. Omitted manufacturer-required components
 6. Missing O&P where applicable
 7. Incorrect depreciation calculations
+8. Line items we included that insurance omitted entirely
 
 Generate comprehensive supplement requests that are defensible and well-documented.`;
 
+        const hasOurEstimate = additionalContext?.ourEstimatePdf;
+        const hasInsuranceEstimate = additionalContext?.insuranceEstimatePdf || pdfContent;
+
         userPrompt = `${claimSummary}
 
-${pdfContent ? `A PDF of the carrier's estimate has been provided for detailed analysis. Review every line item carefully to identify what is missing, undervalued, or incorrect.` : ''}
+${hasOurEstimate && hasInsuranceEstimate ? `
+TWO ESTIMATES HAVE BEEN PROVIDED FOR COMPARISON:
+1. OUR ESTIMATE (${additionalContext?.ourEstimatePdfName || 'our-estimate.pdf'}) - This is our detailed scope of work
+2. INSURANCE ESTIMATE (${additionalContext?.insuranceEstimatePdfName || pdfFileName || 'insurance-estimate.pdf'}) - This is the carrier's estimate
+
+Your primary task is to COMPARE these two estimates line-by-line and identify ALL discrepancies, missing items, and underpayments in the insurance estimate compared to our estimate.
+` : hasInsuranceEstimate ? `A PDF of the carrier's estimate has been provided for detailed analysis. Review every line item carefully to identify what is missing, undervalued, or incorrect.` : hasOurEstimate ? `Our estimate PDF has been provided. Analyze it for completeness and identify potential items the carrier may dispute or miss.` : ''}
 
 ${additionalContext?.existingEstimate ? `EXISTING ESTIMATE ITEMS (TEXT):\n${additionalContext.existingEstimate}` : ''}
 
 ${content ? `ADDITIONAL NOTES/OBSERVATIONS:\n${content}` : ''}
 
-Based on the claim details and the provided estimate, generate a comprehensive supplement analysis that includes:
+Based on the claim details and the provided estimate(s), generate a comprehensive supplement analysis that includes:
 
-1. ESTIMATE ANALYSIS (if estimate provided):
+${hasOurEstimate && hasInsuranceEstimate ? `
+1. SIDE-BY-SIDE COMPARISON SUMMARY:
+   - Total value of OUR estimate vs INSURANCE estimate
+   - Dollar difference between the two
+   - Number of line items in each
+   - Overall assessment of the gap
+
+2. LINE ITEMS IN OUR ESTIMATE BUT MISSING FROM INSURANCE:
+   - List each item we included that insurance omitted
+   - Include Xactimate codes where visible
+   - Provide the value from our estimate
+   - Explain why each item is necessary and supported
+
+3. PRICING DISCREPANCIES:
+   - Items where insurance used lower unit prices than ours
+   - Items where insurance used lower quantities
+   - Labor rate differences
+   - Material pricing differences
+
+4. ` : `1. ESTIMATE ANALYSIS (if estimate provided):
    - Summary of what the carrier's estimate includes
    - Total value of carrier's estimate
    - Obvious gaps or missing scopes
@@ -540,7 +570,7 @@ Based on the claim details and the provided estimate, generate a comprehensive s
    - Items where unit pricing is below market
    - Incorrect labor calculations
 
-4. CODE UPGRADE REQUIREMENTS:
+4. `}CODE UPGRADE REQUIREMENTS:
    - Building codes requiring upgrades beyond like-kind replacement
    - Reference specific code sections
    - Items carrier estimate fails to account for
@@ -1253,7 +1283,48 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
       ];
       
       console.log(`Demand package with ${pdfContents.length} PDFs (processing ${Math.min(pdfContents.length, 5)})`);
-    } else if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'supplement' || analysisType === 'document_compilation' || analysisType === 'estimate_work_summary')) {
+    } else if (analysisType === 'supplement' && (additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf || pdfContent)) {
+      // Supplement comparison with potentially two PDFs
+      const contentParts: any[] = [];
+      
+      if (additionalContext?.ourEstimatePdf) {
+        contentParts.push({
+          type: 'image_url',
+          image_url: {
+            url: `data:application/pdf;base64,${additionalContext.ourEstimatePdf}`
+          }
+        });
+        contentParts.push({
+          type: 'text',
+          text: `[Above is OUR ESTIMATE: ${additionalContext?.ourEstimatePdfName || 'our-estimate.pdf'}]`
+        });
+      }
+      
+      if (additionalContext?.insuranceEstimatePdf || pdfContent) {
+        contentParts.push({
+          type: 'image_url',
+          image_url: {
+            url: `data:application/pdf;base64,${additionalContext?.insuranceEstimatePdf || pdfContent}`
+          }
+        });
+        contentParts.push({
+          type: 'text',
+          text: `[Above is INSURANCE ESTIMATE: ${additionalContext?.insuranceEstimatePdfName || pdfFileName || 'insurance-estimate.pdf'}]`
+        });
+      }
+      
+      contentParts.push({
+        type: 'text',
+        text: userPrompt
+      });
+      
+      messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: contentParts }
+      ];
+      
+      console.log(`Supplement analysis with ${additionalContext?.ourEstimatePdf ? 1 : 0} our estimate + ${(additionalContext?.insuranceEstimatePdf || pdfContent) ? 1 : 0} insurance estimate`);
+    } else if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'document_compilation' || analysisType === 'estimate_work_summary')) {
       // Use multimodal format for PDF analysis with Gemini-compatible inline_data format
       messages = [
         { role: 'system', content: systemPrompt },
@@ -1282,7 +1353,8 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
     }
 
     // Call Lovable AI - use gemini-2.5-pro for PDF analysis (better document understanding)
-    const model = (pdfContent || (pdfContents && pdfContents.length > 0)) ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
+    const hasPdfContent = pdfContent || (pdfContents && pdfContents.length > 0) || additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf;
+    const model = hasPdfContent ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
     console.log(`Using model: ${model}`);
     
     // For task_followup, use tool calling to get structured actions
