@@ -73,6 +73,7 @@ export const AutomationsSettings = () => {
   const [triggerConfig, setTriggerConfig] = useState<TriggerConfig>({});
   const [actions, setActions] = useState<ActionConfig[]>([]);
   const [currentAction, setCurrentAction] = useState<ActionConfig | null>(null);
+  const [editingActionIndex, setEditingActionIndex] = useState<number | null>(null);
 
   const { data: automations, isLoading } = useQuery({
     queryKey: ["automations"],
@@ -227,6 +228,7 @@ export const AutomationsSettings = () => {
     setTriggerConfig({});
     setActions([]);
     setCurrentAction(null);
+    setEditingActionIndex(null);
   };
 
   const openEditDialog = (automation: any) => {
@@ -237,38 +239,64 @@ export const AutomationsSettings = () => {
     setTriggerConfig(automation.trigger_config || {});
     setActions((automation.actions as ActionConfig[]) || []);
     setCurrentAction(null);
+    setEditingActionIndex(null);
     setIsDialogOpen(true);
   };
 
-  const addAction = () => {
+  const saveAction = () => {
     if (currentAction) {
       // Parse file name patterns from text if present
-      const actionToAdd = { ...currentAction };
-      if (actionToAdd.type === 'send_email') {
+      const actionToSave = { ...currentAction };
+      if (actionToSave.type === 'send_email') {
         // Parse file name patterns
-        if (actionToAdd.config.file_name_patterns_text) {
-          const patterns = actionToAdd.config.file_name_patterns_text
+        if (actionToSave.config.file_name_patterns_text) {
+          const patterns = actionToSave.config.file_name_patterns_text
             .split(',')
             .map(p => p.trim())
             .filter(p => p.length > 0);
-          actionToAdd.config.file_name_patterns = patterns.length > 0 ? patterns : undefined;
+          actionToSave.config.file_name_patterns = patterns.length > 0 ? patterns : undefined;
         }
         // Parse manual emails
-        if (actionToAdd.config.manual_emails_text) {
-          const emails = actionToAdd.config.manual_emails_text
+        if (actionToSave.config.manual_emails_text) {
+          const emails = actionToSave.config.manual_emails_text
             .split(',')
             .map(e => e.trim())
             .filter(e => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
-          actionToAdd.config.manual_emails = emails.length > 0 ? emails : undefined;
+          actionToSave.config.manual_emails = emails.length > 0 ? emails : undefined;
         }
       }
-      setActions([...actions, actionToAdd]);
+      
+      if (editingActionIndex !== null) {
+        // Update existing action
+        const updatedActions = [...actions];
+        updatedActions[editingActionIndex] = actionToSave;
+        setActions(updatedActions);
+        setEditingActionIndex(null);
+      } else {
+        // Add new action
+        setActions([...actions, actionToSave]);
+      }
       setCurrentAction(null);
     }
   };
 
+  const editAction = (index: number) => {
+    const action = actions[index];
+    setCurrentAction({ ...action });
+    setEditingActionIndex(index);
+  };
+
+  const cancelEditAction = () => {
+    setCurrentAction(null);
+    setEditingActionIndex(null);
+  };
+
   const removeAction = (index: number) => {
     setActions(actions.filter((_, i) => i !== index));
+    if (editingActionIndex === index) {
+      setCurrentAction(null);
+      setEditingActionIndex(null);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -608,14 +636,19 @@ export const AutomationsSettings = () => {
                   {actions.length > 0 && (
                     <div className="space-y-2">
                       {actions.map((action, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                        <div key={index} className={`flex items-center justify-between p-3 rounded-lg ${editingActionIndex === index ? 'bg-primary/10 border-2 border-primary' : 'bg-muted'}`}>
                           <div className="flex items-center gap-2">
                             {getActionIcon(action.type)}
                             <span className="text-sm">{getActionDescription(action)}</span>
                           </div>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => removeAction(index)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button type="button" variant="ghost" size="sm" onClick={() => editAction(index)}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => removeAction(index)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1134,10 +1167,17 @@ export const AutomationsSettings = () => {
                     )}
 
                     {currentAction?.type && (
-                      <Button type="button" variant="outline" onClick={addAction}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Action
-                      </Button>
+                      <div className="flex gap-2">
+                        {editingActionIndex !== null && (
+                          <Button type="button" variant="ghost" onClick={cancelEditAction}>
+                            Cancel
+                          </Button>
+                        )}
+                        <Button type="button" variant="outline" onClick={saveAction}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          {editingActionIndex !== null ? 'Update Action' : 'Add Action'}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>
