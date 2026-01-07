@@ -124,6 +124,14 @@ export function EmailComposer({
     const pwiNet = pwiACV - (settlement?.pwi_deductible || 0);
     const totalRCV = (settlement?.replacement_cost_value || 0) + (settlement?.other_structures_rcv || 0) + (settlement?.pwi_rcv || 0);
     const totalNet = dwellingNet + otherStructuresNet + pwiNet;
+    
+    // Calculate total depreciation values
+    const totalRecoverableDep = (settlement?.recoverable_depreciation || 0) + 
+      (settlement?.other_structures_recoverable_depreciation || 0) + 
+      (settlement?.pwi_recoverable_depreciation || 0);
+    const totalNonRecoverableDep = (settlement?.non_recoverable_depreciation || 0) + 
+      (settlement?.other_structures_non_recoverable_depreciation || 0) + 
+      (settlement?.pwi_non_recoverable_depreciation || 0);
 
     return text
       // Claim fields
@@ -137,23 +145,29 @@ export function EmailComposer({
       .replace(/\{claim\.policyholder_phone\}/g, claim.policyholder_phone || '')
       .replace(/\{claim\.policyholder_address\}/g, claim.policyholder_address || '')
       .replace(/\{claim\.insurance_company\}/g, claim.insurance_company || '')
-      // Dwelling settlement fields
+      // Dwelling settlement fields (support both short and long field names)
       .replace(/\{settlement\.dwelling_rcv\}/g, formatCurrency(settlement?.replacement_cost_value))
+      .replace(/\{settlement\.dwelling_recoverable_dep\}/g, formatCurrency(settlement?.recoverable_depreciation))
       .replace(/\{settlement\.dwelling_recoverable_depreciation\}/g, formatCurrency(settlement?.recoverable_depreciation))
+      .replace(/\{settlement\.dwelling_non_recoverable_dep\}/g, formatCurrency(settlement?.non_recoverable_depreciation))
       .replace(/\{settlement\.dwelling_non_recoverable_depreciation\}/g, formatCurrency(settlement?.non_recoverable_depreciation))
       .replace(/\{settlement\.dwelling_deductible\}/g, formatCurrency(settlement?.deductible))
       .replace(/\{settlement\.dwelling_acv\}/g, formatCurrency(dwellingACV))
       .replace(/\{settlement\.dwelling_net\}/g, formatCurrency(dwellingNet))
-      // Other Structures settlement fields
+      // Other Structures settlement fields (support both short and long field names)
       .replace(/\{settlement\.other_structures_rcv\}/g, formatCurrency(settlement?.other_structures_rcv))
+      .replace(/\{settlement\.other_structures_recoverable_dep\}/g, formatCurrency(settlement?.other_structures_recoverable_depreciation))
       .replace(/\{settlement\.other_structures_recoverable_depreciation\}/g, formatCurrency(settlement?.other_structures_recoverable_depreciation))
+      .replace(/\{settlement\.other_structures_non_recoverable_dep\}/g, formatCurrency(settlement?.other_structures_non_recoverable_depreciation))
       .replace(/\{settlement\.other_structures_non_recoverable_depreciation\}/g, formatCurrency(settlement?.other_structures_non_recoverable_depreciation))
       .replace(/\{settlement\.other_structures_deductible\}/g, formatCurrency(settlement?.other_structures_deductible))
       .replace(/\{settlement\.other_structures_acv\}/g, formatCurrency(otherStructuresACV))
       .replace(/\{settlement\.other_structures_net\}/g, formatCurrency(otherStructuresNet))
-      // PWI settlement fields
+      // PWI settlement fields (support both short and long field names)
       .replace(/\{settlement\.pwi_rcv\}/g, formatCurrency(settlement?.pwi_rcv))
+      .replace(/\{settlement\.pwi_recoverable_dep\}/g, formatCurrency(settlement?.pwi_recoverable_depreciation))
       .replace(/\{settlement\.pwi_recoverable_depreciation\}/g, formatCurrency(settlement?.pwi_recoverable_depreciation))
+      .replace(/\{settlement\.pwi_non_recoverable_dep\}/g, formatCurrency(settlement?.pwi_non_recoverable_depreciation))
       .replace(/\{settlement\.pwi_non_recoverable_depreciation\}/g, formatCurrency(settlement?.pwi_non_recoverable_depreciation))
       .replace(/\{settlement\.pwi_deductible\}/g, formatCurrency(settlement?.pwi_deductible))
       .replace(/\{settlement\.pwi_acv\}/g, formatCurrency(pwiACV))
@@ -161,6 +175,8 @@ export function EmailComposer({
       // Totals
       .replace(/\{settlement\.total_rcv\}/g, formatCurrency(totalRCV))
       .replace(/\{settlement\.total_net\}/g, formatCurrency(totalNet))
+      .replace(/\{settlement\.total_recoverable_dep\}/g, formatCurrency(totalRecoverableDep))
+      .replace(/\{settlement\.total_non_recoverable_dep\}/g, formatCurrency(totalNonRecoverableDep))
       .replace(/\{settlement\.prior_offer\}/g, formatCurrency(settlement?.prior_offer));
   };
 
