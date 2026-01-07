@@ -177,6 +177,21 @@ async function createTask(supabase: any, config: any, execution: any) {
   
   if (config.assign_to_type === 'user' && config.assign_to_user_id) {
     assignedTo = config.assign_to_user_id;
+  } else if (config.assign_to_type === 'claim_staff') {
+    // Get the staff assigned to this claim
+    const { data: claimStaff } = await supabase
+      .from('claim_staff')
+      .select('staff_id')
+      .eq('claim_id', execution.claim_id)
+      .limit(1)
+      .single();
+    
+    if (claimStaff?.staff_id) {
+      assignedTo = claimStaff.staff_id;
+      console.log('Assigning task to claim staff:', assignedTo);
+    } else {
+      console.log('No staff found for claim, task will be unassigned');
+    }
   } else if (config.assign_to_type === 'claim_contractor') {
     // Get the contractor assigned to this claim
     const { data: claimContractor } = await supabase
