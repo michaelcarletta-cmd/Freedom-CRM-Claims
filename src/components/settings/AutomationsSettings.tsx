@@ -142,9 +142,22 @@ export const AutomationsSettings = () => {
   const { data: users } = useQuery({
     queryKey: ["profiles-for-assignment"],
     queryFn: async () => {
+      // Get staff and admin users only (exclude clients and contractors)
+      const { data: staffRoles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .in("role", ["admin", "staff"]);
+      
+      if (rolesError) throw rolesError;
+      
+      const staffUserIds = staffRoles?.map(r => r.user_id) || [];
+      
+      if (staffUserIds.length === 0) return [];
+      
       const { data, error } = await supabase
         .from("profiles")
         .select("id, full_name, email")
+        .in("id", staffUserIds)
         .order("full_name");
       if (error) throw error;
       return data;
