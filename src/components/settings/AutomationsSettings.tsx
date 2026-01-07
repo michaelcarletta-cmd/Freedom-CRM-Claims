@@ -53,7 +53,7 @@ interface ActionConfig {
     priority?: 'low' | 'medium' | 'high';
     due_date_offset?: number;
     due_date_type?: 'calendar' | 'business'; // Calendar or business days
-    assign_to_type?: 'none' | 'user' | 'claim_contractor'; // Assignment type
+    assign_to_type?: 'none' | 'user' | 'claim_contractor' | 'claim_staff'; // Assignment type
     assign_to_user_id?: string; // Specific user ID
     // Status change
     new_status?: string;
@@ -1044,7 +1044,7 @@ export const AutomationsSettings = () => {
                               ...currentAction,
                               config: { 
                                 ...currentAction.config, 
-                                assign_to_type: value as 'none' | 'user' | 'claim_contractor',
+                                assign_to_type: value as 'none' | 'user' | 'claim_contractor' | 'claim_staff',
                                 assign_to_user_id: value === 'none' ? undefined : currentAction.config.assign_to_user_id
                               }
                             })}
@@ -1055,11 +1055,12 @@ export const AutomationsSettings = () => {
                             <SelectContent>
                               <SelectItem value="none">Unassigned</SelectItem>
                               <SelectItem value="user">Specific User</SelectItem>
+                              <SelectItem value="claim_staff">Claim's Assigned Staff</SelectItem>
                               <SelectItem value="claim_contractor">Claim's Assigned Contractor</SelectItem>
                             </SelectContent>
                           </Select>
                           <p className="text-xs text-muted-foreground">
-                            "Claim's Assigned Contractor" will assign to the contractor linked to the claim at execution time
+                            Dynamically assigns to whoever is linked to the claim at execution time
                           </p>
                         </div>
 
