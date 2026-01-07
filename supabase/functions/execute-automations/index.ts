@@ -172,7 +172,29 @@ async function createTask(supabase: any, config: any, execution: any) {
     }
   }
 
-  const taskData = {
+  // Determine assignment
+  let assignedTo: string | null = null;
+  
+  if (config.assign_to_type === 'user' && config.assign_to_user_id) {
+    assignedTo = config.assign_to_user_id;
+  } else if (config.assign_to_type === 'claim_contractor') {
+    // Get the contractor assigned to this claim
+    const { data: claimContractor } = await supabase
+      .from('claim_contractors')
+      .select('contractor_id')
+      .eq('claim_id', execution.claim_id)
+      .limit(1)
+      .single();
+    
+    if (claimContractor?.contractor_id) {
+      assignedTo = claimContractor.contractor_id;
+      console.log('Assigning task to claim contractor:', assignedTo);
+    } else {
+      console.log('No contractor found for claim, task will be unassigned');
+    }
+  }
+
+  const taskData: any = {
     claim_id: execution.claim_id,
     title: replaceVariables(config.title || 'Automated Task', claim, execution.trigger_data),
     description: config.description ? replaceVariables(config.description, claim, execution.trigger_data) : null,
@@ -181,6 +203,10 @@ async function createTask(supabase: any, config: any, execution: any) {
     due_date: dueDate,
   };
 
+  if (assignedTo) {
+    taskData.assigned_to = assignedTo;
+  }
+
   const { data, error } = await supabase
     .from('tasks')
     .insert(taskData)
@@ -188,7 +214,7 @@ async function createTask(supabase: any, config: any, execution: any) {
     .single();
 
   if (error) throw error;
-  console.log('Created task:', data.id);
+  console.log('Created task:', data.id, assignedTo ? `assigned to ${assignedTo}` : 'unassigned');
   return data;
 }
 
