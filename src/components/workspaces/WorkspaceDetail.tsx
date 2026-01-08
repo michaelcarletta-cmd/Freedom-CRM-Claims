@@ -562,6 +562,11 @@ export function WorkspaceDetail() {
   };
 
   const handleSelectExternalUserForEdit = (userId: string) => {
+    if (userId === 'none') {
+      setEditSalesRepId('');
+      setEditSalesRepName('');
+      return;
+    }
     const user = externalUsers.find((u) => u.id === userId);
     if (user) {
       setEditSalesRepId(user.id);
@@ -982,12 +987,12 @@ export function WorkspaceDetail() {
                                   Loading users...
                                 </div>
                               ) : externalUsers.length > 0 ? (
-                                <Select value={editSalesRepId} onValueChange={handleSelectExternalUserForEdit}>
+                                <Select value={editSalesRepId || 'none'} onValueChange={handleSelectExternalUserForEdit}>
                                   <SelectTrigger className="h-8 text-sm">
                                     <SelectValue placeholder="Select sales rep" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="">
+                                    <SelectItem value="none">
                                       <span className="text-muted-foreground">None</span>
                                     </SelectItem>
                                     {externalUsers.map((user) => (

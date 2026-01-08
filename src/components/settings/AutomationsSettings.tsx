@@ -905,14 +905,15 @@ export const AutomationsSettings = () => {
                           <div className="space-y-2">
                             <Label>Use SMS Template (optional)</Label>
                             <Select 
-                              value={currentAction.config.sms_template_id || ''} 
+                              value={currentAction.config.sms_template_id || 'none'} 
                               onValueChange={(value) => {
-                                const template = smsTemplates.find(t => t.id === value);
+                                const templateId = value === 'none' ? undefined : value;
+                                const template = smsTemplates.find(t => t.id === templateId);
                                 setCurrentAction({
                                   ...currentAction,
                                   config: { 
                                     ...currentAction.config, 
-                                    sms_template_id: value || undefined,
+                                    sms_template_id: templateId,
                                     message: template ? template.body : currentAction.config.message
                                   }
                                 });
@@ -922,7 +923,7 @@ export const AutomationsSettings = () => {
                                 <SelectValue placeholder="Select a template..." />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="">-- Custom Message --</SelectItem>
+                                <SelectItem value="none">-- Custom Message --</SelectItem>
                                 {smsTemplates.map((template) => (
                                   <SelectItem key={template.id} value={template.id}>
                                     {template.name} {template.category && `(${template.category})`}
