@@ -429,22 +429,6 @@ async function sendSms(supabase: any, config: any, execution: any) {
     .limit(1)
     .single();
 
-  // Determine recipient phone
-  let recipientPhone = '';
-
-  switch (config.recipient_type) {
-    case 'policyholder':
-      recipientPhone = claim.policyholder_phone;
-      break;
-    case 'adjuster':
-      recipientPhone = claim.adjuster_phone;
-      break;
-  }
-
-  if (!recipientPhone) {
-    throw new Error(`No phone found for ${config.recipient_type}`);
-  }
-
   // Get message from template or config
   let messageTemplate = config.message || '';
   if (config.sms_template_id) {
@@ -468,48 +452,110 @@ async function sendSms(supabase: any, config: any, execution: any) {
     throw new Error('Telnyx credentials not configured');
   }
 
-  // Normalize phone number to E.164 format
-  let normalizedPhone = recipientPhone.replace(/\D/g, '');
-  if (normalizedPhone.length === 10) {
-    normalizedPhone = '+1' + normalizedPhone;
-  } else if (!normalizedPhone.startsWith('+')) {
-    normalizedPhone = '+' + normalizedPhone;
+  // Helper function to send SMS to a single phone number
+  const sendToPhone = async (phone: string) => {
+    // Normalize phone number to E.164 format
+    let normalizedPhone = phone.replace(/\D/g, '');
+    if (normalizedPhone.length === 10) {
+      normalizedPhone = '+1' + normalizedPhone;
+    } else if (!normalizedPhone.startsWith('+')) {
+      normalizedPhone = '+' + normalizedPhone;
+    }
+
+    const response = await fetch('https://api.telnyx.com/v2/messages', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${telnyxApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: telnyxPhoneNumber,
+        to: normalizedPhone,
+        text: messageBody,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Telnyx error:', errorData);
+      throw new Error(`Failed to send SMS: ${JSON.stringify(errorData)}`);
+    }
+
+    const telnyxResponse = await response.json();
+
+    // Log SMS to database
+    await supabase.from('sms_messages').insert({
+      claim_id: execution.claim_id,
+      to_number: normalizedPhone,
+      from_number: telnyxPhoneNumber,
+      message_body: messageBody,
+      direction: 'outbound',
+      status: 'sent',
+      telnyx_message_id: telnyxResponse.data?.id,
+    });
+
+    console.log('Sent SMS to:', normalizedPhone);
+    return { sent_to: normalizedPhone, message_id: telnyxResponse.data?.id };
+  };
+
+  // Handle contractors - send to all assigned contractors
+  if (config.recipient_type === 'contractors') {
+    const { data: contractors } = await supabase
+      .from('claim_contractors')
+      .select('contractor_id')
+      .eq('claim_id', execution.claim_id);
+
+    if (!contractors || contractors.length === 0) {
+      throw new Error('No contractors assigned to this claim');
+    }
+
+    // Get contractor details from clients table
+    const contractorIds = contractors.map((c: any) => c.contractor_id);
+    const { data: contractorDetails } = await supabase
+      .from('clients')
+      .select('id, name, phone')
+      .in('id', contractorIds);
+
+    if (!contractorDetails || contractorDetails.length === 0) {
+      throw new Error('No contractor details found');
+    }
+
+    const results = [];
+    for (const contractor of contractorDetails) {
+      if (contractor.phone) {
+        try {
+          const result = await sendToPhone(contractor.phone);
+          results.push(result);
+        } catch (err) {
+          console.error(`Failed to send SMS to contractor ${contractor.name}:`, err);
+        }
+      }
+    }
+
+    if (results.length === 0) {
+      throw new Error('No contractors with phone numbers found');
+    }
+
+    return { sent_count: results.length, results };
   }
 
-  const response = await fetch('https://api.telnyx.com/v2/messages', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${telnyxApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: telnyxPhoneNumber,
-      to: normalizedPhone,
-      text: messageBody,
-    }),
-  });
+  // Determine recipient phone for non-contractor types
+  let recipientPhone = '';
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    console.error('Telnyx error:', errorData);
-    throw new Error(`Failed to send SMS: ${JSON.stringify(errorData)}`);
+  switch (config.recipient_type) {
+    case 'policyholder':
+      recipientPhone = claim.policyholder_phone;
+      break;
+    case 'adjuster':
+      recipientPhone = claim.adjuster_phone;
+      break;
   }
 
-  const telnyxResponse = await response.json();
+  if (!recipientPhone) {
+    throw new Error(`No phone found for ${config.recipient_type}`);
+  }
 
-  // Log SMS to database
-  await supabase.from('sms_messages').insert({
-    claim_id: execution.claim_id,
-    to_number: normalizedPhone,
-    from_number: telnyxPhoneNumber,
-    message_body: messageBody,
-    direction: 'outbound',
-    status: 'sent',
-    telnyx_message_id: telnyxResponse.data?.id,
-  });
-
-  console.log('Sent SMS to:', normalizedPhone);
-  return { sent_to: normalizedPhone, message_id: telnyxResponse.data?.id };
+  return await sendToPhone(recipientPhone);
 }
 
 async function updateClaim(supabase: any, config: any, execution: any) {
