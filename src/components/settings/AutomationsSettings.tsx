@@ -896,6 +896,7 @@ export const AutomationsSettings = () => {
                             <SelectContent>
                               <SelectItem value="policyholder">Policyholder</SelectItem>
                               <SelectItem value="adjuster">Insurance Adjuster</SelectItem>
+                              <SelectItem value="contractors">Assigned Contractors</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
