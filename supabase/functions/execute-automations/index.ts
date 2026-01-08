@@ -460,52 +460,56 @@ async function sendSms(supabase: any, config: any, execution: any) {
 
   const messageBody = replaceVariables(messageTemplate, claim, execution.trigger_data, inspection);
 
-  // Use Twilio to send SMS
-  const twilioAccountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
-  const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN');
-  const twilioPhoneNumber = Deno.env.get('TWILIO_PHONE_NUMBER');
+  // Use Telnyx to send SMS
+  const telnyxApiKey = Deno.env.get('TELNYX_API_KEY');
+  const telnyxPhoneNumber = Deno.env.get('TELNYX_PHONE_NUMBER');
 
-  if (!twilioAccountSid || !twilioAuthToken || !twilioPhoneNumber) {
-    throw new Error('Twilio credentials not configured');
+  if (!telnyxApiKey || !telnyxPhoneNumber) {
+    throw new Error('Telnyx credentials not configured');
   }
 
-  const formData = new URLSearchParams();
-  formData.append('To', recipientPhone);
-  formData.append('From', twilioPhoneNumber);
-  formData.append('Body', messageBody);
+  // Normalize phone number to E.164 format
+  let normalizedPhone = recipientPhone.replace(/\D/g, '');
+  if (normalizedPhone.length === 10) {
+    normalizedPhone = '+1' + normalizedPhone;
+  } else if (!normalizedPhone.startsWith('+')) {
+    normalizedPhone = '+' + normalizedPhone;
+  }
 
-  const response = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Basic ' + btoa(`${twilioAccountSid}:${twilioAuthToken}`),
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: formData.toString(),
-    }
-  );
+  const response = await fetch('https://api.telnyx.com/v2/messages', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${telnyxApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: telnyxPhoneNumber,
+      to: normalizedPhone,
+      text: messageBody,
+    }),
+  });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to send SMS: ${errorText}`);
+    const errorData = await response.json();
+    console.error('Telnyx error:', errorData);
+    throw new Error(`Failed to send SMS: ${JSON.stringify(errorData)}`);
   }
 
-  const twilioResponse = await response.json();
+  const telnyxResponse = await response.json();
 
   // Log SMS to database
   await supabase.from('sms_messages').insert({
     claim_id: execution.claim_id,
-    to_number: recipientPhone,
-    from_number: twilioPhoneNumber,
+    to_number: normalizedPhone,
+    from_number: telnyxPhoneNumber,
     message_body: messageBody,
     direction: 'outbound',
     status: 'sent',
-    telnyx_message_id: twilioResponse.sid,
+    telnyx_message_id: telnyxResponse.data?.id,
   });
 
-  console.log('Sent SMS to:', recipientPhone);
-  return { sent_to: recipientPhone, sid: twilioResponse.sid };
+  console.log('Sent SMS to:', normalizedPhone);
+  return { sent_to: normalizedPhone, message_id: telnyxResponse.data?.id };
 }
 
 async function updateClaim(supabase: any, config: any, execution: any) {
