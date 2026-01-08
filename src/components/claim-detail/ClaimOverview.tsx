@@ -7,7 +7,7 @@ import { ClaimCustomFields } from "./ClaimCustomFields";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { MaskedField } from "@/components/ui/masked-field";
+
 
 interface ClaimOverviewProps {
   claim: any;
@@ -281,39 +281,19 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Name</p>
-              <MaskedField
-                value={claim.policyholder_name}
-                fieldName="policyholder_name"
-                recordType="claim"
-                recordId={claim.id}
-              />
+              <p className="text-sm font-medium">{claim.policyholder_name || "N/A"}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Email</p>
-              <MaskedField
-                value={claim.policyholder_email}
-                fieldName="policyholder_email"
-                recordType="claim"
-                recordId={claim.id}
-              />
+              <p className="text-sm font-medium">{claim.policyholder_email || "N/A"}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Phone</p>
-              <MaskedField
-                value={claim.policyholder_phone}
-                fieldName="policyholder_phone"
-                recordType="claim"
-                recordId={claim.id}
-              />
+              <p className="text-sm font-medium">{claim.policyholder_phone || "N/A"}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Address</p>
-              <MaskedField
-                value={claim.policyholder_address}
-                fieldName="policyholder_address"
-                recordType="claim"
-                recordId={claim.id}
-              />
+              <p className="text-sm font-medium">{claim.policyholder_address || "N/A"}</p>
             </div>
           </div>
         </CardContent>
@@ -380,12 +360,7 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Policy Number</p>
-              <MaskedField
-                value={claim.policy_number}
-                fieldName="policy_number"
-                recordType="claim"
-                recordId={claim.id}
-              />
+              <p className="text-sm font-medium">{claim.policy_number || "N/A"}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Phone</p>

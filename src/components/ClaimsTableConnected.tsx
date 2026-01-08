@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BulkClaimActions } from "./BulkClaimActions";
-import { MaskedField } from "@/components/ui/masked-field";
+
 
 interface Claim {
   id: string;
@@ -45,8 +45,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
-  const { user, userRole } = useAuth();
-  const isPrivilegedUser = userRole === "admin" || userRole === "staff";
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -382,41 +381,14 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                         onCheckedChange={() => toggleClaimSelection(claim.id)}
                       />
                     </TableCell>
-                    <TableCell className="font-medium" onClick={isPrivilegedUser ? undefined : (e) => e.stopPropagation()}>
-                      {isPrivilegedUser ? (
-                        <span className="font-mono text-sm">{claim.claim_number || "—"}</span>
-                      ) : (
-                        <MaskedField
-                          value={claim.claim_number}
-                          fieldName="claim_number"
-                          recordType="claim"
-                          recordId={claim.id}
-                        />
-                      )}
+                    <TableCell className="font-medium">
+                      <span className="font-mono text-sm">{claim.claim_number || "—"}</span>
                     </TableCell>
-                    <TableCell onClick={isPrivilegedUser ? undefined : (e) => e.stopPropagation()}>
-                      {isPrivilegedUser ? (
-                        <span className="font-mono text-sm">{claim.policyholder_name || "—"}</span>
-                      ) : (
-                        <MaskedField
-                          value={claim.policyholder_name}
-                          fieldName="policyholder_name"
-                          recordType="claim"
-                          recordId={claim.id}
-                        />
-                      )}
+                    <TableCell>
+                      <span className="font-mono text-sm">{claim.policyholder_name || "—"}</span>
                     </TableCell>
-                    <TableCell className="max-w-[250px] min-w-[150px]" onClick={isPrivilegedUser ? undefined : (e) => e.stopPropagation()}>
-                      {isPrivilegedUser ? (
-                        <span className="font-mono text-sm block truncate" title={claim.policyholder_address || "N/A"}>{claim.policyholder_address || "N/A"}</span>
-                      ) : (
-                        <MaskedField
-                          value={claim.policyholder_address || "N/A"}
-                          fieldName="policyholder_address"
-                          recordType="claim"
-                          recordId={claim.id}
-                        />
-                      )}
+                    <TableCell className="max-w-[250px] min-w-[150px]">
+                      <span className="font-mono text-sm block truncate" title={claim.policyholder_address || "N/A"}>{claim.policyholder_address || "N/A"}</span>
                     </TableCell>
                     <TableCell className="min-w-[100px] whitespace-nowrap">{claim.loss_type || "N/A"}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
