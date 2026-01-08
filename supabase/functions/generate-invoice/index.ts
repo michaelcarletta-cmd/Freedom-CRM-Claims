@@ -36,44 +36,84 @@ function generateInvoiceHtml(data: any): string {
   <meta charset="UTF-8">
   <title>Invoice ${invoiceNumber}</title>
   <style>
+    /* Base styles */
     body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; color: #1f2937; }
-    .invoice-header { display: flex; justify-content: space-between; margin-bottom: 40px; align-items: flex-start; }
-    .company-info { display: flex; flex-direction: column; gap: 8px; }
-    .company-logo { max-height: 80px; max-width: 200px; margin-bottom: 12px; object-fit: contain; }
-    .company-name { font-size: 28px; font-weight: bold; color: #1f2937; margin-bottom: 8px; }
-    .company-info p { margin: 4px 0; color: #6b7280; }
+    
+    /* Page break controls for PDF/Print */
+    @media print {
+      body { padding: 20px; }
+      .page-break { page-break-before: always; }
+      .avoid-break { page-break-inside: avoid; }
+      .keep-together { page-break-inside: avoid; break-inside: avoid; }
+      .invoice-header { page-break-after: avoid; }
+      .breakdown-section { page-break-inside: avoid; }
+      .totals { page-break-inside: avoid; }
+      .notes { page-break-inside: avoid; }
+      .footer { page-break-before: avoid; }
+      table { page-break-inside: auto; }
+      tr { page-break-inside: avoid; page-break-after: auto; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+    }
+    
+    /* Header styles */
+    .invoice-header { display: flex; justify-content: space-between; margin-bottom: 30px; align-items: flex-start; }
+    .company-info { display: flex; flex-direction: column; gap: 6px; }
+    .company-logo { max-height: 60px; max-width: 180px; margin-bottom: 10px; object-fit: contain; }
+    .company-name { font-size: 24px; font-weight: bold; color: #1f2937; margin-bottom: 6px; }
+    .company-info p { margin: 3px 0; color: #6b7280; font-size: 13px; }
     .invoice-details { text-align: right; }
-    .invoice-details h2 { margin: 0 0 12px 0; font-size: 32px; color: #111827; }
-    .invoice-details p { margin: 4px 0; color: #6b7280; }
+    .invoice-details h2 { margin: 0 0 10px 0; font-size: 28px; color: #111827; }
+    .invoice-details p { margin: 3px 0; color: #6b7280; font-size: 13px; }
     .invoice-details strong { color: #111827; }
-    .recipient-section { margin-bottom: 30px; padding: 20px; background: #f9fafb; border-radius: 8px; }
-    .recipient-section h3 { margin: 0 0 12px 0; color: #374151; font-size: 14px; text-transform: uppercase; }
-    .recipient-section p { margin: 4px 0; color: #1f2937; }
-    .property-section { margin-bottom: 30px; padding: 15px 20px; background: #eff6ff; border-radius: 8px; border-left: 4px solid #3b82f6; }
-    .property-section h3 { margin: 0 0 8px 0; color: #1e40af; font-size: 14px; text-transform: uppercase; }
-    .property-section p { margin: 4px 0; color: #1e3a8a; }
-    table { width: 100%; border-collapse: collapse; margin: 30px 0; }
-    th { background: #1f2937; color: white; padding: 14px 12px; text-align: left; font-weight: 600; }
+    
+    /* Sections - compact to fit better */
+    .recipient-section { margin-bottom: 20px; padding: 15px; background: #f9fafb; border-radius: 8px; }
+    .recipient-section h3 { margin: 0 0 8px 0; color: #374151; font-size: 12px; text-transform: uppercase; }
+    .recipient-section p { margin: 3px 0; color: #1f2937; font-size: 14px; }
+    .property-section { margin-bottom: 20px; padding: 12px 15px; background: #eff6ff; border-radius: 8px; border-left: 4px solid #3b82f6; }
+    .property-section h3 { margin: 0 0 6px 0; color: #1e40af; font-size: 12px; text-transform: uppercase; }
+    .property-section p { margin: 3px 0; color: #1e3a8a; font-size: 14px; }
+    
+    /* Table styles */
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th { background: #1f2937; color: white; padding: 10px 8px; text-align: left; font-weight: 600; font-size: 13px; }
     th:nth-child(2), th:nth-child(3), th:nth-child(4) { text-align: center; }
     th:last-child { text-align: right; }
-    .totals { margin-left: auto; width: 300px; margin-top: 20px; }
-    .totals .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
-    .totals .row.total { border-top: 2px solid #1f2937; border-bottom: none; font-size: 20px; font-weight: bold; padding-top: 16px; }
-    .notes { margin-top: 40px; padding: 20px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b; }
-    .notes h4 { margin: 0 0 8px 0; color: #92400e; }
-    .notes p { margin: 0; color: #78350f; }
-    .footer { margin-top: 60px; text-align: center; color: #9ca3af; font-size: 12px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
-    .claim-badge { display: inline-block; background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 20px; font-size: 12px; }
-    .breakdown-section { margin-bottom: 30px; padding: 20px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
-    .breakdown-section h3 { margin: 0 0 16px 0; color: #334155; font-size: 14px; text-transform: uppercase; font-weight: 600; }
-    .breakdown-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .breakdown-item { display: flex; justify-content: space-between; padding: 8px 12px; background: white; border-radius: 6px; border: 1px solid #e2e8f0; }
+    td { padding: 10px 8px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+    
+    /* Totals */
+    .totals { margin-left: auto; width: 280px; margin-top: 15px; }
+    .totals .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    .totals .row.total { border-top: 2px solid #1f2937; border-bottom: none; font-size: 18px; font-weight: bold; padding-top: 12px; }
+    
+    /* Notes */
+    .notes { margin-top: 25px; padding: 15px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b; }
+    .notes h4 { margin: 0 0 6px 0; color: #92400e; font-size: 13px; }
+    .notes p { margin: 0; color: #78350f; font-size: 13px; }
+    
+    /* Footer */
+    .footer { margin-top: 40px; text-align: center; color: #9ca3af; font-size: 11px; padding-top: 15px; border-top: 1px solid #e5e7eb; }
+    
+    /* Badge */
+    .claim-badge { display: inline-block; background: #dbeafe; color: #1e40af; padding: 3px 10px; border-radius: 20px; font-size: 11px; }
+    
+    /* Breakdown section - compact grid */
+    .breakdown-section { margin-bottom: 20px; padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+    .breakdown-section h3 { margin: 0 0 12px 0; color: #334155; font-size: 12px; text-transform: uppercase; font-weight: 600; }
+    .breakdown-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .breakdown-item { display: flex; justify-content: space-between; padding: 6px 10px; background: white; border-radius: 6px; border: 1px solid #e2e8f0; }
     .breakdown-item.highlight { background: #ecfdf5; border-color: #10b981; }
     .breakdown-item.outstanding { background: #fef2f2; border-color: #ef4444; }
-    .breakdown-item .label { color: #64748b; font-size: 13px; }
-    .breakdown-item .value { font-weight: 600; color: #1e293b; }
+    .breakdown-item .label { color: #64748b; font-size: 12px; }
+    .breakdown-item .value { font-weight: 600; color: #1e293b; font-size: 12px; }
     .breakdown-item.highlight .value { color: #059669; }
     .breakdown-item.outstanding .value { color: #dc2626; }
+    
+    /* Work description - handle long text better */
+    .work-section { margin-bottom: 20px; padding: 15px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #22c55e; }
+    .work-section h3 { margin: 0 0 10px 0; color: #166534; font-size: 12px; text-transform: uppercase; }
+    .work-section p { margin: 0; color: #15803d; line-height: 1.5; font-size: 13px; white-space: pre-wrap; word-wrap: break-word; }
   </style>
 </head>
 <body>
@@ -108,7 +148,7 @@ function generateInvoiceHtml(data: any): string {
   ` : ''}
 
   ${settlementBreakdown ? `
-  <div class="breakdown-section">
+  <div class="breakdown-section avoid-break keep-together">
     <h3>Settlement Breakdown</h3>
     <div class="breakdown-grid">
       <div class="breakdown-item">
@@ -154,9 +194,9 @@ function generateInvoiceHtml(data: any): string {
   ` : ''}
 
   ${workDescription ? `
-  <div style="margin-bottom: 30px; padding: 20px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #22c55e;">
-    <h3 style="margin: 0 0 12px 0; color: #166534; font-size: 14px; text-transform: uppercase;">Work Completed</h3>
-    <p style="margin: 0; color: #15803d; line-height: 1.6;">${workDescription}</p>
+  <div class="work-section avoid-break">
+    <h3>Work Completed</h3>
+    <p>${workDescription}</p>
   </div>
   ` : ''}
 
@@ -174,7 +214,7 @@ function generateInvoiceHtml(data: any): string {
     </tbody>
   </table>
 
-  <div class="totals">
+  <div class="totals avoid-break keep-together">
     <div class="row">
       <span>Subtotal</span>
       <span>$${subtotal.toFixed(2)}</span>
@@ -186,7 +226,7 @@ function generateInvoiceHtml(data: any): string {
   </div>
 
   ${notes ? `
-  <div class="notes">
+  <div class="notes avoid-break">
     <h4>Notes</h4>
     <p>${notes}</p>
   </div>
