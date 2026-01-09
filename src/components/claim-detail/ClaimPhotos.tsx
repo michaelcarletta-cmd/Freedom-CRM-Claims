@@ -132,7 +132,7 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
     setCurrentPage(1);
   }, [activeCategory]);
 
-  // Batch fetch signed URLs only for visible photos
+  // Batch fetch signed URLs for visible photos with concurrency limiting
   const fetchSignedUrls = useCallback(async (photosToFetch: ClaimPhoto[]) => {
     if (photosToFetch.length === 0) return;
     
@@ -140,25 +140,39 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
     const photosNeedingUrls = photosToFetch.filter(p => !photoUrls[p.id]);
     if (photosNeedingUrls.length === 0) return;
     
-    const urlPromises = photosNeedingUrls.map(async (photo) => {
-      const path = photo.annotated_file_path || photo.file_path;
-      const { data } = await supabase.storage
-        .from("claim-files")
-        .createSignedUrl(path, 3600);
-      return { id: photo.id, url: data?.signedUrl || "" };
-    });
-    
-    const results = await Promise.all(urlPromises);
+    // Batch fetch with concurrency limit of 6 to avoid overwhelming the browser
+    const BATCH_SIZE = 6;
     const newUrls: Record<string, string> = {};
-    results.forEach(({ id, url }) => {
-      if (url) newUrls[id] = url;
-    });
+    
+    for (let i = 0; i < photosNeedingUrls.length; i += BATCH_SIZE) {
+      const batch = photosNeedingUrls.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (photo) => {
+          const path = photo.annotated_file_path || photo.file_path;
+          // Use transform for thumbnails - much smaller file size = faster loading
+          const { data } = await supabase.storage
+            .from("claim-files")
+            .createSignedUrl(path, 3600, {
+              transform: { width: 400, height: 400, resize: 'cover', quality: 70 }
+            });
+          return { id: photo.id, url: data?.signedUrl || "" };
+        })
+      );
+      
+      batchResults.forEach(({ id, url }) => {
+        if (url) newUrls[id] = url;
+      });
+    }
+    
     setPhotoUrls(prev => ({ ...prev, ...newUrls }));
   }, [photoUrls]);
 
-  // Fetch URLs when paginated photos change
+  // Fetch URLs when paginated photos change - with debounce to prevent rapid refetching
   useEffect(() => {
-    fetchSignedUrls(paginatedPhotos);
+    const timeoutId = setTimeout(() => {
+      fetchSignedUrls(paginatedPhotos);
+    }, 100);
+    return () => clearTimeout(timeoutId);
   }, [paginatedPhotos, fetchSignedUrls]);
 
   const fetchPhotos = async () => {

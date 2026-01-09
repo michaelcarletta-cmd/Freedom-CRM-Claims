@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -521,22 +521,29 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       
       const selectedPhotoData = photos.filter(p => selectedPhotos.includes(p.id));
       
-      // Get signed URLs for all selected photos
-      const photoUrls = await Promise.all(
-        selectedPhotoData.map(async (photo, idx) => {
-          const path = photo.annotated_file_path || photo.file_path;
-          const { data } = await supabase.storage
-            .from("claim-files")
-            .createSignedUrl(path, 3600);
-          return {
-            url: data?.signedUrl || "",
-            fileName: photo.file_name,
-            category: photo.category || "General",
-            description: photo.description || "",
-            photoNumber: idx + 1,
-          };
-        })
-      );
+      // Batch fetch signed URLs with concurrency limit for better performance
+      const BATCH_SIZE = 8;
+      const photoUrls: { url: string; fileName: string; category: string; description: string; photoNumber: number }[] = [];
+      
+      for (let i = 0; i < selectedPhotoData.length; i += BATCH_SIZE) {
+        const batch = selectedPhotoData.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(async (photo, batchIdx) => {
+            const path = photo.annotated_file_path || photo.file_path;
+            const { data } = await supabase.storage
+              .from("claim-files")
+              .createSignedUrl(path, 3600);
+            return {
+              url: data?.signedUrl || "",
+              fileName: photo.file_name,
+              category: photo.category || "General",
+              description: photo.description || "",
+              photoNumber: i + batchIdx + 1,
+            };
+          })
+        );
+        photoUrls.push(...batchResults);
+      }
 
       // Call edge function to generate HTML
       const { data, error } = await supabase.functions.invoke("generate-photo-report-pdf", {
@@ -592,15 +599,23 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     try {
       const selectedPhotoData = photos.filter(p => selectedPhotos.includes(p.id));
       
-      const photoUrls = await Promise.all(
-        selectedPhotoData.map(async (photo) => {
-          const path = photo.annotated_file_path || photo.file_path;
-          const { data } = await supabase.storage
-            .from("claim-files")
-            .createSignedUrl(path, 3600);
-          return { ...photo, signedUrl: data?.signedUrl || "" };
-        })
-      );
+      // Batch fetch signed URLs with concurrency limit
+      const BATCH_SIZE = 8;
+      const photoUrls: Array<ClaimPhoto & { signedUrl: string }> = [];
+      
+      for (let i = 0; i < selectedPhotoData.length; i += BATCH_SIZE) {
+        const batch = selectedPhotoData.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(async (photo) => {
+            const path = photo.annotated_file_path || photo.file_path;
+            const { data } = await supabase.storage
+              .from("claim-files")
+              .createSignedUrl(path, 3600);
+            return { ...photo, signedUrl: data?.signedUrl || "" };
+          })
+        );
+        photoUrls.push(...batchResults);
+      }
 
       const html = generateReportHtml(photoUrls, reportTitle, reportType, includeDescriptions, includeCategories, claim);
       
@@ -990,12 +1005,15 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   );
 }
 
+// Shared cache for thumbnail URLs across component instances
+const thumbnailUrlCache = new Map<string, string>();
+
 function PhotoSelector({ 
   photos, 
   selectedPhotos, 
   togglePhoto,
   selectAll,
-  selectNone 
+  selectNone
 }: { 
   photos: ClaimPhoto[]; 
   selectedPhotos: string[];
@@ -1003,6 +1021,68 @@ function PhotoSelector({
   selectAll: () => void;
   selectNone: () => void;
 }) {
+  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
+  const [loadingBatch, setLoadingBatch] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Batch load visible thumbnails with concurrency limiting
+  useEffect(() => {
+    if (photos.length === 0) return;
+    
+    const loadThumbnails = async () => {
+      // Only load photos that aren't already cached
+      const photosToLoad = photos.filter(p => !thumbnailUrlCache.has(p.id) && !thumbnailUrls[p.id]);
+      if (photosToLoad.length === 0) {
+        // All photos already cached, just use cache
+        const cached: Record<string, string> = {};
+        photos.forEach(p => {
+          const url = thumbnailUrlCache.get(p.id);
+          if (url) cached[p.id] = url;
+        });
+        if (Object.keys(cached).length > 0) {
+          setThumbnailUrls(prev => ({ ...prev, ...cached }));
+        }
+        return;
+      }
+      
+      setLoadingBatch(true);
+      
+      // Batch in groups of 8 for better performance
+      const BATCH_SIZE = 8;
+      const newUrls: Record<string, string> = {};
+      
+      for (let i = 0; i < Math.min(photosToLoad.length, 50); i += BATCH_SIZE) { // Limit to first 50 for initial load
+        const batch = photosToLoad.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map(async (photo) => {
+            const path = photo.annotated_file_path || photo.file_path;
+            // Use small thumbnails for selector - 80px is plenty
+            const { data } = await supabase.storage
+              .from("claim-files")
+              .createSignedUrl(path, 3600, {
+                transform: { width: 80, height: 80, resize: 'cover', quality: 60 }
+              });
+            return { id: photo.id, url: data?.signedUrl || "" };
+          })
+        );
+        
+        results.forEach(({ id, url }) => {
+          if (url) {
+            newUrls[id] = url;
+            thumbnailUrlCache.set(id, url);
+          }
+        });
+        
+        // Update state progressively for better UX
+        setThumbnailUrls(prev => ({ ...prev, ...newUrls }));
+      }
+      
+      setLoadingBatch(false);
+    };
+    
+    loadThumbnails();
+  }, [photos]);
+
   return (
     <div>
       <div className="flex justify-between items-center mb-2">
@@ -1012,67 +1092,40 @@ function PhotoSelector({
           <Button variant="outline" size="sm" onClick={selectNone}>Clear</Button>
         </div>
       </div>
-      <div className="grid grid-cols-6 md:grid-cols-10 gap-1 max-h-40 overflow-auto p-2 border rounded">
+      <div 
+        ref={containerRef}
+        className="grid grid-cols-6 md:grid-cols-10 gap-1 max-h-40 overflow-auto p-2 border rounded"
+      >
         {photos.map(photo => (
           <PhotoThumbnail
             key={photo.id}
             photo={photo}
+            url={thumbnailUrls[photo.id] || thumbnailUrlCache.get(photo.id) || ""}
             selected={selectedPhotos.includes(photo.id)}
             onToggle={() => togglePhoto(photo.id)}
           />
         ))}
       </div>
+      {loadingBatch && (
+        <p className="text-xs text-muted-foreground mt-1">Loading thumbnails...</p>
+      )}
     </div>
   );
 }
 
-function PhotoThumbnail({ 
+const PhotoThumbnail = memo(function PhotoThumbnail({ 
   photo, 
+  url,
   selected, 
   onToggle 
 }: { 
   photo: ClaimPhoto; 
+  url: string;
   selected: boolean; 
   onToggle: () => void;
 }) {
-  const [url, setUrl] = useState("");
-  const [isVisible, setIsVisible] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  // Lazy load: only fetch URL when thumbnail becomes visible
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "50px" }
-    );
-    
-    if (ref.current) {
-      observer.observe(ref.current);
-    }
-    
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!isVisible) return;
-    
-    const loadUrl = async () => {
-      const { data } = await supabase.storage
-        .from("claim-files")
-        .createSignedUrl(photo.annotated_file_path || photo.file_path, 3600);
-      if (data?.signedUrl) setUrl(data.signedUrl);
-    };
-    loadUrl();
-  }, [isVisible, photo]);
-
   return (
     <div
-      ref={ref}
       className={`relative aspect-square cursor-pointer rounded overflow-hidden border-2 ${
         selected ? "border-primary" : "border-transparent"
       }`}
@@ -1094,7 +1147,7 @@ function PhotoThumbnail({
       )}
     </div>
   );
-}
+});
 
 function generateReportHtml(
   photos: Array<ClaimPhoto & { signedUrl: string }>,
