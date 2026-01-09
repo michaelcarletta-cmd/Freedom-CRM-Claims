@@ -23,10 +23,10 @@ interface LossType {
   name: string;
 }
 
-interface Referrer {
+interface Contractor {
   id: string;
-  name: string;
-  company: string | null;
+  full_name: string | null;
+  email: string;
 }
 
 interface Client {
@@ -55,7 +55,7 @@ export function NewClaimDialog() {
   const [loading, setLoading] = useState(false);
   const [insuranceCompanies, setInsuranceCompanies] = useState<InsuranceCompany[]>([]);
   const [lossTypes, setLossTypes] = useState<LossType[]>([]);
-  const [referrers, setReferrers] = useState<Referrer[]>([]);
+  const [contractors, setContractors] = useState<Contractor[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [mortgageCompanies, setMortgageCompanies] = useState<MortgageCompany[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -87,7 +87,7 @@ export function NewClaimDialog() {
     lossTypeId: "",
     lossDate: "",
     lossDescription: "",
-    referrerId: "",
+    contractorId: "",
     mortgageCompanyId: "",
   });
 
@@ -99,25 +99,39 @@ export function NewClaimDialog() {
 
   const fetchDropdownData = async () => {
     try {
-      const [insuranceRes, lossTypesRes, referrersRes, clientsRes, mortgageRes] = await Promise.all([
+      const [insuranceRes, lossTypesRes, clientsRes, mortgageRes] = await Promise.all([
         supabase.from("insurance_companies").select("id, name, phone, email").eq("is_active", true).order("name"),
         supabase.from("loss_types").select("id, name").eq("is_active", true).order("name"),
-        supabase.from("referrers").select("id, name, company").eq("is_active", true).order("name"),
         supabase.from("clients").select("id, name, email, phone, street, city, state, zip_code").order("name"),
         supabase.from("mortgage_companies").select("id, name").eq("is_active", true).order("name"),
       ]);
 
       if (insuranceRes.error) throw insuranceRes.error;
       if (lossTypesRes.error) throw lossTypesRes.error;
-      if (referrersRes.error) throw referrersRes.error;
       if (clientsRes.error) throw clientsRes.error;
       if (mortgageRes.error) throw mortgageRes.error;
 
       setInsuranceCompanies(insuranceRes.data || []);
       setLossTypes(lossTypesRes.data || []);
-      setReferrers(referrersRes.data || []);
       setClients(clientsRes.data || []);
       setMortgageCompanies(mortgageRes.data || []);
+      
+      // Fetch contractors (users with contractor role)
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "contractor");
+      
+      if (roleData && roleData.length > 0) {
+        const contractorIds = roleData.map(r => r.user_id);
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", contractorIds)
+          .order("full_name");
+        
+        setContractors(profiles || []);
+      }
       
       // Fetch workspaces user has access to
       const { data: userData } = await supabase.auth.getUser();
@@ -309,7 +323,7 @@ export function NewClaimDialog() {
           p_loss_type_id: formData.lossTypeId || null,
           p_loss_date: formData.lossDate || null,
           p_loss_description: formData.lossDescription || null,
-          p_referrer_id: formData.referrerId || null,
+          p_referrer_id: null,
           p_client_id: clientId,
         })
         .single();
@@ -337,6 +351,13 @@ export function NewClaimDialog() {
               .insert({ claim_id: claim.id, staff_id: user.id });
           }
         }
+      }
+
+      // Assign contractor if selected
+      if (claim?.id && formData.contractorId) {
+        await supabase
+          .from("claim_contractors")
+          .insert({ claim_id: claim.id, contractor_id: formData.contractorId });
       }
 
       // Share to workspace if selected
@@ -371,7 +392,7 @@ export function NewClaimDialog() {
         lossTypeId: "",
         lossDate: "",
         lossDescription: "",
-        referrerId: "",
+        contractorId: "",
         mortgageCompanyId: "",
       });
 
@@ -588,18 +609,18 @@ export function NewClaimDialog() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="referrer">Referrer</Label>
+                <Label htmlFor="contractor">Contractor</Label>
                 <Select
-                  value={formData.referrerId}
-                  onValueChange={(value) => setFormData({ ...formData, referrerId: value })}
+                  value={formData.contractorId}
+                  onValueChange={(value) => setFormData({ ...formData, contractorId: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select referrer" />
+                    <SelectValue placeholder="Select contractor" />
                   </SelectTrigger>
                   <SelectContent>
-                    {referrers.map((referrer) => (
-                      <SelectItem key={referrer.id} value={referrer.id}>
-                        {referrer.name} {referrer.company && `(${referrer.company})`}
+                    {contractors.map((contractor) => (
+                      <SelectItem key={contractor.id} value={contractor.id}>
+                        {contractor.full_name || contractor.email}
                       </SelectItem>
                     ))}
                   </SelectContent>
