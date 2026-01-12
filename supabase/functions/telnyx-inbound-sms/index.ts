@@ -20,6 +20,55 @@ serve(async (req) => {
 
     // Telnyx sends events in a data wrapper
     const eventType = payload.data?.event_type;
+    const messagePayload = payload.data?.payload;
+    
+    // Handle status update events (sent, delivered, failed, etc.)
+    if (eventType?.startsWith('message.') && eventType !== 'message.received') {
+      const telnyxMessageId = messagePayload?.id;
+      const status = messagePayload?.to?.[0]?.status || eventType?.replace('message.', '');
+      
+      if (!telnyxMessageId) {
+        console.log('No message ID in status payload');
+        return new Response(JSON.stringify({ success: true, ignored: true }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log(`Status update for message ${telnyxMessageId}: ${status}`);
+
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+      // Map Telnyx status to our status
+      let mappedStatus = status;
+      if (status === 'delivered' || status === 'sent') {
+        mappedStatus = status;
+      } else if (status === 'sending' || status === 'queued') {
+        mappedStatus = 'sending';
+      } else if (status === 'delivery_failed' || status === 'sending_failed') {
+        mappedStatus = 'failed';
+      }
+
+      // Update the SMS message status
+      const { error } = await supabase
+        .from('sms_messages')
+        .update({ 
+          status: mappedStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('telnyx_message_id', telnyxMessageId);
+
+      if (error) {
+        console.log('Could not update message status:', error.message);
+      } else {
+        console.log('Updated SMS status to:', mappedStatus);
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, status: mappedStatus }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     if (eventType !== 'message.received') {
       console.log('Ignoring non-message event:', eventType);
@@ -29,7 +78,6 @@ serve(async (req) => {
       });
     }
 
-    const messagePayload = payload.data?.payload;
     const fromNumber = messagePayload?.from?.phone_number;
     const toNumber = messagePayload?.to?.[0]?.phone_number;
     const messageBody = messagePayload?.text;
