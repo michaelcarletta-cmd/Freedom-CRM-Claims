@@ -188,15 +188,26 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
       } else {
         updateData.claim_amount = null;
       }
-
       const { data, error } = await supabase
         .from("claims")
         .update(updateData)
         .eq("id", claim.id)
-        .select()
+        .select("*, client_id")
         .single();
 
       if (error) throw error;
+
+      // Sync client email if policyholder_email changed and claim has a linked client
+      if (data.client_id && formData.policyholder_email && formData.policyholder_email !== claim.policyholder_email) {
+        await supabase
+          .from("clients")
+          .update({ 
+            email: formData.policyholder_email,
+            name: formData.policyholder_name || undefined,
+            phone: formData.policyholder_phone || undefined,
+          })
+          .eq("id", data.client_id);
+      }
 
       // Trigger client notification if status changed
       if (oldStatus !== newStatus && newStatus) {
