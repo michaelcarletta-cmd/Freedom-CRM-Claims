@@ -60,14 +60,28 @@ function extractTextFromHtml(html: string): string {
 async function fetchUrlContent(url: string): Promise<{ title: string; content: string }> {
   console.log(`Fetching URL: ${url}`);
   
+  // Use browser-like headers to avoid bot blocking
   const response = await fetch(url, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; KnowledgeBot/1.0)',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1',
     },
   });
   
   if (!response.ok) {
+    // If still blocked, provide helpful message
+    if (response.status === 403) {
+      throw new Error(`This website (${new URL(url).hostname}) blocks automated access. Try a different page or add the content manually.`);
+    }
     throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
   }
   
