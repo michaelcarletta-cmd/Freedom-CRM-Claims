@@ -5,8 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Save, DollarSign, Loader2, Pencil } from "lucide-react";
+import { Plus, Trash2, Save, DollarSign, Loader2, Pencil, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface OutstandingCheck {
   id: string;
@@ -21,8 +23,24 @@ interface BankBalance {
   business_loans: number;
 }
 
+interface ClaimOutstandingCheck {
+  id: string;
+  check_number: string | null;
+  amount: number;
+  check_type: string;
+  check_date: string;
+  claim_id: string;
+  claims: {
+    id: string;
+    claim_number: string | null;
+    policyholder_name: string | null;
+    policyholder_address: string | null;
+  };
+}
+
 export function OutstandingChecksTracker() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [editingBankBalance, setEditingBankBalance] = useState(false);
   const [tempBankBalance, setTempBankBalance] = useState("");
   const [editingBusinessLoans, setEditingBusinessLoans] = useState(false);
@@ -30,6 +48,7 @@ export function OutstandingChecksTracker() {
   const [newCheck, setNewCheck] = useState({ check_number: "", payee: "", amount: "" });
   const [editingCheckId, setEditingCheckId] = useState<string | null>(null);
   const [editingCheck, setEditingCheck] = useState<OutstandingCheck | null>(null);
+  const [claimChecksOpen, setClaimChecksOpen] = useState(false);
 
   // Fetch bank balance
   const { data: bankBalanceData, isLoading: bankBalanceLoading } = useQuery({
@@ -57,6 +76,34 @@ export function OutstandingChecksTracker() {
       
       if (error) throw error;
       return data as OutstandingCheck[];
+    },
+  });
+
+  // Fetch claim checks that haven't been received yet
+  const { data: claimOutstandingChecks, isLoading: claimChecksLoading } = useQuery({
+    queryKey: ["claim-outstanding-checks"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_checks")
+        .select(`
+          id,
+          check_number,
+          amount,
+          check_type,
+          check_date,
+          claim_id,
+          claims (
+            id,
+            claim_number,
+            policyholder_name,
+            policyholder_address
+          )
+        `)
+        .is("received_date", null)
+        .order("check_date", { ascending: false });
+      
+      if (error) throw error;
+      return data as ClaimOutstandingCheck[];
     },
   });
 
@@ -221,7 +268,7 @@ export function OutstandingChecksTracker() {
     setEditingCheck(null);
   };
 
-  if (bankBalanceLoading || checksLoading) {
+  if (bankBalanceLoading || checksLoading || claimChecksLoading) {
     return (
       <Card className="bg-card border-border">
         <CardContent className="flex items-center justify-center py-8">
@@ -230,6 +277,8 @@ export function OutstandingChecksTracker() {
       </Card>
     );
   }
+
+  const totalClaimOutstandingChecks = claimOutstandingChecks?.reduce((sum, c) => sum + Number(c.amount), 0) || 0;
 
   return (
     <Card className="bg-card border-border">
@@ -377,101 +426,184 @@ export function OutstandingChecksTracker() {
           </Button>
         </div>
 
-        {/* Checks Table */}
-        <div className="rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="w-32">Check #</TableHead>
-                <TableHead>Payee</TableHead>
-                <TableHead className="w-40 text-right">Amount</TableHead>
-                <TableHead className="w-24 text-center">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {checks && checks.length > 0 ? (
-                checks.map((check) => (
-                  <TableRow key={check.id}>
-                    {editingCheckId === check.id && editingCheck ? (
-                      <>
-                        <TableCell>
-                          <Input
-                            value={editingCheck.check_number || ""}
-                            onChange={(e) => setEditingCheck({ ...editingCheck, check_number: e.target.value })}
-                            className="h-8"
-                          />
+        {/* Claim Outstanding Checks - Collapsible Section */}
+        <Collapsible open={claimChecksOpen} onOpenChange={setClaimChecksOpen}>
+          <CollapsibleTrigger asChild>
+            <div className="flex items-center justify-between p-4 bg-amber-500/10 rounded-lg border border-amber-500/30 cursor-pointer hover:bg-amber-500/20 transition-colors">
+              <div className="flex items-center gap-3">
+                {claimChecksOpen ? (
+                  <ChevronDown className="h-5 w-5 text-amber-600" />
+                ) : (
+                  <ChevronRight className="h-5 w-5 text-amber-600" />
+                )}
+                <div>
+                  <h3 className="font-semibold text-foreground">Claims with Outstanding Checks</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {claimOutstandingChecks?.length || 0} checks pending • {formatCurrency(totalClaimOutstandingChecks)} total
+                  </p>
+                </div>
+              </div>
+              <div className="text-xl font-bold text-amber-600 dark:text-amber-400">
+                {formatCurrency(totalClaimOutstandingChecks)}
+              </div>
+            </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <div className="rounded-md border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead>Claim #</TableHead>
+                    <TableHead>Policyholder</TableHead>
+                    <TableHead>Check #</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="w-20 text-center">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {claimOutstandingChecks && claimOutstandingChecks.length > 0 ? (
+                    claimOutstandingChecks.map((check) => (
+                      <TableRow key={check.id} className="hover:bg-muted/50">
+                        <TableCell className="font-medium">
+                          {check.claims?.claim_number || "-"}
                         </TableCell>
                         <TableCell>
-                          <Input
-                            value={editingCheck.payee}
-                            onChange={(e) => setEditingCheck({ ...editingCheck, payee: e.target.value })}
-                            className="h-8"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={editingCheck.amount}
-                            onChange={(e) => setEditingCheck({ ...editingCheck, amount: parseFloat(e.target.value) || 0 })}
-                            className="h-8 text-right"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex justify-center gap-1">
-                            <Button size="sm" variant="ghost" onClick={handleSaveEdit} disabled={updateCheckMutation.isPending}>
-                              <Save className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                              ✕
-                            </Button>
+                          <div>
+                            <div>{check.claims?.policyholder_name || "-"}</div>
+                            <div className="text-xs text-muted-foreground">{check.claims?.policyholder_address}</div>
                           </div>
                         </TableCell>
-                      </>
-                    ) : (
-                      <>
-                        <TableCell>
-                          {check.check_number || "-"}
-                        </TableCell>
-                        <TableCell>
-                          {check.payee}
-                        </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell>{check.check_number || "-"}</TableCell>
+                        <TableCell className="capitalize">{check.check_type?.replace(/_/g, " ") || "-"}</TableCell>
+                        <TableCell>{new Date(check.check_date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-right font-medium">
                           {formatCurrency(Number(check.amount))}
                         </TableCell>
                         <TableCell className="text-center">
-                          <div className="flex justify-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleStartEdit(check)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={() => deleteCheckMutation.mutate(check.id)}
-                              disabled={deleteCheckMutation.isPending}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => navigate(`/claims/${check.claim_id}`)}
+                            title="View Claim"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
                         </TableCell>
-                      </>
-                    )}
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                    No outstanding checks. Add one above.
-                  </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        No outstanding claim checks found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* Manual Outstanding Checks Table */}
+        <div className="space-y-2">
+          <h3 className="font-semibold text-foreground">Manual Outstanding Checks</h3>
+          <div className="rounded-md border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-32">Check #</TableHead>
+                  <TableHead>Payee</TableHead>
+                  <TableHead className="w-40 text-right">Amount</TableHead>
+                  <TableHead className="w-24 text-center">Actions</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {checks && checks.length > 0 ? (
+                  checks.map((check) => (
+                    <TableRow key={check.id}>
+                      {editingCheckId === check.id && editingCheck ? (
+                        <>
+                          <TableCell>
+                            <Input
+                              value={editingCheck.check_number || ""}
+                              onChange={(e) => setEditingCheck({ ...editingCheck, check_number: e.target.value })}
+                              className="h-8"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={editingCheck.payee}
+                              onChange={(e) => setEditingCheck({ ...editingCheck, payee: e.target.value })}
+                              className="h-8"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={editingCheck.amount}
+                              onChange={(e) => setEditingCheck({ ...editingCheck, amount: parseFloat(e.target.value) || 0 })}
+                              className="h-8 text-right"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex justify-center gap-1">
+                              <Button size="sm" variant="ghost" onClick={handleSaveEdit} disabled={updateCheckMutation.isPending}>
+                                <Save className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
+                                ✕
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </>
+                      ) : (
+                        <>
+                          <TableCell>
+                            {check.check_number || "-"}
+                          </TableCell>
+                          <TableCell>
+                            {check.payee}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(Number(check.amount))}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex justify-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleStartEdit(check)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => deleteCheckMutation.mutate(check.id)}
+                                disabled={deleteCheckMutation.isPending}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </>
+                      )}
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                      No outstanding checks. Add one above.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       </CardContent>
     </Card>
