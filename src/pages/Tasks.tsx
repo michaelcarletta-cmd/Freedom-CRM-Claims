@@ -39,11 +39,17 @@ const Tasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<TaskUser[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchTasks();
-    fetchUsers();
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUserId(user?.id || null);
+      fetchTasks();
+      fetchUsers();
+    };
+    init();
 
     const channel = supabase
       .channel("all-tasks")
@@ -137,8 +143,13 @@ const Tasks = () => {
     }
   };
 
-  const pendingTasks = tasks.filter((task) => task.status !== "completed");
-  const completedTasks = tasks.filter((task) => task.status === "completed");
+  // Filter tasks: show only unassigned tasks OR tasks assigned to current user
+  const myTasks = tasks.filter((task) => 
+    !task.assigned_to || task.assigned_to === currentUserId
+  );
+  
+  const pendingTasks = myTasks.filter((task) => task.status !== "completed");
+  const completedTasks = myTasks.filter((task) => task.status === "completed");
 
   const TaskList = ({ taskList }: { taskList: Task[] }) => (
     <div className="space-y-3">
