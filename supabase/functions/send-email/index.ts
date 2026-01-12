@@ -181,9 +181,39 @@ serve(async (req) => {
     if (attachments && Array.isArray(attachments) && attachments.length > 0) {
       console.log(`Processing ${attachments.length} attachments:`, JSON.stringify(attachments));
       
+      const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB max per file (edge function memory limit)
+      
       for (const attachment of attachments as Attachment[]) {
         try {
-          console.log(`Downloading attachment: ${attachment.fileName} from path: ${attachment.filePath}`);
+          console.log(`Processing attachment: ${attachment.fileName} from path: ${attachment.filePath}`);
+          
+          // Extract directory and filename from path to check size first
+          const pathParts = attachment.filePath.split('/');
+          const fileName = pathParts.pop() || '';
+          const directory = pathParts.join('/');
+          
+          // Check file size BEFORE downloading to avoid memory issues
+          const { data: fileList, error: listError } = await supabaseAdmin.storage
+            .from('claim-files')
+            .list(directory, {
+              search: fileName,
+              limit: 1
+            });
+          
+          if (listError) {
+            console.warn(`Could not check file size for ${attachment.fileName}, proceeding with download`);
+          } else if (fileList && fileList.length > 0) {
+            const fileMetadata = fileList.find(f => f.name === fileName);
+            if (fileMetadata && fileMetadata.metadata?.size) {
+              const fileSize = fileMetadata.metadata.size;
+              if (fileSize > MAX_FILE_SIZE) {
+                const errorMsg = `Skipping ${attachment.fileName} - file too large (${(fileSize / 1024 / 1024).toFixed(2)} MB, max ${MAX_FILE_SIZE / 1024 / 1024}MB). Please use a file sharing link instead.`;
+                console.warn(errorMsg);
+                attachmentErrors.push(errorMsg);
+                continue;
+              }
+            }
+          }
           
           // Download file from storage
           const { data: fileData, error: downloadError } = await supabaseAdmin.storage
@@ -204,19 +234,19 @@ serve(async (req) => {
             continue;
           }
           
+          // Double-check size after download (in case list didn't return size)
+          if (fileData.size > MAX_FILE_SIZE) {
+            const errorMsg = `Skipping ${attachment.fileName} - file too large (${(fileData.size / 1024 / 1024).toFixed(2)} MB, max ${MAX_FILE_SIZE / 1024 / 1024}MB). Please use a file sharing link instead.`;
+            console.warn(errorMsg);
+            attachmentErrors.push(errorMsg);
+            continue;
+          }
+          
           console.log(`Downloaded ${attachment.fileName}, size: ${fileData.size} bytes`);
           
           // Convert to base64 using chunked approach (memory efficient)
           const arrayBuffer = await fileData.arrayBuffer();
           const uint8Array = new Uint8Array(arrayBuffer);
-          
-          // Check file size - skip files over 25MB (Resend's limit is 40MB total)
-          if (uint8Array.length > 25 * 1024 * 1024) {
-            const errorMsg = `Skipping ${attachment.fileName} - file too large (${(uint8Array.length / 1024 / 1024).toFixed(2)} MB, max 25MB)`;
-            console.warn(errorMsg);
-            attachmentErrors.push(errorMsg);
-            continue;
-          }
           
           // Chunked base64 encoding to avoid memory issues
           const chunkSize = 32768;
@@ -232,7 +262,7 @@ serve(async (req) => {
             content: base64Content,
           });
           
-          console.log(`Successfully processed attachment: ${attachment.fileName} (${(uint8Array.length / 1024).toFixed(2)} KB, base64 length: ${base64Content.length})`);
+          console.log(`Successfully processed attachment: ${attachment.fileName} (${(uint8Array.length / 1024).toFixed(2)} KB)`);
         } catch (err) {
           const errorMsg = `Error processing ${attachment.fileName}: ${err instanceof Error ? err.message : String(err)}`;
           console.error(errorMsg);
