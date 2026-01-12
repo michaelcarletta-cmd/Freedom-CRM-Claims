@@ -9,8 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image } from "lucide-react";
+import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +43,12 @@ export const AIKnowledgeBaseSettings = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
+  
+  // URL upload state
+  const [urlInput, setUrlInput] = useState("");
+  const [urlCategory, setUrlCategory] = useState<string>("");
+  const [urlDescription, setUrlDescription] = useState("");
+  const [urlUploading, setUrlUploading] = useState(false);
 
   const { data: documents, isLoading } = useQuery({
     queryKey: ["ai-knowledge-documents"],
@@ -184,6 +191,67 @@ export const AIKnowledgeBaseSettings = () => {
     }
   };
 
+  const handleUrlUpload = async () => {
+    if (!urlInput || !urlCategory) {
+      toast.error("Please enter a URL and select a category");
+      return;
+    }
+
+    // Validate URL
+    let url: URL;
+    try {
+      url = new URL(urlInput.startsWith('http') ? urlInput : `https://${urlInput}`);
+    } catch {
+      toast.error("Please enter a valid URL");
+      return;
+    }
+
+    setUrlUploading(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Create document record for URL
+      const { data: docData, error: docError } = await supabase
+        .from("ai_knowledge_documents")
+        .insert({
+          file_name: url.hostname,
+          file_path: url.toString(),
+          file_type: "url",
+          file_size: null,
+          category: urlCategory,
+          description: urlDescription || null,
+          uploaded_by: user.id,
+          status: "pending",
+        })
+        .select()
+        .single();
+
+      if (docError) throw docError;
+
+      // Trigger URL processing
+      supabase.functions.invoke(
+        "process-knowledge-url",
+        { body: { documentId: docData.id, url: url.toString() } }
+      ).catch(err => console.error("URL processing trigger error:", err));
+
+      toast.success("URL submitted for processing");
+
+      // Reset form
+      setUrlInput("");
+      setUrlCategory("");
+      setUrlDescription("");
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
+
+    } catch (error: any) {
+      console.error("URL upload error:", error);
+      toast.error(error.message || "Failed to submit URL");
+    } finally {
+      setUrlUploading(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
@@ -197,7 +265,10 @@ export const AIKnowledgeBaseSettings = () => {
     }
   };
 
-  const getFileIcon = (fileName: string) => {
+  const getFileIcon = (fileName: string, fileType?: string) => {
+    if (fileType === 'url') {
+      return <Globe className="h-5 w-5 text-cyan-400" />;
+    }
     if (fileName.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)) {
       return <Video className="h-5 w-5 text-purple-400" />;
     }
@@ -223,76 +294,154 @@ export const AIKnowledgeBaseSettings = () => {
             AI Knowledge Base
           </CardTitle>
           <CardDescription>
-            Upload documents, images, and videos to train the AI assistant. Supported formats: PDF, Word docs, PowerPoint, images (JPG, PNG), and video/audio files.
+            Upload documents, images, videos, or add URLs to train the AI assistant.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>File(s) - Select multiple for bulk upload</Label>
-              <Input
-                type="file"
-                accept={ACCEPTED_FILE_TYPES}
-                onChange={handleFileSelect}
-                disabled={uploading}
-                className="cursor-pointer"
-                multiple
-              />
-              {selectedFiles.length > 0 && (
-                <p className="text-sm text-muted-foreground">
-                  Selected: {selectedFiles.length} file(s) ({(selectedFiles.reduce((acc, f) => acc + f.size, 0) / 1024 / 1024).toFixed(2)} MB total)
-                </p>
-              )}
-            </div>
+          <Tabs defaultValue="files" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="files" className="flex items-center gap-2">
+                <Upload className="h-4 w-4" />
+                Upload Files
+              </TabsTrigger>
+              <TabsTrigger value="url" className="flex items-center gap-2">
+                <Link className="h-4 w-4" />
+                Add URL
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="files" className="space-y-4 mt-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>File(s) - Select multiple for bulk upload</Label>
+                  <Input
+                    type="file"
+                    accept={ACCEPTED_FILE_TYPES}
+                    onChange={handleFileSelect}
+                    disabled={uploading}
+                    className="cursor-pointer"
+                    multiple
+                  />
+                  {selectedFiles.length > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      Selected: {selectedFiles.length} file(s) ({(selectedFiles.reduce((acc, f) => acc + f.size, 0) / 1024 / 1024).toFixed(2)} MB total)
+                    </p>
+                  )}
+                </div>
 
-            <div className="space-y-2">
-              <Label>Category *</Label>
-              <Select value={category} onValueChange={setCategory} disabled={uploading}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((cat) => (
-                    <SelectItem key={cat.value} value={cat.value}>
-                      {cat.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+                <div className="space-y-2">
+                  <Label>Category *</Label>
+                  <Select value={category} onValueChange={setCategory} disabled={uploading}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-          <div className="space-y-2">
-            <Label>Description (optional)</Label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Brief description of the document content..."
-              disabled={uploading}
-              rows={2}
-            />
-          </div>
+              <div className="space-y-2">
+                <Label>Description (optional)</Label>
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Brief description of the document content..."
+                  disabled={uploading}
+                  rows={2}
+                />
+              </div>
 
-          <Button
-            onClick={handleUpload}
-            disabled={selectedFiles.length === 0 || !category || uploading}
-            className="w-full md:w-auto"
-          >
-            {uploading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                {uploadProgress ? `Uploading ${uploadProgress.current}/${uploadProgress.total}...` : 'Uploading...'}
-              </>
-            ) : (
-              <>
-                <Upload className="h-4 w-4 mr-2" />
-                Upload {selectedFiles.length > 1 ? `${selectedFiles.length} Documents` : 'Document'}
-              </>
-            )}
-          </Button>
-          <p className="text-xs text-muted-foreground mt-2">
-            Processing time: PDFs/Word docs take 30-60 seconds. Videos/audio may take 2-5 minutes for transcription.
-          </p>
+              <Button
+                onClick={handleUpload}
+                disabled={selectedFiles.length === 0 || !category || uploading}
+                className="w-full md:w-auto"
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {uploadProgress ? `Uploading ${uploadProgress.current}/${uploadProgress.total}...` : 'Uploading...'}
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload {selectedFiles.length > 1 ? `${selectedFiles.length} Documents` : 'Document'}
+                  </>
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Supported: PDF, Word docs, PowerPoint, images (JPG, PNG), video/audio files. Max 20MB per file.
+              </p>
+            </TabsContent>
+            
+            <TabsContent value="url" className="space-y-4 mt-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Website URL *</Label>
+                  <Input
+                    type="url"
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    placeholder="https://example.com/page"
+                    disabled={urlUploading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Category *</Label>
+                  <Select value={urlCategory} onValueChange={setUrlCategory} disabled={urlUploading}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Description (optional)</Label>
+                <Textarea
+                  value={urlDescription}
+                  onChange={(e) => setUrlDescription(e.target.value)}
+                  placeholder="Brief description of what this page contains..."
+                  disabled={urlUploading}
+                  rows={2}
+                />
+              </div>
+
+              <Button
+                onClick={handleUrlUpload}
+                disabled={!urlInput || !urlCategory || urlUploading}
+                className="w-full md:w-auto"
+              >
+                {urlUploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing URL...
+                  </>
+                ) : (
+                  <>
+                    <Globe className="h-4 w-4 mr-2" />
+                    Add URL
+                  </>
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                The AI will fetch and analyze the webpage content. Processing takes 30-60 seconds.
+              </p>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
@@ -317,7 +466,7 @@ export const AIKnowledgeBaseSettings = () => {
                     className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border"
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {getFileIcon(doc.file_name)}
+                      {getFileIcon(doc.file_name, doc.file_type)}
                       <div className="min-w-0 flex-1">
                         <p className="font-medium truncate">{doc.file_name}</p>
                         <div className="flex items-center gap-2 mt-1">
