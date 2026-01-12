@@ -1352,9 +1352,8 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
       ];
     }
 
-    // Call Lovable AI - use gemini-2.5-pro for PDF analysis (better document understanding)
-    const hasPdfContent = pdfContent || (pdfContents && pdfContents.length > 0) || additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf;
-    const model = hasPdfContent ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
+    // Call Lovable AI - use GPT-5.2 for maximum intelligence
+    const model = 'openai/gpt-5.2';
     console.log(`Using model: ${model}`);
     
     // For task_followup, use tool calling to get structured actions
