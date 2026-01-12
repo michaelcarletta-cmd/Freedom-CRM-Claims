@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,14 @@ interface InvoiceLineItem {
   description: string;
   quantity: number;
   unitPrice: number;
+}
+
+interface CompanyBranding {
+  company_name: string | null;
+  company_address: string | null;
+  company_phone: string | null;
+  company_email: string | null;
+  letterhead_url: string | null;
 }
 
 interface InvoiceDialogProps {
@@ -38,6 +46,7 @@ export function InvoiceDialog({
 }: InvoiceDialogProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [companyBranding, setCompanyBranding] = useState<CompanyBranding | null>(null);
   const [formData, setFormData] = useState({
     invoiceNumber: `INV-${Date.now().toString().slice(-8)}`,
     invoiceDate: format(new Date(), "yyyy-MM-dd"),
@@ -51,6 +60,22 @@ export function InvoiceDialog({
     { description: "", quantity: 1, unitPrice: 0 },
   ]);
   const [generatedPdfUrl, setGeneratedPdfUrl] = useState<string | null>(null);
+
+  // Load company branding on mount
+  useEffect(() => {
+    const loadBranding = async () => {
+      const { data } = await supabase
+        .from('company_branding')
+        .select('company_name, company_address, company_phone, company_email, letterhead_url')
+        .limit(1)
+        .single();
+      
+      if (data) {
+        setCompanyBranding(data);
+      }
+    };
+    loadBranding();
+  }, []);
 
   const addLineItem = () => {
     setLineItems([...lineItems, { description: "", quantity: 1, unitPrice: 0 }]);
@@ -85,6 +110,14 @@ export function InvoiceDialog({
           invoiceNumber: formData.invoiceNumber,
           invoiceDate: formData.invoiceDate,
           dueDate: formData.dueDate,
+          // Send company branding as sender
+          sender: companyBranding ? {
+            name: companyBranding.company_name || '',
+            email: companyBranding.company_email || '',
+            phone: companyBranding.company_phone || '',
+            address: companyBranding.company_address || '',
+            logoUrl: companyBranding.letterhead_url || '',
+          } : null,
           recipient: {
             name: formData.recipientName,
             email: formData.recipientEmail,

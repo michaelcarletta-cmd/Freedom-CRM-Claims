@@ -23,10 +23,11 @@ function generateInvoiceHtml(data: any): string {
     </tr>
   `).join('');
 
-  // Use contractor name if provided, otherwise fall back to generic
-  const companyName = sender?.name || 'Contractor Services';
+  // Use sender info (company branding or contractor)
+  const companyName = sender?.name || 'Your Company';
   const companyEmail = sender?.email || '';
   const companyPhone = sender?.phone || '';
+  const companyAddress = sender?.address || '';
   const companyLogo = sender?.logoUrl || '';
 
   return `
@@ -121,6 +122,7 @@ function generateInvoiceHtml(data: any): string {
     <div class="company-info">
       ${companyLogo ? `<img src="${companyLogo}" alt="${companyName} Logo" class="company-logo" />` : ''}
       <div class="company-name">${companyName}</div>
+      ${companyAddress ? `<p>${companyAddress}</p>` : ''}
       ${companyPhone ? `<p>Phone: ${companyPhone}</p>` : ''}
       ${companyEmail ? `<p>Email: ${companyEmail}</p>` : ''}
       ${claimNumber ? `<span class="claim-badge">Claim #${claimNumber}</span>` : ''}
