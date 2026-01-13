@@ -421,11 +421,13 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
       const paymentsOutstanding = acv - deductible - paymentsReceived; // What's still owed before depreciation
 
       // Get RCV values for each category
+      // replacement_cost_value IS the dwelling RCV (not the total of all categories)
+      const dwellingRCV = rcv; // This is the dwelling RCV directly
       const otherStructuresRCV = Number(settlement.other_structures_rcv) || 0;
       const pwiRCV = Number(settlement.pwi_rcv) || 0;
       const personalPropertyRCV = Number(settlement.personal_property_rcv) || 0;
-      // Dwelling RCV is the main RCV minus other categories
-      const dwellingRCV = rcv - otherStructuresRCV - pwiRCV - personalPropertyRCV;
+      // Total RCV is dwelling + other categories
+      const totalRCV = dwellingRCV + otherStructuresRCV + pwiRCV + personalPropertyRCV;
 
       const { data: invoiceResult, error: invoiceError } = await supabase.functions.invoke("generate-invoice", {
         body: {
@@ -454,7 +456,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           supplementAmount: supplementAmount > 0 ? supplementAmount : undefined,
           // Settlement breakdown with detailed depreciation categories and RCVs
           settlementBreakdown: {
-            rcv,
+            rcv: totalRCV, // Total RCV across all categories
             acv,
             deductible,
             paymentsReceived,
