@@ -417,7 +417,8 @@ serve(async (req) => {
     } else if (
       fileType.includes('video') || 
       fileType.includes('audio') ||
-      document.file_name.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)
+      fileType === 'audio/amr' ||
+      document.file_name.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|amr|webm)$/i)
     ) {
       extractedText = await transcribeMedia(imageUrl, document.file_name);
     } else if (
