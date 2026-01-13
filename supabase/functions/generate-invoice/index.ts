@@ -187,8 +187,38 @@ function generateInvoiceHtml(data: any): string {
         <span class="value">$${settlementBreakdown.supplement?.toFixed(2) || '0.00'}</span>
       </div>
       ` : ''}
+    </div>
+  </div>
+  
+  <div class="breakdown-section avoid-break keep-together">
+    <h3>Recoverable Depreciation Breakdown</h3>
+    <div class="breakdown-grid">
+      ${settlementBreakdown.dwellingRD > 0 ? `
+      <div class="breakdown-item">
+        <span class="label">Dwelling/Structure RD</span>
+        <span class="value">$${settlementBreakdown.dwellingRD?.toFixed(2) || '0.00'}</span>
+      </div>
+      ` : ''}
+      ${settlementBreakdown.otherStructuresRD > 0 ? `
+      <div class="breakdown-item">
+        <span class="label">Other Structures RD</span>
+        <span class="value">$${settlementBreakdown.otherStructuresRD?.toFixed(2) || '0.00'}</span>
+      </div>
+      ` : ''}
+      ${settlementBreakdown.pwiRD > 0 ? `
+      <div class="breakdown-item">
+        <span class="label">PWI RD</span>
+        <span class="value">$${settlementBreakdown.pwiRD?.toFixed(2) || '0.00'}</span>
+      </div>
+      ` : ''}
+      ${settlementBreakdown.personalPropertyRD > 0 ? `
+      <div class="breakdown-item">
+        <span class="label">Personal Property RD</span>
+        <span class="value">$${settlementBreakdown.personalPropertyRD?.toFixed(2) || '0.00'}</span>
+      </div>
+      ` : ''}
       <div class="breakdown-item highlight">
-        <span class="label">Recoverable Depreciation Owed</span>
+        <span class="label">Total Recoverable Depreciation</span>
         <span class="value">$${settlementBreakdown.recoverableDepreciation?.toFixed(2) || '0.00'}</span>
       </div>
     </div>
