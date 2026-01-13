@@ -333,8 +333,10 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
       ) : (
         <div className="space-y-3">
           {inspections.map((inspection) => {
-            // Use parseISO to correctly handle date-only strings without timezone shift
-            const inspectionDate = parseISO(inspection.inspection_date);
+            // Parse date as local date to avoid timezone shift
+            // Split "YYYY-MM-DD" and create local date (months are 0-indexed)
+            const [year, month, day] = inspection.inspection_date.split('-').map(Number);
+            const inspectionDate = new Date(year, month - 1, day);
             const isUpcoming = !isPast(inspectionDate) && inspection.status === "scheduled";
             const isPastDue = isPast(inspectionDate) && inspection.status === "scheduled";
 
