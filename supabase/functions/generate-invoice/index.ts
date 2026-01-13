@@ -151,16 +151,53 @@ function generateInvoiceHtml(data: any): string {
 
   ${settlementBreakdown ? `
   <div class="breakdown-section avoid-break keep-together">
-    <h3>Settlement Breakdown</h3>
+    <h3>Settlement Breakdown by Coverage</h3>
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px;">
+      <thead>
+        <tr style="background: #f1f5f9;">
+          <th style="padding: 8px; text-align: left; border: 1px solid #e2e8f0;">Coverage</th>
+          <th style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">RCV</th>
+          <th style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">Recoverable Depreciation</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${settlementBreakdown.dwellingRCV > 0 || settlementBreakdown.dwellingRD > 0 ? `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #e2e8f0;">Dwelling/Structure</td>
+          <td style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">$${settlementBreakdown.dwellingRCV?.toFixed(2) || '0.00'}</td>
+          <td style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">$${settlementBreakdown.dwellingRD?.toFixed(2) || '0.00'}</td>
+        </tr>
+        ` : ''}
+        ${settlementBreakdown.otherStructuresRCV > 0 || settlementBreakdown.otherStructuresRD > 0 ? `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #e2e8f0;">Other Structures</td>
+          <td style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">$${settlementBreakdown.otherStructuresRCV?.toFixed(2) || '0.00'}</td>
+          <td style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">$${settlementBreakdown.otherStructuresRD?.toFixed(2) || '0.00'}</td>
+        </tr>
+        ` : ''}
+        ${settlementBreakdown.pwiRCV > 0 || settlementBreakdown.pwiRD > 0 ? `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #e2e8f0;">PWI (Property Within Insurance)</td>
+          <td style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">$${settlementBreakdown.pwiRCV?.toFixed(2) || '0.00'}</td>
+          <td style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">$${settlementBreakdown.pwiRD?.toFixed(2) || '0.00'}</td>
+        </tr>
+        ` : ''}
+        ${settlementBreakdown.personalPropertyRCV > 0 || settlementBreakdown.personalPropertyRD > 0 ? `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #e2e8f0;">Personal Property</td>
+          <td style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">$${settlementBreakdown.personalPropertyRCV?.toFixed(2) || '0.00'}</td>
+          <td style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">$${settlementBreakdown.personalPropertyRD?.toFixed(2) || '0.00'}</td>
+        </tr>
+        ` : ''}
+        <tr style="background: #ecfdf5; font-weight: bold;">
+          <td style="padding: 8px; border: 1px solid #e2e8f0;">TOTAL</td>
+          <td style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">$${settlementBreakdown.rcv?.toFixed(2) || '0.00'}</td>
+          <td style="padding: 8px; text-align: right; border: 1px solid #e2e8f0; color: #059669;">$${settlementBreakdown.recoverableDepreciation?.toFixed(2) || '0.00'}</td>
+        </tr>
+      </tbody>
+    </table>
+    
     <div class="breakdown-grid">
-      <div class="breakdown-item">
-        <span class="label">Replacement Cost Value (RCV)</span>
-        <span class="value">$${settlementBreakdown.rcv?.toFixed(2) || '0.00'}</span>
-      </div>
-      <div class="breakdown-item">
-        <span class="label">Actual Cash Value (ACV)</span>
-        <span class="value">$${settlementBreakdown.acv?.toFixed(2) || '0.00'}</span>
-      </div>
       <div class="breakdown-item">
         <span class="label">Deductible</span>
         <span class="value">$${settlementBreakdown.deductible?.toFixed(2) || '0.00'}</span>
@@ -187,40 +224,6 @@ function generateInvoiceHtml(data: any): string {
         <span class="value">$${settlementBreakdown.supplement?.toFixed(2) || '0.00'}</span>
       </div>
       ` : ''}
-    </div>
-  </div>
-  
-  <div class="breakdown-section avoid-break keep-together">
-    <h3>Recoverable Depreciation Breakdown</h3>
-    <div class="breakdown-grid">
-      ${settlementBreakdown.dwellingRD > 0 ? `
-      <div class="breakdown-item">
-        <span class="label">Dwelling/Structure RD</span>
-        <span class="value">$${settlementBreakdown.dwellingRD?.toFixed(2) || '0.00'}</span>
-      </div>
-      ` : ''}
-      ${settlementBreakdown.otherStructuresRD > 0 ? `
-      <div class="breakdown-item">
-        <span class="label">Other Structures RD</span>
-        <span class="value">$${settlementBreakdown.otherStructuresRD?.toFixed(2) || '0.00'}</span>
-      </div>
-      ` : ''}
-      ${settlementBreakdown.pwiRD > 0 ? `
-      <div class="breakdown-item">
-        <span class="label">PWI RD</span>
-        <span class="value">$${settlementBreakdown.pwiRD?.toFixed(2) || '0.00'}</span>
-      </div>
-      ` : ''}
-      ${settlementBreakdown.personalPropertyRD > 0 ? `
-      <div class="breakdown-item">
-        <span class="label">Personal Property RD</span>
-        <span class="value">$${settlementBreakdown.personalPropertyRD?.toFixed(2) || '0.00'}</span>
-      </div>
-      ` : ''}
-      <div class="breakdown-item highlight">
-        <span class="label">Total Recoverable Depreciation</span>
-        <span class="value">$${settlementBreakdown.recoverableDepreciation?.toFixed(2) || '0.00'}</span>
-      </div>
     </div>
   </div>
   ` : ''}
