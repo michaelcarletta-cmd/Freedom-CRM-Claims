@@ -45,8 +45,7 @@ function getMimeType(fileType: string, fileName: string): string {
   if (fileType.includes('video') || fileName.match(/\.(mp4|mov|avi|mkv|webm)$/i)) {
     return 'video/mp4';
   }
-  if (fileType.includes('audio') || fileName.match(/\.(mp3|wav|m4a|amr)$/i)) {
-    if (fileName.match(/\.amr$/i)) return 'audio/amr';
+  if (fileType.includes('audio') || fileName.match(/\.(mp3|wav|m4a)$/i)) {
     return 'audio/mpeg';
   }
   // Image types
@@ -417,8 +416,7 @@ serve(async (req) => {
     } else if (
       fileType.includes('video') || 
       fileType.includes('audio') ||
-      fileType === 'audio/amr' ||
-      document.file_name.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|amr|webm)$/i)
+      document.file_name.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)
     ) {
       extractedText = await transcribeMedia(imageUrl, document.file_name);
     } else if (
