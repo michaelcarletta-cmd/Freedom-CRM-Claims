@@ -46,7 +46,11 @@ interface Settlement {
   total_settlement: number | null;
   estimate_amount: number | null;
   pwi_recoverable_depreciation?: number;
+  pwi_rcv?: number;
   other_structures_recoverable_depreciation?: number;
+  other_structures_rcv?: number;
+  personal_property_recoverable_depreciation?: number;
+  personal_property_rcv?: number;
 }
 
 const formatCurrency = (amount: number | null | undefined): string => {
@@ -258,10 +262,11 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
   // Calculate total recoverable depreciation
   const getTotalRecoverableDepreciation = (): number => {
     if (!settlement) return 0;
-    const main = Number(settlement.recoverable_depreciation) || 0;
+    const dwelling = Number(settlement.recoverable_depreciation) || 0;
     const pwi = Number(settlement.pwi_recoverable_depreciation) || 0;
-    const other = Number(settlement.other_structures_recoverable_depreciation) || 0;
-    return main + pwi + other;
+    const otherStructures = Number(settlement.other_structures_recoverable_depreciation) || 0;
+    const personalProperty = Number(settlement.personal_property_recoverable_depreciation) || 0;
+    return dwelling + pwi + otherStructures + personalProperty;
   };
 
   // Analyze selected estimate with Darwin AI
@@ -373,16 +378,23 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           unitPrice: 0, // Informational only
         });
       }
-      if (settlement.pwi_recoverable_depreciation && settlement.pwi_recoverable_depreciation > 0) {
+      if (settlement.other_structures_recoverable_depreciation && settlement.other_structures_recoverable_depreciation > 0) {
         lineItems.push({
-          description: '  - Personal Property/Contents Recoverable Depreciation',
+          description: '  - Other Structures Recoverable Depreciation',
           quantity: 1,
           unitPrice: 0,
         });
       }
-      if (settlement.other_structures_recoverable_depreciation && settlement.other_structures_recoverable_depreciation > 0) {
+      if (settlement.pwi_recoverable_depreciation && settlement.pwi_recoverable_depreciation > 0) {
         lineItems.push({
-          description: '  - Other Structures Recoverable Depreciation',
+          description: '  - PWI Recoverable Depreciation',
+          quantity: 1,
+          unitPrice: 0,
+        });
+      }
+      if (settlement.personal_property_recoverable_depreciation && settlement.personal_property_recoverable_depreciation > 0) {
+        lineItems.push({
+          description: '  - Personal Property Recoverable Depreciation',
           quantity: 1,
           unitPrice: 0,
         });
@@ -536,24 +548,24 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
             Settlement Summary
           </h3>
           {settlement ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
               <div>
                 <p className="text-muted-foreground">Dwelling RD</p>
                 <p className="font-semibold">{formatCurrency(settlement.recoverable_depreciation)}</p>
               </div>
-              {settlement.pwi_recoverable_depreciation && settlement.pwi_recoverable_depreciation > 0 && (
-                <div>
-                  <p className="text-muted-foreground">Contents RD</p>
-                  <p className="font-semibold">{formatCurrency(settlement.pwi_recoverable_depreciation)}</p>
-                </div>
-              )}
-              {settlement.other_structures_recoverable_depreciation && settlement.other_structures_recoverable_depreciation > 0 && (
-                <div>
-                  <p className="text-muted-foreground">Other Structures RD</p>
-                  <p className="font-semibold">{formatCurrency(settlement.other_structures_recoverable_depreciation)}</p>
-                </div>
-              )}
-              <div className="col-span-2 md:col-span-1 border-l pl-4">
+              <div>
+                <p className="text-muted-foreground">Other Structures RD</p>
+                <p className="font-semibold">{formatCurrency(settlement.other_structures_recoverable_depreciation)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">PWI RD</p>
+                <p className="font-semibold">{formatCurrency(settlement.pwi_recoverable_depreciation)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Personal Property RD</p>
+                <p className="font-semibold">{formatCurrency(settlement.personal_property_recoverable_depreciation)}</p>
+              </div>
+              <div className="border-l pl-4">
                 <p className="text-muted-foreground">Total Recoverable</p>
                 <p className="font-bold text-lg text-primary">{formatCurrency(totalRD)}</p>
               </div>
