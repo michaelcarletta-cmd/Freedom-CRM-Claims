@@ -1262,7 +1262,8 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
       const contentParts: any[] = [];
       
       // Add each PDF as an image_url (Gemini will process PDFs this way)
-      for (const pdf of pdfContents.slice(0, 5)) { // Limit to 5 PDFs to avoid token limits
+      // Limit to 3 PDFs to reduce payload size and avoid timeouts during gateway issues
+      for (const pdf of pdfContents.slice(0, 3)) {
         contentParts.push({
           type: 'image_url',
           image_url: {
@@ -1282,7 +1283,7 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
         { role: 'user', content: contentParts }
       ];
       
-      console.log(`Demand package with ${pdfContents.length} PDFs (processing ${Math.min(pdfContents.length, 5)})`);
+      console.log(`Demand package with ${pdfContents.length} PDFs (processing ${Math.min(pdfContents.length, 3)})`);
     } else if (analysisType === 'supplement' && (additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf || pdfContent)) {
       // Supplement comparison with potentially two PDFs
       const contentParts: any[] = [];
@@ -1358,15 +1359,17 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
     
     // Model fallback chain - use only Gemini models for PDF processing (OpenAI doesn't support PDF multimodal)
     // For text-only analysis, we can use OpenAI as fallback
+    // IMPORTANT: gemini-3-flash-preview first as it's on newer infrastructure
     const modelFallbackChain = needsPdfProcessing ? [
-      'google/gemini-2.5-pro',         // Most reliable for PDFs - try first
+      'google/gemini-3-flash-preview', // Newest model, different infrastructure - try first
       'google/gemini-2.5-flash',       // Fast option for PDFs
-      'google/gemini-3-flash-preview', // Newer model for PDFs
+      'google/gemini-2.5-pro',         // Most capable for PDFs
+      'google/gemini-3-pro-preview',   // Newer pro model
     ] : [
-      'google/gemini-2.5-flash',       // Fast and reliable
+      'google/gemini-3-flash-preview', // Newest, fastest
       'openai/gpt-5-mini',             // Different provider fallback
-      'google/gemini-2.5-flash-lite',  // Lightweight Google fallback
-      'google/gemini-2.5-pro',         // Full capability Google fallback
+      'google/gemini-2.5-flash',       // Fast Google fallback
+      'openai/gpt-5.2',                // Most capable OpenAI (user's preference for Darwin)
       'openai/gpt-5-nano',             // Fast OpenAI fallback
     ];
     console.log(`Model fallback chain: ${modelFallbackChain.join(' -> ')} (PDF processing: ${needsPdfProcessing})`);
