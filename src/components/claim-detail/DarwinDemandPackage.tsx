@@ -46,6 +46,9 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
   const [generatedPackage, setGeneratedPackage] = useState<string | null>(null);
   const [lastPackageDate, setLastPackageDate] = useState<string | null>(null);
 
+  const [assignedUserName, setAssignedUserName] = useState<string>('Public Adjuster');
+  const [companyBranding, setCompanyBranding] = useState<any>(null);
+
   useEffect(() => {
     loadData();
   }, [claimId]);
@@ -87,6 +90,33 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         .order('created_at', { ascending: false });
       
       setPhotos(photosData || []);
+
+      // Load company branding
+      const { data: brandingData } = await supabase
+        .from('company_branding')
+        .select('*')
+        .limit(1)
+        .single();
+      setCompanyBranding(brandingData);
+
+      // Load assigned staff to get user name
+      const { data: staffData } = await supabase
+        .from('claim_staff')
+        .select('staff_id')
+        .eq('claim_id', claimId)
+        .limit(1)
+        .maybeSingle();
+
+      if (staffData?.staff_id) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', staffData.staff_id)
+          .maybeSingle();
+        if (profileData?.full_name) {
+          setAssignedUserName(profileData.full_name);
+        }
+      }
 
       // Load previous demand package
       const { data: previousPackage } = await supabase
@@ -183,7 +213,8 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
             documentCount: fileContents.length,
             documents: fileContents.map(f => ({ name: f.name, folder: f.folder })),
             photoCount: photoInfo.length,
-            photos: photoInfo
+            photos: photoInfo,
+            assignedUserName
           },
           // Send all PDF contents for analysis
           pdfContents: fileContents
@@ -258,7 +289,8 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           claimId,
           reportTitle: `Demand Package - ${claim.policyholder_name || 'Claim'} - ${format(new Date(), 'yyyy-MM-dd')}`,
           reportType: 'demand_package',
-          companyBranding: null
+          companyBranding,
+          includeLogoHeader: true
         }
       });
 
