@@ -1352,24 +1352,28 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
       ];
     }
 
-    // Call Lovable AI - use Gemini 3 Flash Preview (default, most stable model)
+    // Call Lovable AI with model fallback chain for reliability
     const hasPdfContent = pdfContent || (pdfContents && pdfContents.length > 0) || additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf;
     const needsPdfProcessing = hasPdfContent && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package'].includes(analysisType);
     
-    // Use Gemini 3 Flash Preview - recommended default model, most stable and reliable
-    const model = 'google/gemini-3-flash-preview';
-    console.log(`Using model: ${model} (PDF processing: ${needsPdfProcessing})`);
+    // Model fallback chain - try multiple models if one is unavailable
+    const modelFallbackChain = [
+      'google/gemini-2.5-flash',      // Fast and reliable
+      'google/gemini-3-flash-preview', // Default model
+      'google/gemini-2.5-flash-lite',  // Lightweight fallback
+      'google/gemini-2.5-pro',         // Full capability fallback
+    ];
+    console.log(`Model fallback chain: ${modelFallbackChain.join(' -> ')} (PDF processing: ${needsPdfProcessing})`);
     
     // For task_followup, use tool calling to get structured actions
-    let requestBody: any = {
-      model,
+    let baseRequestBody: any = {
       messages,
       temperature: 0.7,
       max_tokens: 8000,
     };
     
     if (analysisType === 'task_followup') {
-      requestBody.tools = [
+      baseRequestBody.tools = [
         {
           type: 'function',
           function: {
@@ -1411,130 +1415,143 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
           }
         }
       ];
-      requestBody.tool_choice = { type: 'function', function: { name: 'provide_task_followup' } };
+      baseRequestBody.tool_choice = { type: 'function', function: { name: 'provide_task_followup' } };
     }
     
-    // Retry logic for transient errors (503, 502, etc.)
-    const MAX_RETRIES = 3;
-    const RETRY_DELAYS = [2000, 5000, 10000]; // 2s, 5s, 10s
+    // Model fallback with retries - try each model with 2 retries before moving to next
+    const RETRIES_PER_MODEL = 2;
+    const RETRY_DELAY = 3000; // 3 seconds between retries
     
     let aiData: any = null;
     let lastError: string = '';
+    let successfulModel: string = '';
     
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      try {
-        console.log(`AI Gateway request attempt ${attempt + 1}/${MAX_RETRIES}`);
-        
-        const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        });
+    modelLoop:
+    for (const currentModel of modelFallbackChain) {
+      console.log(`Trying model: ${currentModel}`);
+      
+      for (let attempt = 0; attempt < RETRIES_PER_MODEL; attempt++) {
+        try {
+          console.log(`  Attempt ${attempt + 1}/${RETRIES_PER_MODEL} for ${currentModel}`);
+          
+          const requestBody = { ...baseRequestBody, model: currentModel };
+          
+          const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+          });
 
-        // Handle HTTP-level errors
-        if (!response.ok) {
-          const errorText = await response.text();
-          lastError = `HTTP ${response.status}: ${errorText.substring(0, 200)}`;
-          console.error(`AI Gateway HTTP error (attempt ${attempt + 1}):`, response.status);
-          
-          // Don't retry on client errors (4xx) except 429
-          if (response.status === 429) {
-            return new Response(
-              JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
-              { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
-          if (response.status === 402) {
-            return new Response(
-              JSON.stringify({ error: 'AI usage limit reached. Please add credits to continue.' }),
-              { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
-          if (response.status >= 400 && response.status < 500) {
-            throw new Error(`AI Gateway error: ${response.status}`);
-          }
-          
-          // Retry on 5xx errors
-          if (attempt < MAX_RETRIES - 1) {
-            const delay = RETRY_DELAYS[attempt];
-            console.log(`Retrying in ${delay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            continue;
-          }
-          throw new Error(`AI Gateway error: ${response.status}`);
-        }
-        
-        // Parse the response
-        aiData = await response.json();
-        
-        // Log the raw response for debugging
-        console.log(`Darwin AI raw response structure:`, JSON.stringify({
-          hasChoices: !!aiData.choices,
-          choicesLength: aiData.choices?.length,
-          hasMessage: !!aiData.choices?.[0]?.message,
-          contentType: typeof aiData.choices?.[0]?.message?.content,
-          contentLength: aiData.choices?.[0]?.message?.content?.length,
-          finishReason: aiData.choices?.[0]?.finish_reason,
-          error: aiData.error
-        }));
-        
-        // Check if there was an error in the response body (some APIs return 200 with error in body)
-        if (aiData.error) {
-          const errorCode = aiData.error.code || aiData.error.status || 0;
-          const errorMsg = aiData.error.message || aiData.error || 'Unknown error';
-          lastError = `API Error ${errorCode}: ${errorMsg}`;
-          console.error('AI Gateway returned error in body:', aiData.error);
-          
-          // Retry on server errors (5xx codes in the body)
-          if (errorCode >= 500 && attempt < MAX_RETRIES - 1) {
-            const delay = RETRY_DELAYS[attempt];
-            console.log(`Retrying due to API error ${errorCode} in ${delay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            continue;
+          // Handle HTTP-level errors
+          if (!response.ok) {
+            const errorText = await response.text();
+            lastError = `HTTP ${response.status} on ${currentModel}: ${errorText.substring(0, 200)}`;
+            console.error(`  AI Gateway HTTP error:`, response.status);
+            
+            // Don't retry on client errors (4xx) except 429
+            if (response.status === 429) {
+              return new Response(
+                JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
+                { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+            if (response.status === 402) {
+              return new Response(
+                JSON.stringify({ error: 'AI usage limit reached. Please add credits to continue.' }),
+                { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+            // For 4xx errors (not 429/402), try next model immediately
+            if (response.status >= 400 && response.status < 500) {
+              console.log(`  Client error ${response.status}, trying next model...`);
+              continue modelLoop;
+            }
+            
+            // Retry on 5xx errors
+            if (attempt < RETRIES_PER_MODEL - 1) {
+              console.log(`  Retrying in ${RETRY_DELAY}ms...`);
+              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+              continue;
+            }
+            // Exhausted retries for this model, try next
+            console.log(`  Exhausted retries for ${currentModel}, trying next model...`);
+            continue modelLoop;
           }
           
-          throw new Error(errorMsg);
-        }
-        
-        // Check if we got valid choices
-        if (!aiData.choices || aiData.choices.length === 0) {
-          lastError = 'No choices in response';
-          console.error('AI Gateway returned no choices');
+          // Parse the response
+          aiData = await response.json();
           
-          if (attempt < MAX_RETRIES - 1) {
-            const delay = RETRY_DELAYS[attempt];
-            console.log(`Retrying due to empty response in ${delay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            continue;
+          // Log the raw response for debugging
+          console.log(`  Response structure:`, JSON.stringify({
+            hasChoices: !!aiData.choices,
+            choicesLength: aiData.choices?.length,
+            hasMessage: !!aiData.choices?.[0]?.message,
+            contentType: typeof aiData.choices?.[0]?.message?.content,
+            contentLength: aiData.choices?.[0]?.message?.content?.length,
+            finishReason: aiData.choices?.[0]?.finish_reason,
+            error: aiData.error
+          }));
+          
+          // Check if there was an error in the response body
+          if (aiData.error) {
+            const errorCode = aiData.error.code || aiData.error.status || 0;
+            const errorMsg = aiData.error.message || aiData.error || 'Unknown error';
+            lastError = `API Error ${errorCode} on ${currentModel}: ${errorMsg}`;
+            console.error('  AI Gateway returned error in body:', aiData.error);
+            
+            // Retry on server errors (5xx codes in the body)
+            if (errorCode >= 500 && attempt < RETRIES_PER_MODEL - 1) {
+              console.log(`  Retrying due to API error ${errorCode} in ${RETRY_DELAY}ms...`);
+              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+              continue;
+            }
+            // Try next model
+            console.log(`  Error from ${currentModel}, trying next model...`);
+            continue modelLoop;
           }
-          throw new Error('AI analysis returned no response');
-        }
-        
-        // Success!
-        console.log(`AI Gateway request succeeded on attempt ${attempt + 1}`);
-        break;
-        
-      } catch (fetchError) {
-        console.error(`Fetch error (attempt ${attempt + 1}):`, fetchError);
-        lastError = fetchError instanceof Error ? fetchError.message : 'Network error';
-        
-        if (attempt < MAX_RETRIES - 1) {
-          const delay = RETRY_DELAYS[attempt];
-          console.log(`Retrying in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        } else {
-          throw fetchError;
+          
+          // Check if we got valid choices
+          if (!aiData.choices || aiData.choices.length === 0) {
+            lastError = `No choices from ${currentModel}`;
+            console.error('  AI Gateway returned no choices');
+            
+            if (attempt < RETRIES_PER_MODEL - 1) {
+              console.log(`  Retrying due to empty response in ${RETRY_DELAY}ms...`);
+              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+              continue;
+            }
+            // Try next model
+            console.log(`  No choices from ${currentModel}, trying next model...`);
+            continue modelLoop;
+          }
+          
+          // Success!
+          successfulModel = currentModel;
+          console.log(`  SUCCESS with model ${currentModel}!`);
+          break modelLoop;
+          
+        } catch (fetchError) {
+          console.error(`  Fetch error (attempt ${attempt + 1}):`, fetchError);
+          lastError = fetchError instanceof Error ? fetchError.message : 'Network error';
+          
+          if (attempt < RETRIES_PER_MODEL - 1) {
+            console.log(`  Retrying in ${RETRY_DELAY}ms...`);
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          }
+          // If exhausted retries, will continue to next model
         }
       }
     }
     
     if (!aiData || !aiData.choices || aiData.choices.length === 0) {
-      console.error('All retry attempts failed:', lastError);
-      throw new Error(`AI Gateway temporarily unavailable after ${MAX_RETRIES} attempts. ${lastError}`);
+      console.error('All models failed:', lastError);
+      throw new Error(`AI Gateway temporarily unavailable. Tried ${modelFallbackChain.length} models. ${lastError}`);
     }
+    
+    console.log(`Darwin AI analysis completed using model: ${successfulModel}`);
 
     // For task_followup, parse the tool call response
     let suggestedActions: Array<{type: string; title: string; content: string}> = [];
