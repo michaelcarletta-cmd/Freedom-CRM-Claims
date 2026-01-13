@@ -352,14 +352,56 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
       const supplementAmount = Number(invoiceData.supplementAmount) || 0;
       const totalAmount = totalRD + supplementAmount;
 
-      // Generate the invoice
-      const lineItems = [
-        {
+      // Get individual depreciation amounts
+      const dwellingRD = Number(settlement.recoverable_depreciation) || 0;
+      const otherStructuresRD = Number(settlement.other_structures_recoverable_depreciation) || 0;
+      const pwiRD = Number(settlement.pwi_recoverable_depreciation) || 0;
+      const personalPropertyRD = Number(settlement.personal_property_recoverable_depreciation) || 0;
+
+      // Generate the invoice with detailed line items for each category
+      const lineItems: { description: string; quantity: number; unitPrice: number }[] = [];
+
+      // Add each depreciation category as its own line item with actual amounts
+      if (dwellingRD > 0) {
+        lineItems.push({
+          description: `Dwelling/Structure Recoverable Depreciation - Claim #${claim.claim_number || 'N/A'}`,
+          quantity: 1,
+          unitPrice: dwellingRD,
+        });
+      }
+      
+      if (otherStructuresRD > 0) {
+        lineItems.push({
+          description: `Other Structures Recoverable Depreciation - Claim #${claim.claim_number || 'N/A'}`,
+          quantity: 1,
+          unitPrice: otherStructuresRD,
+        });
+      }
+      
+      if (pwiRD > 0) {
+        lineItems.push({
+          description: `PWI (Property Within Insurance) Recoverable Depreciation - Claim #${claim.claim_number || 'N/A'}`,
+          quantity: 1,
+          unitPrice: pwiRD,
+        });
+      }
+      
+      if (personalPropertyRD > 0) {
+        lineItems.push({
+          description: `Personal Property Recoverable Depreciation - Claim #${claim.claim_number || 'N/A'}`,
+          quantity: 1,
+          unitPrice: personalPropertyRD,
+        });
+      }
+
+      // If no individual items but there's a total, use the total as a single line item
+      if (lineItems.length === 0 && totalRD > 0) {
+        lineItems.push({
           description: `Recoverable Depreciation - Claim #${claim.claim_number || 'N/A'}`,
           quantity: 1,
           unitPrice: totalRD,
-        }
-      ];
+        });
+      }
 
       // Add supplement if present
       if (supplementAmount > 0) {
@@ -367,36 +409,6 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           description: 'Supplement Amount',
           quantity: 1,
           unitPrice: supplementAmount,
-        });
-      }
-
-      // Add breakdown items as informational
-      if (settlement.recoverable_depreciation && settlement.recoverable_depreciation > 0) {
-        lineItems.push({
-          description: '  - Dwelling/Structure Recoverable Depreciation',
-          quantity: 1,
-          unitPrice: 0, // Informational only
-        });
-      }
-      if (settlement.other_structures_recoverable_depreciation && settlement.other_structures_recoverable_depreciation > 0) {
-        lineItems.push({
-          description: '  - Other Structures Recoverable Depreciation',
-          quantity: 1,
-          unitPrice: 0,
-        });
-      }
-      if (settlement.pwi_recoverable_depreciation && settlement.pwi_recoverable_depreciation > 0) {
-        lineItems.push({
-          description: '  - PWI Recoverable Depreciation',
-          quantity: 1,
-          unitPrice: 0,
-        });
-      }
-      if (settlement.personal_property_recoverable_depreciation && settlement.personal_property_recoverable_depreciation > 0) {
-        lineItems.push({
-          description: '  - Personal Property Recoverable Depreciation',
-          quantity: 1,
-          unitPrice: 0,
         });
       }
 
@@ -433,7 +445,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           policyholderName: claim.policyholder_name,
           workDescription: workDescription || undefined,
           supplementAmount: supplementAmount > 0 ? supplementAmount : undefined,
-          // Settlement breakdown
+          // Settlement breakdown with detailed depreciation categories
           settlementBreakdown: {
             rcv,
             acv,
@@ -441,6 +453,10 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
             paymentsReceived,
             paymentsOutstanding: paymentsOutstanding > 0 ? paymentsOutstanding : 0,
             recoverableDepreciation: totalRD,
+            dwellingRD,
+            otherStructuresRD,
+            pwiRD,
+            personalPropertyRD,
             nonRecoverableDepreciation,
             supplement: supplementAmount > 0 ? supplementAmount : undefined,
           },
