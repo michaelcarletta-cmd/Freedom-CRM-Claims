@@ -140,7 +140,7 @@ serve(async (req) => {
   }
 
   try {
-    const { reportContent, claimId, reportTitle, reportType, photoUrls, weatherData, companyBranding } = await req.json();
+    const { reportContent, claimId, reportTitle, reportType, photoUrls, weatherData, companyBranding, includeLogoHeader } = await req.json();
 
     if (!reportContent) {
       return new Response(
@@ -162,6 +162,17 @@ serve(async (req) => {
         .eq("id", claimId)
         .single();
       claimData = claim;
+    }
+
+    // Fetch company branding if not provided
+    let branding = companyBranding;
+    if (!branding) {
+      const { data: brandingData } = await supabase
+        .from("company_branding")
+        .select("*")
+        .limit(1)
+        .single();
+      branding = brandingData;
     }
 
     const allPhotos = photoUrls || [];
@@ -195,14 +206,42 @@ serve(async (req) => {
     // Create DOCX with embedded images
     const zip = new PizZip();
     
+    // Check if we should add a header with logo
+    const hasLogoHeader = includeLogoHeader && branding?.letterhead_url;
+    let headerLogoBase64 = "";
+    let headerLogoExtension = "png";
+    
+    if (hasLogoHeader) {
+      try {
+        const logoResponse = await fetch(branding.letterhead_url);
+        if (logoResponse.ok) {
+          const logoBuffer = await logoResponse.arrayBuffer();
+          // Only include if under 500KB
+          if (logoBuffer.byteLength < 500 * 1024) {
+            const uint8Array = new Uint8Array(logoBuffer);
+            let binary = '';
+            for (let i = 0; i < uint8Array.length; i++) {
+              binary += String.fromCharCode(uint8Array[i]);
+            }
+            headerLogoBase64 = btoa(binary);
+            const contentType = logoResponse.headers.get("content-type") || "image/png";
+            headerLogoExtension = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : "jpeg";
+            console.log(`Logo downloaded: ${(logoBuffer.byteLength / 1024).toFixed(1)}KB`);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to download logo:", e);
+      }
+    }
+    
     // Build content types with image types
-    const imageExtensions = [...new Set(downloadedImages.map(img => img.extension))];
+    const imageExtensions = [...new Set([...downloadedImages.map(img => img.extension), headerLogoBase64 ? headerLogoExtension : null].filter(Boolean))] as string[];
     const contentTypesExtensions = imageExtensions.map(ext => {
       const mimeType = ext === "png" ? "image/png" : ext === "gif" ? "image/gif" : ext === "webp" ? "image/webp" : "image/jpeg";
       return `<Default Extension="${ext}" ContentType="${mimeType}"/>`;
     }).join("\n  ");
 
-    // [Content_Types].xml
+    // [Content_Types].xml - add header if we have logo
     zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -210,6 +249,7 @@ serve(async (req) => {
   ${contentTypesExtensions}
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  ${headerLogoBase64 ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : ''}
 </Types>`);
     
     // _rels/.rels
@@ -227,6 +267,7 @@ serve(async (req) => {
     zip.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  ${headerLogoBase64 ? '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>' : ''}
   ${imageRelationships}
 </Relationships>`);
 
@@ -242,6 +283,62 @@ serve(async (req) => {
       zip.file(`word/media/image${i + 1}.${img.extension}`, bytes);
       // Clear the base64 string to free memory
       img.base64 = '';
+    }
+    
+    // Add header logo to media if we have it
+    if (headerLogoBase64) {
+      const binaryString = atob(headerLogoBase64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let j = 0; j < binaryString.length; j++) {
+        bytes[j] = binaryString.charCodeAt(j);
+      }
+      zip.file(`word/media/header_logo.${headerLogoExtension}`, bytes);
+      
+      // Create header relationships
+      zip.file("word/_rels/header1.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/header_logo.${headerLogoExtension}"/>
+</Relationships>`);
+      
+      // Create header XML with logo - logo width 2 inches, height proportional
+      const logoWidth = 1828800; // 2 inches in EMUs
+      const logoHeight = 457200; // 0.5 inches in EMUs (adjust for your logo aspect ratio)
+      
+      zip.file("word/header1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:p>
+    <w:pPr><w:jc w:val="center"/></w:pPr>
+    <w:r>
+      <w:drawing>
+        <wp:inline distT="0" distB="0" distL="0" distR="0">
+          <wp:extent cx="${logoWidth}" cy="${logoHeight}"/>
+          <wp:docPr id="100" name="Header Logo"/>
+          <a:graphic>
+            <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+              <pic:pic>
+                <pic:nvPicPr>
+                  <pic:cNvPr id="100" name="header_logo.${headerLogoExtension}"/>
+                  <pic:cNvPicPr/>
+                </pic:nvPicPr>
+                <pic:blipFill>
+                  <a:blip r:embed="rId1"/>
+                  <a:stretch><a:fillRect/></a:stretch>
+                </pic:blipFill>
+                <pic:spPr>
+                  <a:xfrm>
+                    <a:off x="0" y="0"/>
+                    <a:ext cx="${logoWidth}" cy="${logoHeight}"/>
+                  </a:xfrm>
+                  <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </pic:spPr>
+              </pic:pic>
+            </a:graphicData>
+          </a:graphic>
+        </wp:inline>
+      </w:drawing>
+    </w:r>
+  </w:p>
+</w:hdr>`);
     }
     
     // word/styles.xml
@@ -355,7 +452,7 @@ serve(async (req) => {
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <w:body>
     <w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>${escapeXml(reportTitle || "Photo Analysis Report")}</w:t></w:r></w:p>
-    <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/><w:color w:val="666666"/></w:rPr><w:t>${escapeXml(companyBranding?.company_name || "Freedom Adjustment")}</w:t></w:r></w:p>
+    <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/><w:color w:val="666666"/></w:rPr><w:t>${escapeXml(branding?.company_name || "Freedom Adjustment")}</w:t></w:r></w:p>
     <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="20"/><w:color w:val="666666"/></w:rPr><w:t>${escapeXml(reportDate)}</w:t></w:r></w:p>
     <w:p/>
     <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Claim Information</w:t></w:r></w:p>
@@ -379,7 +476,7 @@ serve(async (req) => {
     <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Photo Documentation</w:t></w:r></w:p>
     <w:p><w:r><w:rPr><w:i/><w:color w:val="666666"/></w:rPr><w:t>Photos could not be embedded due to file size limitations. Please refer to the Photos tab in the application for full resolution images.</w:t></w:r></w:p>
     `}
-    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+    <w:sectPr>${headerLogoBase64 ? '<w:headerReference w:type="default" r:id="rId2"/>' : ''}<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
   </w:body>
 </w:document>`);
 
