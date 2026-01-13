@@ -101,7 +101,7 @@ export const AutomationsSettings = () => {
   });
 
   const { data: statuses } = useQuery({
-    queryKey: ["claim-statuses"],
+    queryKey: ["claim-statuses-automations"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_statuses")
