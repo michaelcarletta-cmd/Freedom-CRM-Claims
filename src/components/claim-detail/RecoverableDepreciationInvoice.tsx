@@ -420,6 +420,13 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
       const paymentsReceived = paymentSummary.totalReceived;
       const paymentsOutstanding = acv - deductible - paymentsReceived; // What's still owed before depreciation
 
+      // Get RCV values for each category
+      const otherStructuresRCV = Number(settlement.other_structures_rcv) || 0;
+      const pwiRCV = Number(settlement.pwi_rcv) || 0;
+      const personalPropertyRCV = Number(settlement.personal_property_rcv) || 0;
+      // Dwelling RCV is the main RCV minus other categories
+      const dwellingRCV = rcv - otherStructuresRCV - pwiRCV - personalPropertyRCV;
+
       const { data: invoiceResult, error: invoiceError } = await supabase.functions.invoke("generate-invoice", {
         body: {
           invoiceNumber: invoiceData.invoiceNumber,
@@ -445,7 +452,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           policyholderName: claim.policyholder_name,
           workDescription: workDescription || undefined,
           supplementAmount: supplementAmount > 0 ? supplementAmount : undefined,
-          // Settlement breakdown with detailed depreciation categories
+          // Settlement breakdown with detailed depreciation categories and RCVs
           settlementBreakdown: {
             rcv,
             acv,
@@ -453,6 +460,12 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
             paymentsReceived,
             paymentsOutstanding: paymentsOutstanding > 0 ? paymentsOutstanding : 0,
             recoverableDepreciation: totalRD,
+            // RCV by category
+            dwellingRCV,
+            otherStructuresRCV,
+            pwiRCV,
+            personalPropertyRCV,
+            // RD by category
             dwellingRD,
             otherStructuresRD,
             pwiRD,
