@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Calendar, User, Trash2, ClipboardCheck, Edit } from "lucide-react";
-import { format, isPast } from "date-fns";
+import { format, isPast, parseISO } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 
 interface Inspection {
@@ -333,7 +333,8 @@ export function ClaimInspections({ claimId }: ClaimInspectionsProps) {
       ) : (
         <div className="space-y-3">
           {inspections.map((inspection) => {
-            const inspectionDate = new Date(inspection.inspection_date);
+            // Use parseISO to correctly handle date-only strings without timezone shift
+            const inspectionDate = parseISO(inspection.inspection_date);
             const isUpcoming = !isPast(inspectionDate) && inspection.status === "scheduled";
             const isPastDue = isPast(inspectionDate) && inspection.status === "scheduled";
 
