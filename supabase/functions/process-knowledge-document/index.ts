@@ -45,7 +45,8 @@ function getMimeType(fileType: string, fileName: string): string {
   if (fileType.includes('video') || fileName.match(/\.(mp4|mov|avi|mkv|webm)$/i)) {
     return 'video/mp4';
   }
-  if (fileType.includes('audio') || fileName.match(/\.(mp3|wav|m4a)$/i)) {
+  if (fileType.includes('audio') || fileName.match(/\.(mp3|wav|m4a|amr)$/i)) {
+    if (fileName.match(/\.amr$/i)) return 'audio/amr';
     return 'audio/mpeg';
   }
   // Image types
