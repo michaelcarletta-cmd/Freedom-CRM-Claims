@@ -1356,12 +1356,14 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
     const hasPdfContent = pdfContent || (pdfContents && pdfContents.length > 0) || additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf;
     const needsPdfProcessing = hasPdfContent && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package'].includes(analysisType);
     
-    // Model fallback chain - try multiple models if one is unavailable
+    // Model fallback chain - try multiple models from different providers if one is unavailable
+    // Include OpenAI models as fallback since they use a different infrastructure
     const modelFallbackChain = [
-      'google/gemini-2.5-flash',      // Fast and reliable
-      'google/gemini-3-flash-preview', // Default model
-      'google/gemini-2.5-flash-lite',  // Lightweight fallback
-      'google/gemini-2.5-pro',         // Full capability fallback
+      'google/gemini-2.5-flash',       // Fast and reliable
+      'openai/gpt-5-mini',             // Different provider fallback
+      'google/gemini-2.5-flash-lite',  // Lightweight Google fallback
+      'google/gemini-2.5-pro',         // Full capability Google fallback
+      'openai/gpt-5-nano',             // Fast OpenAI fallback
     ];
     console.log(`Model fallback chain: ${modelFallbackChain.join(' -> ')} (PDF processing: ${needsPdfProcessing})`);
     
@@ -1418,9 +1420,9 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
       baseRequestBody.tool_choice = { type: 'function', function: { name: 'provide_task_followup' } };
     }
     
-    // Model fallback with retries - try each model with 2 retries before moving to next
-    const RETRIES_PER_MODEL = 2;
-    const RETRY_DELAY = 3000; // 3 seconds between retries
+    // Model fallback with retries - try each model with 1 retry to move faster between providers
+    const RETRIES_PER_MODEL = 1;
+    const RETRY_DELAY = 2000; // 2 seconds between retries (faster)
     
     let aiData: any = null;
     let lastError: string = '';
