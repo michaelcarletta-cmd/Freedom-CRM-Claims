@@ -1444,7 +1444,22 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
 
     const aiData = await response.json();
     
-    console.log(`Darwin AI Analysis completed for ${analysisType}`);
+    // Log the raw response for debugging
+    console.log(`Darwin AI raw response structure:`, JSON.stringify({
+      hasChoices: !!aiData.choices,
+      choicesLength: aiData.choices?.length,
+      hasMessage: !!aiData.choices?.[0]?.message,
+      contentType: typeof aiData.choices?.[0]?.message?.content,
+      contentLength: aiData.choices?.[0]?.message?.content?.length,
+      finishReason: aiData.choices?.[0]?.finish_reason,
+      error: aiData.error
+    }));
+
+    // Check if there was an error in the response
+    if (aiData.error) {
+      console.error('AI Gateway returned error:', aiData.error);
+      throw new Error(aiData.error.message || aiData.error || 'AI analysis failed');
+    }
 
     // For task_followup, parse the tool call response
     let suggestedActions: Array<{type: string; title: string; content: string}> = [];
@@ -1466,8 +1481,34 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
         analysisResult = aiData.choices?.[0]?.message?.content || 'No analysis generated';
       }
     } else {
-      analysisResult = aiData.choices?.[0]?.message?.content || 'No analysis generated';
+      // Extract content - handle both string and potential array formats
+      const messageContent = aiData.choices?.[0]?.message?.content;
+      
+      if (typeof messageContent === 'string' && messageContent.trim()) {
+        analysisResult = messageContent;
+      } else if (Array.isArray(messageContent)) {
+        // Some models return content as array of parts
+        analysisResult = messageContent
+          .filter((part: any) => part.type === 'text' && part.text)
+          .map((part: any) => part.text)
+          .join('\n') || 'No analysis generated';
+      } else {
+        // Log what we actually got for debugging
+        console.error('Unexpected content format:', JSON.stringify(messageContent));
+        
+        // Check finish_reason - if it's 'length', the response was cut off
+        const finishReason = aiData.choices?.[0]?.finish_reason;
+        if (finishReason === 'length') {
+          analysisResult = 'Analysis was too long and got truncated. Please try with fewer documents.';
+        } else if (finishReason === 'content_filter') {
+          analysisResult = 'Content was filtered by the AI model. Please try with different documents.';
+        } else {
+          analysisResult = 'No analysis generated - the AI model returned an empty response. Please try again.';
+        }
+      }
     }
+    
+    console.log(`Darwin AI Analysis completed for ${analysisType}, result length: ${analysisResult.length}`);
 
     return new Response(
       JSON.stringify({ 
