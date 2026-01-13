@@ -1414,32 +1414,73 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
       requestBody.tool_choice = { type: 'function', function: { name: 'provide_task_followup' } };
     }
     
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
+    // Retry logic for transient errors (503, 502, etc.)
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [2000, 5000, 10000]; // 2s, 5s, 10s
+    
+    let response: Response | null = null;
+    let lastError: string = '';
+    
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        console.log(`AI Gateway request attempt ${attempt + 1}/${MAX_RETRIES}`);
+        
+        response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI Gateway error:', response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        if (response.ok) {
+          console.log(`AI Gateway request succeeded on attempt ${attempt + 1}`);
+          break;
+        }
+        
+        const errorText = await response.text();
+        lastError = errorText;
+        console.error(`AI Gateway error (attempt ${attempt + 1}):`, response.status, errorText);
+        
+        // Don't retry on client errors (4xx) except 429
+        if (response.status === 429) {
+          return new Response(
+            JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        if (response.status === 402) {
+          return new Response(
+            JSON.stringify({ error: 'AI usage limit reached. Please add credits to continue.' }),
+            { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        if (response.status >= 400 && response.status < 500) {
+          throw new Error(`AI Gateway error: ${response.status}`);
+        }
+        
+        // Retry on 5xx errors
+        if (attempt < MAX_RETRIES - 1) {
+          const delay = RETRY_DELAYS[attempt];
+          console.log(`Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      } catch (fetchError) {
+        console.error(`Fetch error (attempt ${attempt + 1}):`, fetchError);
+        lastError = fetchError instanceof Error ? fetchError.message : 'Network error';
+        
+        if (attempt < MAX_RETRIES - 1) {
+          const delay = RETRY_DELAYS[attempt];
+          console.log(`Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'AI usage limit reached. Please add credits to continue.' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      throw new Error(`AI Gateway error: ${response.status}`);
+    }
+    
+    if (!response || !response.ok) {
+      console.error('All retry attempts failed');
+      throw new Error(`AI Gateway temporarily unavailable after ${MAX_RETRIES} attempts. Please try again later.`);
     }
 
     const aiData = await response.json();
