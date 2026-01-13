@@ -33,7 +33,7 @@ const CATEGORIES = [
   { value: "other", label: "Other" },
 ];
 
-const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a,.webm,.jpg,.jpeg,.png,.gif,.webp,.bmp";
+const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a,.amr,.webm,.jpg,.jpeg,.png,.gif,.webp,.bmp";
 
 export const AIKnowledgeBaseSettings = () => {
   const queryClient = useQueryClient();
