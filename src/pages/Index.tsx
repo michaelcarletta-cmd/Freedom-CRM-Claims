@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow, startOfMonth, endOfMonth, isAfter, isBefore, addDays } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import { DashboardCalendar } from "@/components/dashboard/DashboardCalendar";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -247,6 +248,9 @@ const Index = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Calendar Section */}
+      <DashboardCalendar />
 
       {/* Tasks and Quick Stats */}
       <div className="grid gap-6 lg:grid-cols-2">
