@@ -153,8 +153,9 @@ export function SignatureFieldTemplatesSettings({ embedded = false }: SignatureF
 
     setIsUploading(true);
     try {
-      // Upload to temp storage
-      const fileName = `temp-signature-templates/${Date.now()}-${file.name}`;
+      // Sanitize filename - remove special characters and spaces
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const fileName = `temp-signature-templates/${Date.now()}-${sanitizedName}`;
       const { error: uploadError } = await supabase.storage
         .from("claim-files")
         .upload(fileName, file);
