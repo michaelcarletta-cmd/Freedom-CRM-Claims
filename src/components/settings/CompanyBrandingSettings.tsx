@@ -15,6 +15,10 @@ export function CompanyBrandingSettings() {
   const [email, setEmail] = useState("");
   const [letterheadUrl, setLetterheadUrl] = useState<string | null>(null);
   const [signnowWebhookUrl, setSignnowWebhookUrl] = useState("");
+  const [esignEmailSubject, setEsignEmailSubject] = useState("Please sign your document");
+  const [esignEmailBody, setEsignEmailBody] = useState("Please click the link to review and sign your document.");
+  const [sigCoords, setSigCoords] = useState({ page: 1, x: 100, y: 600, w: 200, h: 50 });
+  const [dateCoords, setDateCoords] = useState({ page: 1, x: 350, y: 600, w: 100, h: 25 });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [brandingId, setBrandingId] = useState<string | null>(null);
@@ -40,6 +44,10 @@ export function CompanyBrandingSettings() {
       setEmail(branding.company_email || "");
       setLetterheadUrl(branding.letterhead_url || null);
       setSignnowWebhookUrl(branding.signnow_make_webhook_url || "");
+      setEsignEmailSubject(branding.esign_email_subject || "Please sign your document");
+      setEsignEmailBody(branding.esign_email_body || "Please click the link to review and sign your document.");
+      setSigCoords({ page: branding.esign_signature_page || 1, x: branding.esign_signature_x || 100, y: branding.esign_signature_y || 600, w: branding.esign_signature_width || 200, h: branding.esign_signature_height || 50 });
+      setDateCoords({ page: branding.esign_date_page || 1, x: branding.esign_date_x || 350, y: branding.esign_date_y || 600, w: branding.esign_date_width || 100, h: branding.esign_date_height || 25 });
     }
   };
 
@@ -80,6 +88,18 @@ export function CompanyBrandingSettings() {
         company_email: email,
         letterhead_url: letterheadUrl,
         signnow_make_webhook_url: signnowWebhookUrl || null,
+        esign_email_subject: esignEmailSubject,
+        esign_email_body: esignEmailBody,
+        esign_signature_page: sigCoords.page,
+        esign_signature_x: sigCoords.x,
+        esign_signature_y: sigCoords.y,
+        esign_signature_width: sigCoords.w,
+        esign_signature_height: sigCoords.h,
+        esign_date_page: dateCoords.page,
+        esign_date_x: dateCoords.x,
+        esign_date_y: dateCoords.y,
+        esign_date_width: dateCoords.w,
+        esign_date_height: dateCoords.h,
         updated_at: new Date().toISOString()
       };
 
@@ -234,6 +254,34 @@ export function CompanyBrandingSettings() {
             <p className="text-muted-foreground text-xs">
               Configure SignNow/Make to POST to this URL when documents are signed.
             </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div>
+              <Label>Email Subject</Label>
+              <Input value={esignEmailSubject} onChange={(e) => setEsignEmailSubject(e.target.value)} />
+            </div>
+            <div>
+              <Label>Email Body</Label>
+              <Textarea value={esignEmailBody} onChange={(e) => setEsignEmailBody(e.target.value)} rows={2} />
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            <p className="font-medium text-sm">Signature Field Coordinates</p>
+            <div className="grid grid-cols-5 gap-2">
+              <div><Label className="text-xs">Page</Label><Input type="number" value={sigCoords.page} onChange={(e) => setSigCoords({...sigCoords, page: +e.target.value})} /></div>
+              <div><Label className="text-xs">X</Label><Input type="number" value={sigCoords.x} onChange={(e) => setSigCoords({...sigCoords, x: +e.target.value})} /></div>
+              <div><Label className="text-xs">Y</Label><Input type="number" value={sigCoords.y} onChange={(e) => setSigCoords({...sigCoords, y: +e.target.value})} /></div>
+              <div><Label className="text-xs">Width</Label><Input type="number" value={sigCoords.w} onChange={(e) => setSigCoords({...sigCoords, w: +e.target.value})} /></div>
+              <div><Label className="text-xs">Height</Label><Input type="number" value={sigCoords.h} onChange={(e) => setSigCoords({...sigCoords, h: +e.target.value})} /></div>
+            </div>
+            <p className="font-medium text-sm">Date Field Coordinates</p>
+            <div className="grid grid-cols-5 gap-2">
+              <div><Label className="text-xs">Page</Label><Input type="number" value={dateCoords.page} onChange={(e) => setDateCoords({...dateCoords, page: +e.target.value})} /></div>
+              <div><Label className="text-xs">X</Label><Input type="number" value={dateCoords.x} onChange={(e) => setDateCoords({...dateCoords, x: +e.target.value})} /></div>
+              <div><Label className="text-xs">Y</Label><Input type="number" value={dateCoords.y} onChange={(e) => setDateCoords({...dateCoords, y: +e.target.value})} /></div>
+              <div><Label className="text-xs">Width</Label><Input type="number" value={dateCoords.w} onChange={(e) => setDateCoords({...dateCoords, w: +e.target.value})} /></div>
+              <div><Label className="text-xs">Height</Label><Input type="number" value={dateCoords.h} onChange={(e) => setDateCoords({...dateCoords, h: +e.target.value})} /></div>
+            </div>
           </div>
         </CardContent>
       </Card>

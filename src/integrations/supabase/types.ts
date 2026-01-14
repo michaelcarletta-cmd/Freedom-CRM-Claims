@@ -1187,7 +1187,16 @@ export type Database = {
           claim_number: string | null
           client_id: string | null
           construction_status: string | null
+          contract_pdf_path: string | null
           created_at: string | null
+          esign_audit_url: string | null
+          esign_completed_at: string | null
+          esign_document_id: string | null
+          esign_error_message: string | null
+          esign_provider: string | null
+          esign_sent_at: string | null
+          esign_signing_link: string | null
+          esign_status: string | null
           id: string
           insurance_company: string | null
           insurance_company_id: string | null
@@ -1211,6 +1220,7 @@ export type Database = {
           policyholder_name: string | null
           policyholder_phone: string | null
           referrer_id: string | null
+          signed_pdf_url: string | null
           ssn_last_four: string | null
           status: string | null
           updated_at: string | null
@@ -1225,7 +1235,16 @@ export type Database = {
           claim_number?: string | null
           client_id?: string | null
           construction_status?: string | null
+          contract_pdf_path?: string | null
           created_at?: string | null
+          esign_audit_url?: string | null
+          esign_completed_at?: string | null
+          esign_document_id?: string | null
+          esign_error_message?: string | null
+          esign_provider?: string | null
+          esign_sent_at?: string | null
+          esign_signing_link?: string | null
+          esign_status?: string | null
           id?: string
           insurance_company?: string | null
           insurance_company_id?: string | null
@@ -1249,6 +1268,7 @@ export type Database = {
           policyholder_name?: string | null
           policyholder_phone?: string | null
           referrer_id?: string | null
+          signed_pdf_url?: string | null
           ssn_last_four?: string | null
           status?: string | null
           updated_at?: string | null
@@ -1263,7 +1283,16 @@ export type Database = {
           claim_number?: string | null
           client_id?: string | null
           construction_status?: string | null
+          contract_pdf_path?: string | null
           created_at?: string | null
+          esign_audit_url?: string | null
+          esign_completed_at?: string | null
+          esign_document_id?: string | null
+          esign_error_message?: string | null
+          esign_provider?: string | null
+          esign_sent_at?: string | null
+          esign_signing_link?: string | null
+          esign_status?: string | null
           id?: string
           insurance_company?: string | null
           insurance_company_id?: string | null
@@ -1287,6 +1316,7 @@ export type Database = {
           policyholder_name?: string | null
           policyholder_phone?: string | null
           referrer_id?: string | null
+          signed_pdf_url?: string | null
           ssn_last_four?: string | null
           status?: string | null
           updated_at?: string | null
@@ -1392,6 +1422,18 @@ export type Database = {
           company_name: string | null
           company_phone: string | null
           created_at: string
+          esign_date_height: number | null
+          esign_date_page: number | null
+          esign_date_width: number | null
+          esign_date_x: number | null
+          esign_date_y: number | null
+          esign_email_body: string | null
+          esign_email_subject: string | null
+          esign_signature_height: number | null
+          esign_signature_page: number | null
+          esign_signature_width: number | null
+          esign_signature_x: number | null
+          esign_signature_y: number | null
           id: string
           letterhead_url: string | null
           online_check_writer_bank_account_id: string | null
@@ -1407,6 +1449,18 @@ export type Database = {
           company_name?: string | null
           company_phone?: string | null
           created_at?: string
+          esign_date_height?: number | null
+          esign_date_page?: number | null
+          esign_date_width?: number | null
+          esign_date_x?: number | null
+          esign_date_y?: number | null
+          esign_email_body?: string | null
+          esign_email_subject?: string | null
+          esign_signature_height?: number | null
+          esign_signature_page?: number | null
+          esign_signature_width?: number | null
+          esign_signature_x?: number | null
+          esign_signature_y?: number | null
           id?: string
           letterhead_url?: string | null
           online_check_writer_bank_account_id?: string | null
@@ -1422,6 +1476,18 @@ export type Database = {
           company_name?: string | null
           company_phone?: string | null
           created_at?: string
+          esign_date_height?: number | null
+          esign_date_page?: number | null
+          esign_date_width?: number | null
+          esign_date_x?: number | null
+          esign_date_y?: number | null
+          esign_email_body?: string | null
+          esign_email_subject?: string | null
+          esign_signature_height?: number | null
+          esign_signature_page?: number | null
+          esign_signature_width?: number | null
+          esign_signature_x?: number | null
+          esign_signature_y?: number | null
           id?: string
           letterhead_url?: string | null
           online_check_writer_bank_account_id?: string | null
@@ -2975,7 +3041,16 @@ export type Database = {
           claim_number: string | null
           client_id: string | null
           construction_status: string | null
+          contract_pdf_path: string | null
           created_at: string | null
+          esign_audit_url: string | null
+          esign_completed_at: string | null
+          esign_document_id: string | null
+          esign_error_message: string | null
+          esign_provider: string | null
+          esign_sent_at: string | null
+          esign_signing_link: string | null
+          esign_status: string | null
           id: string
           insurance_company: string | null
           insurance_company_id: string | null
@@ -2999,6 +3074,7 @@ export type Database = {
           policyholder_name: string | null
           policyholder_phone: string | null
           referrer_id: string | null
+          signed_pdf_url: string | null
           ssn_last_four: string | null
           status: string | null
           updated_at: string | null
