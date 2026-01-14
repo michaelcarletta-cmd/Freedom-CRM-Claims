@@ -5,7 +5,7 @@ import "react-pdf/dist/esm/Page/TextLayer.css";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Pencil, Calendar, Type, Trash2, Save, ChevronLeft, ChevronRight } from "lucide-react";
+import { Pencil, Calendar, Type, Trash2, Save, ChevronLeft, ChevronRight, CheckSquare } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -20,7 +20,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 interface Field {
   id: string;
-  type: "signature" | "date" | "text";
+  type: "signature" | "date" | "text" | "checkbox";
   x: number;
   y: number;
   width: number;
@@ -40,7 +40,7 @@ interface FieldPlacementEditorProps {
 export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount }: FieldPlacementEditorProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const [fields, setFields] = useState<Field[]>([]);
-  const [activeTool, setActiveTool] = useState<"signature" | "date" | "text" | null>(null);
+  const [activeTool, setActiveTool] = useState<"signature" | "date" | "text" | "checkbox" | null>(null);
   const [currentSignerIndex, setCurrentSignerIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -65,6 +65,10 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
   
   // Dragging state
   const [draggingField, setDraggingField] = useState<string | null>(null);
+  
+  // Resizing state
+  const [resizingField, setResizingField] = useState<string | null>(null);
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
   // Fetch available templates
@@ -145,10 +149,10 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
     }
   };
 
-  const addField = (type: "signature" | "date" | "text", x: number, y: number) => {
+  const addField = (type: "signature" | "date" | "text" | "checkbox", x: number, y: number) => {
     const fieldId = `${type}-${Date.now()}`;
-    const width = type === "signature" ? 150 : type === "date" ? 100 : 120;
-    const height = type === "signature" ? 50 : 25;
+    const width = type === "signature" ? 150 : type === "checkbox" ? 20 : type === "date" ? 100 : 120;
+    const height = type === "signature" ? 50 : type === "checkbox" ? 20 : 25;
 
     const newField: Field = {
       id: fieldId,
@@ -158,7 +162,8 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
       width,
       height,
       label: type === "signature" ? `Signature ${currentSignerIndex + 1}` :
-             type === "date" ? "Date" : "Text Field",
+             type === "date" ? "Date" : 
+             type === "checkbox" ? "Checkbox" : "Text Field",
       required: true,
       signerIndex: currentSignerIndex,
       page: currentPage,
@@ -170,7 +175,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
     toast({ title: `${type} field added to page ${currentPage}` });
   };
 
-  const handleSelectFieldType = (type: "signature" | "date" | "text") => {
+  const handleSelectFieldType = (type: "signature" | "date" | "text" | "checkbox") => {
     if (pendingClickPos) {
       addField(type, pendingClickPos.x, pendingClickPos.y);
       setPendingClickPos(null);
@@ -193,9 +198,22 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
   };
 
   const handleOverlayMouseMove = (e: React.MouseEvent) => {
-    if (!draggingField || !overlayRef.current) return;
+    if (!overlayRef.current) return;
     
     const rect = overlayRef.current.getBoundingClientRect();
+    
+    if (resizingField) {
+      const newWidth = Math.max(20, e.clientX - rect.left - resizeStart.x + resizeStart.width);
+      const newHeight = Math.max(15, e.clientY - rect.top - resizeStart.y + resizeStart.height);
+      
+      setFields(prev => prev.map(f => 
+        f.id === resizingField ? { ...f, width: newWidth, height: newHeight } : f
+      ));
+      return;
+    }
+    
+    if (!draggingField) return;
+    
     const newX = Math.max(0, e.clientX - rect.left - dragOffset.x);
     const newY = Math.max(0, e.clientY - rect.top - dragOffset.y);
     
@@ -205,10 +223,27 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
   };
 
   const handleOverlayMouseUp = () => {
-    if (draggingField) {
+    if (draggingField || resizingField) {
       setDraggingField(null);
+      setResizingField(null);
       onFieldsChange(fields);
     }
+  };
+
+  const handleResizeMouseDown = (e: React.MouseEvent, fieldId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const field = fields.find(f => f.id === fieldId);
+    if (!field || !overlayRef.current) return;
+    
+    setResizeStart({
+      x: field.x,
+      y: field.y,
+      width: field.width,
+      height: field.height,
+    });
+    setResizingField(fieldId);
   };
 
   const removeField = (fieldId: string) => {
@@ -239,6 +274,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
     signature: "#3b82f6",
     date: "#10b981",
     text: "#8b5cf6",
+    checkbox: "#f59e0b",
   };
 
   return (
@@ -356,6 +392,14 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
             <Type className="w-4 h-4 mr-2" />
             Add Text
           </Button>
+          <Button
+            variant={activeTool === "checkbox" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setActiveTool(activeTool === "checkbox" ? null : "checkbox")}
+          >
+            <CheckSquare className="w-4 h-4 mr-2" />
+            Add Checkbox
+          </Button>
         </div>
 
         {activeTool && (
@@ -442,7 +486,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
                   <div
                     key={field.id}
                     className={`field-indicator absolute border-2 border-dashed flex items-center justify-center text-xs font-bold select-none ${
-                      draggingField === field.id ? 'opacity-70' : ''
+                      draggingField === field.id || resizingField === field.id ? 'opacity-70' : ''
                     } ${!activeTool ? 'cursor-move' : ''}`}
                     style={{
                       left: field.x,
@@ -459,7 +503,15 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
                       removeField(field.id);
                     }}
                   >
-                    {field.label}
+                    {field.type === "checkbox" ? "☐" : field.label}
+                    {/* Resize handle */}
+                    <div
+                      className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize bg-current opacity-50 hover:opacity-100"
+                      style={{ 
+                        clipPath: 'polygon(100% 0, 100% 100%, 0 100%)',
+                      }}
+                      onMouseDown={(e) => handleResizeMouseDown(e, field.id)}
+                    />
                   </div>
                 ))}
                 
@@ -500,6 +552,15 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
                       >
                         <Type className="w-4 h-4 mr-2 text-purple-500" />
                         Text
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="justify-start"
+                        onClick={() => handleSelectFieldType("checkbox")}
+                      >
+                        <CheckSquare className="w-4 h-4 mr-2 text-amber-500" />
+                        Checkbox
                       </Button>
                     </div>
                     <Button
