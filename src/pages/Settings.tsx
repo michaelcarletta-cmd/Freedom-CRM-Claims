@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban } from "lucide-react";
+import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -41,7 +41,7 @@ import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSe
 import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
-
+import { SignatureFieldTemplatesSettings } from "@/components/settings/SignatureFieldTemplatesSettings";
 interface ClaimStatus {
   id: string;
   name: string;
@@ -125,6 +125,7 @@ export default function Settings() {
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [companyBrandingOpen, setCompanyBrandingOpen] = useState(false);
   const [workspacesOpen, setWorkspacesOpen] = useState(false);
+  const [signatureTemplatesOpen, setSignatureTemplatesOpen] = useState(false);
   const { toast } = useToast();
 
   // Check if current user is admin
@@ -464,6 +465,33 @@ export default function Settings() {
               <CollapsibleContent>
                 <CardContent>
                   <CustomFieldsSettings embedded />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Signature Field Templates - Collapsible */}
+          <Collapsible open={signatureTemplatesOpen} onOpenChange={setSignatureTemplatesOpen}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileSignature className="h-5 w-5" />
+                      <div>
+                        <CardTitle>Signature Field Templates</CardTitle>
+                        <CardDescription>
+                          Define reusable signature, date, and text field layouts for documents
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 transition-transform ${signatureTemplatesOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent>
+                  <SignatureFieldTemplatesSettings embedded />
                 </CardContent>
               </CollapsibleContent>
             </Card>
