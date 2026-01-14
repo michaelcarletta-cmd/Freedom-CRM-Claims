@@ -156,7 +156,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
           document_name: selectedTemplate.name,
           document_path: generatedDocPath,
           field_data: placedFields,
-          status: webhookUrl ? "sent_to_signnow" : "pending",
+          status: "pending",
         })
         .select()
         .single();
@@ -291,9 +291,8 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       in_progress: "secondary",
       declined: "destructive",
       pending: "outline",
-      sent_to_signnow: "secondary",
     };
-    const displayStatus = status === "sent_to_signnow" ? "Sent to SignNow" : status.replace("_", " ");
+    const displayStatus = status.replace("_", " ");
     return <Badge variant={variants[status] || "outline"}>{displayStatus}</Badge>;
   };
 
