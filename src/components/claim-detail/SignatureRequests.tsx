@@ -72,6 +72,8 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     },
   });
 
+  const [isDocxTemplate, setIsDocxTemplate] = useState(false);
+
   const generateDocumentMutation = useMutation({
     mutationFn: async () => {
       if (!selectedTemplate) throw new Error("No template selected");
@@ -86,6 +88,8 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
 
       // Handle both PDF and Word document responses
       const isPDF = docData.isPDF;
+      setIsDocxTemplate(!isPDF);
+      
       const contentArray = Array.isArray(docData.content) 
         ? docData.content 
         : docData.content?.data || docData.content;
@@ -103,19 +107,28 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .upload(fileName, blob);
       if (uploadError) throw uploadError;
 
-      // Get signed URL for field placement
+      // Get signed URL for field placement (only useful for PDFs)
       const { data: urlData } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(fileName, 3600);
 
       setGeneratedDocPath(fileName);
-      setGeneratedDocUrl(urlData?.signedUrl || null);
+      setGeneratedDocUrl(isPDF ? (urlData?.signedUrl || null) : null);
       
-      return { fileName, url: urlData?.signedUrl };
+      return { fileName, url: urlData?.signedUrl, isPDF };
     },
-    onSuccess: () => {
-      setCurrentStep(2);
-      toast({ title: "Document generated! Now place signature fields." });
+    onSuccess: (data) => {
+      if (data?.isPDF) {
+        setCurrentStep(2);
+        toast({ title: "Document generated! Now place signature fields." });
+      } else {
+        // For Word documents, skip field placement and go directly to signers
+        setCurrentStep(3);
+        toast({ 
+          title: "Word document generated", 
+          description: "Field placement is only available for PDF templates. Proceeding to signer configuration." 
+        });
+      }
     },
     onError: (error: Error) => {
       toast({ title: "Failed to generate document", description: error.message, variant: "destructive" });
@@ -215,6 +228,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       setGeneratedDocUrl(null);
       setGeneratedDocPath(null);
       setPlacedFields([]);
+      setIsDocxTemplate(false);
       setSigners([{ name: claim.policyholder_name || "", email: claim.policyholder_email || "", type: "policyholder", order: 1 }]);
       queryClient.invalidateQueries({ queryKey: ["signature-requests"] });
       queryClient.invalidateQueries({ queryKey: ["claim-updates"] });
@@ -454,7 +468,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       )}
                     </Button>
                   )}
-                  {currentStep === 2 && (
+                  {currentStep === 2 && !isDocxTemplate && (
                     <Button
                       onClick={() => setCurrentStep(3)}
                       disabled={placedFields.length === 0}
