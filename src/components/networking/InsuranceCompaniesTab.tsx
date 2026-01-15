@@ -14,6 +14,7 @@ interface InsuranceCompany {
   id: string;
   name: string;
   phone: string | null;
+  phone_extension: string | null;
   email: string | null;
   is_active: boolean;
 }
@@ -28,6 +29,7 @@ export const InsuranceCompaniesTab = () => {
     name: "",
     email: "",
     phone: "",
+    phone_extension: "",
   });
 
   useEffect(() => {
@@ -67,10 +69,11 @@ export const InsuranceCompaniesTab = () => {
         name: company.name,
         email: company.email || "",
         phone: company.phone || "",
+        phone_extension: company.phone_extension || "",
       });
     } else {
       setEditingCompany(null);
-      setFormData({ name: "", email: "", phone: "" });
+      setFormData({ name: "", email: "", phone: "", phone_extension: "" });
     }
     setDialogOpen(true);
   };
@@ -87,6 +90,7 @@ export const InsuranceCompaniesTab = () => {
         .update({
           name: formData.name,
           phone: formData.phone || null,
+          phone_extension: formData.phone_extension || null,
           email: formData.email || null,
         })
         .eq("id", editingCompany.id);
@@ -102,6 +106,7 @@ export const InsuranceCompaniesTab = () => {
         .insert([{
           name: formData.name,
           phone: formData.phone || null,
+          phone_extension: formData.phone_extension || null,
           email: formData.email || null,
         }]);
 
@@ -114,7 +119,7 @@ export const InsuranceCompaniesTab = () => {
 
     setDialogOpen(false);
     setEditingCompany(null);
-    setFormData({ name: "", email: "", phone: "" });
+    setFormData({ name: "", email: "", phone: "", phone_extension: "" });
     fetchCompanies();
   };
 
@@ -177,6 +182,7 @@ export const InsuranceCompaniesTab = () => {
                         <div className="flex items-center gap-2">
                           <Phone className="h-4 w-4 text-muted-foreground" />
                           {company.phone}
+                          {company.phone_extension && ` ext ${company.phone_extension}`}
                         </div>
                       ) : (
                         <span className="text-muted-foreground">—</span>
@@ -222,14 +228,24 @@ export const InsuranceCompaniesTab = () => {
                 placeholder="Enter email"
               />
             </div>
-            <div>
-              <Label>Phone</Label>
-              <Input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) })}
-                placeholder="123-456-7890"
-              />
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                <Label>Phone</Label>
+                <Input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) })}
+                  placeholder="123-456-7890"
+                />
+              </div>
+              <div>
+                <Label>Ext</Label>
+                <Input
+                  value={formData.phone_extension}
+                  onChange={(e) => setFormData({ ...formData, phone_extension: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+                  placeholder="1234"
+                />
+              </div>
             </div>
             <Button onClick={handleSaveCompany} className="w-full">
               {editingCompany ? "Save Changes" : "Add Company"}
