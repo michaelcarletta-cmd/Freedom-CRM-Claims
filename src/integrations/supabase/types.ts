@@ -25,6 +25,7 @@ export type Database = {
           name: string
           notes: string | null
           phone: string | null
+          phone_extension: string | null
           updated_at: string | null
         }
         Insert: {
@@ -37,6 +38,7 @@ export type Database = {
           name: string
           notes?: string | null
           phone?: string | null
+          phone_extension?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -49,6 +51,7 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string | null
+          phone_extension?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -1821,6 +1824,7 @@ export type Database = {
           is_active: boolean
           name: string
           phone: string | null
+          phone_extension: string | null
           updated_at: string
         }
         Insert: {
@@ -1830,6 +1834,7 @@ export type Database = {
           is_active?: boolean
           name: string
           phone?: string | null
+          phone_extension?: string | null
           updated_at?: string
         }
         Update: {
@@ -1839,6 +1844,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           phone?: string | null
+          phone_extension?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -2017,6 +2023,7 @@ export type Database = {
           is_active: boolean
           name: string
           phone: string | null
+          phone_extension: string | null
           updated_at: string
         }
         Insert: {
@@ -2027,6 +2034,7 @@ export type Database = {
           is_active?: boolean
           name: string
           phone?: string | null
+          phone_extension?: string | null
           updated_at?: string
         }
         Update: {
@@ -2037,6 +2045,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           phone?: string | null
+          phone_extension?: string | null
           updated_at?: string
         }
         Relationships: []

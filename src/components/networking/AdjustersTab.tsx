@@ -29,6 +29,7 @@ interface Adjuster {
   name: string;
   email: string | null;
   phone: string | null;
+  phone_extension: string | null;
   company: string | null;
   notes: string | null;
   is_active: boolean;
@@ -51,6 +52,7 @@ export function AdjustersTab() {
     name: "",
     email: "",
     phone: "",
+    phone_extension: "",
     company: "",
     notes: "",
   });
@@ -74,6 +76,7 @@ export function AdjustersTab() {
         name: data.name,
         email: data.email || null,
         phone: data.phone || null,
+        phone_extension: data.phone_extension || null,
         company: data.company || null,
         notes: data.notes || null,
       });
@@ -95,6 +98,7 @@ export function AdjustersTab() {
           name: data.name,
           email: data.email || null,
           phone: data.phone || null,
+          phone_extension: data.phone_extension || null,
           company: data.company || null,
           notes: data.notes || null,
         })
@@ -127,7 +131,7 @@ export function AdjustersTab() {
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
     setEditingAdjuster(null);
-    setFormData({ name: "", email: "", phone: "", company: "", notes: "" });
+    setFormData({ name: "", email: "", phone: "", phone_extension: "", company: "", notes: "" });
   };
 
   const handleOpenEdit = (adjuster: Adjuster) => {
@@ -136,6 +140,7 @@ export function AdjustersTab() {
       name: adjuster.name,
       email: adjuster.email || "",
       phone: adjuster.phone || "",
+      phone_extension: adjuster.phone_extension || "",
       company: adjuster.company || "",
       notes: adjuster.notes || "",
     });
@@ -214,6 +219,7 @@ export function AdjustersTab() {
                         <div className="flex items-center gap-1">
                           <Phone className="h-3 w-3" />
                           {adjuster.phone}
+                          {adjuster.phone_extension && ` ext ${adjuster.phone_extension}`}
                         </div>
                       )}
                     </div>
@@ -279,18 +285,33 @@ export function AdjustersTab() {
                   placeholder="email@example.com"
                 />
               </div>
-              <div>
-                <Label>Phone</Label>
-                <Input
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      phone: formatPhoneNumber(e.target.value),
-                    })
-                  }
-                  placeholder="555-123-4567"
-                />
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <Label>Phone</Label>
+                  <Input
+                    value={formData.phone}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        phone: formatPhoneNumber(e.target.value),
+                      })
+                    }
+                    placeholder="555-123-4567"
+                  />
+                </div>
+                <div>
+                  <Label>Ext</Label>
+                  <Input
+                    value={formData.phone_extension}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        phone_extension: e.target.value.replace(/\D/g, "").slice(0, 6),
+                      })
+                    }
+                    placeholder="1234"
+                  />
+                </div>
               </div>
               <div>
                 <Label>Notes</Label>

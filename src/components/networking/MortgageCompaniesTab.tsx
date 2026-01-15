@@ -15,6 +15,7 @@ interface MortgageCompany {
   name: string;
   contact_name: string | null;
   phone: string | null;
+  phone_extension: string | null;
   email: string | null;
   is_active: boolean;
 }
@@ -30,6 +31,7 @@ export const MortgageCompaniesTab = () => {
     contact_name: "",
     email: "",
     phone: "",
+    phone_extension: "",
   });
 
   useEffect(() => {
@@ -71,10 +73,11 @@ export const MortgageCompaniesTab = () => {
         contact_name: company.contact_name || "",
         email: company.email || "",
         phone: company.phone || "",
+        phone_extension: company.phone_extension || "",
       });
     } else {
       setEditingCompany(null);
-      setFormData({ name: "", contact_name: "", email: "", phone: "" });
+      setFormData({ name: "", contact_name: "", email: "", phone: "", phone_extension: "" });
     }
     setDialogOpen(true);
   };
@@ -92,6 +95,7 @@ export const MortgageCompaniesTab = () => {
           name: formData.name,
           contact_name: formData.contact_name || null,
           phone: formData.phone || null,
+          phone_extension: formData.phone_extension || null,
           email: formData.email || null,
         })
         .eq("id", editingCompany.id);
@@ -108,6 +112,7 @@ export const MortgageCompaniesTab = () => {
           name: formData.name,
           contact_name: formData.contact_name || null,
           phone: formData.phone || null,
+          phone_extension: formData.phone_extension || null,
           email: formData.email || null,
         }]);
 
@@ -120,7 +125,7 @@ export const MortgageCompaniesTab = () => {
 
     setDialogOpen(false);
     setEditingCompany(null);
-    setFormData({ name: "", contact_name: "", phone: "", email: "" });
+    setFormData({ name: "", contact_name: "", phone: "", phone_extension: "", email: "" });
     fetchCompanies();
   };
 
@@ -194,6 +199,7 @@ export const MortgageCompaniesTab = () => {
                         <div className="flex items-center gap-2">
                           <Phone className="h-4 w-4 text-muted-foreground" />
                           {company.phone}
+                          {company.phone_extension && ` ext ${company.phone_extension}`}
                         </div>
                       ) : (
                         <span className="text-muted-foreground">—</span>
@@ -247,14 +253,24 @@ export const MortgageCompaniesTab = () => {
                 placeholder="Enter email"
               />
             </div>
-            <div>
-              <Label>Phone</Label>
-              <Input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) })}
-                placeholder="123-456-7890"
-              />
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                <Label>Phone</Label>
+                <Input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) })}
+                  placeholder="123-456-7890"
+                />
+              </div>
+              <div>
+                <Label>Ext</Label>
+                <Input
+                  value={formData.phone_extension}
+                  onChange={(e) => setFormData({ ...formData, phone_extension: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+                  placeholder="1234"
+                />
+              </div>
             </div>
             <Button onClick={handleSaveCompany} className="w-full">
               {editingCompany ? "Save Changes" : "Add Company"}
