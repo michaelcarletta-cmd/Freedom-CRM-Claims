@@ -149,6 +149,90 @@ serve(async (req) => {
 
     console.log('Inbound SMS stored for claim:', claimId);
 
+    // Identify sender type for automation triggers
+    let senderType: 'insurance' | 'client' | 'contractor' | 'unknown' = 'unknown';
+    const matchedClaim = claims?.[0];
+    const fromNumberLast10 = fromNumber.slice(-10);
+    
+    if (matchedClaim) {
+      // Check if sender matches policyholder
+      if (matchedClaim.policyholder_phone?.includes(fromNumberLast10)) {
+        senderType = 'client';
+      }
+      // Check if sender matches adjuster
+      else if (matchedClaim.adjuster_phone?.includes(fromNumberLast10)) {
+        senderType = 'insurance';
+      }
+    }
+    
+    // Check claim_adjusters if not found
+    if (senderType === 'unknown') {
+      const { data: adjusters } = await supabase
+        .from('claim_adjusters')
+        .select('adjuster_phone')
+        .eq('claim_id', claimId);
+      
+      if (adjusters?.some(a => a.adjuster_phone?.includes(fromNumberLast10))) {
+        senderType = 'insurance';
+      }
+    }
+    
+    // Check contractors
+    if (senderType === 'unknown') {
+      const { data: contractors } = await supabase
+        .from('claim_contractors')
+        .select('contractor_id')
+        .eq('claim_id', claimId);
+      
+      if (contractors && contractors.length > 0) {
+        const contractorIds = contractors.map(c => c.contractor_id);
+        const { data: clients } = await supabase
+          .from('clients')
+          .select('phone')
+          .in('id', contractorIds);
+        
+        if (clients?.some(c => c.phone?.includes(fromNumberLast10))) {
+          senderType = 'contractor';
+        }
+      }
+    }
+    
+    console.log(`Identified SMS sender type: ${senderType}`);
+
+    // Check for inbound_sms automations
+    const { data: smsAutomations } = await supabase
+      .from('automations')
+      .select('*')
+      .eq('trigger_type', 'inbound_sms')
+      .eq('is_active', true);
+
+    if (smsAutomations && smsAutomations.length > 0) {
+      for (const automation of smsAutomations) {
+        const config = automation.trigger_config as { sender_type?: string } || {};
+        const configSenderType = config.sender_type || 'any';
+        
+        // Check if this automation should trigger
+        if (configSenderType === 'any' || configSenderType === senderType) {
+          console.log(`Queueing SMS automation "${automation.name}" for claim ${claimId}`);
+          
+          // Create execution record
+          await supabase
+            .from('automation_executions')
+            .insert({
+              automation_id: automation.id,
+              claim_id: claimId,
+              status: 'pending',
+              trigger_data: {
+                sms_id: smsRecord.id,
+                from_number: fromNumber,
+                sender_type: senderType,
+                message_body: messageBody,
+              },
+            });
+        }
+      }
+    }
+
     // Update claim's updated_at to bubble it up in the list
     await supabase
       .from('claims')
