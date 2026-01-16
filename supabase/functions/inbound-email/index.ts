@@ -346,6 +346,97 @@ serve(async (req) => {
 
     console.log(`Email logged to claim ${claim.claim_number} (policy: ${claim.policy_number}) from ${senderEmail}`);
 
+    // Identify sender type for automation triggers
+    let senderType: 'insurance' | 'client' | 'contractor' | 'unknown' = 'unknown';
+    
+    // Check if sender is from insurance/adjuster
+    const { data: claimData } = await supabase
+      .from('claims')
+      .select('adjuster_email, insurance_email, policyholder_email')
+      .eq('id', claim.id)
+      .single();
+    
+    if (claimData) {
+      const senderLower = senderEmail.toLowerCase();
+      
+      // Check adjuster emails
+      if (claimData.adjuster_email?.toLowerCase() === senderLower ||
+          claimData.insurance_email?.toLowerCase() === senderLower) {
+        senderType = 'insurance';
+      }
+      // Check claim_adjusters table too
+      if (senderType === 'unknown') {
+        const { data: adjusters } = await supabase
+          .from('claim_adjusters')
+          .select('adjuster_email')
+          .eq('claim_id', claim.id);
+        
+        if (adjusters?.some(a => a.adjuster_email?.toLowerCase() === senderLower)) {
+          senderType = 'insurance';
+        }
+      }
+      // Check policyholder
+      if (senderType === 'unknown' && claimData.policyholder_email?.toLowerCase() === senderLower) {
+        senderType = 'client';
+      }
+      // Check contractors
+      if (senderType === 'unknown') {
+        const { data: contractors } = await supabase
+          .from('claim_contractors')
+          .select('contractor_id')
+          .eq('claim_id', claim.id);
+        
+        if (contractors && contractors.length > 0) {
+          const contractorIds = contractors.map(c => c.contractor_id);
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('email')
+            .in('id', contractorIds);
+          
+          if (profiles?.some(p => p.email?.toLowerCase() === senderLower)) {
+            senderType = 'contractor';
+          }
+        }
+      }
+    }
+    
+    console.log(`Identified sender type: ${senderType}`);
+
+    // Check for inbound_email automations
+    const { data: emailAutomations } = await supabase
+      .from('automations')
+      .select('*')
+      .eq('trigger_type', 'inbound_email')
+      .eq('is_active', true);
+
+    if (emailAutomations && emailAutomations.length > 0) {
+      for (const automation of emailAutomations) {
+        const config = automation.trigger_config as { sender_type?: string } || {};
+        const configSenderType = config.sender_type || 'any';
+        
+        // Check if this automation should trigger
+        if (configSenderType === 'any' || configSenderType === senderType) {
+          console.log(`Queueing automation "${automation.name}" for claim ${claim.id}`);
+          
+          // Create execution record
+          await supabase
+            .from('automation_executions')
+            .insert({
+              automation_id: automation.id,
+              claim_id: claim.id,
+              status: 'pending',
+              trigger_data: {
+                email_id: insertedEmail.id,
+                sender_email: senderEmail,
+                sender_name: senderName,
+                sender_type: senderType,
+                subject: subject,
+              },
+            });
+        }
+      }
+    }
+
     // Check if this claim has AI automation enabled
     const { data: automation } = await supabase
       .from('claim_automations')

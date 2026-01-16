@@ -29,6 +29,8 @@ interface TriggerConfig {
   status?: string;
   // For task_completed
   task_title_pattern?: string;
+  // For inbound_email / inbound_sms
+  sender_type?: 'insurance' | 'client' | 'contractor' | 'any';
 }
 
 interface ActionConfig {
@@ -337,6 +339,12 @@ export const AutomationsSettings = () => {
 
   const getTriggerDescription = (automation: any) => {
     const config = automation.trigger_config || {};
+    const senderLabels: Record<string, string> = {
+      'insurance': 'Insurance/Adjuster',
+      'client': 'Client/Policyholder',
+      'contractor': 'Contractor',
+      'any': 'Any sender'
+    };
     switch (automation.trigger_type) {
       case 'scheduled':
         if (config.schedule_type === 'once') return `Once at ${config.schedule_time}`;
@@ -354,6 +362,10 @@ export const AutomationsSettings = () => {
           : 'When any task is completed';
       case 'inspection_scheduled':
         return 'When a new inspection is scheduled';
+      case 'inbound_email':
+        return `When email received from ${senderLabels[config.sender_type] || 'any sender'}`;
+      case 'inbound_sms':
+        return `When SMS received from ${senderLabels[config.sender_type] || 'any sender'}`;
       default:
         return automation.trigger_type.replace('_', ' ');
     }
@@ -505,6 +517,8 @@ export const AutomationsSettings = () => {
                         <SelectItem value="status_change">When Claim Status Changes</SelectItem>
                         <SelectItem value="task_completed">When Task is Completed</SelectItem>
                         <SelectItem value="inspection_scheduled">When Inspection is Scheduled</SelectItem>
+                        <SelectItem value="inbound_email">When Inbound Email Received</SelectItem>
+                        <SelectItem value="inbound_sms">When Inbound SMS Received</SelectItem>
                         <SelectItem value="manual">Manual Trigger Only</SelectItem>
                       </SelectContent>
                     </Select>
@@ -635,6 +649,58 @@ export const AutomationsSettings = () => {
                         />
                         <p className="text-sm text-muted-foreground">
                           Leave empty to trigger on any task completion, or enter text to match specific tasks
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Inbound Email Trigger Config */}
+                  {triggerType === 'inbound_email' && (
+                    <div className="space-y-4 pl-4 border-l-2 border-muted">
+                      <div className="space-y-2">
+                        <Label>Email From</Label>
+                        <Select 
+                          value={triggerConfig.sender_type || 'any'} 
+                          onValueChange={(value) => setTriggerConfig({ ...triggerConfig, sender_type: value as any })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select sender type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="any">Any Sender</SelectItem>
+                            <SelectItem value="insurance">Insurance Company / Adjuster</SelectItem>
+                            <SelectItem value="client">Client / Policyholder</SelectItem>
+                            <SelectItem value="contractor">Contractor</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-sm text-muted-foreground">
+                          Trigger when an inbound email is received from the selected sender type
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Inbound SMS Trigger Config */}
+                  {triggerType === 'inbound_sms' && (
+                    <div className="space-y-4 pl-4 border-l-2 border-muted">
+                      <div className="space-y-2">
+                        <Label>SMS From</Label>
+                        <Select 
+                          value={triggerConfig.sender_type || 'any'} 
+                          onValueChange={(value) => setTriggerConfig({ ...triggerConfig, sender_type: value as any })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select sender type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="any">Any Sender</SelectItem>
+                            <SelectItem value="insurance">Insurance Company / Adjuster</SelectItem>
+                            <SelectItem value="client">Client / Policyholder</SelectItem>
+                            <SelectItem value="contractor">Contractor</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-sm text-muted-foreground">
+                          Trigger when an inbound SMS is received from the selected sender type
                         </p>
                       </div>
                     </div>
