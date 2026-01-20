@@ -850,6 +850,23 @@ const tools = [
         required: []
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_notepad_item",
+      description: "Add an item to the user's personal notepad/quick notes on the dashboard. Use this when the user asks you to remind them of something, jot something down, add to their notes, or save a quick note for later.",
+      parameters: {
+        type: "object",
+        properties: {
+          item: {
+            type: "string",
+            description: "The note/item to add to the notepad"
+          }
+        },
+        required: ["item"]
+      }
+    }
   }
 ];
 async function createTask(supabase: any, params: {
@@ -1066,6 +1083,57 @@ async function bulkShareToWorkspace(supabase: any, claimIds: string[], workspace
     return { success: 0, failed: claimIds.length };
   }
   return { success: claimIds.length, failed: 0 };
+}
+
+// Helper function to add item to user's notepad
+async function addNotepadItem(supabase: any, userId: string, item: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Check if user already has a note
+    const { data: existingNote } = await supabase
+      .from("user_notes")
+      .select("id, content")
+      .eq("user_id", userId)
+      .single();
+
+    if (existingNote) {
+      // Parse existing content and add new item
+      let items: string[] = [];
+      try {
+        items = JSON.parse(existingNote.content);
+        if (!Array.isArray(items)) items = [];
+      } catch {
+        // If it's plain text, convert to array
+        items = existingNote.content ? existingNote.content.split('\n').filter((l: string) => l.trim()) : [];
+      }
+      
+      items.push(item);
+      
+      const { error } = await supabase
+        .from("user_notes")
+        .update({ content: JSON.stringify(items), updated_at: new Date().toISOString() })
+        .eq("id", existingNote.id);
+      
+      if (error) {
+        console.error("Error updating notepad:", error);
+        return { success: false, error: error.message };
+      }
+    } else {
+      // Create new note with the item
+      const { error } = await supabase
+        .from("user_notes")
+        .insert({ user_id: userId, content: JSON.stringify([item]) });
+      
+      if (error) {
+        console.error("Error creating notepad:", error);
+        return { success: false, error: error.message };
+      }
+    }
+    
+    return { success: true };
+  } catch (err) {
+    console.error("Exception adding notepad item:", err);
+    return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
 }
 
 // Helper function to get staff members for assignment
@@ -1342,7 +1410,12 @@ WORKSPACE SHARING: You can share claims to workspaces for partner collaboration!
 - Example: "share all claims with Condition One as contractor to Condition One workspace"
   → use filter_by_contractor: "Condition One", workspace_name: "Condition One"
 
-You can also specify claims by name using client_names array, or by ID using claim_ids array.`;
+You can also specify claims by name using client_names array, or by ID using claim_ids array.
+
+NOTEPAD: You can add items to the user's personal notepad on their dashboard!
+- Use add_notepad_item when the user asks you to remind them of something, jot something down, add to their notes, or save a quick note
+- Examples: "remind me to call the adjuster tomorrow", "add to my notes: follow up on Smith claim", "jot down that I need to review the Johnson estimate"
+- The note will appear as a bullet point on their dashboard notepad`;
 
     // Fetch available workspaces for context
     let workspacesContext = "";
@@ -1723,6 +1796,35 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
           } catch (parseErr) {
             console.error("Error in bulk_share_to_workspace:", parseErr);
             answer += `\n\n❌ **Error sharing to workspace:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "add_notepad_item") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Adding notepad item:", params.item);
+            
+            // Get user ID from auth header
+            const authHeader = req.headers.get("authorization");
+            if (!authHeader) {
+              answer += `\n\n❌ **Cannot add to notepad:** Not authenticated`;
+              continue;
+            }
+            
+            const { data: { user } } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+            if (!user) {
+              answer += `\n\n❌ **Cannot add to notepad:** User not found`;
+              continue;
+            }
+            
+            const result = await addNotepadItem(supabase, user.id, params.item);
+            
+            if (result.success) {
+              answer += `\n\n✅ **Added to your notepad:** "${params.item}"`;
+            } else {
+              answer += `\n\n❌ **Failed to add to notepad:** ${result.error}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in add_notepad_item:", parseErr);
+            answer += `\n\n❌ **Error adding to notepad:** Invalid parameters`;
           }
         }
       }
