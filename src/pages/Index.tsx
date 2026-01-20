@@ -1,11 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, DollarSign, CheckCircle, AlertTriangle, ListTodo, TrendingUp } from "lucide-react";
+import { FileText, DollarSign, ListTodo, TrendingUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { formatDistanceToNow, startOfMonth, endOfMonth, isAfter, isBefore, addDays } from "date-fns";
+import { formatDistanceToNow, startOfMonth, endOfMonth } from "date-fns";
 import { useNavigate } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
 import { DashboardCalendar } from "@/components/dashboard/DashboardCalendar";
+import { DashboardNotepad } from "@/components/dashboard/DashboardNotepad";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -121,16 +121,6 @@ const Index = () => {
   const totalAdjusterFees = fees?.reduce((sum, f) => sum + (f.adjuster_fee_amount || 0), 0) || 0;
   const netProfit = totalChecks - totalExpenses - totalPayments - totalAdjusterFees;
 
-  // Urgent tasks (overdue or due within 2 days)
-  const urgentTasks = tasks?.filter(task => {
-    if (!task.due_date) return false;
-    const dueDate = new Date(task.due_date);
-    return isBefore(dueDate, addDays(now, 2));
-  }) || [];
-
-  const overdueTasks = urgentTasks.filter(task => isBefore(new Date(task.due_date!), now));
-  const dueSoonTasks = urgentTasks.filter(task => !isBefore(new Date(task.due_date!), now));
-
   const formatCurrency = (amount: number) => {
     if (amount >= 1000000) {
       return `$${(amount / 1000000).toFixed(2)}M`;
@@ -191,66 +181,11 @@ const Index = () => {
         ))}
       </div>
 
-      {/* Urgent Section */}
-      {urgentTasks.length > 0 && (
-        <Card className="border-destructive/50 bg-destructive/5">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" />
-              Urgent Attention Required
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {overdueTasks.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-destructive">Overdue Tasks ({overdueTasks.length})</p>
-                {overdueTasks.slice(0, 3).map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-background border cursor-pointer hover:bg-accent/50 transition-colors"
-                    onClick={() => navigate(`/claims/${task.claim_id}`)}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{task.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {(task.claims as any)?.policyholder_name || (task.claims as any)?.claim_number}
-                      </p>
-                    </div>
-                    <Badge variant="destructive" className="ml-2 shrink-0">
-                      {formatDistanceToNow(new Date(task.due_date!), { addSuffix: true })}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-            {dueSoonTasks.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-amber-600">Due Soon ({dueSoonTasks.length})</p>
-                {dueSoonTasks.slice(0, 3).map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-background border cursor-pointer hover:bg-accent/50 transition-colors"
-                    onClick={() => navigate(`/claims/${task.claim_id}`)}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{task.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {(task.claims as any)?.policyholder_name || (task.claims as any)?.claim_number}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="ml-2 shrink-0 border-amber-500 text-amber-600">
-                      {formatDistanceToNow(new Date(task.due_date!), { addSuffix: true })}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Calendar Section */}
-      <DashboardCalendar />
+      {/* Notepad and Calendar Section */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <DashboardNotepad />
+        <DashboardCalendar />
+      </div>
 
       {/* Tasks and Quick Stats */}
       <div className="grid gap-6 lg:grid-cols-2">
