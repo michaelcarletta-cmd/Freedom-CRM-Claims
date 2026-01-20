@@ -1,18 +1,21 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, KeyboardEvent } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { StickyNote, Save, Loader2 } from "lucide-react";
+import { StickyNote, Save, Loader2, Plus, X } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export const DashboardNotepad = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [content, setContent] = useState("");
+  const [items, setItems] = useState<string[]>([]);
+  const [newItem, setNewItem] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const debouncedContent = useDebounce(content, 1000);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debouncedItems = useDebounce(items, 1000);
 
   const { data: note, isLoading } = useQuery({
     queryKey: ["user-note"],
@@ -33,25 +36,40 @@ export const DashboardNotepad = () => {
 
   useEffect(() => {
     if (note?.content !== undefined) {
-      setContent(note.content);
+      try {
+        const parsed = JSON.parse(note.content);
+        if (Array.isArray(parsed)) {
+          setItems(parsed);
+        } else {
+          // Convert old plain text to bullet points
+          const lines = note.content.split('\n').filter((line: string) => line.trim());
+          setItems(lines);
+        }
+      } catch {
+        // If not JSON, split by newlines
+        const lines = note.content.split('\n').filter((line: string) => line.trim());
+        setItems(lines);
+      }
     }
   }, [note?.content]);
 
   const saveMutation = useMutation({
-    mutationFn: async (newContent: string) => {
+    mutationFn: async (newItems: string[]) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
+
+      const content = JSON.stringify(newItems);
 
       if (note) {
         const { error } = await supabase
           .from("user_notes")
-          .update({ content: newContent })
+          .update({ content })
           .eq("id", note.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from("user_notes")
-          .insert({ user_id: user.id, content: newContent });
+          .insert({ user_id: user.id, content });
         if (error) throw error;
       }
     },
@@ -73,12 +91,38 @@ export const DashboardNotepad = () => {
   });
 
   useEffect(() => {
-    if (debouncedContent !== note?.content && debouncedContent !== "") {
-      saveMutation.mutate(debouncedContent);
-    } else if (debouncedContent === "" && note?.content) {
-      saveMutation.mutate(debouncedContent);
+    const currentContent = note?.content;
+    let existingItems: string[] = [];
+    try {
+      const parsed = JSON.parse(currentContent || "[]");
+      existingItems = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      existingItems = currentContent?.split('\n').filter((l: string) => l.trim()) || [];
     }
-  }, [debouncedContent]);
+    
+    if (JSON.stringify(debouncedItems) !== JSON.stringify(existingItems)) {
+      saveMutation.mutate(debouncedItems);
+    }
+  }, [debouncedItems]);
+
+  const handleAddItem = () => {
+    if (newItem.trim()) {
+      setItems([...items, newItem.trim()]);
+      setNewItem("");
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddItem();
+    }
+  };
+
+  const handleRemoveItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index));
+  };
 
   if (isLoading) {
     return (
@@ -112,7 +156,7 @@ export const DashboardNotepad = () => {
               Saving...
             </div>
           )}
-          {!isSaving && content && (
+          {!isSaving && items.length > 0 && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Save className="h-3 w-3" />
               Saved
@@ -120,13 +164,44 @@ export const DashboardNotepad = () => {
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <Textarea
-          placeholder="Jot down quick thoughts, reminders, or ideas..."
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          className="min-h-[150px] resize-none"
-        />
+      <CardContent className="space-y-3">
+        <div className="flex gap-2">
+          <Input
+            ref={inputRef}
+            placeholder="Add a note..."
+            value={newItem}
+            onChange={(e) => setNewItem(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="flex-1"
+          />
+          <Button size="icon" variant="outline" onClick={handleAddItem}>
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        <ul className="space-y-2 max-h-[200px] overflow-y-auto">
+          {items.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No notes yet. Add one above!
+            </p>
+          ) : (
+            items.map((item, index) => (
+              <li
+                key={index}
+                className="flex items-start gap-2 p-2 rounded-md bg-muted/50 group"
+              >
+                <span className="text-primary mt-0.5">•</span>
+                <span className="flex-1 text-sm">{item}</span>
+                <button
+                  onClick={() => handleRemoveItem(index)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
       </CardContent>
     </Card>
   );
