@@ -164,7 +164,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -1663,6 +1663,104 @@ Analyze this claim and identify ALL weaknesses that could lead to denial, underp
    - Nice-to-have enhancements (low priority)
 
 Be specific and actionable. For each weakness, explain why it's a problem and exactly how to fix it.`;
+        break;
+      }
+
+      case 'photo_linking': {
+        // AI-powered photo to estimate line item linking
+        systemPrompt = `You are Darwin, an expert in analyzing claim photos and matching them to estimate line items. Your role is to identify which photos correspond to which damaged items in an insurance estimate.
+
+FORMATTING REQUIREMENT: Return ONLY valid JSON. No markdown, no explanations.
+
+You understand:
+- Construction terminology and damage types
+- Photo categorization (roof, siding, interior, etc.)
+- How to match visual evidence to line item descriptions
+- Common roofing, siding, window, and interior damage patterns
+
+Return a JSON object with a "matches" array containing objects with:
+- photo_id: the ID of the photo
+- line_item_index: the index of the matching line item
+- confidence: a number between 0 and 1 indicating match confidence
+- reason: brief explanation of why this photo matches this line item`;
+
+        const photos = additionalContext?.photos || [];
+        const lineItems = additionalContext?.lineItems || [];
+
+        userPrompt = `Match these claim photos to the estimate line items based on file names, categories, descriptions, and logical associations.
+
+PHOTOS:
+${photos.map((p: any) => `- ID: ${p.id}, Name: ${p.name}, Category: ${p.category || 'none'}, Description: ${p.description || 'none'}`).join('\n')}
+
+ESTIMATE LINE ITEMS:
+${lineItems.map((item: any, idx: number) => `- Index ${idx}: ${item.description}${item.amount ? ` ($${item.amount})` : ''}`).join('\n')}
+
+Return a JSON object with a "matches" array. Only include confident matches (confidence > 0.6). Each match should have: photo_id, line_item_index, confidence, reason.`;
+        break;
+      }
+
+      case 'code_lookup': {
+        // AI-powered building code and manufacturer spec lookup
+        const searchQuery = content || '';
+        
+        // Fetch relevant codes and specs from database
+        const { data: relevantCodes } = await supabase
+          .from('building_code_citations')
+          .select('*')
+          .or(`content.ilike.%${searchQuery}%,section_title.ilike.%${searchQuery}%`)
+          .limit(10);
+
+        const { data: relevantSpecs } = await supabase
+          .from('manufacturer_specs')
+          .select('*')
+          .or(`content.ilike.%${searchQuery}%,manufacturer.ilike.%${searchQuery}%,product_name.ilike.%${searchQuery}%`)
+          .limit(10);
+
+        systemPrompt = `You are Darwin, an expert in building codes and manufacturer specifications for insurance claims. Your role is to find and cite relevant codes and specifications that support claim arguments.
+
+IMPORTANT: This claim is located in ${stateInfo.stateName}. Reference ${stateInfo.stateName}-adopted codes.
+
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting.
+
+CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
+- Focus on code requirements that mandate full replacement vs partial repair
+- Cite manufacturer specs that prohibit mixing old and new materials
+- Reference installation requirements that cannot be met with partial repairs
+- Emphasize code compliance issues that require full scope replacement
+
+You have access to these relevant codes and specifications:
+
+BUILDING CODES:
+${relevantCodes?.map((c: any) => `${c.code_source} ${c.code_year} ${c.section_number}: ${c.section_title || ''}\n${c.content}`).join('\n\n') || 'No matching codes found in database.'}
+
+MANUFACTURER SPECIFICATIONS:
+${relevantSpecs?.map((s: any) => `${s.manufacturer} ${s.product_name || s.product_category} (${s.spec_type}):\n${s.content}`).join('\n\n') || 'No matching specs found in database.'}`;
+
+        userPrompt = `${claimSummary}
+
+SEARCH QUERY: ${searchQuery}
+
+LOSS TYPE: ${claim.loss_type || 'Unknown'}
+LOSS DESCRIPTION: ${claim.loss_description || 'Not provided'}
+
+Based on the search query and claim context, provide:
+
+1. RELEVANT BUILDING CODE CITATIONS:
+   - Specific code sections that apply
+   - How they support full replacement arguments
+   - Code requirements that cannot be met with partial repairs
+
+2. MANUFACTURER SPECIFICATION REFERENCES:
+   - Installation requirements that mandate full system installation
+   - Warranty provisions that are voided by partial repairs
+   - Technical specifications requiring matching components
+
+3. APPLICATION TO THIS CLAIM:
+   - How these codes/specs support the claim
+   - Specific arguments to use with the carrier
+   - Documentation needed to prove compliance requirements
+
+Be specific with citations and provide actionable information for claim negotiation.`;
         break;
       }
 
