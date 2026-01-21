@@ -1499,6 +1499,51 @@ export type Database = {
         }
         Relationships: []
       }
+      counter_arguments: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          denial_category: string
+          denial_keywords: string[] | null
+          denial_reason: string
+          id: string
+          is_active: boolean | null
+          legal_citations: string | null
+          rebuttal_template: string
+          success_rate: number | null
+          updated_at: string
+          usage_count: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          denial_category: string
+          denial_keywords?: string[] | null
+          denial_reason: string
+          id?: string
+          is_active?: boolean | null
+          legal_citations?: string | null
+          rebuttal_template: string
+          success_rate?: number | null
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          denial_category?: string
+          denial_keywords?: string[] | null
+          denial_reason?: string
+          id?: string
+          is_active?: boolean | null
+          legal_citations?: string | null
+          rebuttal_template?: string
+          success_rate?: number | null
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
       custom_fields: {
         Row: {
           created_at: string
@@ -1733,6 +1778,62 @@ export type Database = {
           rotated_at?: string | null
         }
         Relationships: []
+      }
+      extracted_document_data: {
+        Row: {
+          acv_total: number | null
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          deductible: number | null
+          depreciation: number | null
+          document_type: string
+          extracted_data: Json
+          extraction_confidence: number | null
+          id: string
+          line_items: Json | null
+          rcv_total: number | null
+          source_file_name: string | null
+        }
+        Insert: {
+          acv_total?: number | null
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          deductible?: number | null
+          depreciation?: number | null
+          document_type: string
+          extracted_data?: Json
+          extraction_confidence?: number | null
+          id?: string
+          line_items?: Json | null
+          rcv_total?: number | null
+          source_file_name?: string | null
+        }
+        Update: {
+          acv_total?: number | null
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          deductible?: number | null
+          depreciation?: number | null
+          document_type?: string
+          extracted_data?: Json
+          extraction_confidence?: number | null
+          id?: string
+          line_items?: Json | null
+          rcv_total?: number | null
+          source_file_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extracted_document_data_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       file_comments: {
         Row: {
