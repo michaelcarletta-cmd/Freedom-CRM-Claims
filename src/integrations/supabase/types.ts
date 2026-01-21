@@ -295,6 +295,45 @@ export type Database = {
         }
         Relationships: []
       }
+      building_code_citations: {
+        Row: {
+          code_source: string
+          code_year: string
+          content: string
+          created_at: string
+          id: string
+          keywords: string[] | null
+          section_number: string
+          section_title: string | null
+          state_adoptions: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          code_source: string
+          code_year: string
+          content: string
+          created_at?: string
+          id?: string
+          keywords?: string[] | null
+          section_number: string
+          section_title?: string | null
+          state_adoptions?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          code_source?: string
+          code_year?: string
+          content?: string
+          created_at?: string
+          id?: string
+          keywords?: string[] | null
+          section_number?: string
+          section_title?: string | null
+          state_adoptions?: string[] | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       claim_adjusters: {
         Row: {
           adjuster_email: string | null
@@ -623,6 +662,59 @@ export type Database = {
             columns: ["custom_field_id"]
             isOneToOne: false
             referencedRelation: "custom_fields"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_deadlines: {
+        Row: {
+          claim_id: string
+          created_at: string
+          deadline_date: string
+          deadline_type: string
+          id: string
+          notes: string | null
+          regulation_reference: string | null
+          resolved_at: string | null
+          state_code: string
+          status: string
+          triggered_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          deadline_date: string
+          deadline_type: string
+          id?: string
+          notes?: string | null
+          regulation_reference?: string | null
+          resolved_at?: string | null
+          state_code: string
+          status?: string
+          triggered_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          deadline_date?: string
+          deadline_type?: string
+          id?: string
+          notes?: string | null
+          regulation_reference?: string | null
+          resolved_at?: string | null
+          state_code?: string
+          status?: string
+          triggered_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_deadlines_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
             referencedColumns: ["id"]
           },
         ]
@@ -2115,6 +2207,45 @@ export type Database = {
         }
         Relationships: []
       }
+      manufacturer_specs: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          keywords: string[] | null
+          manufacturer: string
+          product_category: string
+          product_name: string | null
+          source_url: string | null
+          spec_type: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          keywords?: string[] | null
+          manufacturer: string
+          product_category: string
+          product_name?: string | null
+          source_url?: string | null
+          spec_type: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          keywords?: string[] | null
+          manufacturer?: string
+          product_category?: string
+          product_name?: string | null
+          source_url?: string | null
+          spec_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mortgage_companies: {
         Row: {
           contact_name: string | null
@@ -2362,6 +2493,60 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      photo_line_item_links: {
+        Row: {
+          confidence_score: number | null
+          created_at: string
+          created_by: string | null
+          extracted_data_id: string | null
+          id: string
+          line_item_description: string | null
+          line_item_index: number | null
+          match_type: string
+          photo_id: string
+          updated_at: string
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          extracted_data_id?: string | null
+          id?: string
+          line_item_description?: string | null
+          line_item_index?: number | null
+          match_type?: string
+          photo_id: string
+          updated_at?: string
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          extracted_data_id?: string | null
+          id?: string
+          line_item_description?: string | null
+          line_item_index?: number | null
+          match_type?: string
+          photo_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_line_item_links_extracted_data_id_fkey"
+            columns: ["extracted_data_id"]
+            isOneToOne: false
+            referencedRelation: "extracted_document_data"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_line_item_links_photo_id_fkey"
+            columns: ["photo_id"]
+            isOneToOne: false
+            referencedRelation: "claim_photos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pii_reveal_logs: {
         Row: {

@@ -43,6 +43,10 @@ const DarwinDemandPackage = lazy(() => import("@/components/claim-detail/DarwinD
 const DarwinDocumentComparison = lazy(() => import("@/components/claim-detail/DarwinDocumentComparison").then(m => ({ default: m.DarwinDocumentComparison })));
 const DarwinSmartExtraction = lazy(() => import("@/components/claim-detail/DarwinSmartExtraction").then(m => ({ default: m.DarwinSmartExtraction })));
 const DarwinWeaknessDetection = lazy(() => import("@/components/claim-detail/DarwinWeaknessDetection").then(m => ({ default: m.DarwinWeaknessDetection })));
+// Phase 2 Components
+const DarwinDeadlineTracker = lazy(() => import("@/components/claim-detail/DarwinDeadlineTracker").then(m => ({ default: m.DarwinDeadlineTracker })));
+const DarwinPhotoLinker = lazy(() => import("@/components/claim-detail/DarwinPhotoLinker").then(m => ({ default: m.DarwinPhotoLinker })));
+const DarwinBuildingCodes = lazy(() => import("@/components/claim-detail/DarwinBuildingCodes").then(m => ({ default: m.DarwinBuildingCodes })));
 
 // Loading fallback for Darwin components
 const DarwinLoadingFallback = () => (
@@ -474,6 +478,15 @@ const ClaimDetail = () => {
                 
                 {/* Weakness Detection */}
                 <DarwinWeaknessDetection claimId={claim.id} claim={claim} />
+                
+                {/* Phase 2: Deadline Tracker */}
+                <DarwinDeadlineTracker claimId={claim.id} claim={claim} />
+                
+                {/* Phase 2: Building Codes & Manufacturer Specs */}
+                <DarwinBuildingCodes claimId={claim.id} claim={claim} />
+                
+                {/* Phase 2: Photo-Document Linker */}
+                <DarwinPhotoLinker claimId={claim.id} claim={claim} />
                 
                 {/* AI Analysis Tools */}
                 <div className="grid gap-6 lg:grid-cols-2">
