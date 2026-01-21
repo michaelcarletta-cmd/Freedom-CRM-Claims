@@ -56,6 +56,78 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_generated_tasks: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          claim_id: string
+          created_at: string
+          dismissed_reason: string | null
+          generation_reason: string
+          id: string
+          is_approved: boolean | null
+          is_dismissed: boolean | null
+          source_analysis_type: string | null
+          suggested_assignee_id: string | null
+          suggested_description: string | null
+          suggested_due_date: string | null
+          suggested_priority: string | null
+          suggested_title: string
+          task_id: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          claim_id: string
+          created_at?: string
+          dismissed_reason?: string | null
+          generation_reason: string
+          id?: string
+          is_approved?: boolean | null
+          is_dismissed?: boolean | null
+          source_analysis_type?: string | null
+          suggested_assignee_id?: string | null
+          suggested_description?: string | null
+          suggested_due_date?: string | null
+          suggested_priority?: string | null
+          suggested_title: string
+          task_id?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          claim_id?: string
+          created_at?: string
+          dismissed_reason?: string | null
+          generation_reason?: string
+          id?: string
+          is_approved?: boolean | null
+          is_dismissed?: boolean | null
+          source_analysis_type?: string | null
+          suggested_assignee_id?: string | null
+          suggested_description?: string | null
+          suggested_due_date?: string | null
+          suggested_priority?: string | null
+          suggested_title?: string
+          task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_generated_tasks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_generated_tasks_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_knowledge_chunks: {
         Row: {
           chunk_index: number
@@ -913,6 +985,65 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "claim_folders_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_outcome_predictions: {
+        Row: {
+          analysis_notes: string | null
+          claim_id: string
+          comparable_claims: Json | null
+          created_at: string
+          created_by: string | null
+          id: string
+          model_version: string | null
+          opportunity_factors: Json | null
+          predicted_settlement_high: number | null
+          predicted_settlement_likely: number | null
+          predicted_settlement_low: number | null
+          predicted_timeline_days: number | null
+          risk_factors: Json | null
+          settlement_probability: number | null
+        }
+        Insert: {
+          analysis_notes?: string | null
+          claim_id: string
+          comparable_claims?: Json | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          model_version?: string | null
+          opportunity_factors?: Json | null
+          predicted_settlement_high?: number | null
+          predicted_settlement_likely?: number | null
+          predicted_settlement_low?: number | null
+          predicted_timeline_days?: number | null
+          risk_factors?: Json | null
+          settlement_probability?: number | null
+        }
+        Update: {
+          analysis_notes?: string | null
+          claim_id?: string
+          comparable_claims?: Json | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          model_version?: string | null
+          opportunity_factors?: Json | null
+          predicted_settlement_high?: number | null
+          predicted_settlement_likely?: number | null
+          predicted_settlement_low?: number | null
+          predicted_timeline_days?: number | null
+          risk_factors?: Json | null
+          settlement_probability?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_outcome_predictions_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
@@ -2825,6 +2956,78 @@ export type Database = {
           },
         ]
       }
+      smart_follow_up_recommendations: {
+        Row: {
+          ai_confidence: number | null
+          claim_id: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          dismissed: boolean | null
+          dismissed_reason: string | null
+          id: string
+          is_completed: boolean | null
+          priority: string
+          reason: string
+          recommendation_type: string
+          recommended_date: string
+          suggested_template_id: string | null
+          target_recipient: string | null
+          updated_at: string
+        }
+        Insert: {
+          ai_confidence?: number | null
+          claim_id: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          dismissed?: boolean | null
+          dismissed_reason?: string | null
+          id?: string
+          is_completed?: boolean | null
+          priority?: string
+          reason: string
+          recommendation_type: string
+          recommended_date: string
+          suggested_template_id?: string | null
+          target_recipient?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ai_confidence?: number | null
+          claim_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          dismissed?: boolean | null
+          dismissed_reason?: string | null
+          id?: string
+          is_completed?: boolean | null
+          priority?: string
+          reason?: string
+          recommendation_type?: string
+          recommended_date?: string
+          suggested_template_id?: string | null
+          target_recipient?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smart_follow_up_recommendations_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "smart_follow_up_recommendations_suggested_template_id_fkey"
+            columns: ["suggested_template_id"]
+            isOneToOne: false
+            referencedRelation: "email_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sms_messages: {
         Row: {
           claim_id: string
@@ -3105,6 +3308,51 @@ export type Database = {
           role_version?: number
           session_token?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      workflow_automation_rules: {
+        Row: {
+          action_config: Json | null
+          action_type: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          priority_order: number | null
+          trigger_config: Json | null
+          trigger_event: string
+          updated_at: string
+        }
+        Insert: {
+          action_config?: Json | null
+          action_type: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          priority_order?: number | null
+          trigger_config?: Json | null
+          trigger_event: string
+          updated_at?: string
+        }
+        Update: {
+          action_config?: Json | null
+          action_type?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          priority_order?: number | null
+          trigger_config?: Json | null
+          trigger_event?: string
+          updated_at?: string
         }
         Relationships: []
       }
