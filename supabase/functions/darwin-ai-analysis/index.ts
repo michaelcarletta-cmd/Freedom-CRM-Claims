@@ -164,7 +164,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -1761,6 +1761,141 @@ Based on the search query and claim context, provide:
    - Documentation needed to prove compliance requirements
 
 Be specific with citations and provide actionable information for claim negotiation.`;
+        break;
+      }
+
+      case 'smart_follow_ups': {
+        // AI-powered follow-up recommendation generation
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in claim workflow optimization. Your role is to analyze claim status and recommend strategic follow-up actions.
+
+FORMATTING REQUIREMENT: Return ONLY valid JSON. No markdown, no explanations.
+
+You understand:
+- Insurance claim timelines and carrier response patterns
+- Regulatory deadlines for ${stateInfo.stateName} (${stateInfo.adminCode})
+- Best practices for claim communication cadence
+- When to escalate vs. when to wait
+
+Return a JSON object with a "recommendations" array. Each recommendation should have:
+- type: 'call' | 'email' | 'document_request' | 'inspection_schedule' | 'escalation'
+- priority: 'low' | 'medium' | 'high' | 'critical'
+- date: ISO date string for when to perform the follow-up
+- reason: explanation of why this follow-up is needed
+- recipient: 'adjuster' | 'carrier' | 'client' | 'contractor'
+- confidence: number between 0.5 and 1.0`;
+
+        userPrompt = `${claimSummary}
+
+DAYS SINCE LOSS: ${claim.loss_date ? Math.floor((Date.now() - new Date(claim.loss_date).getTime()) / (1000 * 60 * 60 * 24)) : 'Unknown'}
+DAYS SINCE LAST ACTIVITY: ${context.emails?.length > 0 ? Math.floor((Date.now() - new Date(context.emails[0].created_at).getTime()) / (1000 * 60 * 60 * 24)) : 'Unknown'}
+
+Based on this claim's current state, generate 3-5 strategic follow-up recommendations. Consider:
+1. Regulatory deadlines under ${stateInfo.adminCode}
+2. Time since last carrier communication
+3. Pending tasks and their due dates
+4. Inspection status and scheduling needs
+5. Document request opportunities
+6. Escalation triggers
+
+Return JSON with a "recommendations" array.`;
+        break;
+      }
+
+      case 'task_generation': {
+        // AI-powered task suggestion based on claim analysis
+        systemPrompt = `You are Darwin, an expert public adjuster AI that helps staff stay organized by suggesting relevant tasks. Your role is to analyze claim status and recommend actionable tasks.
+
+FORMATTING REQUIREMENT: Return ONLY valid JSON. No markdown, no explanations.
+
+You understand:
+- Public adjusting workflows and best practices
+- Insurance claim milestones and deliverables
+- ${stateInfo.stateName} regulatory requirements
+- Document preparation and submission timelines
+
+Return a JSON object with a "tasks" array. Each task should have:
+- title: concise task title (max 60 chars)
+- description: brief description of what needs to be done
+- due_date: ISO date string (YYYY-MM-DD format)
+- priority: 'low' | 'medium' | 'high'
+- reason: why this task is needed based on claim analysis`;
+
+        const daysSinceLoss = claim.loss_date ? Math.floor((Date.now() - new Date(claim.loss_date).getTime()) / (1000 * 60 * 60 * 24)) : null;
+        const pendingTasks = context.tasks?.filter((t: any) => t.status === 'pending' || t.status === 'in_progress') || [];
+
+        userPrompt = `${claimSummary}
+
+CURRENT PENDING TASKS:
+${pendingTasks.map((t: any) => `- ${t.title} (${t.status}, due: ${t.due_date || 'no date'})`).join('\n') || 'No pending tasks'}
+
+DAYS SINCE LOSS: ${daysSinceLoss || 'Unknown'}
+CLAIM AGE: ${claim.created_at ? Math.floor((Date.now() - new Date(claim.created_at).getTime()) / (1000 * 60 * 60 * 24)) : 'Unknown'} days
+
+Based on this claim's current state and what tasks already exist, suggest 3-5 NEW tasks that should be created. Consider:
+1. Missing documentation that should be gathered
+2. Follow-up communications needed
+3. Deadline-driven tasks based on ${stateInfo.stateName} regulations
+4. Next logical steps based on claim status
+5. Quality control and review tasks
+
+Do NOT suggest tasks that duplicate existing pending tasks.
+
+Return JSON with a "tasks" array.`;
+        break;
+      }
+
+      case 'outcome_prediction': {
+        // AI-powered claim outcome prediction
+        const totalChecksReceived = context.checks?.reduce((sum: number, c: any) => sum + (c.amount || 0), 0) || 0;
+        const latestSettlement = context.settlements?.[0];
+        const rcv = latestSettlement?.replacement_cost_value || claim.claim_amount || 0;
+
+        systemPrompt = `You are Darwin, an expert public adjuster AI with deep knowledge of claim outcomes and settlement patterns. Your role is to predict likely claim outcomes based on available data.
+
+FORMATTING REQUIREMENT: Return ONLY valid JSON. No markdown, no explanations.
+
+You understand:
+- Settlement patterns for ${stateInfo.stateName} claims
+- How claim characteristics affect outcomes
+- Risk factors that reduce settlements
+- Opportunity factors that increase settlements
+- Typical timelines for different claim types
+
+Return a JSON object with a "prediction" object containing:
+- settlement_low: minimum expected settlement (number)
+- settlement_high: maximum expected settlement (number)
+- settlement_likely: most probable settlement (number)
+- probability: confidence in prediction (0.5 to 0.95)
+- timeline_days: expected days to resolution (number)
+- risks: array of risk factor strings
+- opportunities: array of opportunity factor strings
+- notes: brief analysis summary`;
+
+        userPrompt = `${claimSummary}
+
+FINANCIAL DATA:
+- Claim Amount / RCV: $${rcv.toLocaleString()}
+- Deductible: $${latestSettlement?.deductible?.toLocaleString() || 'Unknown'}
+- Recoverable Depreciation: $${latestSettlement?.recoverable_depreciation?.toLocaleString() || 'Unknown'}
+- Total Checks Received: $${totalChecksReceived.toLocaleString()}
+- Remaining to Collect: $${Math.max(0, rcv - totalChecksReceived).toLocaleString()}
+
+CLAIM CHARACTERISTICS:
+- Loss Type: ${claim.loss_type || 'Unknown'}
+- Insurance Company: ${claim.insurance_company || 'Unknown'}
+- Current Status: ${claim.status || 'Unknown'}
+- Days Since Loss: ${claim.loss_date ? Math.floor((Date.now() - new Date(claim.loss_date).getTime()) / (1000 * 60 * 60 * 24)) : 'Unknown'}
+- Has Inspection: ${context.inspections?.length > 0 ? 'Yes' : 'No'}
+- Communication Count: ${context.emails?.length || 0} emails
+
+Based on this data, predict the likely outcome of this claim. Consider:
+1. Typical settlement percentages for this loss type
+2. Carrier behavior patterns
+3. Documentation strength
+4. Timeline compliance
+5. Claim complexity
+
+Return JSON with a "prediction" object.`;
         break;
       }
 
