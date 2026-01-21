@@ -466,6 +466,15 @@ const ClaimDetail = () => {
                 {/* Next Steps Predictor */}
                 <DarwinNextSteps claimId={claim.id} claim={claim} />
                 
+                {/* Smart Document Extraction */}
+                <DarwinSmartExtraction claimId={claim.id} claim={claim} />
+                
+                {/* Document Comparison */}
+                <DarwinDocumentComparison claimId={claim.id} claim={claim} />
+                
+                {/* Weakness Detection */}
+                <DarwinWeaknessDetection claimId={claim.id} claim={claim} />
+                
                 {/* AI Analysis Tools */}
                 <div className="grid gap-6 lg:grid-cols-2">
                   <DarwinDenialAnalyzer claimId={claim.id} claim={claim} />

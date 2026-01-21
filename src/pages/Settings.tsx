@@ -33,6 +33,7 @@ import { ImportSettings } from "@/components/settings/ImportSettings";
 import { UserManagementSettings } from "@/components/settings/UserManagementSettings";
 import { ProfileSettings } from "@/components/settings/ProfileSettings";
 import { AIKnowledgeBaseSettings } from "@/components/settings/AIKnowledgeBaseSettings";
+import { CounterArgumentsSettings } from "@/components/settings/CounterArgumentsSettings";
 import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
 import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings";
 import { MakeIntegrationSettings } from "@/components/settings/MakeIntegrationSettings";
@@ -531,8 +532,9 @@ export default function Settings() {
           <AutomationsSettings />
         </TabsContent>
 
-        <TabsContent value="ai-knowledge" className="w-full">
+        <TabsContent value="ai-knowledge" className="w-full space-y-6">
           <AIKnowledgeBaseSettings />
+          <CounterArgumentsSettings />
         </TabsContent>
 
         <TabsContent value="organization" className="w-full space-y-4">

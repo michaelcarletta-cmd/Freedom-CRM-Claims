@@ -164,7 +164,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -1456,6 +1456,216 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
         break;
       }
 
+      case 'document_comparison': {
+        // Fetch counter-arguments library for reference
+        const { data: counterArgs } = await supabase
+          .from('counter_arguments')
+          .select('*')
+          .eq('is_active', true);
+        
+        const counterArgsContext = counterArgs && counterArgs.length > 0 
+          ? `\n\nCOUNTER-ARGUMENTS LIBRARY (use these proven rebuttals when relevant):\n${counterArgs.map((ca: any) => 
+              `- ${ca.denial_category}: ${ca.denial_reason}\n  Rebuttal: ${ca.rebuttal_template}\n  Citations: ${ca.legal_citations || 'N/A'}`
+            ).join('\n\n')}`
+          : '';
+
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in comparing insurance documents. Your role is to provide detailed line-by-line comparisons between multiple estimates or documents.
+
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting.
+
+CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
+- NEVER argue "matching" - PA and NJ do NOT have matching requirements
+- ALWAYS argue "repairability" - damaged materials CANNOT BE REPAIRED
+- Focus on: structural integrity, manufacturer specs prohibit partial repairs, code compliance, material degradation
+
+Your expertise includes:
+- Xactimate line item analysis
+- Identifying discrepancies between carrier and contractor estimates
+- Recognizing undervalued or missing items
+- Building codes and manufacturer specifications
+- O&P calculations
+
+${counterArgsContext}`;
+
+        userPrompt = `${claimSummary}
+
+${pdfContent ? `PDF documents have been provided for comparison. Analyze them thoroughly.` : ''}
+
+${additionalContext?.comparisonNotes ? `USER NOTES:\n${additionalContext.comparisonNotes}` : ''}
+
+Please provide a comprehensive document comparison that includes:
+
+1. DOCUMENT OVERVIEW:
+   - Summary of each document analyzed
+   - Total values from each estimate
+
+2. LINE-BY-LINE DISCREPANCIES:
+   - Items present in one document but missing from another
+   - Quantity differences for the same items
+   - Unit price variations
+   - Different labor rates or material costs
+
+3. MISSING ITEMS ANALYSIS:
+   - Items that should be included but are missing
+   - Code-required items not present
+   - Manufacturer-required components omitted
+
+4. PRICING ANALYSIS:
+   - Items where pricing appears below market
+   - O&P inclusion comparison
+   - Depreciation calculation differences
+
+5. SUMMARY OF DIFFERENCES:
+   - Total dollar difference
+   - Number of discrepant line items
+   - Key areas of disagreement
+
+6. RECOMMENDATIONS:
+   - Priority items to address
+   - Supporting arguments for each discrepancy
+   - Suggested next steps`;
+        break;
+      }
+
+      case 'smart_extraction': {
+        const docType = additionalContext?.documentType || 'estimate';
+        
+        systemPrompt = `You are Darwin, an expert AI specializing in extracting structured data from insurance claim documents. Your role is to parse PDFs and extract key financial and line item data into a structured format.
+
+FORMATTING REQUIREMENT: Return a JSON object with the extracted data. Do NOT include markdown code blocks or any other formatting - just the raw JSON.
+
+For ${docType} documents, extract:
+- RCV (Replacement Cost Value) total
+- ACV (Actual Cash Value) total  
+- Deductible amount
+- Depreciation amount
+- All line items with: description, quantity, unit, unit price, total, category
+
+Be precise with numbers. If a value is not present, omit it from the response.`;
+
+        userPrompt = `${claimSummary}
+
+DOCUMENT TYPE: ${docType}
+
+${pdfContent ? `A PDF document has been provided. Extract all structured data from it.` : `DOCUMENT CONTENT:\n${content || 'No content provided'}`}
+
+Extract all financial data and line items from this document. Return a JSON object with this structure:
+{
+  "rcv_total": number or null,
+  "acv_total": number or null,
+  "deductible": number or null,
+  "depreciation": number or null,
+  "line_items": [
+    {
+      "description": "string",
+      "quantity": number or null,
+      "unit": "string or null",
+      "unitPrice": number or null,
+      "total": number or null,
+      "category": "string or null"
+    }
+  ]
+}
+
+Return ONLY the JSON object, no additional text or formatting.`;
+        break;
+      }
+
+      case 'weakness_detection': {
+        // Fetch all claim documentation for analysis
+        const { data: claimFiles } = await supabase
+          .from('claim_files')
+          .select('file_name, file_type, folder_id')
+          .eq('claim_id', claimId);
+
+        const { data: claimPhotos } = await supabase
+          .from('claim_photos')
+          .select('file_name, category, description')
+          .eq('claim_id', claimId);
+
+        const { data: claimNotes } = await supabase
+          .from('claim_notes')
+          .select('content, created_at')
+          .eq('claim_id', claimId)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        // Fetch counter-arguments for known denial patterns
+        const { data: counterArgs } = await supabase
+          .from('counter_arguments')
+          .select('denial_category, denial_reason, denial_keywords')
+          .eq('is_active', true);
+
+        const denialPatterns = counterArgs?.map((ca: any) => ca.denial_category).join(', ') || '';
+
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in proactive claim review. Your role is to identify weaknesses, gaps, and vulnerabilities in a claim BEFORE the insurance carrier does.
+
+FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting.
+
+You understand:
+- Common denial reasons and how carriers find weaknesses
+- Documentation requirements for successful claims
+- Evidence gaps that carriers exploit
+- Timeline and deadline concerns
+- ${stateInfo.stateName} insurance regulations
+
+KNOWN DENIAL PATTERNS TO CHECK FOR:
+${denialPatterns}
+
+Be thorough but actionable. Every weakness should have a recommended fix.`;
+
+        const filesSummary = claimFiles?.map((f: any) => f.file_name).join(', ') || 'No files uploaded';
+        const photosSummary = claimPhotos?.map((p: any) => `${p.file_name} (${p.category || 'uncategorized'})`).join(', ') || 'No photos uploaded';
+        const notesSummary = claimNotes?.map((n: any) => n.content?.substring(0, 100)).join('\n') || 'No notes';
+
+        userPrompt = `${claimSummary}
+
+STATE JURISDICTION: ${stateInfo.stateName}
+
+CURRENT CLAIM DOCUMENTATION:
+Files: ${filesSummary}
+Photos: ${photosSummary}
+
+RECENT NOTES:
+${notesSummary}
+
+${additionalContext?.focusAreas ? `USER-SPECIFIED FOCUS AREAS:\n${additionalContext.focusAreas}` : ''}
+
+Analyze this claim and identify ALL weaknesses that could lead to denial, underpayment, or delays. For each weakness:
+
+1. DOCUMENTATION GAPS:
+   - Missing required documents
+   - Incomplete documentation
+   - Suggested documents to obtain
+
+2. EVIDENCE WEAKNESSES:
+   - Photo documentation gaps
+   - Missing expert opinions
+   - Lack of supporting evidence for claimed damage
+
+3. TIMELINE CONCERNS:
+   - Deadline risks under ${stateInfo.adminCode}
+   - Statute of limitations issues
+   - Prompt payment compliance
+
+4. CLAIM PRESENTATION ISSUES:
+   - Scope of loss concerns
+   - Pricing vulnerabilities
+   - Arguments carrier may use against claim
+
+5. REGULATORY COMPLIANCE:
+   - ${stateInfo.stateName} specific requirements
+   - Policy compliance issues
+
+6. PRIORITY ACTIONS:
+   - Immediate fixes needed (high priority)
+   - Important improvements (medium priority)
+   - Nice-to-have enhancements (low priority)
+
+Be specific and actionable. For each weakness, explain why it's a problem and exactly how to fix it.`;
+        break;
+      }
+
       default:
         throw new Error(`Unknown analysis type: ${analysisType}`);
 
@@ -1532,7 +1742,7 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
       ];
       
       console.log(`Supplement analysis with ${additionalContext?.ourEstimatePdf ? 1 : 0} our estimate + ${(additionalContext?.insuranceEstimatePdf || pdfContent) ? 1 : 0} insurance estimate`);
-    } else if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'document_compilation' || analysisType === 'estimate_work_summary')) {
+    } else if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'document_compilation' || analysisType === 'estimate_work_summary' || analysisType === 'document_comparison' || analysisType === 'smart_extraction')) {
       // Use multimodal format for PDF analysis with Gemini-compatible inline_data format
       messages = [
         { role: 'system', content: systemPrompt },
@@ -1562,7 +1772,7 @@ Based on the estimate, write a 2-4 sentence summary describing the repairs/repla
 
     // Call Lovable AI with model fallback chain for reliability
     const hasPdfContent = pdfContent || (pdfContents && pdfContents.length > 0) || additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf;
-    const needsPdfProcessing = hasPdfContent && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package'].includes(analysisType);
+    const needsPdfProcessing = hasPdfContent && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package', 'document_comparison', 'smart_extraction'].includes(analysisType);
     
     // Model fallback chain - use only Gemini models for PDF processing (OpenAI doesn't support PDF multimodal)
     // For text-only analysis, we can use OpenAI as fallback
