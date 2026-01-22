@@ -25,7 +25,9 @@ import { ProofOfLossGenerator } from "@/components/claim-detail/ProofOfLossGener
 import { EnhancedEstimateBuilder } from "@/components/claim-detail/EnhancedEstimateBuilder";
 import { RecoverableDepreciationInvoice } from "@/components/claim-detail/RecoverableDepreciationInvoice";
 import { ShareClaimDialog } from "@/components/claim-detail/ShareClaimDialog";
+import { ClaimTabsDropdown } from "@/components/claim-detail/ClaimTabsDropdown";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles, Share2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -75,6 +77,7 @@ const ClaimDetail = () => {
   const { userRole } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
@@ -359,50 +362,60 @@ const ClaimDetail = () => {
       )}
 
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex flex-col md:flex-row w-full bg-muted p-2 gap-1 h-auto rounded-md">
-          <TabsTrigger value="overview" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-            Overview
-          </TabsTrigger>
-          {isStaffOrAdmin && (
-            <TabsTrigger value="assigned" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-              Assigned
+        {/* Mobile: Dropdown selector */}
+        {isMobile ? (
+          <ClaimTabsDropdown 
+            activeTab={activeTab} 
+            onTabChange={setActiveTab} 
+            isStaffOrAdmin={isStaffOrAdmin} 
+          />
+        ) : (
+          /* Desktop: Horizontal tabs */
+          <TabsList className="flex flex-row w-full bg-muted p-2 gap-1 h-auto rounded-md">
+            <TabsTrigger value="overview" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+              Overview
             </TabsTrigger>
-          )}
-          <TabsTrigger value="activity" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-            Notes & Activity
-          </TabsTrigger>
-          {isStaffOrAdmin && (
-            <TabsTrigger value="tasks" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-              Tasks
+            {isStaffOrAdmin && (
+              <TabsTrigger value="assigned" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+                Assigned
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="activity" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+              Notes & Activity
             </TabsTrigger>
-          )}
-          <TabsTrigger value="communication" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-            Communication
-          </TabsTrigger>
-          <TabsTrigger value="inspections" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-            Inspections
-          </TabsTrigger>
-          <TabsTrigger value="photos" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-            Photos
-          </TabsTrigger>
-          <TabsTrigger value="files" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-            Files
-          </TabsTrigger>
-          <TabsTrigger value="accounting" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-            Accounting
-          </TabsTrigger>
-          {isStaffOrAdmin && (
-            <TabsTrigger value="access" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-              Portal Access
+            {isStaffOrAdmin && (
+              <TabsTrigger value="tasks" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+                Tasks
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="communication" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+              Communication
             </TabsTrigger>
-          )}
-          {isStaffOrAdmin && (
-            <TabsTrigger value="darwin" className="w-full md:w-auto justify-start text-sm md:text-base font-medium px-3 md:px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-              <Brain className="h-4 w-4 mr-1" />
-              Darwin
+            <TabsTrigger value="inspections" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+              Inspections
             </TabsTrigger>
-          )}
-        </TabsList>
+            <TabsTrigger value="photos" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+              Photos
+            </TabsTrigger>
+            <TabsTrigger value="files" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+              Files
+            </TabsTrigger>
+            <TabsTrigger value="accounting" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+              Accounting
+            </TabsTrigger>
+            {isStaffOrAdmin && (
+              <TabsTrigger value="access" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+                Portal Access
+              </TabsTrigger>
+            )}
+            {isStaffOrAdmin && (
+              <TabsTrigger value="darwin" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+                <Brain className="h-4 w-4 mr-1" />
+                Darwin
+              </TabsTrigger>
+            )}
+          </TabsList>
+        )}
 
         <TabsContent value="overview" className="mt-6">
           <ClaimOverview 
