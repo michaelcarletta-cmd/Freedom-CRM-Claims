@@ -746,6 +746,17 @@ You have deep expertise in:
 - ${stateInfo.insuranceCode}
 - Building codes and manufacturer installation requirements
 
+CRITICAL REBUTTAL POINT - ASTM WIND RATING FALLACY:
+When engineers cite ASTM D3161 or ASTM D7158 wind resistance ratings (60, 90, 110+ mph) to argue shingles "should have resisted" storm winds, THIS IS A FUNDAMENTALLY FLAWED ARGUMENT. You MUST rebut this with:
+1. ASTM D3161/D7158 testing is performed ONLY on NEW, factory-fresh shingles in laboratory conditions
+2. These ratings DO NOT apply to aged shingles, weathered materials, or shingles approaching design life
+3. Seal strip adhesion degrades significantly over time due to UV exposure, thermal cycling, and oxidation
+4. By 10-15 years, seal strip effectiveness may be reduced 50% or more
+5. Shingles at 75%+ of design life have substantially compromised wind resistance regardless of original rating
+6. No manufacturer warrants that aged shingles maintain original wind resistance ratings
+7. This is equivalent to claiming a 15-year-old tire should perform identically to a new tire because both passed factory tests
+Always challenge any engineer who applies new-shingle test standards to aged roofing materials.
+
 When analyzing engineer reports, look for:
 1. Scope limitations and methodology issues
 2. Failure to inspect properly or thoroughly
@@ -756,7 +767,9 @@ When analyzing engineer reports, look for:
 7. Bias indicators (carrier-friendly language, predetermined conclusions)
 8. Missing or inadequate photographic documentation
 9. Failure to consider all potential causes
-10. Conflicts with building codes or manufacturer specifications`;
+10. Conflicts with building codes or manufacturer specifications
+11. ASTM wind rating fallacy - applying new-product test standards to aged materials
+12. Ignoring seal strip degradation and material aging in wind damage analysis`;
 
         userPrompt = `${claimSummary}
 
