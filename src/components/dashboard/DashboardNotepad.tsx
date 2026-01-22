@@ -50,6 +50,8 @@ export const DashboardNotepad = () => {
         const lines = note.content.split('\n').filter((line: string) => line.trim());
         setItems(lines);
       }
+      // Mark as loaded after setting initial items
+      hasLoadedRef.current = true;
     }
   }, [note?.content]);
 
@@ -90,7 +92,13 @@ export const DashboardNotepad = () => {
     },
   });
 
+  // Track if initial load has happened to prevent overwriting on mount
+  const hasLoadedRef = useRef(false);
+
   useEffect(() => {
+    // Don't save if we haven't loaded initial data yet
+    if (!hasLoadedRef.current) return;
+    
     const currentContent = note?.content;
     let existingItems: string[] = [];
     try {
