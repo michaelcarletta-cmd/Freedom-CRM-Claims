@@ -125,3 +125,6 @@ verify_jwt = false
 
 [functions.clawdbot-notifications]
 verify_jwt = false
+
+[functions.clawdbot-mcp]
+verify_jwt = false
