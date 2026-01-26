@@ -1,133 +1,70 @@
 
-# Clawdbot Integration for Freedom Claims
+# Convert Freedom Claims to MCP Server for Clawdbot
 
 ## Overview
-Replace the current in-app Claims AI Assistant with **Clawdbot**, enabling you to manage claims via WhatsApp, Telegram, or any chat app you already use. Clawdbot will connect to your Freedom Claims database and handle claim lookups, task management, follow-up drafting, and proactive notifications.
 
-## How Clawdbot Works
+The current `clawdbot-webhook` uses a custom HTTP webhook format, but Clawdbot connects via **MCP (Model Context Protocol)** through its "mcporter" feature. We need to convert the webhook into an MCP server that exposes Freedom Claims tools.
 
-Clawdbot is a self-hosted AI agent that runs on your Mac Mini (or similar always-on computer). It connects to your messaging apps (WhatsApp/Telegram) and can perform actions on your behalf. For this integration:
+## What is MCP?
 
-1. **Clawdbot** receives your messages via WhatsApp/Telegram
-2. Clawdbot calls a **webhook endpoint** in Freedom Claims to execute actions
-3. Freedom Claims returns data/confirmations back through the same channel
-4. For **notifications**, a scheduled function pushes alerts TO Clawdbot
-
-```text
-+-------------------+        +------------------+        +-------------------+
-|   WhatsApp/       |  <-->  |    Clawdbot      |  <-->  |  Freedom Claims   |
-|   Telegram        |        |  (Your Mac Mini) |        |  (Backend API)    |
-+-------------------+        +------------------+        +-------------------+
-                                     |
-                                     v
-                              Uses Claude API
-                              for AI reasoning
-```
+MCP (Model Context Protocol) is a standard way for AI assistants to connect to external tools. Instead of a custom webhook, Freedom Claims will expose its functionality as MCP "tools" that Clawdbot can discover and use automatically.
 
 ## Implementation Plan
 
-### Phase 1: Create Clawdbot Webhook Endpoint
+### Step 1: Create MCP Server Edge Function
 
-Build a new edge function that Clawdbot will call to interact with Freedom Claims:
+Create a new edge function that implements the MCP protocol using the `mcp-lite` library.
 
-**New file: `supabase/functions/clawdbot-webhook/index.ts`**
+**New file:** `supabase/functions/clawdbot-mcp/index.ts`
 
-This endpoint will handle:
-- **Authentication**: Verify requests come from your Clawdbot instance using a shared secret
-- **Action routing**: Parse natural language intents from Clawdbot and execute the appropriate action
+This will expose the following tools to Clawdbot:
 
-**Supported Actions:**
+| Tool Name | Description |
+|-----------|-------------|
+| `lookup_claim` | Find a claim by name or number |
+| `list_claims` | List claims filtered by status |
+| `list_tasks` | Get pending/overdue tasks |
+| `create_task` | Create a new task on a claim |
+| `complete_task` | Mark a task as done |
+| `draft_email` | Draft a follow-up email |
+| `draft_sms` | Draft an SMS message |
+| `get_summary` | Get daily claims summary |
 
-| Action | Description | Example Message |
-|--------|-------------|-----------------|
-| `lookup_claim` | Get claim details by name/number | "What's the status of the Johnson claim?" |
-| `list_claims` | List claims by status/date | "Show me overdue claims" |
-| `create_task` | Create a task on a claim | "Add task to follow up with adjuster on Smith claim" |
-| `complete_task` | Mark task as done | "Mark the inspection task done on claim 12345" |
-| `list_tasks` | Get tasks (yours, due today, overdue) | "What tasks do I have today?" |
-| `draft_email` | Draft follow-up email | "Draft a supplement request for the Williams claim" |
-| `draft_sms` | Draft SMS message | "Write an inspection reminder for the Davis claim" |
-| `send_email` | Actually send a drafted email | "Send that email" |
-| `send_sms` | Actually send a drafted SMS | "Send that SMS" |
-| `get_summary` | Daily/weekly claim summary | "Give me a summary of this week" |
+### Step 2: Add MCP Dependencies
 
-### Phase 2: Proactive Notifications System
+Create a `deno.json` file for the edge function with the required MCP library:
 
-Create a scheduled function that sends alerts TO Clawdbot when events occur:
+```text
+supabase/functions/clawdbot-mcp/deno.json
+```
 
-**New file: `supabase/functions/clawdbot-notifications/index.ts`**
+### Step 3: Update Clawdbot Settings UI
 
-This function runs on a schedule (every 15 minutes) and checks for:
-- Tasks due today or overdue
-- Claims with no activity in X days
-- New documents uploaded
-- Approaching deadlines (statutes of limitations, response deadlines)
-- Check payments received
+Modify the settings page to show the new MCP endpoint URL instead of the webhook URL:
 
-Notifications are pushed to Clawdbot via its API, which then forwards to your WhatsApp/Telegram.
+**File:** `src/components/settings/ClawdbotSettings.tsx`
 
-### Phase 3: Database Changes
+Changes:
+- Update the displayed endpoint URL to the MCP server
+- Add instructions for configuring mcporter in Clawdbot
+- Show the MCP transport type (HTTP)
 
-**New table: `clawdbot_config`**
-- `id` (UUID)
-- `user_id` (UUID, FK to profiles)
-- `webhook_secret` (text, encrypted) - Shared secret for authenticating Clawdbot
-- `clawdbot_endpoint` (text) - Your Clawdbot instance URL for push notifications
-- `notification_preferences` (JSONB) - Which notifications to receive
-- `active` (boolean)
-- `created_at`, `updated_at`
+### Step 4: Keep Existing Webhook (Backward Compatibility)
 
-**New table: `clawdbot_message_log`**
-- `id` (UUID)
-- `user_id` (UUID)
-- `direction` (text: 'inbound' | 'outbound')
-- `message_content` (text)
-- `action_type` (text)
-- `claim_id` (UUID, nullable)
-- `created_at`
-
-### Phase 4: Settings UI
-
-**New file: `src/components/settings/ClawdbotSettings.tsx`**
-
-A settings page where you can:
-- Enter your Clawdbot webhook URL
-- Generate/regenerate the shared secret
-- Configure which notifications to receive
-- Test the connection
-- View message history/logs
-
-### Phase 5: Remove In-App Assistant (Optional)
-
-Once Clawdbot is fully operational, you can optionally:
-- Remove the floating assistant button from the Claims page
-- Keep Darwin AI tools in the claim detail page (they serve a different purpose)
-- Or keep both as backup
+The existing `clawdbot-webhook` will remain functional for any future integrations that prefer webhooks.
 
 ---
 
-## Clawdbot Setup Instructions
+## How to Connect in Clawdbot
 
-After implementation, you'll need to configure Clawdbot on your end:
+After implementation, you'll configure mcporter in Clawdbot with:
 
-### Step 1: Install Clawdbot
-Follow instructions at https://clawd.bot/ to set up Clawdbot on your Mac Mini
-
-### Step 2: Configure Freedom Claims Integration
-Add this to your Clawdbot configuration:
-
-```text
-Tool: Freedom Claims
-Description: Manage insurance claims, tasks, and communications
-Endpoint: https://tnnzihuszaosnyeyceed.supabase.co/functions/v1/clawdbot-webhook
-Headers:
-  - X-Clawdbot-Secret: [your-secret-from-settings]
-```
-
-### Step 3: Test Commands
-- "What claims are in pending status?"
-- "Create a task to follow up with the adjuster on the Johnson claim"
-- "Draft a supplement request email for claim 2024-001"
+| Setting | Value |
+|---------|-------|
+| **Name** | Freedom Claims |
+| **URL** | `https://tnnzihuszaosnyeyceed.supabase.co/functions/v1/clawdbot-mcp` |
+| **Transport** | HTTP (Streamable) |
+| **Auth Header** | `X-Clawdbot-Secret: [your-secret]` |
 
 ---
 
@@ -135,80 +72,67 @@ Headers:
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `supabase/functions/clawdbot-webhook/index.ts` | Create | Main webhook for Clawdbot requests |
-| `supabase/functions/clawdbot-notifications/index.ts` | Create | Push notifications to Clawdbot |
-| `src/components/settings/ClawdbotSettings.tsx` | Create | Settings UI for Clawdbot config |
-| `src/pages/Settings.tsx` | Modify | Add Clawdbot settings section |
-| `supabase/config.toml` | Modify | Register new functions |
-| Database migration | Create | Add config and log tables |
+| `supabase/functions/clawdbot-mcp/index.ts` | Create | MCP server implementation |
+| `supabase/functions/clawdbot-mcp/deno.json` | Create | Dependencies for mcp-lite |
+| `src/components/settings/ClawdbotSettings.tsx` | Modify | Update UI with MCP instructions |
 
 ---
 
 ## Technical Details
 
-### Webhook Authentication
-```typescript
-// Verify Clawdbot requests using HMAC signature
-const signature = req.headers.get("X-Clawdbot-Signature");
-const secret = Deno.env.get("CLAWDBOT_WEBHOOK_SECRET");
-const payload = await req.text();
-const expected = await hmacSha256(secret, payload);
-if (signature !== expected) {
-  return new Response("Unauthorized", { status: 401 });
-}
+### MCP Server Structure
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│                    Clawdbot (mcporter)                  │
+│                           │                             │
+│                     MCP Protocol                        │
+│                           ▼                             │
+├─────────────────────────────────────────────────────────┤
+│              clawdbot-mcp Edge Function                 │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Tool: lookup_claim                             │   │
+│  │  Tool: list_claims                              │   │
+│  │  Tool: list_tasks                               │   │
+│  │  Tool: create_task                              │   │
+│  │  Tool: complete_task                            │   │
+│  │  Tool: draft_email                              │   │
+│  │  Tool: draft_sms                                │   │
+│  │  Tool: get_summary                              │   │
+│  └─────────────────────────────────────────────────┘   │
+│                           │                             │
+│                    Supabase Client                      │
+│                           ▼                             │
+│                    Claims Database                      │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Example Webhook Request/Response
-```typescript
-// Incoming from Clawdbot
-{
-  "user_id": "your-user-id",
-  "action": "lookup_claim",
-  "query": "What's the status of the Johnson claim?",
-  "context": {} // Previous conversation context
-}
+### Example Tool Definition
 
-// Response to Clawdbot
-{
-  "success": true,
-  "response": "The Johnson claim (2024-0123) is currently in 'Supplement Requested' status. Last activity was 3 days ago when the estimate was uploaded. The claim value is $45,230. Would you like me to draft a follow-up email to the adjuster?",
-  "claim_id": "uuid-here",
-  "suggested_actions": ["draft_follow_up", "view_estimate", "create_task"]
-}
-```
+Each Freedom Claims action becomes an MCP tool:
 
-### Notification Push Example
 ```typescript
-// Push to Clawdbot
-await fetch(clawdbotEndpoint, {
-  method: "POST",
-  headers: {
-    "X-Clawdbot-Secret": secret,
-    "Content-Type": "application/json"
+mcpServer.tool({
+  name: "lookup_claim",
+  description: "Find a claim by policyholder name or claim number",
+  inputSchema: {
+    type: "object",
+    properties: {
+      query: { 
+        type: "string", 
+        description: "Name or claim number to search for" 
+      }
+    },
+    required: ["query"]
   },
-  body: JSON.stringify({
-    type: "notification",
-    priority: "high",
-    message: "⚠️ Task overdue: Follow up with adjuster on Smith claim (due yesterday)",
-    claim_id: "uuid",
-    action_buttons: [
-      { label: "Mark Complete", action: "complete_task" },
-      { label: "Snooze 1 day", action: "snooze_task" }
-    ]
-  })
+  handler: async ({ query }) => {
+    // Existing lookupClaim logic
+    return { content: [{ type: "text", text: result }] };
+  }
 });
 ```
 
----
+### Authentication
 
-## Summary
+The MCP server will verify requests using the same `X-Clawdbot-Secret` header, checking against the `clawdbot_config` table.
 
-This integration will give you:
-- Manage claims from WhatsApp/Telegram instead of logging into the web app
-- Quick claim lookups with voice messages or text
-- Create and complete tasks on the go
-- Draft and send follow-up communications
-- Proactive notifications pushed to your phone
-- Full conversation context so Clawdbot remembers what you were discussing
-
-Darwin AI tools in the claim detail page will remain unchanged - they serve a different purpose (deep analysis, rebuttals, etc.) vs. Clawdbot (quick actions and daily management).
