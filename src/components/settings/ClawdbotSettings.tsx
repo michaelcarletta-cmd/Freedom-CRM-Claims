@@ -45,6 +45,7 @@ export const ClawdbotSettings = () => {
   const [endpoint, setEndpoint] = useState("");
 
   const webhookUrl = `https://tnnzihuszaosnyeyceed.supabase.co/functions/v1/clawdbot-webhook`;
+  const mcpUrl = `https://tnnzihuszaosnyeyceed.supabase.co/functions/v1/clawdbot-mcp`;
 
   useEffect(() => {
     if (user) {
@@ -323,23 +324,26 @@ export const ClawdbotSettings = () => {
         </CardHeader>
       </Card>
 
-      {/* Configuration Card */}
+      {/* MCP Configuration Card */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Webhook Configuration</CardTitle>
+          <CardTitle className="text-lg">MCP Server Configuration (for mcporter)</CardTitle>
           <CardDescription>
-            Use these details to configure Clawdbot on your Mac Mini.
+            Use these details to connect Freedom Claims in Clawdbot's mcporter.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>Webhook URL</Label>
+            <Label>MCP Server URL</Label>
             <div className="flex gap-2">
-              <Input value={webhookUrl} readOnly className="font-mono text-sm" />
-              <Button variant="outline" size="icon" onClick={() => copyToClipboard(webhookUrl, "Webhook URL")}>
+              <Input value={mcpUrl} readOnly className="font-mono text-sm" />
+              <Button variant="outline" size="icon" onClick={() => copyToClipboard(mcpUrl, "MCP URL")}>
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Enter this URL in Clawdbot's mcporter as an HTTP (Streamable) transport.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -359,8 +363,38 @@ export const ClawdbotSettings = () => {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Add this as the X-Clawdbot-Secret header in your Clawdbot configuration.
+              Add this as a header: <code className="bg-muted px-1 rounded">X-Clawdbot-Secret: [your-secret]</code>
             </p>
+          </div>
+
+          <div className="rounded-lg bg-muted p-4 space-y-2">
+            <h4 className="font-medium text-sm">mcporter Configuration</h4>
+            <div className="text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Name:</span>
+                <span className="font-mono">Freedom Claims</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Transport:</span>
+                <span className="font-mono">HTTP (Streamable)</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Auth Header:</span>
+                <span className="font-mono">X-Clawdbot-Secret</span>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <Label>Legacy Webhook URL (for notifications)</Label>
+            <div className="flex gap-2">
+              <Input value={webhookUrl} readOnly className="font-mono text-sm text-muted-foreground" />
+              <Button variant="outline" size="icon" onClick={() => copyToClipboard(webhookUrl, "Webhook URL")}>
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           <Separator />
@@ -388,6 +422,52 @@ export const ClawdbotSettings = () => {
               {testing ? "Testing..." : "Test Connection"}
             </Button>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Available Tools Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Available Tools</CardTitle>
+          <CardDescription>
+            These tools are automatically available in Clawdbot via MCP.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-2 text-sm">
+            <div className="flex items-start gap-2">
+              <Badge variant="outline" className="mt-0.5">lookup_claim</Badge>
+              <span className="text-muted-foreground">Find a claim by name or number</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Badge variant="outline" className="mt-0.5">list_claims</Badge>
+              <span className="text-muted-foreground">List claims by status</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Badge variant="outline" className="mt-0.5">list_tasks</Badge>
+              <span className="text-muted-foreground">Get pending/overdue tasks</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Badge variant="outline" className="mt-0.5">create_task</Badge>
+              <span className="text-muted-foreground">Create a task on a claim</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Badge variant="outline" className="mt-0.5">complete_task</Badge>
+              <span className="text-muted-foreground">Mark a task as done</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Badge variant="outline" className="mt-0.5">draft_email</Badge>
+              <span className="text-muted-foreground">Draft a follow-up email</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Badge variant="outline" className="mt-0.5">draft_sms</Badge>
+              <span className="text-muted-foreground">Draft an SMS message</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Badge variant="outline" className="mt-0.5">get_summary</Badge>
+              <span className="text-muted-foreground">Get daily claims summary</span>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
