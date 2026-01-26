@@ -43,6 +43,7 @@ import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
 import { SignatureFieldTemplatesSettings } from "@/components/settings/SignatureFieldTemplatesSettings";
+import { ClawdbotSettings } from "@/components/settings/ClawdbotSettings";
 interface ClaimStatus {
   id: string;
   name: string;
@@ -518,6 +519,11 @@ export default function Settings() {
                 <CardContent className="space-y-6">
                   <MakeIntegrationSettings embedded />
                   <QuickBooksSettings embedded />
+                  
+                  {/* Clawdbot Integration */}
+                  <div className="pt-4 border-t">
+                    <ClawdbotSettings />
+                  </div>
                 </CardContent>
               </CollapsibleContent>
             </Card>
