@@ -1593,6 +1593,80 @@ export type Database = {
           },
         ]
       }
+      clawdbot_config: {
+        Row: {
+          active: boolean | null
+          clawdbot_endpoint: string | null
+          created_at: string
+          id: string
+          notification_preferences: Json | null
+          updated_at: string
+          user_id: string
+          webhook_secret: string
+        }
+        Insert: {
+          active?: boolean | null
+          clawdbot_endpoint?: string | null
+          created_at?: string
+          id?: string
+          notification_preferences?: Json | null
+          updated_at?: string
+          user_id: string
+          webhook_secret: string
+        }
+        Update: {
+          active?: boolean | null
+          clawdbot_endpoint?: string | null
+          created_at?: string
+          id?: string
+          notification_preferences?: Json | null
+          updated_at?: string
+          user_id?: string
+          webhook_secret?: string
+        }
+        Relationships: []
+      }
+      clawdbot_message_log: {
+        Row: {
+          action_type: string | null
+          claim_id: string | null
+          created_at: string
+          direction: string
+          id: string
+          message_content: string
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          action_type?: string | null
+          claim_id?: string | null
+          created_at?: string
+          direction: string
+          id?: string
+          message_content: string
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          action_type?: string | null
+          claim_id?: string | null
+          created_at?: string
+          direction?: string
+          id?: string
+          message_content?: string
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clawdbot_message_log_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           city: string | null
