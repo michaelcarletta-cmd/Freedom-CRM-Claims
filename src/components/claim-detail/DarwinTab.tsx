@@ -260,7 +260,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                 <div className="text-center text-muted-foreground text-sm p-4">
                   <Brain className="h-8 w-8 mx-auto mb-2 text-primary/50" />
                   <p className="font-medium">Darwin Copilot</p>
-                  <p className="text-xs mt-1">Use the AI Assistant button in the bottom right to chat with Darwin about this claim.</p>
+                  <p className="text-xs mt-1">Click the sparkle button in the bottom right corner to chat with Darwin about this claim.</p>
                 </div>
               </CardContent>
             </Card>
