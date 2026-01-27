@@ -8,26 +8,26 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Army Tan, White & Black Theme */
-    --background: 40 30% 55%;
-    --foreground: 0 0% 100%;
+    /* Navy, White & Gray Theme */
+    --background: 0 0% 98%;
+    --foreground: 220 30% 15%;
 
-    --card: 40 25% 48%;
-    --card-foreground: 0 0% 100%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 30% 15%;
 
-    --popover: 40 20% 42%;
-    --popover-foreground: 0 0% 100%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 30% 15%;
 
-    --primary: 0 0% 10%;
+    --primary: 220 60% 25%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 40 20% 45%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 220 15% 92%;
+    --secondary-foreground: 220 30% 15%;
 
-    --muted: 40 15% 50%;
-    --muted-foreground: 0 0% 90%;
+    --muted: 220 15% 95%;
+    --muted-foreground: 220 15% 45%;
 
-    --accent: 0 0% 15%;
+    --accent: 220 50% 30%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 70% 50%;
@@ -37,25 +37,25 @@ All colors MUST be HSL.
     --success-foreground: 0 0% 100%;
 
     --warning: 35 85% 50%;
-    --warning-foreground: 0 0% 10%;
+    --warning-foreground: 220 30% 15%;
 
-    --border: 40 15% 40%;
-    --input: 40 20% 48%;
-    --ring: 0 0% 20%;
+    --border: 220 15% 85%;
+    --input: 220 15% 90%;
+    --ring: 220 60% 25%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 40 25% 50%;
+    --sidebar-background: 220 60% 20%;
     --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 0 0% 10%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 40 20% 45%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 220 60% 20%;
+    --sidebar-accent: 220 50% 30%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 40 15% 38%;
-    --sidebar-ring: 0 0% 20%;
+    --sidebar-border: 220 50% 25%;
+    --sidebar-ring: 220 60% 40%;
 
-    --chart-1: 0 0% 20%;
-    --chart-2: 40 30% 60%;
+    --chart-1: 220 60% 25%;
+    --chart-2: 220 30% 50%;
     --chart-3: 145 65% 40%;
     --chart-4: 35 85% 50%;
     --chart-5: 0 70% 50%;
