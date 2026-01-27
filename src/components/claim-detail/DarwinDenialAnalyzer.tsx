@@ -203,18 +203,18 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
         )}
 
         <Tabs value={inputMethod} onValueChange={setInputMethod}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="claim-files" className="gap-2">
-              <FolderOpen className="h-4 w-4" />
-              Claim Files
+          <TabsList className="flex flex-col sm:flex-row w-full h-auto gap-1 p-1">
+            <TabsTrigger value="claim-files" className="w-full justify-start gap-2 px-3 py-2">
+              <FolderOpen className="h-4 w-4 flex-shrink-0" />
+              <span>Claim Files</span>
             </TabsTrigger>
-            <TabsTrigger value="upload" className="gap-2">
-              <Upload className="h-4 w-4" />
-              Upload
+            <TabsTrigger value="upload" className="w-full justify-start gap-2 px-3 py-2">
+              <Upload className="h-4 w-4 flex-shrink-0" />
+              <span>Upload PDF</span>
             </TabsTrigger>
-            <TabsTrigger value="paste" className="gap-2">
-              <FileText className="h-4 w-4" />
-              Paste
+            <TabsTrigger value="paste" className="w-full justify-start gap-2 px-3 py-2">
+              <FileText className="h-4 w-4 flex-shrink-0" />
+              <span>Paste Content</span>
             </TabsTrigger>
           </TabsList>
 

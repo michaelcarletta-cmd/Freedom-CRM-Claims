@@ -138,9 +138,13 @@ export const DarwinStateLawAdvisor = ({ claimId, claim }: DarwinStateLawAdvisorP
       </CardHeader>
       <CardContent>
         <Tabs value={selectedState} onValueChange={setSelectedState}>
-          <TabsList className="grid w-full grid-cols-2 mb-4">
-            <TabsTrigger value="PA">Pennsylvania</TabsTrigger>
-            <TabsTrigger value="NJ">New Jersey</TabsTrigger>
+          <TabsList className="flex flex-col sm:flex-row w-full h-auto gap-1 p-1 mb-4">
+            <TabsTrigger value="PA" className="w-full justify-center gap-2 px-3 py-2">
+              <span>Pennsylvania</span>
+            </TabsTrigger>
+            <TabsTrigger value="NJ" className="w-full justify-center gap-2 px-3 py-2">
+              <span>New Jersey</span>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value={selectedState}>

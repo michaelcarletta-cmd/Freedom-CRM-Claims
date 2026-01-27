@@ -225,14 +225,14 @@ export function DarwinBuildingCodes({ claimId, claim }: BuildingCodesProps) {
         )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="codes" className="flex items-center gap-1">
-              <BookOpen className="h-4 w-4" />
-              Building Codes ({codes.length})
+          <TabsList className="flex flex-col sm:flex-row w-full h-auto gap-1 p-1">
+            <TabsTrigger value="codes" className="w-full justify-start gap-2 px-3 py-2">
+              <BookOpen className="h-4 w-4 flex-shrink-0" />
+              <span>Building Codes ({codes.length})</span>
             </TabsTrigger>
-            <TabsTrigger value="specs" className="flex items-center gap-1">
-              <Building className="h-4 w-4" />
-              Manufacturer Specs ({specs.length})
+            <TabsTrigger value="specs" className="w-full justify-start gap-2 px-3 py-2">
+              <Building className="h-4 w-4 flex-shrink-0" />
+              <span>Manufacturer Specs ({specs.length})</span>
             </TabsTrigger>
           </TabsList>
 

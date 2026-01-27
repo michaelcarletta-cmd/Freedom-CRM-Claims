@@ -765,14 +765,14 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
 
         {/* Document Selection Tabs */}
         <Tabs defaultValue="documents" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="documents" className="gap-2">
-              <File className="h-4 w-4" />
-              Certificate Docs ({selectedFiles.size}/{files.length})
+          <TabsList className="flex flex-col sm:flex-row w-full h-auto gap-1 p-1">
+            <TabsTrigger value="documents" className="w-full justify-start gap-2 px-3 py-2">
+              <File className="h-4 w-4 flex-shrink-0" />
+              <span>Certificate Docs ({selectedFiles.size}/{files.length})</span>
             </TabsTrigger>
-            <TabsTrigger value="photos" className="gap-2">
-              <Camera className="h-4 w-4" />
-              Photos ({selectedPhotos.size}/{photos.length})
+            <TabsTrigger value="photos" className="w-full justify-start gap-2 px-3 py-2">
+              <Camera className="h-4 w-4 flex-shrink-0" />
+              <span>Photos ({selectedPhotos.size}/{photos.length})</span>
             </TabsTrigger>
           </TabsList>
 
