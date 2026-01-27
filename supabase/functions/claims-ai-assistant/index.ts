@@ -867,8 +867,162 @@ const tools = [
         required: ["item"]
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_full_claim_context",
+      description: "ALWAYS call this function FIRST when the user asks about a specific claim by name, claim number, or reference. This retrieves the complete claim context including loss type, settlement data, emails, inspections, tasks, files, adjuster info, and Darwin notes. Use the returned context to give accurate, detailed responses about the claim.",
+      parameters: {
+        type: "object",
+        properties: {
+          client_name: {
+            type: "string",
+            description: "The client/policyholder name or claim number to look up"
+          }
+        },
+        required: ["client_name"]
+      }
+    }
   }
 ];
+// Helper function to get full Darwin-level claim context
+async function getFullClaimContext(supabase: any, searchTerm: string): Promise<{ success: boolean; context?: string; claim?: any; error?: string }> {
+  try {
+    // First find the claim
+    const foundClaim = await findClaimByClientName(supabase, searchTerm);
+    if (!foundClaim) {
+      return { success: false, error: `Could not find claim for "${searchTerm}"` };
+    }
+
+    const claimId = foundClaim.id;
+
+    // Fetch claim with all related data
+    const { data: claim, error: claimError } = await supabase
+      .from("claims")
+      .select("*")
+      .eq("id", claimId)
+      .single();
+
+    if (claimError || !claim) {
+      return { success: false, error: "Failed to fetch claim details" };
+    }
+
+    // Fetch related data in parallel
+    const [
+      { data: settlements },
+      { data: checks },
+      { data: tasks },
+      { data: inspections },
+      { data: emails },
+      { data: files },
+      { data: adjusters },
+      { data: updates },
+      { data: photos },
+      { data: darwinNotes }
+    ] = await Promise.all([
+      supabase.from("claim_settlements").select("*").eq("claim_id", claimId),
+      supabase.from("claim_checks").select("*").eq("claim_id", claimId),
+      supabase.from("tasks").select("*").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(10),
+      supabase.from("inspections").select("*").eq("claim_id", claimId),
+      supabase.from("emails").select("*").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(10),
+      supabase.from("claim_files").select("*").eq("claim_id", claimId),
+      supabase.from("claim_adjusters").select("*").eq("claim_id", claimId),
+      supabase.from("claim_updates").select("*").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(10),
+      supabase.from("claim_photos").select("*").eq("claim_id", claimId).limit(20),
+      supabase.from("darwin_analysis_results").select("result").eq("claim_id", claimId).eq("analysis_type", "context_notes").order("created_at", { ascending: false }).limit(1)
+    ]);
+
+    // Build comprehensive context
+    let context = `
+=== FULL CLAIM CONTEXT (Darwin-Level Intelligence) ===
+
+CLAIM DETAILS:
+- Claim ID: ${claim.id}
+- Claim Number: ${claim.claim_number || 'N/A'}
+- Policy Number: ${claim.policy_number || 'N/A'}
+- Policyholder: ${claim.policyholder_name || 'N/A'}
+- Phone: ${claim.policyholder_phone || 'N/A'}
+- Email: ${claim.policyholder_email || 'N/A'}
+- Address: ${claim.policyholder_address || 'N/A'}
+- Insurance Company: ${claim.insurance_company || 'N/A'}
+- LOSS TYPE: ${claim.loss_type || 'Not specified'} *** PAY ATTENTION TO THIS ***
+- Loss Date: ${claim.loss_date || 'N/A'}
+- Loss Description: ${claim.loss_description || 'N/A'}
+- Current Status: ${claim.status || 'N/A'}
+- Construction Status: ${claim.construction_status || 'N/A'}
+- Claim Amount: $${claim.claim_amount?.toLocaleString() || 'N/A'}
+- Is Closed: ${claim.is_closed ? 'Yes' : 'No'}
+
+ADJUSTER INFORMATION:
+${adjusters && adjusters.length > 0 
+  ? adjusters.map((a: any) => `- ${a.adjuster_name} (${a.company || 'N/A'}) | Phone: ${a.adjuster_phone || 'N/A'} | Email: ${a.adjuster_email || 'N/A'} ${a.is_primary ? '(PRIMARY)' : ''}`).join('\n')
+  : `- Primary: ${claim.adjuster_name || 'Not assigned'} | Phone: ${claim.adjuster_phone || 'N/A'} | Email: ${claim.adjuster_email || 'N/A'}`}
+
+SETTLEMENT DATA:
+${settlements && settlements.length > 0 
+  ? settlements.map((s: any) => `
+  - RCV: $${s.replacement_cost_value?.toLocaleString() || 0}
+  - Recoverable Depreciation: $${s.recoverable_depreciation?.toLocaleString() || 0}
+  - Non-Recoverable Depreciation: $${s.non_recoverable_depreciation?.toLocaleString() || 0}
+  - Deductible: $${s.deductible?.toLocaleString() || 0}
+  - Total Settlement: $${s.total_settlement?.toLocaleString() || 'N/A'}
+  - Notes: ${s.notes || 'None'}`).join('\n')
+  : '- No settlement data recorded'}
+
+CHECKS RECEIVED:
+${checks && checks.length > 0 
+  ? checks.map((c: any) => `- ${c.check_type}: $${c.amount?.toLocaleString()} | Date: ${c.check_date} | Check #: ${c.check_number || 'N/A'}`).join('\n')
+  : '- No checks received yet'}
+
+INSPECTIONS:
+${inspections && inspections.length > 0 
+  ? inspections.map((i: any) => `- ${i.inspection_type}: ${i.inspection_date} | Status: ${i.status} | Notes: ${i.notes || 'None'}`).join('\n')
+  : '- No inspections scheduled'}
+
+TASKS (Recent 10):
+${tasks && tasks.length > 0 
+  ? tasks.map((t: any) => `- [${t.status?.toUpperCase()}] ${t.title} | Due: ${t.due_date || 'No date'} | Priority: ${t.priority || 'Normal'}`).join('\n')
+  : '- No tasks'}
+
+RECENT COMMUNICATIONS (Emails):
+${emails && emails.length > 0 
+  ? emails.map((e: any) => `- ${e.direction === 'inbound' ? 'FROM' : 'TO'}: ${e.from_email || e.to_email} | Subject: ${e.subject} | Date: ${new Date(e.created_at).toLocaleDateString()}`).join('\n')
+  : '- No emails on file'}
+
+RECENT ACTIVITY:
+${updates && updates.length > 0 
+  ? updates.slice(0, 5).map((u: any) => `- ${new Date(u.created_at).toLocaleDateString()}: ${u.content?.substring(0, 100)}...`).join('\n')
+  : '- No recent activity'}
+
+FILES ON CLAIM:
+${files && files.length > 0 
+  ? files.map((f: any) => `- ${f.file_name} (${f.file_type || 'unknown'})`).join('\n')
+  : '- No files uploaded'}
+
+PHOTOS:
+- ${photos?.length || 0} photos on file
+${photos && photos.length > 0 
+  ? photos.slice(0, 5).map((p: any) => `  - ${p.file_name}: ${p.description || p.category || 'No description'}`).join('\n')
+  : ''}
+
+${darwinNotes?.[0]?.result ? `
+DARWIN CONTEXT NOTES (User-Provided Insights):
+${darwinNotes[0].result}
+` : ''}
+
+=== END FULL CLAIM CONTEXT ===
+
+IMPORTANT: The loss type is "${claim.loss_type || 'not specified'}". Make sure your response is relevant to this specific type of damage. Do not confuse hail damage with wind damage, fire damage with water damage, etc.
+`;
+
+    return { success: true, context, claim };
+  } catch (err) {
+    console.error("Error getting full claim context:", err);
+    return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
 async function createTask(supabase: any, params: {
   claim_id: string;
   title: string;
@@ -1374,6 +1528,14 @@ Use this date as reference when calculating due dates. For example:
 - "next week" means add 7 days to ${currentDate}
 - "in 3 days" means add 3 days to ${currentDate}
 
+*** CRITICAL - CLAIM LOOKUP TOOL (USE THIS FIRST!) ***
+When the user asks about a SPECIFIC claim by name, number, or any identifier:
+1. ALWAYS call get_full_claim_context FIRST with the client_name before answering
+2. This retrieves COMPLETE claim data: loss type, settlements, emails, inspections, tasks, files, adjuster info
+3. WITHOUT calling this tool first, you will NOT have accurate claim information
+4. Common triggers: "help with [name] claim", "what's the status of [name]", "tell me about [claim number]", "the [name] file", etc.
+5. NEVER assume or guess claim details - always fetch the full context first
+
 IMPORTANT: You have the ability to CREATE TASKS. When the user asks you to create a task, reminder, follow-up, or to-do item:
 1. Use the create_task function
 2. CRITICAL - To identify the claim:
@@ -1825,6 +1987,63 @@ Be professional, ethical, and focused on helping the user achieve a fair settlem
           } catch (parseErr) {
             console.error("Error in add_notepad_item:", parseErr);
             answer += `\n\n❌ **Error adding to notepad:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "get_full_claim_context") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Getting full claim context for:", params.client_name);
+            
+            const contextResult = await getFullClaimContext(supabase, params.client_name);
+            
+            if (contextResult.success && contextResult.context) {
+              // Make a follow-up AI call with the full context
+              console.log("Making follow-up AI call with full claim context");
+              
+              const followUpMessages = [
+                { 
+                  role: "system", 
+                  content: `You are Darwin, an expert public adjuster AI assistant with COMPLETE knowledge of this claim. You have access to all claim details, communications, files, and history. Provide expert, detailed responses based on the claim data below.
+
+CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
+- NEVER argue "matching" (that new materials must match existing materials)
+- ALWAYS argue "repairability" - damaged materials CANNOT BE REPAIRED and must be replaced
+- Focus on why materials are not repairable: manufacturing discontinuation, material degradation, structural integrity compromised, code compliance requirements
+
+FORMATTING: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics.
+
+${contextResult.context}
+
+${knowledgeBaseContext || ''}`
+                },
+                ...conversationMessages.slice(1) // Skip the original system message
+              ];
+              
+              const followUpResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "google/gemini-2.5-flash",
+                  messages: followUpMessages,
+                  max_tokens: 2000,
+                }),
+              });
+              
+              if (followUpResponse.ok) {
+                const followUpData = await followUpResponse.json();
+                answer = followUpData.choices[0].message.content || "";
+              } else {
+                console.error("Follow-up AI call failed:", followUpResponse.status);
+                answer = `I found the claim for ${params.client_name}. ${contextResult.context.substring(0, 500)}...\n\nPlease ask your specific question about this claim.`;
+              }
+            } else {
+              answer += `\n\n❌ **Could not find claim:** ${contextResult.error}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in get_full_claim_context:", parseErr);
+            answer += `\n\n❌ **Error getting claim context:** Invalid parameters`;
           }
         }
       }
