@@ -43,6 +43,7 @@ export function DarwinBuildingCodes({ claimId, claim }: BuildingCodesProps) {
   const [specs, setSpecs] = useState<ManufacturerSpec[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [aiResult, setAiResult] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -117,6 +118,7 @@ export function DarwinBuildingCodes({ claimId, claim }: BuildingCodesProps) {
 
   const aiLookup = async () => {
     setIsSearching(true);
+    setAiResult(null);
     try {
       const response = await supabase.functions.invoke("darwin-ai-analysis", {
         body: {
@@ -132,10 +134,19 @@ export function DarwinBuildingCodes({ claimId, claim }: BuildingCodesProps) {
 
       if (response.error) throw response.error;
 
-      toast({ 
-        title: "AI Code Lookup", 
-        description: response.data?.result ? "Found relevant codes. See analysis below." : "No specific codes found.",
-      });
+      const result = response.data?.result || response.data?.analysis;
+      if (result) {
+        setAiResult(result);
+        toast({ 
+          title: "AI Code Lookup Complete", 
+          description: "Found relevant codes and recommendations.",
+        });
+      } else {
+        toast({ 
+          title: "AI Code Lookup", 
+          description: "No specific codes found for this query.",
+        });
+      }
     } catch (error: any) {
       console.error("Error in AI lookup:", error);
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -174,6 +185,44 @@ export function DarwinBuildingCodes({ claimId, claim }: BuildingCodesProps) {
             AI Lookup
           </Button>
         </div>
+
+        {/* AI Result Display */}
+        {aiResult && (
+          <Card className="mb-4 bg-primary/5 border-primary/20">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Search className="h-4 w-4 text-primary" />
+                  AI Code Lookup Results
+                </CardTitle>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setAiResult(null)}
+                  className="h-6 px-2 text-xs"
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="max-h-[300px]">
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <p className="text-sm whitespace-pre-wrap">{aiResult}</p>
+                </div>
+              </ScrollArea>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => copyToClipboard(aiResult, "AI Analysis")}
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy to Clipboard
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-2">
