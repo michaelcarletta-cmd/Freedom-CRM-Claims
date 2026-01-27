@@ -466,26 +466,35 @@ export type Database = {
       claim_ai_conversations: {
         Row: {
           claim_id: string
+          confidence_score: number | null
           content: string
           created_at: string
           id: string
+          needs_review: boolean | null
           role: string
+          source_citations: Json | null
           user_id: string | null
         }
         Insert: {
           claim_id: string
+          confidence_score?: number | null
           content: string
           created_at?: string
           id?: string
+          needs_review?: boolean | null
           role: string
+          source_citations?: Json | null
           user_id?: string | null
         }
         Update: {
           claim_id?: string
+          confidence_score?: number | null
           content?: string
           created_at?: string
           id?: string
+          needs_review?: boolean | null
           role?: string
+          source_citations?: Json | null
           user_id?: string | null
         }
         Relationships: [
@@ -1064,36 +1073,54 @@ export type Database = {
       claim_files: {
         Row: {
           claim_id: string
+          extracted_text: string | null
           file_name: string
           file_path: string
           file_size: number | null
           file_type: string | null
           folder_id: string | null
           id: string
+          is_latest_version: boolean | null
+          ocr_processed_at: string | null
+          parent_file_id: string | null
           uploaded_at: string | null
           uploaded_by: string | null
+          version: number | null
+          version_label: string | null
         }
         Insert: {
           claim_id: string
+          extracted_text?: string | null
           file_name: string
           file_path: string
           file_size?: number | null
           file_type?: string | null
           folder_id?: string | null
           id?: string
+          is_latest_version?: boolean | null
+          ocr_processed_at?: string | null
+          parent_file_id?: string | null
           uploaded_at?: string | null
           uploaded_by?: string | null
+          version?: number | null
+          version_label?: string | null
         }
         Update: {
           claim_id?: string
+          extracted_text?: string | null
           file_name?: string
           file_path?: string
           file_size?: number | null
           file_type?: string | null
           folder_id?: string | null
           id?: string
+          is_latest_version?: boolean | null
+          ocr_processed_at?: string | null
+          parent_file_id?: string | null
           uploaded_at?: string | null
           uploaded_by?: string | null
+          version?: number | null
+          version_label?: string | null
         }
         Relationships: [
           {
@@ -1108,6 +1135,13 @@ export type Database = {
             columns: ["folder_id"]
             isOneToOne: false
             referencedRelation: "claim_folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_files_parent_file_id_fkey"
+            columns: ["parent_file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
             referencedColumns: ["id"]
           },
         ]
@@ -1789,6 +1823,7 @@ export type Database = {
           adjuster_email: string | null
           adjuster_name: string | null
           adjuster_phone: string | null
+          ale_limit: number | null
           claim_amount: number | null
           claim_email_id: string | null
           claim_number: string | null
@@ -1796,6 +1831,8 @@ export type Database = {
           construction_status: string | null
           contract_pdf_path: string | null
           created_at: string | null
+          deductible: number | null
+          dwelling_limit: number | null
           esign_audit_url: string | null
           esign_completed_at: string | null
           esign_document_id: string | null
@@ -1804,6 +1841,10 @@ export type Database = {
           esign_sent_at: string | null
           esign_signing_link: string | null
           esign_status: string | null
+          fraud_flag: boolean | null
+          fraud_flag_reason: string | null
+          fraud_flagged_at: string | null
+          fraud_flagged_by: string | null
           id: string
           insurance_company: string | null
           insurance_company_id: string | null
@@ -1817,10 +1858,12 @@ export type Database = {
           loss_type: string | null
           loss_type_id: string | null
           mortgage_company_id: string | null
+          other_structures_limit: number | null
           partner_assigned_user_email: string | null
           partner_assigned_user_id: string | null
           partner_assigned_user_name: string | null
           partner_construction_status: string | null
+          personal_property_limit: number | null
           policy_number: string | null
           policyholder_address: string | null
           policyholder_email: string | null
@@ -1837,6 +1880,7 @@ export type Database = {
           adjuster_email?: string | null
           adjuster_name?: string | null
           adjuster_phone?: string | null
+          ale_limit?: number | null
           claim_amount?: number | null
           claim_email_id?: string | null
           claim_number?: string | null
@@ -1844,6 +1888,8 @@ export type Database = {
           construction_status?: string | null
           contract_pdf_path?: string | null
           created_at?: string | null
+          deductible?: number | null
+          dwelling_limit?: number | null
           esign_audit_url?: string | null
           esign_completed_at?: string | null
           esign_document_id?: string | null
@@ -1852,6 +1898,10 @@ export type Database = {
           esign_sent_at?: string | null
           esign_signing_link?: string | null
           esign_status?: string | null
+          fraud_flag?: boolean | null
+          fraud_flag_reason?: string | null
+          fraud_flagged_at?: string | null
+          fraud_flagged_by?: string | null
           id?: string
           insurance_company?: string | null
           insurance_company_id?: string | null
@@ -1865,10 +1915,12 @@ export type Database = {
           loss_type?: string | null
           loss_type_id?: string | null
           mortgage_company_id?: string | null
+          other_structures_limit?: number | null
           partner_assigned_user_email?: string | null
           partner_assigned_user_id?: string | null
           partner_assigned_user_name?: string | null
           partner_construction_status?: string | null
+          personal_property_limit?: number | null
           policy_number?: string | null
           policyholder_address?: string | null
           policyholder_email?: string | null
@@ -1885,6 +1937,7 @@ export type Database = {
           adjuster_email?: string | null
           adjuster_name?: string | null
           adjuster_phone?: string | null
+          ale_limit?: number | null
           claim_amount?: number | null
           claim_email_id?: string | null
           claim_number?: string | null
@@ -1892,6 +1945,8 @@ export type Database = {
           construction_status?: string | null
           contract_pdf_path?: string | null
           created_at?: string | null
+          deductible?: number | null
+          dwelling_limit?: number | null
           esign_audit_url?: string | null
           esign_completed_at?: string | null
           esign_document_id?: string | null
@@ -1900,6 +1955,10 @@ export type Database = {
           esign_sent_at?: string | null
           esign_signing_link?: string | null
           esign_status?: string | null
+          fraud_flag?: boolean | null
+          fraud_flag_reason?: string | null
+          fraud_flagged_at?: string | null
+          fraud_flagged_by?: string | null
           id?: string
           insurance_company?: string | null
           insurance_company_id?: string | null
@@ -1913,10 +1972,12 @@ export type Database = {
           loss_type?: string | null
           loss_type_id?: string | null
           mortgage_company_id?: string | null
+          other_structures_limit?: number | null
           partner_assigned_user_email?: string | null
           partner_assigned_user_id?: string | null
           partner_assigned_user_name?: string | null
           partner_construction_status?: string | null
+          personal_property_limit?: number | null
           policy_number?: string | null
           policyholder_address?: string | null
           policyholder_email?: string | null
@@ -4175,6 +4236,7 @@ export type Database = {
           adjuster_email: string | null
           adjuster_name: string | null
           adjuster_phone: string | null
+          ale_limit: number | null
           claim_amount: number | null
           claim_email_id: string | null
           claim_number: string | null
@@ -4182,6 +4244,8 @@ export type Database = {
           construction_status: string | null
           contract_pdf_path: string | null
           created_at: string | null
+          deductible: number | null
+          dwelling_limit: number | null
           esign_audit_url: string | null
           esign_completed_at: string | null
           esign_document_id: string | null
@@ -4190,6 +4254,10 @@ export type Database = {
           esign_sent_at: string | null
           esign_signing_link: string | null
           esign_status: string | null
+          fraud_flag: boolean | null
+          fraud_flag_reason: string | null
+          fraud_flagged_at: string | null
+          fraud_flagged_by: string | null
           id: string
           insurance_company: string | null
           insurance_company_id: string | null
@@ -4203,10 +4271,12 @@ export type Database = {
           loss_type: string | null
           loss_type_id: string | null
           mortgage_company_id: string | null
+          other_structures_limit: number | null
           partner_assigned_user_email: string | null
           partner_assigned_user_id: string | null
           partner_assigned_user_name: string | null
           partner_construction_status: string | null
+          personal_property_limit: number | null
           policy_number: string | null
           policyholder_address: string | null
           policyholder_email: string | null
