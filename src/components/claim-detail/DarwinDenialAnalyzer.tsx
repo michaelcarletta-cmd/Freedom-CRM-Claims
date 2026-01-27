@@ -3,9 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { FileWarning, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History } from "lucide-react";
+import { FileWarning, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen } from "lucide-react";
+import { useClaimFiles } from "@/hooks/useClaimFiles";
+import { ClaimFileSelector } from "./ClaimFileSelector";
 
 interface DarwinDenialAnalyzerProps {
   claimId: string;
@@ -15,12 +18,16 @@ interface DarwinDenialAnalyzerProps {
 export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerProps) => {
   const [denialContent, setDenialContent] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [selectedClaimFileId, setSelectedClaimFileId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastAnalyzed, setLastAnalyzed] = useState<Date | null>(null);
   const [lastFileName, setLastFileName] = useState<string | null>(null);
+  const [inputMethod, setInputMethod] = useState<string>("claim-files");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  
+  const { files: claimFiles, loading: loadingFiles, downloadFileAsBase64 } = useClaimFiles(claimId);
 
   // Load previous analysis on mount
   useEffect(() => {
@@ -64,6 +71,7 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
         return;
       }
       setPdfFile(file);
+      setSelectedClaimFileId(null);
     }
   };
 
@@ -75,10 +83,12 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
   };
 
   const handleAnalyze = async () => {
-    if (!denialContent.trim() && !pdfFile) {
+    const selectedFile = claimFiles.find(f => f.id === selectedClaimFileId);
+    
+    if (!denialContent.trim() && !pdfFile && !selectedFile) {
       toast({
         title: "Content required",
-        description: "Please paste the denial letter content or upload a PDF",
+        description: "Please select a file, upload a PDF, or paste content",
         variant: "destructive"
       });
       return;
@@ -86,8 +96,13 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
 
     setLoading(true);
     try {
-      let pdfBase64 = null;
-      if (pdfFile) {
+      let pdfBase64: string | null = null;
+      let fileName: string | undefined;
+
+      if (selectedFile) {
+        pdfBase64 = await downloadFileAsBase64(selectedFile.file_path);
+        fileName = selectedFile.file_name;
+      } else if (pdfFile) {
         const arrayBuffer = await pdfFile.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);
         let binary = '';
@@ -95,6 +110,7 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
           binary += String.fromCharCode(bytes[i]);
         }
         pdfBase64 = btoa(binary);
+        fileName = pdfFile.name;
       }
 
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
@@ -103,7 +119,7 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
           analysisType: 'denial_rebuttal',
           content: denialContent || undefined,
           pdfContent: pdfBase64 || undefined,
-          pdfFileName: pdfFile?.name || undefined
+          pdfFileName: fileName
         }
       });
 
@@ -115,16 +131,16 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
 
       setAnalysis(data.result);
       setLastAnalyzed(new Date());
-      setLastFileName(pdfFile?.name || null);
+      setLastFileName(fileName || null);
 
       // Save the analysis result
       const { data: userData } = await supabase.auth.getUser();
       await supabase.from('darwin_analysis_results').insert({
         claim_id: claimId,
         analysis_type: 'denial_rebuttal',
-        input_summary: pdfFile?.name || denialContent.substring(0, 200),
+        input_summary: fileName || denialContent.substring(0, 200),
         result: data.result,
-        pdf_file_name: pdfFile?.name || null,
+        pdf_file_name: fileName || null,
         created_by: userData.user?.id
       });
 
@@ -163,6 +179,9 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
     }
   };
 
+  const selectedFile = claimFiles.find(f => f.id === selectedClaimFileId);
+  const hasInput = denialContent.trim() || pdfFile || selectedFile;
+
   return (
     <Card>
       <CardHeader>
@@ -171,7 +190,7 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
           Denial Letter Analyzer
         </CardTitle>
         <CardDescription>
-          Upload a denial letter PDF or paste content and Darwin will generate a point-by-point rebuttal with policy citations
+          Select a denial letter from claim files, upload a PDF, or paste content for Darwin to generate a point-by-point rebuttal
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -183,58 +202,84 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
           </div>
         )}
 
-        {/* PDF Upload Section */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Upload Denial Letter (PDF)</label>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept=".pdf"
-            className="hidden"
-          />
-          {pdfFile ? (
-            <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
-              <FileText className="h-5 w-5 text-primary" />
-              <span className="flex-1 text-sm truncate">{pdfFile.name}</span>
-              <Button variant="ghost" size="sm" onClick={removeFile}>
-                <X className="h-4 w-4" />
+        <Tabs value={inputMethod} onValueChange={setInputMethod}>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="claim-files" className="gap-2">
+              <FolderOpen className="h-4 w-4" />
+              Claim Files
+            </TabsTrigger>
+            <TabsTrigger value="upload" className="gap-2">
+              <Upload className="h-4 w-4" />
+              Upload
+            </TabsTrigger>
+            <TabsTrigger value="paste" className="gap-2">
+              <FileText className="h-4 w-4" />
+              Paste
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="claim-files" className="space-y-2 mt-4">
+            <label className="text-sm font-medium">Select from Claim Files</label>
+            <ClaimFileSelector
+              files={claimFiles}
+              loading={loadingFiles}
+              selectedFileId={selectedClaimFileId}
+              onSelectFile={(file) => {
+                setSelectedClaimFileId(file.id);
+                setPdfFile(null);
+                setDenialContent("");
+              }}
+              height="200px"
+            />
+          </TabsContent>
+
+          <TabsContent value="upload" className="space-y-2 mt-4">
+            <label className="text-sm font-medium">Upload Denial Letter (PDF)</label>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".pdf"
+              className="hidden"
+            />
+            {pdfFile ? (
+              <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
+                <FileText className="h-5 w-5 text-primary" />
+                <span className="flex-1 text-sm truncate">{pdfFile.name}</span>
+                <Button variant="ghost" size="sm" onClick={removeFile}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Select PDF File
               </Button>
-            </div>
-          ) : (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Select PDF File
-            </Button>
-          )}
-        </div>
+            )}
+          </TabsContent>
 
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground">or paste content</span>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Denial Letter Content</label>
-          <Textarea
-            value={denialContent}
-            onChange={(e) => setDenialContent(e.target.value)}
-            placeholder="Paste the denial letter content here..."
-            className="min-h-[120px]"
-          />
-        </div>
+          <TabsContent value="paste" className="space-y-2 mt-4">
+            <label className="text-sm font-medium">Denial Letter Content</label>
+            <Textarea
+              value={denialContent}
+              onChange={(e) => {
+                setDenialContent(e.target.value);
+                setSelectedClaimFileId(null);
+                setPdfFile(null);
+              }}
+              placeholder="Paste the denial letter content here..."
+              className="min-h-[150px]"
+            />
+          </TabsContent>
+        </Tabs>
 
         <Button 
           onClick={handleAnalyze} 
-          disabled={loading || (!denialContent.trim() && !pdfFile)}
+          disabled={loading || !hasInput}
           className="w-full"
         >
           {loading ? (

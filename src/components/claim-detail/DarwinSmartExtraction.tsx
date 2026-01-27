@@ -2,11 +2,14 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { FileSearch, Loader2, Upload, X, FileText, History, Save, Table } from "lucide-react";
+import { FileSearch, Loader2, Upload, X, FileText, History, Save, Table, FolderOpen } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { useClaimFiles } from "@/hooks/useClaimFiles";
+import { ClaimFileSelector } from "./ClaimFileSelector";
 
 interface DarwinSmartExtractionProps {
   claimId: string;
@@ -36,13 +39,17 @@ interface ExtractedData {
 
 export const DarwinSmartExtraction = ({ claimId, claim }: DarwinSmartExtractionProps) => {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [selectedClaimFileId, setSelectedClaimFileId] = useState<string | null>(null);
   const [documentType, setDocumentType] = useState<string>("estimate");
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [previousExtractions, setPreviousExtractions] = useState<ExtractedData[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [inputMethod, setInputMethod] = useState<string>("claim-files");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const { files: claimFiles, loading: loadingFiles, downloadFileAsBase64 } = useClaimFiles(claimId);
 
   const documentTypes = [
     { value: "estimate", label: "Estimate (Xactimate, etc.)" },
@@ -102,6 +109,7 @@ export const DarwinSmartExtraction = ({ claimId, claim }: DarwinSmartExtractionP
         return;
       }
       setPdfFile(file);
+      setSelectedClaimFileId(null);
       setExtractedData(null);
     }
   };
@@ -115,10 +123,12 @@ export const DarwinSmartExtraction = ({ claimId, claim }: DarwinSmartExtractionP
   };
 
   const handleExtract = async () => {
-    if (!pdfFile) {
+    const selectedFile = claimFiles.find(f => f.id === selectedClaimFileId);
+    
+    if (!pdfFile && !selectedFile) {
       toast({
         title: "No file selected",
-        description: "Please upload a PDF to extract data from",
+        description: "Please select a file from claim files or upload a PDF",
         variant: "destructive"
       });
       return;
@@ -126,20 +136,31 @@ export const DarwinSmartExtraction = ({ claimId, claim }: DarwinSmartExtractionP
 
     setLoading(true);
     try {
-      const arrayBuffer = await pdfFile.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
+      let pdfBase64: string | null = null;
+      let fileName: string;
+
+      if (selectedFile) {
+        pdfBase64 = await downloadFileAsBase64(selectedFile.file_path);
+        fileName = selectedFile.file_name;
+      } else if (pdfFile) {
+        const arrayBuffer = await pdfFile.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        pdfBase64 = btoa(binary);
+        fileName = pdfFile.name;
+      } else {
+        throw new Error("No file selected");
       }
-      const pdfBase64 = btoa(binary);
 
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
         body: {
           claimId,
           analysisType: 'smart_extraction',
           pdfContent: pdfBase64,
-          pdfFileName: pdfFile.name,
+          pdfFileName: fileName,
           additionalContext: { documentType }
         }
       });
@@ -153,7 +174,7 @@ export const DarwinSmartExtraction = ({ claimId, claim }: DarwinSmartExtractionP
       // Parse the structured response
       const extracted: ExtractedData = {
         documentType,
-        sourceFileName: pdfFile.name,
+        sourceFileName: fileName,
         rcvTotal: data.extractedData?.rcv_total,
         acvTotal: data.extractedData?.acv_total,
         deductible: data.extractedData?.deductible,
@@ -167,7 +188,7 @@ export const DarwinSmartExtraction = ({ claimId, claim }: DarwinSmartExtractionP
 
       toast({
         title: "Extraction complete",
-        description: `Extracted ${extracted.lineItems.length} line items from ${pdfFile.name}`
+        description: `Extracted ${extracted.lineItems.length} line items from ${fileName}`
       });
     } catch (error: any) {
       console.error("Extraction error:", error);
@@ -234,6 +255,7 @@ export const DarwinSmartExtraction = ({ claimId, claim }: DarwinSmartExtractionP
 
       setExtractedData(null);
       setPdfFile(null);
+      setSelectedClaimFileId(null);
     } catch (error: any) {
       console.error("Save error:", error);
       toast({
@@ -250,6 +272,9 @@ export const DarwinSmartExtraction = ({ claimId, claim }: DarwinSmartExtractionP
     if (value === undefined || value === null) return "—";
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
   };
+
+  const selectedFile = claimFiles.find(f => f.id === selectedClaimFileId);
+  const hasFile = pdfFile || selectedFile;
 
   return (
     <Card>
@@ -305,39 +330,67 @@ export const DarwinSmartExtraction = ({ claimId, claim }: DarwinSmartExtractionP
           </Select>
         </div>
 
-        {/* PDF Upload Section */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Upload Document (PDF)</label>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept=".pdf"
-            className="hidden"
-          />
-          {pdfFile ? (
-            <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
-              <FileText className="h-5 w-5 text-primary" />
-              <span className="flex-1 text-sm truncate">{pdfFile.name}</span>
-              <Button variant="ghost" size="sm" onClick={removeFile}>
-                <X className="h-4 w-4" />
+        {/* File Selection Tabs */}
+        <Tabs value={inputMethod} onValueChange={setInputMethod}>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="claim-files" className="gap-2">
+              <FolderOpen className="h-4 w-4" />
+              Claim Files
+            </TabsTrigger>
+            <TabsTrigger value="upload" className="gap-2">
+              <Upload className="h-4 w-4" />
+              Upload
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="claim-files" className="space-y-2 mt-4">
+            <label className="text-sm font-medium">Select from Claim Files</label>
+            <ClaimFileSelector
+              files={claimFiles}
+              loading={loadingFiles}
+              selectedFileId={selectedClaimFileId}
+              onSelectFile={(file) => {
+                setSelectedClaimFileId(file.id);
+                setPdfFile(null);
+                setExtractedData(null);
+              }}
+              height="180px"
+            />
+          </TabsContent>
+
+          <TabsContent value="upload" className="space-y-2 mt-4">
+            <label className="text-sm font-medium">Upload Document (PDF)</label>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".pdf"
+              className="hidden"
+            />
+            {pdfFile ? (
+              <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
+                <FileText className="h-5 w-5 text-primary" />
+                <span className="flex-1 text-sm truncate">{pdfFile.name}</span>
+                <Button variant="ghost" size="sm" onClick={removeFile}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Select PDF File
               </Button>
-            </div>
-          ) : (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Select PDF File
-            </Button>
-          )}
-        </div>
+            )}
+          </TabsContent>
+        </Tabs>
 
         <Button 
           onClick={handleExtract} 
-          disabled={loading || !pdfFile}
+          disabled={loading || !hasFile}
           className="w-full"
         >
           {loading ? (

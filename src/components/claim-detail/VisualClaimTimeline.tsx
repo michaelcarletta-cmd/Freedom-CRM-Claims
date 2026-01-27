@@ -267,19 +267,19 @@ export const VisualClaimTimeline = ({ claimId, claim }: VisualClaimTimelineProps
 
   const getStatusStyle = (status: TimelineEvent["status"]) => {
     switch (status) {
-      case "completed": return "border-green-500 bg-green-50 dark:bg-green-950";
-      case "overdue": return "border-red-500 bg-red-50 dark:bg-red-950";
-      case "upcoming": return "border-amber-500 bg-amber-50 dark:bg-amber-950";
-      default: return "border-blue-500 bg-blue-50 dark:bg-blue-950";
+      case "completed": return "border-l-success bg-success/10";
+      case "overdue": return "border-l-destructive bg-destructive/10";
+      case "upcoming": return "border-l-warning bg-warning/10";
+      default: return "border-l-primary bg-primary/10";
     }
   };
 
   const getStatusBadge = (status: TimelineEvent["status"]) => {
     switch (status) {
-      case "completed": return <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">Completed</Badge>;
-      case "overdue": return <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">Overdue</Badge>;
-      case "upcoming": return <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">Upcoming</Badge>;
-      default: return <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">Pending</Badge>;
+      case "completed": return <Badge className="bg-success/20 text-success-foreground border-success/30">Completed</Badge>;
+      case "overdue": return <Badge variant="destructive">Overdue</Badge>;
+      case "upcoming": return <Badge className="bg-warning/20 text-warning-foreground border-warning/30">Upcoming</Badge>;
+      default: return <Badge variant="secondary">Pending</Badge>;
     }
   };
 
@@ -319,7 +319,7 @@ export const VisualClaimTimeline = ({ claimId, claim }: VisualClaimTimelineProps
                   </Badge>
                 )}
                 {upcomingCount > 0 && (
-                  <Badge className="bg-amber-100 text-amber-700 text-xs">
+                  <Badge className="bg-warning/20 text-warning-foreground border-warning/30 text-xs">
                     {upcomingCount} upcoming
                   </Badge>
                 )}
@@ -333,21 +333,21 @@ export const VisualClaimTimeline = ({ claimId, claim }: VisualClaimTimelineProps
           <CardContent className="space-y-4">
             {/* Summary Stats */}
             <div className="grid grid-cols-4 gap-2">
-              <div className="flex items-center gap-2 p-2 rounded-md bg-green-50 dark:bg-green-950">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <span className="text-sm font-medium">{completedCount} Done</span>
+              <div className="flex items-center gap-2 p-2 rounded-md bg-success/10 border border-success/20">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                <span className="text-sm font-medium text-foreground">{completedCount} Done</span>
               </div>
-              <div className="flex items-center gap-2 p-2 rounded-md bg-blue-50 dark:bg-blue-950">
-                <Clock className="h-4 w-4 text-blue-600" />
-                <span className="text-sm font-medium">{pendingCount} Pending</span>
+              <div className="flex items-center gap-2 p-2 rounded-md bg-primary/10 border border-primary/20">
+                <Clock className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium text-foreground">{pendingCount} Pending</span>
               </div>
-              <div className="flex items-center gap-2 p-2 rounded-md bg-amber-50 dark:bg-amber-950">
-                <Calendar className="h-4 w-4 text-amber-600" />
-                <span className="text-sm font-medium">{upcomingCount} Soon</span>
+              <div className="flex items-center gap-2 p-2 rounded-md bg-warning/10 border border-warning/20">
+                <Calendar className="h-4 w-4 text-warning" />
+                <span className="text-sm font-medium text-foreground">{upcomingCount} Soon</span>
               </div>
-              <div className="flex items-center gap-2 p-2 rounded-md bg-red-50 dark:bg-red-950">
-                <AlertTriangle className="h-4 w-4 text-red-600" />
-                <span className="text-sm font-medium">{overdueCount} Overdue</span>
+              <div className="flex items-center gap-2 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <span className="text-sm font-medium text-foreground">{overdueCount} Overdue</span>
               </div>
             </div>
 
