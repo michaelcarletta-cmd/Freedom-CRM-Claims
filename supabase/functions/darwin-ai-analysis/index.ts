@@ -279,10 +279,10 @@ serve(async (req) => {
       .limit(10);
     context.emails = emails || [];
 
-    // Get files
+    // Get files with folder info
     const { data: files } = await supabase
       .from('claim_files')
-      .select('*')
+      .select('*, claim_folders(name)')
       .eq('claim_id', claimId);
     context.files = files || [];
 
@@ -519,12 +519,25 @@ ${stateInfo.state === 'NJ' ? `
 
 Provide actionable, specific recommendations based on the claim's current state and ${stateInfo.stateName} law. Every recommendation should move the claim toward getting FILED RIGHT, MOVING FAST, and PAID FULLY.`;
 
+        // Build a list of uploaded files for context with folder names
+        const filesList = context.files?.length > 0 
+          ? context.files.map((f: any) => {
+              const folderName = f.claim_folders?.name || (f.folder_id ? 'Unknown Folder' : 'Root');
+              return `- ${f.file_name} [Folder: ${folderName}] - uploaded ${new Date(f.uploaded_at).toLocaleDateString()}`;
+            }).join('\n')
+          : '- No files uploaded';
+
         userPrompt = `${claimSummary}
 
 STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
 APPLICABLE STATUTES: ${stateInfo.insuranceCode}
 UNFAIR PRACTICES: ${stateInfo.promptPayAct}
 ADMINISTRATIVE REGULATIONS: ${stateInfo.adminCode}
+
+UPLOADED CLAIM DOCUMENTS (ALREADY IN THE CLAIM FILE):
+${filesList}
+
+IMPORTANT: When making recommendations, check the uploaded documents list above. Do NOT recommend obtaining documents that have already been uploaded. For example, if a denial letter or engineer report is already listed above, acknowledge it exists and recommend RESPONDING to it rather than obtaining it.
 
 ${additionalContext?.timeline ? `TIMELINE EVENTS:\n${JSON.stringify(additionalContext.timeline, null, 2)}` : ''}
 
