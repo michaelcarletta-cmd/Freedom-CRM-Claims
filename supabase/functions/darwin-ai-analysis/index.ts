@@ -164,7 +164,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -2018,6 +2018,123 @@ Based on this data, predict the likely outcome of this claim. Consider:
 5. Claim complexity
 
 Return JSON with a "prediction" object.`;
+        break;
+      }
+
+      case 'carrier_email_draft': {
+        // AI-powered carrier email drafting
+        const emailType = additionalContext?.emailType || 'status_inquiry';
+        const emailTypeLabel = additionalContext?.emailTypeLabel || 'Status Inquiry';
+        const userContext = additionalContext?.userContext || '';
+
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in professional carrier communications. Your emails are:
+- Professional and firm but not aggressive
+- Compliant with ${stateInfo.stateName} insurance regulations
+- Strategic - advancing the claim while documenting the carrier's obligations
+- Reference specific deadlines and regulations when appropriate
+
+FORMATTING REQUIREMENT: Return the email in this exact format:
+SUBJECT: [subject line]
+BODY: [full email body]
+
+Include qualifying language where appropriate (e.g., "pending further investigation", "subject to revision").
+Reference claim number and policy number in the subject line.
+Include specific dates and deadlines based on ${stateInfo.adminCode}.`;
+
+        const emailTypePrompts: Record<string, string> = {
+          'status_inquiry': 'Request an update on the current status of the claim, referencing the time elapsed and any pending items.',
+          'document_submission': 'Write a cover letter for document submission, listing what is being submitted and requesting acknowledgment.',
+          'deadline_reminder': `Remind the carrier of regulatory deadlines under ${stateInfo.adminCode}, noting any approaching or missed deadlines.`,
+          'payment_follow_up': 'Follow up on a pending payment, referencing the approval and requesting payment timeline.',
+          'dispute_response': 'Respond to a carrier dispute or partial denial, presenting counter-arguments professionally.',
+          'inspection_request': 'Request a re-inspection or joint inspection, explaining why it is necessary.',
+          'supplement_submission': 'Submit supplemental claim documentation with a cover letter explaining the additional items.',
+          'bad_faith_warning': `Issue a formal notice of potential bad faith violations under ${stateInfo.promptPayAct}, documenting specific violations.`,
+        };
+
+        userPrompt = `${claimSummary}
+
+EMAIL TYPE: ${emailTypeLabel}
+PURPOSE: ${emailTypePrompts[emailType] || emailTypePrompts['status_inquiry']}
+
+${userContext ? `ADDITIONAL CONTEXT FROM USER:\n${userContext}\n` : ''}
+
+Write a professional email to the insurance carrier for this ${emailTypeLabel.toLowerCase()}. 
+The email should be from the public adjuster on behalf of the policyholder.
+Include appropriate regulatory references for ${stateInfo.stateName}.
+Address the email to the adjuster (${claim.adjuster_name || 'Claims Adjuster'}) at ${claim.insurance_company || 'the insurance company'}.`;
+        break;
+      }
+
+      case 'one_click_package': {
+        // Compile comprehensive claim package
+        const components = additionalContext?.components || [];
+        
+        systemPrompt = `You are Darwin, an expert public adjuster AI. Your task is to compile a comprehensive claim package summary that can be used for carrier submission or internal review.
+
+Create a professional, well-organized document that includes all requested components.
+Use clear section headers and formatting.
+Include all relevant dates, amounts, and status information.
+Format for easy reading and professional presentation.`;
+
+        userPrompt = `${claimSummary}
+
+REQUESTED COMPONENTS: ${components.join(', ')}
+
+${additionalContext?.includePhotos ? `PHOTOS: ${context.files?.filter((f: any) => f.file_type?.startsWith('image/'))?.length || 0} photos available` : ''}
+${additionalContext?.includeDocuments ? `DOCUMENTS: ${context.files?.filter((f: any) => !f.file_type?.startsWith('image/'))?.length || 0} documents available` : ''}
+${additionalContext?.includeCommunications ? `COMMUNICATIONS: ${context.emails?.length || 0} emails on file` : ''}
+${additionalContext?.includeInspections ? `INSPECTIONS:\n${context.inspections?.map((i: any) => `- ${i.inspection_type}: ${i.inspection_date} (${i.status})`).join('\n') || 'None scheduled'}` : ''}
+
+Compile a comprehensive claim package summary including:
+1. Executive Summary - Current claim status and key metrics
+2. Claim Details - All relevant claim information
+3. Financial Summary - Settlement data, checks received, amounts outstanding
+4. Documentation Inventory - List of all files and photos
+5. Communication Timeline - Summary of carrier correspondence
+6. Next Steps - Recommended actions and pending items
+
+Format this as a professional document ready for review or submission.`;
+        break;
+      }
+
+      case 'auto_summary': {
+        // Auto-generated claim summary with key facts
+        systemPrompt = `You are Darwin, an expert public adjuster AI. Generate a comprehensive yet concise claim summary.
+
+FORMATTING REQUIREMENT: Return ONLY valid JSON with this structure:
+{
+  "id": "summary_[timestamp]",
+  "created_at": "[ISO date]",
+  "summary": "2-3 paragraph executive summary",
+  "key_facts": ["fact 1", "fact 2", ...],
+  "next_actions": ["action 1", "action 2", ...],
+  "risk_factors": ["risk 1", "risk 2", ...],
+  "estimated_value": {
+    "low": number,
+    "likely": number,
+    "high": number
+  }
+}`;
+
+        const totalChecksReceived = context.checks?.reduce((sum: number, c: any) => sum + (c.amount || 0), 0) || 0;
+        const latestSettlement = context.settlements?.[0];
+
+        userPrompt = `${claimSummary}
+
+ADDITIONAL DATA:
+- Total Checks Received: $${totalChecksReceived.toLocaleString()}
+- Documents on File: ${context.files?.length || 0}
+- Photos on File: ${context.files?.filter((f: any) => f.file_type?.startsWith('image/'))?.length || 0}
+
+Generate a comprehensive claim summary in the specified JSON format. Include:
+1. Executive summary of the claim status and key issues
+2. 5-7 key facts about the claim
+3. 3-5 recommended next actions
+4. Any risk factors that could affect the outcome
+5. Estimated claim value range based on available data
+
+Return ONLY valid JSON.`;
         break;
       }
 
