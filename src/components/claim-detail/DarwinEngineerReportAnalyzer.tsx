@@ -261,18 +261,18 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
 
         {/* Input Method Tabs */}
         <Tabs value={inputMethod} onValueChange={(v) => setInputMethod(v as any)}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="existing" className="gap-1">
-              <FolderOpen className="h-4 w-4" />
-              Claim Files
+          <TabsList className="flex flex-col sm:flex-row w-full h-auto gap-1 p-1">
+            <TabsTrigger value="existing" className="w-full justify-start gap-2 px-3 py-2">
+              <FolderOpen className="h-4 w-4 flex-shrink-0" />
+              <span>Claim Files</span>
             </TabsTrigger>
-            <TabsTrigger value="upload" className="gap-1">
-              <Upload className="h-4 w-4" />
-              Upload
+            <TabsTrigger value="upload" className="w-full justify-start gap-2 px-3 py-2">
+              <Upload className="h-4 w-4 flex-shrink-0" />
+              <span>Upload PDF</span>
             </TabsTrigger>
-            <TabsTrigger value="paste" className="gap-1">
-              <FileText className="h-4 w-4" />
-              Paste
+            <TabsTrigger value="paste" className="w-full justify-start gap-2 px-3 py-2">
+              <FileText className="h-4 w-4 flex-shrink-0" />
+              <span>Paste Content</span>
             </TabsTrigger>
           </TabsList>
 
