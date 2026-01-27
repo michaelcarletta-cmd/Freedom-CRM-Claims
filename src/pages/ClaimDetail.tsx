@@ -19,63 +19,23 @@ import { ClaimPhotos } from "@/components/claim-detail/ClaimPhotos";
 import { EditClaimDialog } from "@/components/claim-detail/EditClaimDialog";
 import { DeleteClaimDialog } from "@/components/claim-detail/DeleteClaimDialog";
 import { NotifyPortalDialog } from "@/components/claim-detail/NotifyPortalDialog";
-import { ClaimAutomationSettings } from "@/components/claim-detail/ClaimAutomationSettings";
-import { ClaimTimeline } from "@/components/claim-detail/ClaimTimeline";
-import { ProofOfLossGenerator } from "@/components/claim-detail/ProofOfLossGenerator";
-import { EnhancedEstimateBuilder } from "@/components/claim-detail/EnhancedEstimateBuilder";
-import { RecoverableDepreciationInvoice } from "@/components/claim-detail/RecoverableDepreciationInvoice";
 import { ShareClaimDialog } from "@/components/claim-detail/ShareClaimDialog";
 import { ClaimTabsDropdown } from "@/components/claim-detail/ClaimTabsDropdown";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ArrowLeft, Edit, Trash2, Bell, Brain, Sparkles, Share2, Loader2 } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Bell, Brain, Share2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-// Lazy load Darwin components - they're heavy and only needed when Darwin tab is active
-const DarwinDenialAnalyzer = lazy(() => import("@/components/claim-detail/DarwinDenialAnalyzer").then(m => ({ default: m.DarwinDenialAnalyzer })));
-const DarwinNextSteps = lazy(() => import("@/components/claim-detail/DarwinNextSteps").then(m => ({ default: m.DarwinNextSteps })));
-const DarwinSupplementGenerator = lazy(() => import("@/components/claim-detail/DarwinSupplementGenerator").then(m => ({ default: m.DarwinSupplementGenerator })));
-const DarwinCorrespondenceAnalyzer = lazy(() => import("@/components/claim-detail/DarwinCorrespondenceAnalyzer").then(m => ({ default: m.DarwinCorrespondenceAnalyzer })));
-const DarwinEngineerReportAnalyzer = lazy(() => import("@/components/claim-detail/DarwinEngineerReportAnalyzer").then(m => ({ default: m.DarwinEngineerReportAnalyzer })));
-const DarwinClaimBriefing = lazy(() => import("@/components/claim-detail/DarwinClaimBriefing").then(m => ({ default: m.DarwinClaimBriefing })));
-const DarwinDocumentCompiler = lazy(() => import("@/components/claim-detail/DarwinDocumentCompiler").then(m => ({ default: m.DarwinDocumentCompiler })));
-const DarwinDemandPackage = lazy(() => import("@/components/claim-detail/DarwinDemandPackage").then(m => ({ default: m.DarwinDemandPackage })));
-const DarwinDocumentComparison = lazy(() => import("@/components/claim-detail/DarwinDocumentComparison").then(m => ({ default: m.DarwinDocumentComparison })));
-const DarwinSmartExtraction = lazy(() => import("@/components/claim-detail/DarwinSmartExtraction").then(m => ({ default: m.DarwinSmartExtraction })));
-const DarwinWeaknessDetection = lazy(() => import("@/components/claim-detail/DarwinWeaknessDetection").then(m => ({ default: m.DarwinWeaknessDetection })));
-// Phase 2 Components
-const DarwinDeadlineTracker = lazy(() => import("@/components/claim-detail/DarwinDeadlineTracker").then(m => ({ default: m.DarwinDeadlineTracker })));
-const DarwinPhotoLinker = lazy(() => import("@/components/claim-detail/DarwinPhotoLinker").then(m => ({ default: m.DarwinPhotoLinker })));
-const DarwinBuildingCodes = lazy(() => import("@/components/claim-detail/DarwinBuildingCodes").then(m => ({ default: m.DarwinBuildingCodes })));
-// Phase 3 Components
-const DarwinSmartFollowUps = lazy(() => import("@/components/claim-detail/DarwinSmartFollowUps").then(m => ({ default: m.DarwinSmartFollowUps })));
-const DarwinTaskGenerator = lazy(() => import("@/components/claim-detail/DarwinTaskGenerator").then(m => ({ default: m.DarwinTaskGenerator })));
-const DarwinOutcomePredictor = lazy(() => import("@/components/claim-detail/DarwinOutcomePredictor").then(m => ({ default: m.DarwinOutcomePredictor })));
-// Brelly-inspired PA/NJ features
-const DarwinStateLawAdvisor = lazy(() => import("@/components/claim-detail/DarwinStateLawAdvisor").then(m => ({ default: m.DarwinStateLawAdvisor })));
-const DarwinCarrierDeadlineMonitor = lazy(() => import("@/components/claim-detail/DarwinCarrierDeadlineMonitor").then(m => ({ default: m.DarwinCarrierDeadlineMonitor })));
-const DarwinLossOfUseCalculator = lazy(() => import("@/components/claim-detail/DarwinLossOfUseCalculator").then(m => ({ default: m.DarwinLossOfUseCalculator })));
-// DarwinCommunicationsDiary moved to ClaimNotes (Notes & Updates section)
-const DarwinHomeInventoryBuilder = lazy(() => import("@/components/claim-detail/DarwinHomeInventoryBuilder").then(m => ({ default: m.DarwinHomeInventoryBuilder })));
-const DarwinHiddenLossDetective = lazy(() => import("@/components/claim-detail/DarwinHiddenLossDetective").then(m => ({ default: m.DarwinHiddenLossDetective })));
-const DarwinQualifyingLanguage = lazy(() => import("@/components/claim-detail/DarwinQualifyingLanguage").then(m => ({ default: m.DarwinQualifyingLanguage })));
-// New Brelly-inspired features
-const DarwinCarrierEmailDrafter = lazy(() => import("@/components/claim-detail/DarwinCarrierEmailDrafter").then(m => ({ default: m.DarwinCarrierEmailDrafter })));
-const DarwinWeatherHistory = lazy(() => import("@/components/claim-detail/DarwinWeatherHistory").then(m => ({ default: m.DarwinWeatherHistory })));
-const DarwinOneClickPackage = lazy(() => import("@/components/claim-detail/DarwinOneClickPackage").then(m => ({ default: m.DarwinOneClickPackage })));
-const DarwinAutoSummary = lazy(() => import("@/components/claim-detail/DarwinAutoSummary").then(m => ({ default: m.DarwinAutoSummary })));
-// New Brelly-inspired Smart Features
-const DarwinSmartDocumentSort = lazy(() => import("@/components/claim-detail/DarwinSmartDocumentSort").then(m => ({ default: m.DarwinSmartDocumentSort })));
-const VisualClaimTimeline = lazy(() => import("@/components/claim-detail/VisualClaimTimeline").then(m => ({ default: m.VisualClaimTimeline })));
-const DarwinComplianceChecker = lazy(() => import("@/components/claim-detail/DarwinComplianceChecker").then(m => ({ default: m.DarwinComplianceChecker })));
+// Lazy load Darwin tab as a single organized component
+const DarwinTab = lazy(() => import("@/components/claim-detail/DarwinTab").then(m => ({ default: m.DarwinTab })));
 
 // Loading fallback for Darwin components
 const DarwinLoadingFallback = () => (
   <div className="flex items-center justify-center p-8">
     <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
-    <span className="text-muted-foreground">Loading Darwin AI module...</span>
+    <span className="text-muted-foreground">Loading Darwin AI...</span>
   </div>
 );
 
@@ -491,132 +451,7 @@ const ClaimDetail = () => {
         {isStaffOrAdmin && (
           <TabsContent value="darwin" className="mt-6">
             <Suspense fallback={<DarwinLoadingFallback />}>
-              <div className="space-y-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Brain className="h-6 w-6 text-primary" />
-                  <h2 className="text-xl font-semibold">Darwin AI</h2>
-                  <span className="text-sm text-muted-foreground">Your intelligent claims assistant</span>
-                </div>
-                
-                {/* Smart Document Sorting - AI-powered file organization */}
-                <DarwinSmartDocumentSort claimId={claim.id} claim={claim} />
-                
-                {/* Visual Claim Timeline - Audit-ready event tracking */}
-                <VisualClaimTimeline claimId={claim.id} claim={claim} />
-                
-                {/* Compliance-Aware Messaging - Flag risky language */}
-                <DarwinComplianceChecker claimId={claim.id} claim={claim} />
-                
-                {/* Auto Claim Summary - Updates on document upload */}
-                <DarwinAutoSummary claimId={claim.id} claim={claim} />
-                
-                {/* Weather History Report */}
-                <DarwinWeatherHistory claimId={claim.id} claim={claim} />
-                
-                {/* Claim Briefing - Get caught up first */}
-                <DarwinClaimBriefing claimId={claim.id} claim={claim} />
-                
-                {/* One-Click Package Builder */}
-                <DarwinOneClickPackage claimId={claim.id} claim={claim} />
-                
-                {/* AI Carrier Email Drafter */}
-                <DarwinCarrierEmailDrafter claimId={claim.id} claim={claim} />
-                
-                {/* Next Steps Predictor */}
-                <DarwinNextSteps claimId={claim.id} claim={claim} />
-                
-                {/* Smart Document Extraction */}
-                <DarwinSmartExtraction claimId={claim.id} claim={claim} />
-                
-                {/* Document Comparison */}
-                <DarwinDocumentComparison claimId={claim.id} claim={claim} />
-                
-                {/* Weakness Detection */}
-                <DarwinWeaknessDetection claimId={claim.id} claim={claim} />
-                
-                {/* Phase 2: Deadline Tracker */}
-                <DarwinDeadlineTracker claimId={claim.id} claim={claim} />
-                
-                {/* Phase 2: Building Codes & Manufacturer Specs */}
-                <DarwinBuildingCodes claimId={claim.id} claim={claim} />
-                
-                {/* Phase 2: Photo-Document Linker */}
-                <DarwinPhotoLinker claimId={claim.id} claim={claim} />
-                
-                {/* AI Analysis Tools */}
-                <div className="grid gap-6 lg:grid-cols-2">
-                  <DarwinDenialAnalyzer claimId={claim.id} claim={claim} />
-                  <DarwinSupplementGenerator claimId={claim.id} claim={claim} />
-                </div>
-                
-                <div className="grid gap-6 lg:grid-cols-2">
-                  <DarwinEngineerReportAnalyzer claimId={claim.id} claim={claim} />
-                  <DarwinCorrespondenceAnalyzer claimId={claim.id} claim={claim} />
-                </div>
-                
-                {/* Demand Package Builder - Primary tool for building cases from evidence */}
-                <DarwinDemandPackage claimId={claim.id} claim={claim} />
-                
-                {/* Recoverable Depreciation Invoice - Generate RD invoice with Certificate of Completion docs */}
-                <RecoverableDepreciationInvoice claimId={claim.id} claim={claim} />
-                
-                {/* Document Compiler - Legacy tool for compiling photos and documents */}
-                <DarwinDocumentCompiler claimId={claim.id} claim={claim} />
-                
-                {/* Document Generation Tools */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-primary" />
-                    Document Generation
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    <ProofOfLossGenerator claimId={claim.id} claim={claim} />
-                    <EnhancedEstimateBuilder claimId={claim.id} claim={claim} />
-                  </div>
-                </div>
-                
-                {/* Legacy AI Claim Timeline */}
-                <ClaimTimeline claimId={id || ""} claim={claim} />
-                
-                {/* PA/NJ Brelly-Inspired Tools */}
-                <div className="space-y-4 pt-6 border-t">
-                  <h3 className="text-lg font-medium flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-primary" />
-                    PA/NJ Regulatory Tools
-                  </h3>
-                  
-                  {/* State Law Advisor */}
-                  <DarwinStateLawAdvisor claimId={claim.id} claim={claim} />
-                  
-                  {/* Carrier Deadline Monitor */}
-                  <DarwinCarrierDeadlineMonitor claimId={claim.id} claim={claim} />
-                  
-                  {/* Communications Diary moved to Notes & Updates section */}
-                  
-                  {/* Qualifying Language Generator */}
-                  <DarwinQualifyingLanguage claimId={claim.id} claim={claim} />
-                </div>
-                
-                {/* Contents & Loss Tracking */}
-                <div className="space-y-4 pt-6 border-t">
-                  <h3 className="text-lg font-medium flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-primary" />
-                    Contents & Hidden Loss Tools
-                  </h3>
-                  
-                  {/* Loss of Use Calculator */}
-                  <DarwinLossOfUseCalculator claimId={claim.id} claim={claim} />
-                  
-                  {/* Home Inventory Builder */}
-                  <DarwinHomeInventoryBuilder claimId={claim.id} claim={claim} />
-                  
-                  {/* Hidden Loss Detective */}
-                  <DarwinHiddenLossDetective claimId={claim.id} claim={claim} />
-                </div>
-                
-                {/* AI Automation Settings */}
-                <ClaimAutomationSettings claimId={id!} />
-              </div>
+              <DarwinTab claimId={claim.id} claim={claim} />
             </Suspense>
           </TabsContent>
         )}
