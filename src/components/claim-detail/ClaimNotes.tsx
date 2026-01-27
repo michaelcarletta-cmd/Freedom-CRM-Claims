@@ -159,7 +159,31 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
       toast.error("Failed to add entry");
       console.error(error);
     } else {
-      toast.success("Communication logged");
+      // Auto-create a claim update/note for this communication
+      const commType = COMM_TYPES.find(t => t.value === commFormData.communication_type)?.label || commFormData.communication_type;
+      const direction = commFormData.direction === "outbound" ? "Outbound" : "Inbound";
+      const contactInfo = commFormData.contact_name 
+        ? `with ${commFormData.contact_name}${commFormData.contact_company ? ` (${commFormData.contact_company})` : ''}${commFormData.employee_id ? ` [ID: ${commFormData.employee_id}]` : ''}`
+        : '';
+      
+      let noteContent = `📞 ${direction} ${commType} ${contactInfo}\n\n${commFormData.summary}`;
+      
+      if (commFormData.promises_made) {
+        noteContent += `\n\n⚠️ CARRIER PROMISES: ${commFormData.promises_made}`;
+      }
+      if (commFormData.deadlines_mentioned) {
+        noteContent += `\n\n📅 DEADLINES MENTIONED: ${commFormData.deadlines_mentioned}`;
+      }
+
+      // Insert into claim_updates to show in activity feed
+      await supabase.from("claim_updates").insert({
+        claim_id: claimId,
+        content: noteContent,
+        update_type: "communication_log",
+        user_id: userData.user?.id,
+      });
+
+      toast.success("Communication logged and added to notes");
       setCommDialogOpen(false);
       setCommFormData({
         communication_type: "phone",
@@ -177,6 +201,7 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
         follow_up_date: "",
       });
       fetchCommEntries();
+      fetchUpdates(); // Refresh the notes list to show the new entry
     }
   };
 
