@@ -61,6 +61,11 @@ const DarwinLossOfUseCalculator = lazy(() => import("@/components/claim-detail/D
 const DarwinHomeInventoryBuilder = lazy(() => import("@/components/claim-detail/DarwinHomeInventoryBuilder").then(m => ({ default: m.DarwinHomeInventoryBuilder })));
 const DarwinHiddenLossDetective = lazy(() => import("@/components/claim-detail/DarwinHiddenLossDetective").then(m => ({ default: m.DarwinHiddenLossDetective })));
 const DarwinQualifyingLanguage = lazy(() => import("@/components/claim-detail/DarwinQualifyingLanguage").then(m => ({ default: m.DarwinQualifyingLanguage })));
+// New Brelly-inspired features
+const DarwinCarrierEmailDrafter = lazy(() => import("@/components/claim-detail/DarwinCarrierEmailDrafter").then(m => ({ default: m.DarwinCarrierEmailDrafter })));
+const DarwinWeatherHistory = lazy(() => import("@/components/claim-detail/DarwinWeatherHistory").then(m => ({ default: m.DarwinWeatherHistory })));
+const DarwinOneClickPackage = lazy(() => import("@/components/claim-detail/DarwinOneClickPackage").then(m => ({ default: m.DarwinOneClickPackage })));
+const DarwinAutoSummary = lazy(() => import("@/components/claim-detail/DarwinAutoSummary").then(m => ({ default: m.DarwinAutoSummary })));
 
 // Loading fallback for Darwin components
 const DarwinLoadingFallback = () => (
@@ -489,8 +494,20 @@ const ClaimDetail = () => {
                   <span className="text-sm text-muted-foreground">Your intelligent claims assistant</span>
                 </div>
                 
+                {/* Auto Claim Summary - Updates on document upload */}
+                <DarwinAutoSummary claimId={claim.id} claim={claim} />
+                
+                {/* Weather History Report */}
+                <DarwinWeatherHistory claimId={claim.id} claim={claim} />
+                
                 {/* Claim Briefing - Get caught up first */}
                 <DarwinClaimBriefing claimId={claim.id} claim={claim} />
+                
+                {/* One-Click Package Builder */}
+                <DarwinOneClickPackage claimId={claim.id} claim={claim} />
+                
+                {/* AI Carrier Email Drafter */}
+                <DarwinCarrierEmailDrafter claimId={claim.id} claim={claim} />
                 
                 {/* Next Steps Predictor */}
                 <DarwinNextSteps claimId={claim.id} claim={claim} />
