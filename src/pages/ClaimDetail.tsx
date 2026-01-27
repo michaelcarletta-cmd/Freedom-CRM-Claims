@@ -53,6 +53,14 @@ const DarwinBuildingCodes = lazy(() => import("@/components/claim-detail/DarwinB
 const DarwinSmartFollowUps = lazy(() => import("@/components/claim-detail/DarwinSmartFollowUps").then(m => ({ default: m.DarwinSmartFollowUps })));
 const DarwinTaskGenerator = lazy(() => import("@/components/claim-detail/DarwinTaskGenerator").then(m => ({ default: m.DarwinTaskGenerator })));
 const DarwinOutcomePredictor = lazy(() => import("@/components/claim-detail/DarwinOutcomePredictor").then(m => ({ default: m.DarwinOutcomePredictor })));
+// Brelly-inspired PA/NJ features
+const DarwinStateLawAdvisor = lazy(() => import("@/components/claim-detail/DarwinStateLawAdvisor").then(m => ({ default: m.DarwinStateLawAdvisor })));
+const DarwinCarrierDeadlineMonitor = lazy(() => import("@/components/claim-detail/DarwinCarrierDeadlineMonitor").then(m => ({ default: m.DarwinCarrierDeadlineMonitor })));
+const DarwinLossOfUseCalculator = lazy(() => import("@/components/claim-detail/DarwinLossOfUseCalculator").then(m => ({ default: m.DarwinLossOfUseCalculator })));
+const DarwinCommunicationsDiary = lazy(() => import("@/components/claim-detail/DarwinCommunicationsDiary").then(m => ({ default: m.DarwinCommunicationsDiary })));
+const DarwinHomeInventoryBuilder = lazy(() => import("@/components/claim-detail/DarwinHomeInventoryBuilder").then(m => ({ default: m.DarwinHomeInventoryBuilder })));
+const DarwinHiddenLossDetective = lazy(() => import("@/components/claim-detail/DarwinHiddenLossDetective").then(m => ({ default: m.DarwinHiddenLossDetective })));
+const DarwinQualifyingLanguage = lazy(() => import("@/components/claim-detail/DarwinQualifyingLanguage").then(m => ({ default: m.DarwinQualifyingLanguage })));
 
 // Loading fallback for Darwin components
 const DarwinLoadingFallback = () => (
@@ -539,6 +547,43 @@ const ClaimDetail = () => {
                 
                 {/* AI Claim Timeline */}
                 <ClaimTimeline claimId={id || ""} claim={claim} />
+                
+                {/* PA/NJ Brelly-Inspired Tools */}
+                <div className="space-y-4 pt-6 border-t">
+                  <h3 className="text-lg font-medium flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    PA/NJ Regulatory Tools
+                  </h3>
+                  
+                  {/* State Law Advisor */}
+                  <DarwinStateLawAdvisor claimId={claim.id} claim={claim} />
+                  
+                  {/* Carrier Deadline Monitor */}
+                  <DarwinCarrierDeadlineMonitor claimId={claim.id} claim={claim} />
+                  
+                  {/* Communications Diary */}
+                  <DarwinCommunicationsDiary claimId={claim.id} claim={claim} />
+                  
+                  {/* Qualifying Language Generator */}
+                  <DarwinQualifyingLanguage claimId={claim.id} claim={claim} />
+                </div>
+                
+                {/* Contents & Loss Tracking */}
+                <div className="space-y-4 pt-6 border-t">
+                  <h3 className="text-lg font-medium flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    Contents & Hidden Loss Tools
+                  </h3>
+                  
+                  {/* Loss of Use Calculator */}
+                  <DarwinLossOfUseCalculator claimId={claim.id} claim={claim} />
+                  
+                  {/* Home Inventory Builder */}
+                  <DarwinHomeInventoryBuilder claimId={claim.id} claim={claim} />
+                  
+                  {/* Hidden Loss Detective */}
+                  <DarwinHiddenLossDetective claimId={claim.id} claim={claim} />
+                </div>
                 
                 {/* AI Automation Settings */}
                 <ClaimAutomationSettings claimId={id!} />

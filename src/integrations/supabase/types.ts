@@ -617,6 +617,87 @@ export type Database = {
           },
         ]
       }
+      claim_carrier_deadlines: {
+        Row: {
+          bad_faith_potential: boolean | null
+          carrier_response_date: string | null
+          carrier_response_summary: string | null
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          days_overdue: number | null
+          deadline_date: string
+          deadline_type: string
+          extension_reason: string | null
+          extension_requested: boolean | null
+          id: string
+          is_business_days: boolean | null
+          notes: string | null
+          regulation_id: string | null
+          status: string | null
+          trigger_date: string
+          trigger_description: string
+          updated_at: string
+        }
+        Insert: {
+          bad_faith_potential?: boolean | null
+          carrier_response_date?: string | null
+          carrier_response_summary?: string | null
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          days_overdue?: number | null
+          deadline_date: string
+          deadline_type: string
+          extension_reason?: string | null
+          extension_requested?: boolean | null
+          id?: string
+          is_business_days?: boolean | null
+          notes?: string | null
+          regulation_id?: string | null
+          status?: string | null
+          trigger_date: string
+          trigger_description: string
+          updated_at?: string
+        }
+        Update: {
+          bad_faith_potential?: boolean | null
+          carrier_response_date?: string | null
+          carrier_response_summary?: string | null
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          days_overdue?: number | null
+          deadline_date?: string
+          deadline_type?: string
+          extension_reason?: string | null
+          extension_requested?: boolean | null
+          id?: string
+          is_business_days?: boolean | null
+          notes?: string | null
+          regulation_id?: string | null
+          status?: string | null
+          trigger_date?: string
+          trigger_description?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_carrier_deadlines_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_carrier_deadlines_regulation_id_fkey"
+            columns: ["regulation_id"]
+            isOneToOne: false
+            referencedRelation: "state_insurance_regulations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_checks: {
         Row: {
           amount: number
@@ -660,6 +741,83 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "claim_checks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_communications_diary: {
+        Row: {
+          claim_id: string
+          communication_date: string
+          communication_type: string
+          contact_company: string | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          contact_title: string | null
+          created_at: string
+          created_by: string | null
+          deadlines_mentioned: string | null
+          direction: string
+          employee_id: string | null
+          follow_up_date: string | null
+          follow_up_required: boolean | null
+          id: string
+          promises_made: string | null
+          recording_file_path: string | null
+          summary: string
+          updated_at: string
+        }
+        Insert: {
+          claim_id: string
+          communication_date?: string
+          communication_type: string
+          contact_company?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          contact_title?: string | null
+          created_at?: string
+          created_by?: string | null
+          deadlines_mentioned?: string | null
+          direction: string
+          employee_id?: string | null
+          follow_up_date?: string | null
+          follow_up_required?: boolean | null
+          id?: string
+          promises_made?: string | null
+          recording_file_path?: string | null
+          summary: string
+          updated_at?: string
+        }
+        Update: {
+          claim_id?: string
+          communication_date?: string
+          communication_type?: string
+          contact_company?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          contact_title?: string | null
+          created_at?: string
+          created_by?: string | null
+          deadlines_mentioned?: string | null
+          direction?: string
+          employee_id?: string | null
+          follow_up_date?: string | null
+          follow_up_required?: boolean | null
+          id?: string
+          promises_made?: string | null
+          recording_file_path?: string | null
+          summary?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_communications_diary_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
@@ -985,6 +1143,229 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "claim_folders_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_hidden_loss_checks: {
+        Row: {
+          checked_at: string | null
+          checked_by: string | null
+          checklist_item_id: string | null
+          claim_id: string
+          created_at: string
+          custom_item_name: string | null
+          damage_description: string | null
+          estimated_cost: number | null
+          id: string
+          is_checked: boolean | null
+          is_damage_found: boolean | null
+          notes: string | null
+          photo_file_paths: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          checked_at?: string | null
+          checked_by?: string | null
+          checklist_item_id?: string | null
+          claim_id: string
+          created_at?: string
+          custom_item_name?: string | null
+          damage_description?: string | null
+          estimated_cost?: number | null
+          id?: string
+          is_checked?: boolean | null
+          is_damage_found?: boolean | null
+          notes?: string | null
+          photo_file_paths?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          checked_at?: string | null
+          checked_by?: string | null
+          checklist_item_id?: string | null
+          claim_id?: string
+          created_at?: string
+          custom_item_name?: string | null
+          damage_description?: string | null
+          estimated_cost?: number | null
+          id?: string
+          is_checked?: boolean | null
+          is_damage_found?: boolean | null
+          notes?: string | null
+          photo_file_paths?: string[] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_hidden_loss_checks_checklist_item_id_fkey"
+            columns: ["checklist_item_id"]
+            isOneToOne: false
+            referencedRelation: "hidden_loss_checklist_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_hidden_loss_checks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_home_inventory: {
+        Row: {
+          actual_cash_value: number | null
+          claim_id: string
+          condition_before_loss: string | null
+          created_at: string
+          created_by: string | null
+          damage_description: string | null
+          id: string
+          is_total_loss: boolean | null
+          item_description: string | null
+          item_name: string
+          manufacturer: string | null
+          model_number: string | null
+          notes: string | null
+          original_purchase_date: string | null
+          original_purchase_price: number | null
+          photo_file_paths: string[] | null
+          quantity: number | null
+          receipt_file_path: string | null
+          replacement_cost: number | null
+          replacement_link: string | null
+          room_name: string
+          serial_number: string | null
+          updated_at: string
+        }
+        Insert: {
+          actual_cash_value?: number | null
+          claim_id: string
+          condition_before_loss?: string | null
+          created_at?: string
+          created_by?: string | null
+          damage_description?: string | null
+          id?: string
+          is_total_loss?: boolean | null
+          item_description?: string | null
+          item_name: string
+          manufacturer?: string | null
+          model_number?: string | null
+          notes?: string | null
+          original_purchase_date?: string | null
+          original_purchase_price?: number | null
+          photo_file_paths?: string[] | null
+          quantity?: number | null
+          receipt_file_path?: string | null
+          replacement_cost?: number | null
+          replacement_link?: string | null
+          room_name: string
+          serial_number?: string | null
+          updated_at?: string
+        }
+        Update: {
+          actual_cash_value?: number | null
+          claim_id?: string
+          condition_before_loss?: string | null
+          created_at?: string
+          created_by?: string | null
+          damage_description?: string | null
+          id?: string
+          is_total_loss?: boolean | null
+          item_description?: string | null
+          item_name?: string
+          manufacturer?: string | null
+          model_number?: string | null
+          notes?: string | null
+          original_purchase_date?: string | null
+          original_purchase_price?: number | null
+          photo_file_paths?: string[] | null
+          quantity?: number | null
+          receipt_file_path?: string | null
+          replacement_cost?: number | null
+          replacement_link?: string | null
+          room_name?: string
+          serial_number?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_home_inventory_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_loss_of_use_expenses: {
+        Row: {
+          amount: number
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          denial_reason: string | null
+          description: string
+          expense_category: string
+          expense_date: string
+          id: string
+          is_reimbursed: boolean | null
+          is_submitted_to_insurer: boolean | null
+          notes: string | null
+          receipt_file_path: string | null
+          reimbursed_amount: number | null
+          reimbursed_date: string | null
+          submitted_date: string | null
+          updated_at: string
+          vendor_name: string | null
+        }
+        Insert: {
+          amount: number
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          denial_reason?: string | null
+          description: string
+          expense_category: string
+          expense_date: string
+          id?: string
+          is_reimbursed?: boolean | null
+          is_submitted_to_insurer?: boolean | null
+          notes?: string | null
+          receipt_file_path?: string | null
+          reimbursed_amount?: number | null
+          reimbursed_date?: string | null
+          submitted_date?: string | null
+          updated_at?: string
+          vendor_name?: string | null
+        }
+        Update: {
+          amount?: number
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          denial_reason?: string | null
+          description?: string
+          expense_category?: string
+          expense_date?: string
+          id?: string
+          is_reimbursed?: boolean | null
+          is_submitted_to_insurer?: boolean | null
+          notes?: string | null
+          receipt_file_path?: string | null
+          reimbursed_amount?: number | null
+          reimbursed_date?: string | null
+          submitted_date?: string | null
+          updated_at?: string
+          vendor_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_loss_of_use_expenses_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
@@ -2164,6 +2545,48 @@ export type Database = {
           },
         ]
       }
+      hidden_loss_checklist_items: {
+        Row: {
+          category: string
+          common_locations: string | null
+          created_at: string
+          description: string
+          detection_tips: string | null
+          display_order: number | null
+          id: string
+          is_active: boolean | null
+          item_name: string
+          loss_type: string
+          typical_cost_range: string | null
+        }
+        Insert: {
+          category: string
+          common_locations?: string | null
+          created_at?: string
+          description: string
+          detection_tips?: string | null
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          item_name: string
+          loss_type: string
+          typical_cost_range?: string | null
+        }
+        Update: {
+          category?: string
+          common_locations?: string | null
+          created_at?: string
+          description?: string
+          detection_tips?: string | null
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          item_name?: string
+          loss_type?: string
+          typical_cost_range?: string | null
+        }
+        Relationships: []
+      }
       inspections: {
         Row: {
           claim_id: string
@@ -2840,6 +3263,39 @@ export type Database = {
         }
         Relationships: []
       }
+      qualifying_language_templates: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean | null
+          state_specific: string | null
+          template_name: string
+          template_text: string
+          template_type: string
+          usage_context: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          state_specific?: string | null
+          template_name: string
+          template_text: string
+          template_type: string
+          usage_context?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          state_specific?: string | null
+          template_name?: string
+          template_text?: string
+          template_type?: string
+          usage_context?: string | null
+        }
+        Relationships: []
+      }
       referrers: {
         Row: {
           company: string | null
@@ -3184,6 +3640,48 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      state_insurance_regulations: {
+        Row: {
+          consequence_description: string | null
+          created_at: string
+          deadline_days: number | null
+          description: string
+          id: string
+          regulation_citation: string
+          regulation_title: string
+          regulation_type: string
+          state_code: string
+          state_name: string
+          updated_at: string
+        }
+        Insert: {
+          consequence_description?: string | null
+          created_at?: string
+          deadline_days?: number | null
+          description: string
+          id?: string
+          regulation_citation: string
+          regulation_title: string
+          regulation_type: string
+          state_code: string
+          state_name: string
+          updated_at?: string
+        }
+        Update: {
+          consequence_description?: string | null
+          created_at?: string
+          deadline_days?: number | null
+          description?: string
+          id?: string
+          regulation_citation?: string
+          regulation_title?: string
+          regulation_type?: string
+          state_code?: string
+          state_name?: string
           updated_at?: string
         }
         Relationships: []
