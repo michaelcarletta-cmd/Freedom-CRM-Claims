@@ -119,12 +119,3 @@ verify_jwt = true
 
 [functions.sync-claim-to-partner]
 verify_jwt = true
-
-[functions.clawdbot-webhook]
-verify_jwt = false
-
-[functions.clawdbot-notifications]
-verify_jwt = false
-
-[functions.clawdbot-mcp]
-verify_jwt = false
