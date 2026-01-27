@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClaimStatusSelect } from "@/components/ClaimStatusSelect";
-import { ConstructionStatusSelect } from "@/components/ConstructionStatusSelect";
+
 import { ClaimOverview } from "@/components/claim-detail/ClaimOverview";
 import { ClaimCommunicationTab } from "@/components/claim-detail/ClaimCommunicationTab";
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
@@ -229,27 +229,6 @@ const ClaimDetail = () => {
                 <span className="px-3 py-1 text-sm rounded-none bg-primary text-primary-foreground w-fit">
                   {claim.status}
                 </span>
-              )}
-              {/* Construction status for workspace claims - editable by workspace partners */}
-              {isWorkspaceClaim && isStaffOrAdmin && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Construction:</span>
-                    <ConstructionStatusSelect 
-                      claimId={claim.id}
-                      currentStatus={claim.construction_status}
-                      onStatusChange={handleConstructionStatusChange}
-                    />
-                  </div>
-                  {claim.partner_construction_status && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Partner:</span>
-                      <span className="px-2 py-1 text-xs rounded-sm bg-muted text-muted-foreground">
-                        {claim.partner_construction_status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                      </span>
-                    </div>
-                  )}
-                </div>
               )}
             </div>
             <p className="text-muted-foreground mt-1 font-medium">{claim.policyholder_name}</p>
