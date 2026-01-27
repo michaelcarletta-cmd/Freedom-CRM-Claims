@@ -473,8 +473,12 @@ const ClaimDetail = () => {
         </div>
       )}
       
-      {/* Floating AI Assistant Button */}
-      <ClaimsAIAssistant />
+      {/* Floating AI Assistant Button - claim-aware */}
+      <ClaimsAIAssistant 
+        claimId={claim.id} 
+        claimNumber={claim.claim_number} 
+        policyholderName={claim.policyholder_name}
+      />
     </div>
   );
 };
