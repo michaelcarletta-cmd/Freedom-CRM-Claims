@@ -259,19 +259,19 @@ Respond with JSON format:
 
   const getStatusColor = (status: Milestone["status"]) => {
     switch (status) {
-      case "completed": return "text-green-600 bg-green-100";
-      case "overdue": return "text-red-600 bg-red-100";
-      case "upcoming": return "text-amber-600 bg-amber-100";
-      default: return "text-blue-600 bg-blue-100";
+      case "completed": return "text-success bg-success/20";
+      case "overdue": return "text-destructive bg-destructive/20";
+      case "upcoming": return "text-warning bg-warning/20";
+      default: return "text-primary bg-primary/20";
     }
   };
 
   const getStatusIcon = (status: Milestone["status"]) => {
     switch (status) {
-      case "completed": return <CheckCircle2 className="h-4 w-4 text-green-600" />;
-      case "overdue": return <AlertTriangle className="h-4 w-4 text-red-600" />;
-      case "upcoming": return <Clock className="h-4 w-4 text-amber-600" />;
-      default: return <Clock className="h-4 w-4 text-blue-600" />;
+      case "completed": return <CheckCircle2 className="h-4 w-4 text-success" />;
+      case "overdue": return <AlertTriangle className="h-4 w-4 text-destructive" />;
+      case "upcoming": return <Clock className="h-4 w-4 text-warning" />;
+      default: return <Clock className="h-4 w-4 text-primary" />;
     }
   };
 
@@ -292,21 +292,21 @@ Respond with JSON format:
     <div className="space-y-4">
       {/* Summary Stats */}
       <div className="grid grid-cols-4 gap-2">
-        <div className="flex items-center gap-2 p-2 rounded-md bg-green-50 dark:bg-green-950">
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
-          <span className="text-sm font-medium">{completedCount} Done</span>
+        <div className="flex items-center gap-2 p-2 rounded-md bg-success/10 border border-success/20">
+          <CheckCircle2 className="h-4 w-4 text-success" />
+          <span className="text-sm font-medium text-foreground">{completedCount} Done</span>
         </div>
-        <div className="flex items-center gap-2 p-2 rounded-md bg-blue-50 dark:bg-blue-950">
-          <Clock className="h-4 w-4 text-blue-600" />
-          <span className="text-sm font-medium">{pendingCount} Pending</span>
+        <div className="flex items-center gap-2 p-2 rounded-md bg-primary/10 border border-primary/20">
+          <Clock className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">{pendingCount} Pending</span>
         </div>
-        <div className="flex items-center gap-2 p-2 rounded-md bg-amber-50 dark:bg-amber-950">
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
-          <span className="text-sm font-medium">{upcomingCount} Soon</span>
+        <div className="flex items-center gap-2 p-2 rounded-md bg-warning/10 border border-warning/20">
+          <AlertTriangle className="h-4 w-4 text-warning" />
+          <span className="text-sm font-medium text-foreground">{upcomingCount} Soon</span>
         </div>
-        <div className="flex items-center gap-2 p-2 rounded-md bg-red-50 dark:bg-red-950">
-          <AlertTriangle className="h-4 w-4 text-red-600" />
-          <span className="text-sm font-medium">{overdueCount} Overdue</span>
+        <div className="flex items-center gap-2 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+          <AlertTriangle className="h-4 w-4 text-destructive" />
+          <span className="text-sm font-medium text-foreground">{overdueCount} Overdue</span>
         </div>
       </div>
 

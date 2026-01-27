@@ -3,9 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { PlusCircle, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History } from "lucide-react";
+import { PlusCircle, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen } from "lucide-react";
+import { useClaimFiles } from "@/hooks/useClaimFiles";
+import { ClaimFileSelector } from "./ClaimFileSelector";
 
 interface DarwinSupplementGeneratorProps {
   claimId: string;
@@ -19,11 +22,16 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
   const [loading, setLoading] = useState(false);
   const [ourEstimatePdf, setOurEstimatePdf] = useState<File | null>(null);
   const [insuranceEstimatePdf, setInsuranceEstimatePdf] = useState<File | null>(null);
+  const [selectedOurEstimateId, setSelectedOurEstimateId] = useState<string | null>(null);
+  const [selectedInsuranceEstimateId, setSelectedInsuranceEstimateId] = useState<string | null>(null);
   const [lastAnalyzed, setLastAnalyzed] = useState<Date | null>(null);
   const [lastFileName, setLastFileName] = useState<string | null>(null);
+  const [inputMethod, setInputMethod] = useState<string>("claim-files");
   const ourEstimateInputRef = useRef<HTMLInputElement>(null);
   const insuranceEstimateInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const { files: claimFiles, loading: loadingFiles, downloadFileAsBase64 } = useClaimFiles(claimId);
 
   // Load previous analysis on mount
   useEffect(() => {
@@ -68,8 +76,10 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
       }
       if (type === 'our') {
         setOurEstimatePdf(file);
+        setSelectedOurEstimateId(null);
       } else {
         setInsuranceEstimatePdf(file);
+        setSelectedInsuranceEstimateId(null);
       }
     }
   };
@@ -103,13 +113,30 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
     try {
       let ourEstimateContent: string | undefined;
       let insuranceEstimateContent: string | undefined;
-      
-      if (ourEstimatePdf) {
-        ourEstimateContent = await convertFileToBase64(ourEstimatePdf);
-      }
-      
-      if (insuranceEstimatePdf) {
-        insuranceEstimateContent = await convertFileToBase64(insuranceEstimatePdf);
+      let ourFileName: string | undefined;
+      let insuranceFileName: string | undefined;
+
+      if (inputMethod === "claim-files") {
+        const ourFile = claimFiles.find(f => f.id === selectedOurEstimateId);
+        const insuranceFile = claimFiles.find(f => f.id === selectedInsuranceEstimateId);
+
+        if (ourFile) {
+          ourEstimateContent = await downloadFileAsBase64(ourFile.file_path) || undefined;
+          ourFileName = ourFile.file_name;
+        }
+        if (insuranceFile) {
+          insuranceEstimateContent = await downloadFileAsBase64(insuranceFile.file_path) || undefined;
+          insuranceFileName = insuranceFile.file_name;
+        }
+      } else {
+        if (ourEstimatePdf) {
+          ourEstimateContent = await convertFileToBase64(ourEstimatePdf);
+          ourFileName = ourEstimatePdf.name;
+        }
+        if (insuranceEstimatePdf) {
+          insuranceEstimateContent = await convertFileToBase64(insuranceEstimatePdf);
+          insuranceFileName = insuranceEstimatePdf.name;
+        }
       }
 
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
@@ -117,14 +144,14 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
           claimId,
           analysisType: 'supplement',
           content: additionalNotes,
-          pdfContent: insuranceEstimateContent, // Keep backward compatibility
-          pdfFileName: insuranceEstimatePdf?.name,
+          pdfContent: insuranceEstimateContent,
+          pdfFileName: insuranceFileName,
           additionalContext: { 
             existingEstimate,
             ourEstimatePdf: ourEstimateContent,
-            ourEstimatePdfName: ourEstimatePdf?.name,
+            ourEstimatePdfName: ourFileName,
             insuranceEstimatePdf: insuranceEstimateContent,
-            insuranceEstimatePdfName: insuranceEstimatePdf?.name
+            insuranceEstimatePdfName: insuranceFileName
           }
         }
       });
@@ -137,7 +164,7 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
 
       setAnalysis(data.result);
       setLastAnalyzed(new Date());
-      const fileNames = [ourEstimatePdf?.name, insuranceEstimatePdf?.name].filter(Boolean).join(' vs ');
+      const fileNames = [ourFileName, insuranceFileName].filter(Boolean).join(' vs ');
       setLastFileName(fileNames || null);
 
       // Save the analysis result
@@ -186,6 +213,9 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
     }
   };
 
+  const ourEstimateFile = claimFiles.find(f => f.id === selectedOurEstimateId);
+  const insuranceEstimateFile = claimFiles.find(f => f.id === selectedInsuranceEstimateId);
+
   return (
     <Card>
       <CardHeader>
@@ -206,87 +236,136 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Our Estimate (PDF)</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
-                accept=".pdf"
-                onChange={(e) => handleFileChange(e, 'our')}
-                ref={ourEstimateInputRef}
-                className="hidden"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => ourEstimateInputRef.current?.click()}
-                className="flex items-center gap-2"
-              >
-                <Upload className="h-4 w-4" />
-                {ourEstimatePdf ? 'Change' : 'Upload'}
-              </Button>
-              {ourEstimatePdf && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md flex-1">
-                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <span className="text-sm truncate">{ourEstimatePdf.name}</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => clearFile('our')}
-                    className="h-6 w-6 p-0 ml-auto flex-shrink-0"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Your estimate/scope of work
-            </p>
-          </div>
+        <Tabs value={inputMethod} onValueChange={setInputMethod}>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="claim-files" className="gap-2">
+              <FolderOpen className="h-4 w-4" />
+              Claim Files
+            </TabsTrigger>
+            <TabsTrigger value="upload" className="gap-2">
+              <Upload className="h-4 w-4" />
+              Upload
+            </TabsTrigger>
+          </TabsList>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Insurance Estimate (PDF)</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
-                accept=".pdf"
-                onChange={(e) => handleFileChange(e, 'insurance')}
-                ref={insuranceEstimateInputRef}
-                className="hidden"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => insuranceEstimateInputRef.current?.click()}
-                className="flex items-center gap-2"
-              >
-                <Upload className="h-4 w-4" />
-                {insuranceEstimatePdf ? 'Change' : 'Upload'}
-              </Button>
-              {insuranceEstimatePdf && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md flex-1">
-                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <span className="text-sm truncate">{insuranceEstimatePdf.name}</span>
+          <TabsContent value="claim-files" className="space-y-4 mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Our Estimate</label>
+                <ClaimFileSelector
+                  files={claimFiles}
+                  loading={loadingFiles}
+                  selectedFileId={selectedOurEstimateId}
+                  onSelectFile={(file) => {
+                    setSelectedOurEstimateId(file.id);
+                    setOurEstimatePdf(null);
+                  }}
+                  height="150px"
+                  emptyMessage="No PDFs found"
+                />
+                {ourEstimateFile && (
+                  <p className="text-xs text-primary">Selected: {ourEstimateFile.file_name}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Insurance Estimate</label>
+                <ClaimFileSelector
+                  files={claimFiles}
+                  loading={loadingFiles}
+                  selectedFileId={selectedInsuranceEstimateId}
+                  onSelectFile={(file) => {
+                    setSelectedInsuranceEstimateId(file.id);
+                    setInsuranceEstimatePdf(null);
+                  }}
+                  height="150px"
+                  emptyMessage="No PDFs found"
+                />
+                {insuranceEstimateFile && (
+                  <p className="text-xs text-primary">Selected: {insuranceEstimateFile.file_name}</p>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="upload" className="mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Our Estimate (PDF)</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={(e) => handleFileChange(e, 'our')}
+                    ref={ourEstimateInputRef}
+                    className="hidden"
+                  />
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => clearFile('insurance')}
-                    className="h-6 w-6 p-0 ml-auto flex-shrink-0"
+                    variant="outline"
+                    onClick={() => ourEstimateInputRef.current?.click()}
+                    className="flex items-center gap-2"
                   >
-                    <X className="h-4 w-4" />
+                    <Upload className="h-4 w-4" />
+                    {ourEstimatePdf ? 'Change' : 'Upload'}
                   </Button>
+                  {ourEstimatePdf && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md flex-1">
+                      <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-sm truncate">{ourEstimatePdf.name}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => clearFile('our')}
+                        className="h-6 w-6 p-0 ml-auto flex-shrink-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Insurance Estimate (PDF)</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={(e) => handleFileChange(e, 'insurance')}
+                    ref={insuranceEstimateInputRef}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => insuranceEstimateInputRef.current?.click()}
+                    className="flex items-center gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {insuranceEstimatePdf ? 'Change' : 'Upload'}
+                  </Button>
+                  {insuranceEstimatePdf && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md flex-1">
+                      <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-sm truncate">{insuranceEstimatePdf.name}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => clearFile('insurance')}
+                        className="h-6 w-6 p-0 ml-auto flex-shrink-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Carrier's estimate to compare against
-            </p>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
 
         <div className="space-y-2">
           <label className="text-sm font-medium">Or Paste Estimate Items (optional)</label>
