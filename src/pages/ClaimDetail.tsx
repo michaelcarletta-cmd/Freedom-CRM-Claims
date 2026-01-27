@@ -21,6 +21,7 @@ import { DeleteClaimDialog } from "@/components/claim-detail/DeleteClaimDialog";
 import { NotifyPortalDialog } from "@/components/claim-detail/NotifyPortalDialog";
 import { ShareClaimDialog } from "@/components/claim-detail/ShareClaimDialog";
 import { ClaimTabsDropdown } from "@/components/claim-detail/ClaimTabsDropdown";
+import { ClaimsAIAssistant } from "@/components/ClaimsAIAssistant";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ArrowLeft, Edit, Trash2, Bell, Brain, Share2, Loader2 } from "lucide-react";
@@ -471,6 +472,9 @@ const ClaimDetail = () => {
           </div>
         </div>
       )}
+      
+      {/* Floating AI Assistant Button */}
+      <ClaimsAIAssistant />
     </div>
   );
 };
