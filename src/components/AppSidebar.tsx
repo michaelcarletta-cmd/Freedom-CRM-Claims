@@ -1,4 +1,4 @@
-import { Home, FileText, CheckSquare, Inbox, Users, Network, DollarSign, FileStack, Settings, LogOut } from "lucide-react";
+import { Home, FileText, CheckSquare, Inbox, Users, Network, DollarSign, FileStack, Settings, LogOut, MessageCircle } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import logo from "@/assets/freedom-claims-logo.svg";
 import { useAuth } from "@/hooks/useAuth";
@@ -22,6 +22,7 @@ const mainItems = [
   { title: "Claims", url: "/claims", icon: FileText },
   { title: "Tasks", url: "/tasks", icon: CheckSquare },
   { title: "Inbox", url: "/inbox", icon: Inbox },
+  { title: "Chat", url: "/chat", icon: MessageCircle },
   { title: "Clients", url: "/clients", icon: Users },
   { title: "Networking", url: "/networking", icon: Network },
   { title: "Sales", url: "/sales", icon: DollarSign },
