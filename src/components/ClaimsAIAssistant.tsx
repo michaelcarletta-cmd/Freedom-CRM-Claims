@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bot, Send, Loader2, Sparkles, X } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,12 +16,25 @@ interface AiMessage {
   timestamp: Date;
 }
 
-export const ClaimsAIAssistant = () => {
+interface ClaimsAIAssistantProps {
+  claimId?: string;
+  claimNumber?: string;
+  policyholderName?: string;
+}
+
+export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: ClaimsAIAssistantProps) => {
   const [open, setOpen] = useState(false);
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const queryClient = useQueryClient();
+
+  // Clear messages when switching between claims
+  useEffect(() => {
+    setAiMessages([]);
+  }, [claimId]);
+
+  const isClaimContext = !!claimId;
 
   const handleAskAI = async () => {
     if (!aiQuestion.trim()) return;
@@ -46,7 +59,8 @@ export const ClaimsAIAssistant = () => {
         body: {
           question: userMessage.content,
           messages: conversationHistory,
-          mode: "general",
+          mode: isClaimContext ? "claim" : "general",
+          claimId: claimId || undefined,
         },
       });
 
@@ -56,6 +70,10 @@ export const ClaimsAIAssistant = () => {
       if (data.tasksCreated && data.tasksCreated.length > 0) {
         const taskCount = data.tasksCreated.length;
         toast.success(`${taskCount} task${taskCount > 1 ? 's' : ''} created successfully`);
+        // Invalidate tasks query to refresh the list
+        if (claimId) {
+          queryClient.invalidateQueries({ queryKey: ["claim-tasks", claimId] });
+        }
       }
 
       // Check if bulk operations were performed (detect by response content)
@@ -97,6 +115,72 @@ export const ClaimsAIAssistant = () => {
     setAiMessages([]);
   };
 
+  const getPlaceholder = () => {
+    if (isClaimContext) {
+      return `Ask Darwin about ${claimNumber || 'this claim'}...`;
+    }
+    return "Ask about claims, follow-ups, strategies...";
+  };
+
+  const getTitle = () => {
+    if (isClaimContext) {
+      return "Darwin AI";
+    }
+    return "Claims AI Assistant";
+  };
+
+  const getIcon = () => {
+    if (isClaimContext) {
+      return <Brain className="h-5 w-5 text-primary" />;
+    }
+    return <Bot className="h-5 w-5 text-primary" />;
+  };
+
+  const getHelpContent = () => {
+    if (isClaimContext) {
+      return (
+        <Card className="p-6 bg-primary/5 border-primary/20 max-w-sm">
+          <div className="text-center space-y-3">
+            <Brain className="h-12 w-12 text-primary mx-auto" />
+            <h3 className="font-semibold">Darwin - Your Claim Copilot</h3>
+            <p className="text-sm text-muted-foreground">
+              I have full context on <strong>{policyholderName || claimNumber}</strong>
+            </p>
+            <ul className="text-sm text-muted-foreground space-y-1 text-left">
+              <li>• Summarize this claim's status</li>
+              <li>• Draft carrier communications</li>
+              <li>• Analyze settlement details</li>
+              <li>• Suggest next steps</li>
+              <li>• Create tasks for this claim</li>
+              <li>• Answer insurance questions</li>
+            </ul>
+          </div>
+        </Card>
+      );
+    }
+
+    return (
+      <Card className="p-6 bg-primary/5 border-primary/20 max-w-sm">
+        <div className="text-center space-y-3">
+          <Bot className="h-12 w-12 text-primary mx-auto" />
+          <h3 className="font-semibold">Your Claims Assistant</h3>
+          <p className="text-sm text-muted-foreground">
+            I can help you with:
+          </p>
+          <ul className="text-sm text-muted-foreground space-y-1 text-left">
+            <li>• Draft follow-up communications</li>
+            <li>• Summarize claim statuses</li>
+            <li>• <strong>Create tasks with due dates</strong></li>
+            <li>• <strong>Bulk update statuses</strong></li>
+            <li>• <strong>Bulk close/reopen claims</strong></li>
+            <li>• <strong>Bulk assign staff</strong></li>
+            <li>• Explain insurance terms & regulations</li>
+          </ul>
+        </div>
+      </Card>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -104,15 +188,20 @@ export const ClaimsAIAssistant = () => {
           className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50"
           size="icon"
         >
-          <Sparkles className="h-6 w-6" />
+          {isClaimContext ? <Brain className="h-6 w-6" /> : <Sparkles className="h-6 w-6" />}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px] h-[600px] flex flex-col p-0">
         <DialogHeader className="px-6 py-4 border-b">
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
-              <Bot className="h-5 w-5 text-primary" />
-              Claims AI Assistant
+              {getIcon()}
+              {getTitle()}
+              {isClaimContext && claimNumber && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({claimNumber})
+                </span>
+              )}
             </DialogTitle>
             {aiMessages.length > 0 && (
               <Button variant="ghost" size="sm" onClick={clearChat}>
@@ -125,24 +214,7 @@ export const ClaimsAIAssistant = () => {
         <div className="flex-1 flex flex-col overflow-hidden">
           {aiMessages.length === 0 ? (
             <div className="flex-1 flex items-center justify-center p-6">
-              <Card className="p-6 bg-primary/5 border-primary/20 max-w-sm">
-                <div className="text-center space-y-3">
-                  <Bot className="h-12 w-12 text-primary mx-auto" />
-                  <h3 className="font-semibold">Your Claims Assistant</h3>
-                  <p className="text-sm text-muted-foreground">
-                    I can help you with:
-                  </p>
-                  <ul className="text-sm text-muted-foreground space-y-1 text-left">
-                    <li>• Draft follow-up communications</li>
-                    <li>• Summarize claim statuses</li>
-                    <li>• <strong>Create tasks with due dates</strong></li>
-                    <li>• <strong>Bulk update statuses</strong></li>
-                    <li>• <strong>Bulk close/reopen claims</strong></li>
-                    <li>• <strong>Bulk assign staff</strong></li>
-                    <li>• Explain insurance terms & regulations</li>
-                  </ul>
-                </div>
-              </Card>
+              {getHelpContent()}
             </div>
           ) : (
             <ScrollArea className="flex-1 p-4">
@@ -162,7 +234,7 @@ export const ClaimsAIAssistant = () => {
                             : "bg-muted"
                         }
                       >
-                        {message.role === "user" ? "U" : <Bot className="h-4 w-4" />}
+                        {message.role === "user" ? "U" : isClaimContext ? <Brain className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                       </AvatarFallback>
                     </Avatar>
                     <div
@@ -180,7 +252,7 @@ export const ClaimsAIAssistant = () => {
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8">
                       <AvatarFallback className="bg-muted">
-                        <Bot className="h-4 w-4" />
+                        {isClaimContext ? <Brain className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 p-3 rounded-lg bg-muted mr-8">
@@ -195,7 +267,7 @@ export const ClaimsAIAssistant = () => {
           <div className="p-4 border-t">
             <div className="flex gap-2">
               <Textarea
-                placeholder="Ask about claims, follow-ups, strategies..."
+                placeholder={getPlaceholder()}
                 value={aiQuestion}
                 onChange={(e) => setAiQuestion(e.target.value)}
                 onKeyDown={handleKeyDown}
