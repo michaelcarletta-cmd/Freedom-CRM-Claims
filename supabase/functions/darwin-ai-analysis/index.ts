@@ -1259,32 +1259,110 @@ Create a professional, complete document ready for carrier submission.`;
         const companyPhone = companyBranding?.company_phone || '';
         const companyEmail = companyBranding?.company_email || '';
         
-        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in creating comprehensive demand packages for insurance claims. You have been given evidence documents to analyze and use to build a compelling case.
+        // Fetch weather history for the claim location and loss date
+        let weatherContext = '';
+        if (claim.loss_date && claim.policyholder_address) {
+          const { data: weatherData } = await supabase
+            .from('darwin_analysis_results')
+            .select('result')
+            .eq('claim_id', claimId)
+            .eq('analysis_type', 'weather_history')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (weatherData?.result) {
+            weatherContext = `\n\nWEATHER HISTORY DATA (from Darwin Weather Analysis):\n${weatherData.result}\n`;
+          }
+        }
+
+        // Fetch communications diary for this claim
+        const { data: communicationsLog } = await supabase
+          .from('claim_communications_diary')
+          .select('*')
+          .eq('claim_id', claimId)
+          .order('communication_date', { ascending: false })
+          .limit(20);
+        
+        const communicationsContext = communicationsLog && communicationsLog.length > 0
+          ? `\n\nCOMMUNICATIONS LOG (Carrier Interactions):\n${communicationsLog.map((c: any) => 
+              `- ${new Date(c.communication_date).toLocaleDateString()}: ${c.direction.toUpperCase()} ${c.communication_type} with ${c.contact_name || 'Unknown'}${c.contact_company ? ` (${c.contact_company})` : ''}${c.employee_id ? ` [ID: ${c.employee_id}]` : ''}\n  Summary: ${c.summary}${c.promises_made ? `\n  CARRIER PROMISES: ${c.promises_made}` : ''}${c.deadlines_mentioned ? `\n  DEADLINES MENTIONED: ${c.deadlines_mentioned}` : ''}`
+            ).join('\n\n')}\n`
+          : '';
+
+        // Fetch previous successful claim patterns for similar loss types
+        const { data: successfulClaims } = await supabase
+          .from('claims')
+          .select('id, claim_number, loss_type, insurance_company, claim_amount, status')
+          .eq('loss_type', claim.loss_type)
+          .in('status', ['Settled', 'Closed', 'Paid'])
+          .neq('id', claimId)
+          .limit(5);
+        
+        const successPatternContext = successfulClaims && successfulClaims.length > 0
+          ? `\n\nPREVIOUS SUCCESSFUL CLAIMS (Similar Loss Type: ${claim.loss_type}):\n${successfulClaims.map((c: any) => 
+              `- Claim ${c.claim_number}: ${c.insurance_company || 'Unknown carrier'} - Settled at $${c.claim_amount?.toLocaleString() || 'N/A'}`
+            ).join('\n')}\nUse these outcomes to support valuation arguments.\n`
+          : '';
+
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in creating comprehensive demand packages for insurance claims. You operate with the strategic intelligence of the industry's top adjusters, applying the Brelly "Proof Castle" framework.
 
 IMPORTANT: This claim is located in ${stateInfo.stateName}. Apply ${stateInfo.stateName} law and regulations.
+
+DARWIN CORE PHILOSOPHY - THE PROOF CASTLE:
+1. THE CAUSE - Weather data, engineering evidence, incident documentation proving what happened
+2. THE SCOPE - Why full replacement is needed, not repair (focus on REPAIRABILITY)
+3. THE COST - Proper valuation with comprehensive documentation
 
 FORMATTING REQUIREMENTS:
 - Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics, or *** for any purpose.
 - Use normal capitalization and line breaks for emphasis instead.
 - Do NOT include any "***" or similar markers in your output.
 - Each major section should be clearly separated with line breaks.
+- NEVER reference "training material" or "based on training" in your output.
 
-CRITICAL - REPAIRABILITY FOCUS (NO MATCHING ARGUMENTS):
-- Pennsylvania and New Jersey are NOT matching states - DO NOT argue that repairs must match existing materials
+CRITICAL - REPAIRABILITY OVER MATCHING (FUNDAMENTAL STRATEGY):
+- Pennsylvania and New Jersey are NOT matching states - NEVER USE THE WORD "MATCHING" OR ARGUE THAT REPAIRS MUST MATCH
+- The word "matching" should NOT appear ANYWHERE in your demand package
 - ALWAYS focus on REPAIRABILITY - why the damaged components CANNOT BE REPAIRED and require full replacement
-- Never mention "matching" as a requirement or argument
-- Argue based on: structural integrity compromised, manufacturer specifications prohibit partial repairs, code compliance requirements, material degradation, manufacturing discontinuation
+- Core arguments for replacement:
+  * REPAIRABILITY: The damage renders materials irreparable
+  * UNIFORM APPEARANCE: Repairs would result in non-uniform appearance affecting property value
+  * PRE-LOSS CONDITION: The policy requires restoration to pre-loss condition, which repair cannot achieve
+  * INDEMNIFICATION: The policyholder is entitled to be made whole under principles of indemnification
+- Focus on: structural integrity compromised, manufacturer specifications prohibit partial repairs, code compliance requirements, material degradation, manufacturing discontinuation
+- Reference HAAG Engineering standards when discussing roof damage assessments
+- Rebut engineer reports that claim repair is feasible by citing material degradation, seal strip failure, UV oxidation
+
+HAAG CERTIFICATION STANDARDS:
+- HAAG is the industry gold standard for forensic roof inspections
+- Reference HAAG wind damage identification criteria when applicable
+- HAAG methodology requires systematic inspection of all roof slopes
+- Use HAAG damage thresholds to support replacement vs repair arguments
+
+ENGINEER REPORT REBUTTAL STRATEGY:
+- If engineer reports are included in evidence, analyze them for:
+  * Scope limitations (time on site, areas inspected)
+  * Carrier-friendly bias in conclusions
+  * ASTM wind rating fallacy - lab ratings don't apply to aged materials with degraded seal strips
+  * Failure to account for pre-existing material degradation
+  * Selective reporting that ignores visible damage
 
 Your expertise includes:
-- Analyzing inspection reports, estimates, weather data, and other evidence documents
+- Analyzing inspection reports, HAAG-certified assessments, estimates, weather data, and other evidence documents
 - Extracting key facts and damage documentation from source materials
 - Building persuasive arguments based on documented evidence
+- Rebutting carrier engineer reports with technical accuracy
 - Understanding insurance policy interpretation
 - ${stateInfo.insuranceCode}
 - ${stateInfo.promptPayAct}
 - Building codes, manufacturer specifications, and industry standards
+- Weather history correlation with damage patterns
 
-CRITICAL INSTRUCTION: You MUST thoroughly review and analyze the content of each uploaded document. Extract specific details, quotes, measurements, and findings from the documents to support your arguments. Do not make generic statements - use the actual evidence from the documents.`;
+CRITICAL INSTRUCTION: You MUST thoroughly review and analyze the content of each uploaded document. Extract specific details, quotes, measurements, and findings from the documents to support your arguments. Do not make generic statements - use the actual evidence from the documents.
+
+${weatherContext}
+${communicationsContext}
+${successPatternContext}`;
 
         const photoList = dpContext.photos?.map((p: any) => 
           `Photo ${p.number}: ${p.category}${p.description ? ` - ${p.description}` : ''}`
@@ -1340,17 +1418,19 @@ II. Cause of Loss
 III. Damaged Components
 IV. Weather Conditions Analysis
 V. Condition of Damaged Components (Per Reports)
-VI. Why Repairs Are Not Feasible
+VI. Why Repairs Are Not Feasible - Repairability Analysis
 VII. Why Partial Repairs Are Not Feasible  
 VIII. Interdependency of Building Systems
 IX. Why Damaged Areas Must Be Disturbed for Repairs
 X. State/Local Code Requirements
-XI. Building Department Bulletins and Permit Requirements
-XII. Manufacturer Installation Standards (Adopted by Code)
-XIII. How Repairs Trigger Code Upgrades
-XIV. Detailed Repair Estimate Explanation
-XV. Formal Demand and Conclusion
-XVI. Signature
+XI. Manufacturer Installation Standards (Adopted by Code)
+XII. How Repairs Trigger Code Upgrades
+XIII. HAAG Engineering Standards & Industry Best Practices
+XIV. Rebuttal of Carrier Engineer Reports (If Applicable)
+XV. Communications Log & Carrier Response Timeline
+XVI. Detailed Repair Estimate Explanation
+XVII. Formal Demand and Conclusion
+XVIII. Signature
 
 ================================================================================
 
@@ -1358,9 +1438,11 @@ I. SUMMARY OF FINDINGS
 
 [Provide a comprehensive executive summary of the claim including:
 - Brief overview of the loss event
-- Total damages identified
+- Total damages identified from all evidence documents
 - Settlement demand amount
-- Key evidence supporting full replacement vs repair]
+- Key evidence supporting why REPAIRS ARE NOT FEASIBLE - focus on structural integrity, material degradation, code compliance
+- Reference to previous successful settlements for similar loss types if available
+- Restoration to PRE-LOSS CONDITION requires full replacement per INDEMNIFICATION principles]
 
 ================================================================================
 
@@ -1369,8 +1451,10 @@ II. CAUSE OF LOSS
 [Detail the cause of loss based on weather data, inspection reports, and other evidence:
 - Date and nature of the loss event
 - Weather conditions at time of loss (from weather reports provided)
+- Wind speeds, hail sizes, precipitation data
 - How the event caused the documented damage
-- Timeline of events]
+- Timeline of events
+- Correlation between weather severity and damage patterns]
 
 ================================================================================
 
@@ -1379,38 +1463,46 @@ III. DAMAGED COMPONENTS
 [List and describe each damaged component identified in the evidence:
 - Component name and location
 - Type and extent of damage
-- Current condition
-- Reference to supporting documentation/photos]
+- Current condition and why it is IRREPARABLE
+- Reference to supporting documentation/photos
+- Note if materials are discontinued or manufacturer no longer supports repair]
 
 ================================================================================
 
 IV. WEATHER CONDITIONS ANALYSIS
 
 [Analyze weather reports provided in the evidence:
-- Date of loss weather data
-- Wind speeds, hail size, precipitation
-- How weather conditions caused the damage
-- Correlation between weather event and damage pattern]
+- Date of loss weather data with specific measurements
+- Wind speeds (sustained and gusts), hail size, precipitation
+- NWS storm reports and warnings issued
+- How weather conditions exceeded material tolerances
+- Correlation between weather event intensity and damage severity
+- Reference HailTrace, weather history, or other weather documentation]
 
 ================================================================================
 
 V. CONDITION OF DAMAGED COMPONENTS (PER REPORTS)
 
 [Extract specific findings from inspection reports and estimates:
-- Quote specific observations from inspector reports
+- Quote specific observations from inspector/engineer reports
 - Include measurements, test results, damage descriptions
-- Reference which report each finding comes from]
+- Reference which report each finding comes from
+- Note any HAAG-certified inspection findings
+- Document material age and pre-existing degradation that affects repairability]
 
 ================================================================================
 
-VI. WHY REPAIRS ARE NOT FEASIBLE
+VI. WHY REPAIRS ARE NOT FEASIBLE - REPAIRABILITY ANALYSIS
 
-[Explain why the damaged materials cannot be repaired:
-- Structural integrity compromised
-- Material degradation prevents repair
-- Manufacturer specifications prohibit patching/partial repair
+[Core argument - explain why the damaged materials CANNOT BE REPAIRED:
+- Structural integrity has been compromised beyond repair
+- Material degradation prevents successful repair (UV oxidation, seal strip failure, brittleness)
+- Manufacturer specifications explicitly prohibit patching/partial repair
 - Code compliance cannot be achieved through repair
-- Safety concerns with repair vs replacement]
+- Safety concerns with repair vs replacement
+- Pre-loss condition cannot be restored through repair alone
+- Industry standards (NRCA, ARMA) require full replacement when damage exceeds thresholds
+- Reference HAAG damage identification criteria]
 
 ================================================================================
 
@@ -1418,22 +1510,25 @@ VII. WHY PARTIAL REPAIRS ARE NOT FEASIBLE
 
 [Explain why partial/spot repairs will not work:
 - Material discontinuation issues
-- Proper flashing and waterproofing cannot be achieved
-- Warranty implications
+- Proper flashing and waterproofing cannot be achieved with partial work
+- Warranty implications - partial repairs void manufacturer warranties
 - Industry standards require complete system repair
-- Reference specific manufacturer guidelines]
+- Reference specific manufacturer guidelines that prohibit spot repairs
+- Uniform appearance cannot be maintained - affects property value
+- Adjacent materials disturbed during repair require replacement]
 
 ================================================================================
 
 VIII. INTERDEPENDENCY OF BUILDING SYSTEMS
 
-[Explain how building components work together:
-- Underlayment system interdependency
-- Flashing integration requirements
+[Explain how building components work together as a system:
+- Underlayment system interdependency with roofing
+- Flashing integration requirements at all penetrations
 - Ridge and ventilation system connections
-- Siding course alignment and weather barrier
-- How damage to one component affects the entire system
-- Why system must be addressed as a whole]
+- Siding course alignment and weather barrier continuity
+- How damage to one component compromises the entire system
+- Why system must be addressed as a whole for proper restoration
+- Reference IRC and IBC requirements for system integrity]
 
 ================================================================================
 
@@ -1442,65 +1537,99 @@ IX. WHY DAMAGED AREAS MUST BE DISTURBED FOR REPAIRS
 [Explain necessary work that requires accessing adjacent areas:
 - Access requirements for proper repairs
 - Removal necessary to assess hidden damage
-- Tie-in requirements for new materials
-- Building envelope integrity considerations]
+- Tie-in requirements for new materials to existing
+- Building envelope integrity considerations
+- Step flashing, counter flashing requirements
+- Proper starter course and edge installations]
 
 ================================================================================
 
 X. STATE AND LOCAL CODE REQUIREMENTS
 
 [Include applicable ${stateInfo.stateName} building codes:
-- International Residential Code (IRC) excerpts
-- ${stateInfo.stateName} specific building codes
+- International Residential Code (IRC) 2021 requirements
+- ${stateInfo.stateName} specific building code adoptions
 - Local jurisdiction code requirements
-- How these codes mandate full replacement]
+- How these codes mandate full replacement for proper compliance
+- Reference specific code sections (e.g., IRC R905, R703)]
 
 ================================================================================
 
-XI. BUILDING DEPARTMENT BULLETINS AND PERMIT REQUIREMENTS
+XI. MANUFACTURER INSTALLATION STANDARDS (ADOPTED BY CODE)
 
-[Detail permit and bulletin requirements:
-- What work requires permits in this jurisdiction
-- Building department bulletins regarding repair standards
-- Inspection requirements
-- Documentation of permit costs if applicable]
-
-================================================================================
-
-XII. MANUFACTURER INSTALLATION STANDARDS (ADOPTED BY CODE)
-
-[Reference manufacturer requirements:
+[Reference manufacturer requirements that have force of law:
 - Specific manufacturer installation manuals
-- Warranty requirements
+- Warranty requirements that mandate certain installation practices
 - Standards that have been adopted by code
-- Why partial installation violates standards]
+- Why partial installation violates manufacturer standards
+- Reference ASTM standards for materials (D3161, D7158)
+- Why aged materials cannot meet original performance specifications]
 
 ================================================================================
 
-XIII. HOW REPAIRS TRIGGER CODE UPGRADES
+XII. HOW REPAIRS TRIGGER CODE UPGRADES
 
 [Explain code upgrade requirements:
 - When repairs exceed thresholds requiring full compliance
 - Ordinance and Law coverage triggers
 - Required upgrades per current code
-- Cost implications of code upgrades]
+- Cost implications of code upgrades
+- Reference specific ${stateInfo.stateName} adoption of IRC/IBC]
 
 ================================================================================
 
-XIV. DETAILED REPAIR ESTIMATE EXPLANATION
+XIII. HAAG ENGINEERING STANDARDS & INDUSTRY BEST PRACTICES
+
+[Reference HAAG and industry standards:
+- HAAG damage identification methodology
+- HAAG thresholds for repair vs replacement recommendations
+- NRCA (National Roofing Contractors Association) guidelines
+- ARMA (Asphalt Roofing Manufacturers Association) standards
+- How these industry standards support full replacement
+- Reference specific damage patterns that meet replacement thresholds]
+
+================================================================================
+
+XIV. REBUTTAL OF CARRIER ENGINEER REPORTS (IF APPLICABLE)
+
+[If carrier engineer reports are in the evidence, provide comprehensive rebuttal:
+- Identify scope limitations in the inspection (time on site, areas inspected)
+- Challenge the ASTM wind rating fallacy - lab ratings for new materials do not apply to aged shingles with degraded seal strips and UV oxidation
+- Note any carrier-friendly bias in conclusions
+- Identify where observations don't support conclusions
+- Reference contradictory evidence from other inspections
+- Note failure to consider material degradation and age factors
+- Challenge desk reviews vs actual field inspections]
+
+================================================================================
+
+XV. COMMUNICATIONS LOG & CARRIER RESPONSE TIMELINE
+
+[Document carrier interactions and response times:
+- Timeline of all communications with carrier
+- Any carrier promises or commitments made
+- Deadlines mentioned by carrier representatives
+- Response time analysis per ${stateInfo.adminCode}
+- Any missed deadlines that constitute regulatory violations
+- Bad faith indicators if applicable]
+
+================================================================================
+
+XVI. DETAILED REPAIR ESTIMATE EXPLANATION
 
 [Provide line-by-line explanation of the estimate:
 - Each major line item and its necessity
 - Quantity and pricing justification
 - Why each item is required for proper repair
 - Code-required items
-- Total breakdown by category]
+- Total breakdown by category
+- Comparison to previous successful settlements for similar claims if available]
 
 ================================================================================
 
-XV. FORMAL DEMAND AND CONCLUSION
+XVII. FORMAL DEMAND AND CONCLUSION
 
-Based on the evidence documented above, we hereby formally demand payment of the full claim value as follows:
+Based on the evidence documented above, including the demonstrated IRREPARABILITY of the damaged materials and the policyholder's right to INDEMNIFICATION and restoration to PRE-LOSS CONDITION, we hereby formally demand payment of the full claim value as follows:
 
 [Include specific dollar amounts from estimates]
 
@@ -1509,11 +1638,11 @@ Response is required within thirty (30) days pursuant to ${stateInfo.promptPayAc
 Failure to respond will result in escalation including but not limited to:
 - Filing complaint with ${stateInfo.stateName} Department of Insurance
 - Demand for appraisal per policy terms
-- Pursuit of bad faith claim if warranted
+- Pursuit of bad faith claim if warranted based on timeline violations documented in Communications Log
 
 ================================================================================
 
-XVI. SIGNATURE
+XVIII. SIGNATURE
 
 Respectfully submitted,
 
@@ -1529,7 +1658,7 @@ Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long',
 
 ================================================================================
 
-Create a thorough, professional demand package using ALL evidence from the provided documents. Be specific and reference actual findings, measurements, and conclusions from the documents.`;
+Create a thorough, professional demand package using ALL evidence from the provided documents. Be specific and reference actual findings, measurements, and conclusions from the documents. NEVER use the word "matching" - focus on REPAIRABILITY, UNIFORM APPEARANCE, PRE-LOSS CONDITION, and INDEMNIFICATION.`;
         break;
       }
 
