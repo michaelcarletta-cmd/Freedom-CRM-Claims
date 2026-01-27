@@ -91,7 +91,7 @@ export const DarwinCommunicationsDiary = ({ claimId, claim }: DarwinCommunicatio
 
     const { data: userData } = await supabase.auth.getUser();
 
-    const { error } = await supabase.from("claim_communications_diary").insert({
+    const { data: newEntry, error } = await supabase.from("claim_communications_diary").insert({
       claim_id: claimId,
       communication_date: new Date().toISOString(),
       communication_type: formData.communication_type,
@@ -108,13 +108,37 @@ export const DarwinCommunicationsDiary = ({ claimId, claim }: DarwinCommunicatio
       follow_up_required: formData.follow_up_required,
       follow_up_date: formData.follow_up_date || null,
       created_by: userData.user?.id,
-    });
+    }).select().single();
 
     if (error) {
       toast.error("Failed to add entry");
       console.error(error);
     } else {
-      toast.success("Communication logged");
+      // Auto-create a claim update/note for this communication
+      const commType = COMM_TYPES.find(t => t.value === formData.communication_type)?.label || formData.communication_type;
+      const direction = formData.direction === "outbound" ? "Outbound" : "Inbound";
+      const contactInfo = formData.contact_name 
+        ? `with ${formData.contact_name}${formData.contact_company ? ` (${formData.contact_company})` : ''}${formData.employee_id ? ` [ID: ${formData.employee_id}]` : ''}`
+        : '';
+      
+      let noteContent = `📞 ${direction} ${commType} ${contactInfo}\n\n${formData.summary}`;
+      
+      if (formData.promises_made) {
+        noteContent += `\n\n⚠️ CARRIER PROMISES: ${formData.promises_made}`;
+      }
+      if (formData.deadlines_mentioned) {
+        noteContent += `\n\n📅 DEADLINES MENTIONED: ${formData.deadlines_mentioned}`;
+      }
+
+      // Insert into claim_updates to show in activity feed
+      await supabase.from("claim_updates").insert({
+        claim_id: claimId,
+        content: noteContent,
+        update_type: "communication_log",
+        user_id: userData.user?.id,
+      });
+
+      toast.success("Communication logged and added to claim notes");
       setDialogOpen(false);
       setFormData({
         communication_type: "phone",
