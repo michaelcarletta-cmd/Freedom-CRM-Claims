@@ -66,6 +66,10 @@ const DarwinCarrierEmailDrafter = lazy(() => import("@/components/claim-detail/D
 const DarwinWeatherHistory = lazy(() => import("@/components/claim-detail/DarwinWeatherHistory").then(m => ({ default: m.DarwinWeatherHistory })));
 const DarwinOneClickPackage = lazy(() => import("@/components/claim-detail/DarwinOneClickPackage").then(m => ({ default: m.DarwinOneClickPackage })));
 const DarwinAutoSummary = lazy(() => import("@/components/claim-detail/DarwinAutoSummary").then(m => ({ default: m.DarwinAutoSummary })));
+// New Brelly-inspired Smart Features
+const DarwinSmartDocumentSort = lazy(() => import("@/components/claim-detail/DarwinSmartDocumentSort").then(m => ({ default: m.DarwinSmartDocumentSort })));
+const VisualClaimTimeline = lazy(() => import("@/components/claim-detail/VisualClaimTimeline").then(m => ({ default: m.VisualClaimTimeline })));
+const DarwinComplianceChecker = lazy(() => import("@/components/claim-detail/DarwinComplianceChecker").then(m => ({ default: m.DarwinComplianceChecker })));
 
 // Loading fallback for Darwin components
 const DarwinLoadingFallback = () => (
@@ -494,6 +498,15 @@ const ClaimDetail = () => {
                   <span className="text-sm text-muted-foreground">Your intelligent claims assistant</span>
                 </div>
                 
+                {/* Smart Document Sorting - AI-powered file organization */}
+                <DarwinSmartDocumentSort claimId={claim.id} claim={claim} />
+                
+                {/* Visual Claim Timeline - Audit-ready event tracking */}
+                <VisualClaimTimeline claimId={claim.id} claim={claim} />
+                
+                {/* Compliance-Aware Messaging - Flag risky language */}
+                <DarwinComplianceChecker claimId={claim.id} claim={claim} />
+                
                 {/* Auto Claim Summary - Updates on document upload */}
                 <DarwinAutoSummary claimId={claim.id} claim={claim} />
                 
@@ -562,7 +575,7 @@ const ClaimDetail = () => {
                   </div>
                 </div>
                 
-                {/* AI Claim Timeline */}
+                {/* Legacy AI Claim Timeline */}
                 <ClaimTimeline claimId={id || ""} claim={claim} />
                 
                 {/* PA/NJ Brelly-Inspired Tools */}

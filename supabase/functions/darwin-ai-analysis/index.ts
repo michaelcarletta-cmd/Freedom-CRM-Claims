@@ -164,7 +164,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -2135,6 +2135,92 @@ Generate a comprehensive claim summary in the specified JSON format. Include:
 5. Estimated claim value range based on available data
 
 Return ONLY valid JSON.`;
+        break;
+      }
+
+      case 'compliance_check': {
+        // Compliance-aware messaging checker
+        const textToCheck = additionalContext?.text || content || '';
+        const state = claim?.policyholder_state || stateInfo.state;
+        
+        systemPrompt = `You are Darwin, an expert public adjuster compliance advisor for ${stateInfo.stateName}. 
+You analyze communications for compliance issues, risky language, and professional best practices.
+
+Your task is to identify any language that could:
+1. Constitute unauthorized practice of law (UPL)
+2. Make guarantees or promises that can't be kept
+3. Allege bad faith without proper documentation
+4. Use emotional or unprofessional language
+5. Make improper coverage determinations
+6. Violate ${stateInfo.stateName} insurance regulations
+
+Return ONLY valid JSON with this structure:
+{
+  "issues": [
+    {
+      "severity": "error|warning|info",
+      "category": "Category name",
+      "originalText": "The problematic text",
+      "issue": "Description of the issue",
+      "suggestion": "Recommended alternative",
+      "regulation": "Relevant regulation reference if any"
+    }
+  ],
+  "overallScore": "compliant|needs_review|risky",
+  "summary": "Brief overall assessment"
+}`;
+
+        userPrompt = `Analyze this communication for compliance issues:
+
+---
+${textToCheck}
+---
+
+State: ${stateInfo.stateName}
+Applicable Regulations: ${stateInfo.adminCode}
+
+Return ONLY valid JSON with any compliance issues found.`;
+        break;
+      }
+
+      case 'document_classify': {
+        // Document classification for smart sorting
+        const fileName = additionalContext?.fileName || '';
+        const fileSize = additionalContext?.fileSize || 0;
+        
+        systemPrompt = `You are Darwin, an expert document classifier for insurance claims.
+Based on the file name and context, classify this document into one of these categories:
+- Policy Documents
+- Correspondence
+- Estimates
+- Photos
+- Invoices
+- Inspection Reports
+- Legal Documents
+- Contracts
+- Weather Reports
+- Engineering Reports
+- Other
+
+Return ONLY valid JSON with this structure:
+{
+  "classification": {
+    "folder": "Category name",
+    "type": "Specific document type",
+    "confidence": 0.0-1.0,
+    "sender": "Sender if identifiable",
+    "date": "Date if identifiable",
+    "topic": "Brief topic description"
+  }
+}`;
+
+        userPrompt = `Classify this document:
+File Name: ${fileName}
+File Size: ${fileSize} bytes
+Claim Type: ${claim?.loss_type || 'Property damage'}
+Insurance Company: ${claim?.insurance_company || 'Unknown'}
+
+Return ONLY valid JSON with the classification.`;
         break;
       }
 
