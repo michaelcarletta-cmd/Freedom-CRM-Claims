@@ -3,13 +3,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { HardHat, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History } from "lucide-react";
+import { HardHat, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen } from "lucide-react";
 
 interface DarwinEngineerReportAnalyzerProps {
   claimId: string;
   claim: any;
+}
+
+interface ClaimFile {
+  id: string;
+  file_name: string;
+  file_path: string;
+  file_type: string | null;
+  folder_id: string | null;
+  folder_name?: string;
+  uploaded_at: string | null;
 }
 
 export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerReportAnalyzerProps) => {
@@ -20,29 +31,65 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
   const [loading, setLoading] = useState(false);
   const [lastAnalyzed, setLastAnalyzed] = useState<Date | null>(null);
   const [lastFileName, setLastFileName] = useState<string | null>(null);
+  const [claimFiles, setClaimFiles] = useState<ClaimFile[]>([]);
+  const [selectedClaimFile, setSelectedClaimFile] = useState<ClaimFile | null>(null);
+  const [loadingFiles, setLoadingFiles] = useState(true);
+  const [inputMethod, setInputMethod] = useState<'existing' | 'upload' | 'paste'>('existing');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  // Load previous analysis on mount
+  // Load claim files and previous analysis on mount
   useEffect(() => {
-    const loadPreviousAnalysis = async () => {
-      const { data } = await supabase
-        .from('darwin_analysis_results')
-        .select('*')
-        .eq('claim_id', claimId)
-        .eq('analysis_type', 'engineer_report_rebuttal')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+    const loadData = async () => {
+      setLoadingFiles(true);
+      try {
+        // Load folders for folder names
+        const { data: foldersData } = await supabase
+          .from('claim_folders')
+          .select('id, name')
+          .eq('claim_id', claimId);
+        
+        const folderMap = new Map(foldersData?.map(f => [f.id, f.name]) || []);
 
-      if (data) {
-        setAnalysis(data.result);
-        setLastAnalyzed(new Date(data.created_at));
-        setLastFileName(data.pdf_file_name || null);
+        // Load PDF files from claim
+        const { data: filesData } = await supabase
+          .from('claim_files')
+          .select('id, file_name, file_path, file_type, folder_id, uploaded_at')
+          .eq('claim_id', claimId)
+          .order('uploaded_at', { ascending: false });
+
+        const pdfFiles = (filesData || [])
+          .filter(f => f.file_name?.toLowerCase().endsWith('.pdf'))
+          .map(f => ({
+            ...f,
+            folder_name: f.folder_id ? folderMap.get(f.folder_id) : undefined
+          }));
+        
+        setClaimFiles(pdfFiles);
+
+        // Load previous analysis
+        const { data } = await supabase
+          .from('darwin_analysis_results')
+          .select('*')
+          .eq('claim_id', claimId)
+          .eq('analysis_type', 'engineer_report_rebuttal')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (data) {
+          setAnalysis(data.result);
+          setLastAnalyzed(new Date(data.created_at));
+          setLastFileName(data.pdf_file_name || null);
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setLoadingFiles(false);
       }
     };
 
-    loadPreviousAnalysis();
+    loadData();
   }, [claimId]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,6 +112,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
         return;
       }
       setPdfFile(file);
+      setSelectedClaimFile(null);
     }
   };
 
@@ -75,11 +123,16 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
     }
   };
 
+  const selectClaimFile = (file: ClaimFile) => {
+    setSelectedClaimFile(file);
+    setPdfFile(null);
+  };
+
   const handleAnalyze = async () => {
-    if (!reportContent.trim() && !pdfFile) {
+    if (!reportContent.trim() && !pdfFile && !selectedClaimFile) {
       toast({
         title: "Content required",
-        description: "Please paste the engineer report content or upload a PDF",
+        description: "Please select a claim file, upload a PDF, or paste content",
         variant: "destructive"
       });
       return;
@@ -88,7 +141,25 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
     setLoading(true);
     try {
       let pdfBase64 = null;
-      if (pdfFile) {
+      let fileName = null;
+
+      // If using existing claim file, download it first
+      if (selectedClaimFile) {
+        const { data: fileData, error: downloadError } = await supabase.storage
+          .from('claim-files')
+          .download(selectedClaimFile.file_path);
+
+        if (downloadError) throw downloadError;
+
+        const arrayBuffer = await fileData.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        pdfBase64 = btoa(binary);
+        fileName = selectedClaimFile.file_name;
+      } else if (pdfFile) {
         const arrayBuffer = await pdfFile.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);
         let binary = '';
@@ -96,6 +167,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
           binary += String.fromCharCode(bytes[i]);
         }
         pdfBase64 = btoa(binary);
+        fileName = pdfFile.name;
       }
 
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
@@ -104,7 +176,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
           analysisType: 'engineer_report_rebuttal',
           content: reportContent || undefined,
           pdfContent: pdfBase64 || undefined,
-          pdfFileName: pdfFile?.name || undefined,
+          pdfFileName: fileName || undefined,
           additionalContext: additionalContext || undefined
         }
       });
@@ -117,16 +189,16 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
 
       setAnalysis(data.result);
       setLastAnalyzed(new Date());
-      setLastFileName(pdfFile?.name || null);
+      setLastFileName(fileName || null);
 
       // Save the analysis result
       const { data: userData } = await supabase.auth.getUser();
       await supabase.from('darwin_analysis_results').insert({
         claim_id: claimId,
         analysis_type: 'engineer_report_rebuttal',
-        input_summary: pdfFile?.name || reportContent.substring(0, 200),
+        input_summary: fileName || reportContent.substring(0, 200),
         result: data.result,
-        pdf_file_name: pdfFile?.name || null,
+        pdf_file_name: fileName || null,
         created_by: userData.user?.id
       });
 
@@ -165,6 +237,8 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
     }
   };
 
+  const hasInput = reportContent.trim() || pdfFile || selectedClaimFile;
+
   return (
     <Card>
       <CardHeader>
@@ -173,7 +247,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
           Engineer Report Analyzer
         </CardTitle>
         <CardDescription>
-          Upload an engineer's report PDF or paste content and Darwin will identify flaws, methodological issues, and generate a professional rebuttal
+          Select an engineer report from claim files, upload a new PDF, or paste content for Darwin to analyze and generate a professional rebuttal
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -185,68 +259,127 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
           </div>
         )}
 
-        {/* PDF Upload Section */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Upload Engineer Report (PDF)</label>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept=".pdf"
-            className="hidden"
-          />
-          {pdfFile ? (
-            <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
-              <FileText className="h-5 w-5 text-primary" />
-              <span className="flex-1 text-sm truncate">{pdfFile.name}</span>
-              <Button variant="ghost" size="sm" onClick={removeFile}>
-                <X className="h-4 w-4" />
+        {/* Input Method Tabs */}
+        <Tabs value={inputMethod} onValueChange={(v) => setInputMethod(v as any)}>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="existing" className="gap-1">
+              <FolderOpen className="h-4 w-4" />
+              Claim Files
+            </TabsTrigger>
+            <TabsTrigger value="upload" className="gap-1">
+              <Upload className="h-4 w-4" />
+              Upload
+            </TabsTrigger>
+            <TabsTrigger value="paste" className="gap-1">
+              <FileText className="h-4 w-4" />
+              Paste
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="existing" className="space-y-3">
+            {loadingFiles ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : claimFiles.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <FolderOpen className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No PDF files in this claim.</p>
+                <p className="text-xs">Upload files to the claim or use another input method.</p>
+              </div>
+            ) : (
+              <ScrollArea className="h-[200px] border rounded-md p-2">
+                <div className="space-y-2">
+                  {claimFiles.map(file => (
+                    <div
+                      key={file.id}
+                      className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors ${
+                        selectedClaimFile?.id === file.id ? 'border-primary bg-primary/5' : ''
+                      }`}
+                      onClick={() => selectClaimFile(file)}
+                    >
+                      <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+                      <div className="overflow-hidden flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{file.file_name}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {file.folder_name && (
+                            <span className="bg-muted px-1.5 py-0.5 rounded">{file.folder_name}</span>
+                          )}
+                          {file.uploaded_at && (
+                            <span>{new Date(file.uploaded_at).toLocaleDateString()}</span>
+                          )}
+                        </div>
+                      </div>
+                      {selectedClaimFile?.id === file.id && (
+                        <div className="h-2 w-2 rounded-full bg-primary" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+            {selectedClaimFile && (
+              <div className="flex items-center gap-2 p-2 bg-primary/10 rounded-md text-sm">
+                <FileText className="h-4 w-4 text-primary" />
+                <span className="flex-1 truncate">Selected: {selectedClaimFile.file_name}</span>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedClaimFile(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="upload" className="space-y-3">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".pdf"
+              className="hidden"
+            />
+            {pdfFile ? (
+              <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
+                <FileText className="h-5 w-5 text-primary" />
+                <span className="flex-1 text-sm truncate">{pdfFile.name}</span>
+                <Button variant="ghost" size="sm" onClick={removeFile}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full h-24 flex-col gap-2"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="h-6 w-6" />
+                <span>Click to select PDF file</span>
               </Button>
-            </div>
-          ) : (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Select PDF File
-            </Button>
-          )}
-        </div>
+            )}
+          </TabsContent>
 
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground">or paste content</span>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Engineer Report Content</label>
-          <Textarea
-            value={reportContent}
-            onChange={(e) => setReportContent(e.target.value)}
-            placeholder="Paste the engineer's report content here..."
-            className="min-h-[120px]"
-          />
-        </div>
+          <TabsContent value="paste" className="space-y-3">
+            <Textarea
+              value={reportContent}
+              onChange={(e) => setReportContent(e.target.value)}
+              placeholder="Paste the engineer's report content here..."
+              className="min-h-[150px]"
+            />
+          </TabsContent>
+        </Tabs>
 
         <div className="space-y-2">
           <label className="text-sm font-medium">Additional Context (Optional)</label>
           <Textarea
             value={additionalContext}
             onChange={(e) => setAdditionalContext(e.target.value)}
-            placeholder="Add any additional observations, photos descriptions, or contradictory evidence that should be considered..."
+            placeholder="Add any additional observations, photo descriptions, or contradictory evidence that should be considered..."
             className="min-h-[80px]"
           />
         </div>
 
         <Button 
           onClick={handleAnalyze} 
-          disabled={loading || (!reportContent.trim() && !pdfFile)}
+          disabled={loading || !hasInput}
           className="w-full"
         >
           {loading ? (
