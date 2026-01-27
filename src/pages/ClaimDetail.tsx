@@ -71,11 +71,11 @@ const DarwinSmartDocumentSort = lazy(() => import("@/components/claim-detail/Dar
 const VisualClaimTimeline = lazy(() => import("@/components/claim-detail/VisualClaimTimeline").then(m => ({ default: m.VisualClaimTimeline })));
 const DarwinComplianceChecker = lazy(() => import("@/components/claim-detail/DarwinComplianceChecker").then(m => ({ default: m.DarwinComplianceChecker })));
 
-// Loading fallback for Darwin components - v2
+// Loading fallback for Darwin components
 const DarwinLoadingFallback = () => (
   <div className="flex items-center justify-center p-8">
     <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
-    <span className="text-muted-foreground">Loading Darwin AI...</span>
+    <span className="text-muted-foreground">Loading Darwin AI module...</span>
   </div>
 );
 
