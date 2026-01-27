@@ -2,18 +2,47 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
-import { Plus, Send, Bot, MessageSquare, Loader2, Edit, Trash2, FileText, Cloud, Camera, Calculator } from "lucide-react";
+import { Plus, Send, Bot, MessageSquare, Loader2, Edit, Trash2, FileText, Cloud, Camera, Calculator, Phone, Mail, Users, ArrowUpRight, ArrowDownLeft, Copy } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { format } from "date-fns";
+
+interface CommunicationEntry {
+  id: string;
+  communication_date: string;
+  communication_type: string;
+  direction: string;
+  contact_name: string | null;
+  contact_title: string | null;
+  contact_company: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  employee_id: string | null;
+  summary: string;
+  promises_made: string | null;
+  deadlines_mentioned: string | null;
+  follow_up_required: boolean;
+  follow_up_date: string | null;
+}
+
+const COMM_TYPES = [
+  { value: "phone", label: "Phone Call", icon: Phone },
+  { value: "email", label: "Email", icon: Mail },
+  { value: "letter", label: "Letter/Mail", icon: FileText },
+  { value: "in_person", label: "In Person", icon: Users },
+  { value: "voicemail", label: "Voicemail", icon: Phone },
+];
 
 interface Update {
   id: string;
@@ -64,10 +93,123 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
   const { user, userRole } = useAuth();
   const isStaff = userRole === "admin" || userRole === "staff";
 
+  // Communications Diary state
+  const [commEntries, setCommEntries] = useState<CommunicationEntry[]>([]);
+  const [commLoading, setCommLoading] = useState(true);
+  const [commDialogOpen, setCommDialogOpen] = useState(false);
+  const [commFormData, setCommFormData] = useState({
+    communication_type: "phone",
+    direction: "outbound",
+    contact_name: "",
+    contact_title: "",
+    contact_company: "",
+    contact_phone: "",
+    contact_email: "",
+    employee_id: "",
+    summary: "",
+    promises_made: "",
+    deadlines_mentioned: "",
+    follow_up_required: false,
+    follow_up_date: "",
+  });
+
+  const fetchCommEntries = async () => {
+    const { data, error } = await supabase
+      .from("claim_communications_diary")
+      .select("*")
+      .eq("claim_id", claimId)
+      .order("communication_date", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching communications:", error);
+    } else {
+      setCommEntries(data || []);
+    }
+    setCommLoading(false);
+  };
+
+  const handleAddCommEntry = async () => {
+    if (!commFormData.summary) {
+      toast.error("Please provide a summary");
+      return;
+    }
+
+    const { data: userData } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from("claim_communications_diary").insert({
+      claim_id: claimId,
+      communication_date: new Date().toISOString(),
+      communication_type: commFormData.communication_type,
+      direction: commFormData.direction,
+      contact_name: commFormData.contact_name || null,
+      contact_title: commFormData.contact_title || null,
+      contact_company: commFormData.contact_company || null,
+      contact_phone: commFormData.contact_phone || null,
+      contact_email: commFormData.contact_email || null,
+      employee_id: commFormData.employee_id || null,
+      summary: commFormData.summary,
+      promises_made: commFormData.promises_made || null,
+      deadlines_mentioned: commFormData.deadlines_mentioned || null,
+      follow_up_required: commFormData.follow_up_required,
+      follow_up_date: commFormData.follow_up_date || null,
+      created_by: userData.user?.id,
+    });
+
+    if (error) {
+      toast.error("Failed to add entry");
+      console.error(error);
+    } else {
+      toast.success("Communication logged");
+      setCommDialogOpen(false);
+      setCommFormData({
+        communication_type: "phone",
+        direction: "outbound",
+        contact_name: "",
+        contact_title: "",
+        contact_company: "",
+        contact_phone: "",
+        contact_email: "",
+        employee_id: "",
+        summary: "",
+        promises_made: "",
+        deadlines_mentioned: "",
+        follow_up_required: false,
+        follow_up_date: "",
+      });
+      fetchCommEntries();
+    }
+  };
+
+  const generateCommTimeline = () => {
+    const timeline = commEntries.map(e => {
+      const commType = COMM_TYPES.find(t => t.value === e.communication_type);
+      return `${format(new Date(e.communication_date), "MM/dd/yyyy HH:mm")} - ${e.direction === "outbound" ? "OUTBOUND" : "INBOUND"} ${commType?.label || e.communication_type}
+Contact: ${e.contact_name || "Unknown"}${e.employee_id ? ` (ID: ${e.employee_id})` : ""}${e.contact_company ? ` - ${e.contact_company}` : ""}
+Summary: ${e.summary}${e.promises_made ? `\nPromises Made: ${e.promises_made}` : ""}${e.deadlines_mentioned ? `\nDeadlines Mentioned: ${e.deadlines_mentioned}` : ""}
+---`;
+    }).join("\n\n");
+
+    const fullDoc = `COMMUNICATIONS DIARY
+Claim: ${claim?.policyholder_name || claimId}
+Generated: ${format(new Date(), "MM/dd/yyyy HH:mm")}
+
+${timeline}`;
+
+    navigator.clipboard.writeText(fullDoc);
+    toast.success("Communications timeline copied to clipboard");
+  };
+
+  const getCommTypeIcon = (type: string) => {
+    const commType = COMM_TYPES.find(t => t.value === type);
+    const Icon = commType?.icon || MessageSquare;
+    return <Icon className="h-4 w-4" />;
+  };
+
   useEffect(() => {
     fetchUpdates();
     fetchClaim();
     fetchAiConversations();
+    fetchCommEntries();
 
     const channel = supabase
       .channel("claim-updates-changes")
@@ -407,6 +549,10 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
             <MessageSquare className="h-4 w-4" />
             Notes & Updates
           </TabsTrigger>
+          <TabsTrigger value="communications" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap flex items-center gap-2">
+            <Phone className="h-4 w-4" />
+            Communications Log
+          </TabsTrigger>
           <TabsTrigger value="ai" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap flex items-center gap-2">
             <Bot className="h-4 w-4" />
             AI Assistant
@@ -566,6 +712,209 @@ export const ClaimNotes = ({ claimId }: { claimId: string }) => {
               </div>
             )}
           </div>
+        </TabsContent>
+
+        <TabsContent value="communications" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Phone className="h-5 w-5 text-indigo-600" />
+                Communications Log
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Log all adjuster interactions for bad faith documentation (PA/NJ)
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {commEntries.length > 0 && (
+                <Button variant="outline" size="sm" onClick={generateCommTimeline}>
+                  <Copy className="h-4 w-4 mr-1" /> Export Timeline
+                </Button>
+              )}
+              <Dialog open={commDialogOpen} onOpenChange={setCommDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <Plus className="h-4 w-4 mr-1" /> Log Communication
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>Log Communication</DialogTitle>
+                  </DialogHeader>
+                  <ScrollArea className="max-h-[70vh]">
+                    <div className="space-y-4 pr-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Type *</Label>
+                          <Select
+                            value={commFormData.communication_type}
+                            onValueChange={(v) => setCommFormData({ ...commFormData, communication_type: v })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {COMM_TYPES.map((type) => (
+                                <SelectItem key={type.value} value={type.value}>
+                                  {type.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Direction *</Label>
+                          <Select
+                            value={commFormData.direction}
+                            onValueChange={(v) => setCommFormData({ ...commFormData, direction: v })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="outbound">Outbound (We called/wrote)</SelectItem>
+                              <SelectItem value="inbound">Inbound (They called/wrote)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Contact Name</Label>
+                          <Input
+                            placeholder="John Smith"
+                            value={commFormData.contact_name}
+                            onChange={(e) => setCommFormData({ ...commFormData, contact_name: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Employee ID</Label>
+                          <Input
+                            placeholder="EMP12345"
+                            value={commFormData.employee_id}
+                            onChange={(e) => setCommFormData({ ...commFormData, employee_id: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Title/Role</Label>
+                          <Input
+                            placeholder="Claims Adjuster"
+                            value={commFormData.contact_title}
+                            onChange={(e) => setCommFormData({ ...commFormData, contact_title: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Company</Label>
+                          <Input
+                            placeholder="State Farm"
+                            value={commFormData.contact_company}
+                            onChange={(e) => setCommFormData({ ...commFormData, contact_company: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Summary of Conversation *</Label>
+                        <Textarea
+                          placeholder="Detailed notes about what was discussed..."
+                          className="min-h-[100px]"
+                          value={commFormData.summary}
+                          onChange={(e) => setCommFormData({ ...commFormData, summary: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Promises Made by Carrier</Label>
+                        <Textarea
+                          placeholder="Any commitments, timelines, or promises made..."
+                          value={commFormData.promises_made}
+                          onChange={(e) => setCommFormData({ ...commFormData, promises_made: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Deadlines Mentioned</Label>
+                        <Input
+                          placeholder="e.g., 'Will have decision by Friday'"
+                          value={commFormData.deadlines_mentioned}
+                          onChange={(e) => setCommFormData({ ...commFormData, deadlines_mentioned: e.target.value })}
+                        />
+                      </div>
+
+                      <Button onClick={handleAddCommEntry} className="w-full">
+                        Log Communication
+                      </Button>
+                    </div>
+                  </ScrollArea>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
+
+          {commLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+            </div>
+          ) : commEntries.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Phone className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p>No communications logged yet</p>
+              <p className="text-sm">Document all interactions for potential bad faith claims</p>
+            </div>
+          ) : (
+            <ScrollArea className="h-[400px]">
+              <div className="space-y-4">
+                {commEntries.map((entry) => (
+                  <div key={entry.id} className="border rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2 rounded-full ${entry.direction === "outbound" ? "bg-blue-100" : "bg-green-100"}`}>
+                        {getCommTypeIcon(entry.communication_type)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium">
+                            {COMM_TYPES.find(t => t.value === entry.communication_type)?.label}
+                          </span>
+                          <Badge variant="outline" className="text-xs">
+                            {entry.direction === "outbound" ? (
+                              <><ArrowUpRight className="h-3 w-3 mr-1" /> Outbound</>
+                            ) : (
+                              <><ArrowDownLeft className="h-3 w-3 mr-1" /> Inbound</>
+                            )}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            {format(new Date(entry.communication_date), "MMM d, yyyy h:mm a")}
+                          </span>
+                        </div>
+                        {entry.contact_name && (
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Contact: <span className="font-medium">{entry.contact_name}</span>
+                            {entry.employee_id && <span> (ID: {entry.employee_id})</span>}
+                            {entry.contact_company && <span> — {entry.contact_company}</span>}
+                          </p>
+                        )}
+                        <p className="mt-2">{entry.summary}</p>
+                        {entry.promises_made && (
+                          <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+                            <strong>Promises Made:</strong> {entry.promises_made}
+                          </p>
+                        )}
+                        {entry.deadlines_mentioned && (
+                          <p className="text-sm text-blue-700 dark:text-blue-400">
+                            <strong>Deadlines:</strong> {entry.deadlines_mentioned}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
         </TabsContent>
 
         <TabsContent value="ai" className="space-y-6">

@@ -57,7 +57,7 @@ const DarwinOutcomePredictor = lazy(() => import("@/components/claim-detail/Darw
 const DarwinStateLawAdvisor = lazy(() => import("@/components/claim-detail/DarwinStateLawAdvisor").then(m => ({ default: m.DarwinStateLawAdvisor })));
 const DarwinCarrierDeadlineMonitor = lazy(() => import("@/components/claim-detail/DarwinCarrierDeadlineMonitor").then(m => ({ default: m.DarwinCarrierDeadlineMonitor })));
 const DarwinLossOfUseCalculator = lazy(() => import("@/components/claim-detail/DarwinLossOfUseCalculator").then(m => ({ default: m.DarwinLossOfUseCalculator })));
-const DarwinCommunicationsDiary = lazy(() => import("@/components/claim-detail/DarwinCommunicationsDiary").then(m => ({ default: m.DarwinCommunicationsDiary })));
+// DarwinCommunicationsDiary moved to ClaimNotes (Notes & Updates section)
 const DarwinHomeInventoryBuilder = lazy(() => import("@/components/claim-detail/DarwinHomeInventoryBuilder").then(m => ({ default: m.DarwinHomeInventoryBuilder })));
 const DarwinHiddenLossDetective = lazy(() => import("@/components/claim-detail/DarwinHiddenLossDetective").then(m => ({ default: m.DarwinHiddenLossDetective })));
 const DarwinQualifyingLanguage = lazy(() => import("@/components/claim-detail/DarwinQualifyingLanguage").then(m => ({ default: m.DarwinQualifyingLanguage })));
@@ -561,8 +561,7 @@ const ClaimDetail = () => {
                   {/* Carrier Deadline Monitor */}
                   <DarwinCarrierDeadlineMonitor claimId={claim.id} claim={claim} />
                   
-                  {/* Communications Diary */}
-                  <DarwinCommunicationsDiary claimId={claim.id} claim={claim} />
+                  {/* Communications Diary moved to Notes & Updates section */}
                   
                   {/* Qualifying Language Generator */}
                   <DarwinQualifyingLanguage claimId={claim.id} claim={claim} />
