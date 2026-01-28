@@ -960,6 +960,23 @@ const tools = [
         required: ["query"]
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "bulk_update_insurance_companies",
+      description: "Search the web and update contact information (phone numbers, email addresses) for ALL insurance companies in the Networking tab. Use this when the user asks to update contact info for all or multiple insurance companies.",
+      parameters: {
+        type: "object",
+        properties: {
+          company_names: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional: specific company names to update. If empty, updates ALL companies."
+          }
+        }
+      }
+    }
   }
 ];
 // Helper function to get full Darwin-level claim context
@@ -2293,6 +2310,131 @@ ${knowledgeBaseContext || ''}`
           } catch (parseErr) {
             console.error("Error in lookup_building_code:", parseErr);
             answer += `\n\n❌ **Error looking up building code:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "bulk_update_insurance_companies") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Bulk updating insurance companies");
+            
+            // Fetch all insurance companies or specific ones
+            let query = supabase.from("insurance_companies").select("id, name, phone, email");
+            
+            if (params.company_names && params.company_names.length > 0) {
+              // Filter to specific companies
+              const filters = params.company_names.map((name: string) => `name.ilike.%${name}%`);
+              query = query.or(filters.join(","));
+            }
+            
+            const { data: companies, error: fetchError } = await query.eq("is_active", true);
+            
+            if (fetchError || !companies || companies.length === 0) {
+              answer += `\n\n❌ **No insurance companies found to update.**`;
+              continue;
+            }
+            
+            answer += `\n\n🔄 **Updating ${companies.length} insurance companies...**\n`;
+            
+            let successCount = 0;
+            let failCount = 0;
+            const updates: string[] = [];
+            
+            // Process each company
+            for (const company of companies) {
+              try {
+                // Search for company contact info
+                const searchQuery = `${company.name} insurance company claims department phone number email contact information`;
+                const searchResult = await searchWeb(searchQuery);
+                
+                if (!searchResult || searchResult.includes("unavailable")) {
+                  failCount++;
+                  continue;
+                }
+                
+                // Extract phone and email from search results using AI
+                const extractResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: "google/gemini-2.5-flash",
+                    messages: [
+                      {
+                        role: "system",
+                        content: "Extract the main claims phone number and email from the following text. Return ONLY a JSON object with 'phone' and 'email' fields. If not found, use null. Format phone as digits only with area code."
+                      },
+                      {
+                        role: "user",
+                        content: `Extract contact info for ${company.name} from:\n\n${searchResult}`
+                      }
+                    ],
+                    max_tokens: 200,
+                  }),
+                });
+                
+                if (!extractResponse.ok) {
+                  failCount++;
+                  continue;
+                }
+                
+                const extractData = await extractResponse.json();
+                let extracted: { phone?: string; email?: string } = {};
+                
+                try {
+                  const content = extractData.choices[0].message.content || "";
+                  // Try to parse JSON from the response
+                  const jsonMatch = content.match(/\{[\s\S]*\}/);
+                  if (jsonMatch) {
+                    extracted = JSON.parse(jsonMatch[0]);
+                  }
+                } catch (parseErr) {
+                  console.error("Failed to parse extraction for", company.name);
+                  failCount++;
+                  continue;
+                }
+                
+                // Only update if we found new info
+                const updateData: any = {};
+                if (extracted.phone && extracted.phone !== company.phone) {
+                  updateData.phone = extracted.phone;
+                }
+                if (extracted.email && extracted.email !== company.email) {
+                  updateData.email = extracted.email;
+                }
+                
+                if (Object.keys(updateData).length > 0) {
+                  const { error: updateError } = await supabase
+                    .from("insurance_companies")
+                    .update(updateData)
+                    .eq("id", company.id);
+                  
+                  if (!updateError) {
+                    successCount++;
+                    const changedFields = Object.entries(updateData).map(([k, v]) => `${k}: ${v}`).join(", ");
+                    updates.push(`• ${company.name}: ${changedFields}`);
+                  } else {
+                    failCount++;
+                  }
+                } else {
+                  // No new info found or same as existing
+                  updates.push(`• ${company.name}: no new info found`);
+                }
+                
+                // Add small delay to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+              } catch (companyErr) {
+                console.error(`Error updating ${company.name}:`, companyErr);
+                failCount++;
+              }
+            }
+            
+            answer += updates.join("\n");
+            answer += `\n\n✅ **Completed:** ${successCount} updated, ${failCount} failed/no changes`;
+          } catch (parseErr) {
+            console.error("Error in bulk_update_insurance_companies:", parseErr);
+            answer += `\n\n❌ **Error updating insurance companies:** Invalid parameters`;
           }
         }
       }
