@@ -59,9 +59,14 @@ function getMimeType(fileType: string, fileName: string): string {
   return fileType || 'application/octet-stream';
 }
 
-// For smaller files, download and convert to base64 data URL
-// For larger files (>4MB), return the URL directly for the AI to fetch
-const BASE64_SIZE_LIMIT = 4 * 1024 * 1024; // 4MB limit for base64 encoding
+// Download and convert to base64 data URL
+// NOTE: The AI gateway only supports direct URLs for images (PNG, JPEG, WebP, GIF)
+// PDFs, documents, and other formats MUST be sent as base64 data URLs
+
+function isImageMimeType(mimeType: string): boolean {
+  return mimeType.startsWith('image/') && 
+    ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'].includes(mimeType);
+}
 
 async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize: number | null): Promise<{ url: string; isDirectUrl: boolean }> {
   // Check file size before processing
@@ -69,13 +74,16 @@ async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize
     throw new Error(`File too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum supported size is 20MB. Please upload a smaller file.`);
   }
   
-  // For larger files, pass URL directly to avoid memory issues
-  if (fileSize && fileSize > BASE64_SIZE_LIMIT) {
-    console.log(`Large file (${Math.round(fileSize / 1024 / 1024)}MB), using direct URL`);
+  // Only images can use direct URLs - PDFs and documents MUST be base64 encoded
+  const canUseDirectUrl = isImageMimeType(mimeType);
+  
+  if (canUseDirectUrl && fileSize && fileSize > 10 * 1024 * 1024) {
+    // Only use direct URL for large images
+    console.log(`Large image (${Math.round(fileSize / 1024 / 1024)}MB), using direct URL`);
     return { url: fileUrl, isDirectUrl: true };
   }
   
-  console.log(`Downloading file for base64 encoding...`);
+  console.log(`Downloading file for base64 encoding (${Math.round((fileSize || 0) / 1024 / 1024)}MB)...`);
   
   const response = await fetch(fileUrl);
   if (!response.ok) {
@@ -83,13 +91,6 @@ async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize
   }
   
   const arrayBuffer = await response.arrayBuffer();
-  
-  // Double-check size after download
-  if (arrayBuffer.byteLength > BASE64_SIZE_LIMIT) {
-    console.log(`File larger than expected, using direct URL instead`);
-    return { url: fileUrl, isDirectUrl: true };
-  }
-  
   const base64 = base64Encode(arrayBuffer);
   
   console.log(`Encoded file: ${arrayBuffer.byteLength} bytes as base64`);
