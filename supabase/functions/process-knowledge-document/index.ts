@@ -2,8 +2,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
-// @ts-ignore - pdf.js for Deno
-import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.0.379/build/pdf.min.mjs";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,10 +10,11 @@ const corsHeaders = {
 
 // Maximum file size: 20MB (matches upload limit)
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-// Size threshold for AI extraction (base64 encoding uses ~1.33x memory)
-const AI_EXTRACTION_LIMIT = 5 * 1024 * 1024; // 5MB - safe for base64 + AI
-// Size threshold for native pdf.js extraction (needs full file in memory)
-const NATIVE_EXTRACTION_LIMIT = 8 * 1024 * 1024; // 8MB - max for pdf.js
+// AI extraction limit (base64 uses ~1.33x memory, plus AI processing overhead)
+// 5MB file = ~6.7MB base64 = ~50MB+ memory with AI context
+const AI_EXTRACTION_LIMIT = 5 * 1024 * 1024; // 5MB
+// Image direct URL threshold - larger images use direct URLs to save memory
+const IMAGE_DIRECT_URL_THRESHOLD = 4 * 1024 * 1024; // 4MB
 
 // Split text into chunks for RAG
 function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[] {
@@ -65,26 +64,22 @@ function getMimeType(fileType: string, fileName: string): string {
   return fileType || 'application/octet-stream';
 }
 
-// Download and convert to base64 data URL
-// NOTE: The AI gateway only supports direct URLs for images (PNG, JPEG, WebP, GIF)
-// PDFs, documents, and other formats MUST be sent as base64 data URLs
-
 function isImageMimeType(mimeType: string): boolean {
   return mimeType.startsWith('image/') && 
     ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'].includes(mimeType);
 }
 
+// Download and convert to base64 data URL
 async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize: number | null): Promise<{ url: string; isDirectUrl: boolean }> {
   // Check file size before processing
   if (fileSize && fileSize > MAX_FILE_SIZE) {
-    throw new Error(`File too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum supported size is 20MB. Please upload a smaller file.`);
+    throw new Error(`File too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum supported size is 20MB.`);
   }
   
-  // Only images can use direct URLs - PDFs and documents MUST be base64 encoded
+  // Large images can use direct URLs - saves memory
   const canUseDirectUrl = isImageMimeType(mimeType);
   
-  if (canUseDirectUrl && fileSize && fileSize > 10 * 1024 * 1024) {
-    // Only use direct URL for large images
+  if (canUseDirectUrl && fileSize && fileSize > IMAGE_DIRECT_URL_THRESHOLD) {
     console.log(`Large image (${Math.round(fileSize / 1024 / 1024)}MB), using direct URL`);
     return { url: fileUrl, isDirectUrl: true };
   }
@@ -102,50 +97,6 @@ async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize
   console.log(`Encoded file: ${arrayBuffer.byteLength} bytes as base64`);
   
   return { url: `data:${mimeType};base64,${base64}`, isDirectUrl: false };
-}
-
-// Extract text from PDF using pdf.js (Deno-compatible, no AI, lower memory usage)
-async function extractTextFromPDFNative(fileUrl: string, fileName: string): Promise<string> {
-  console.log(`Extracting text from PDF natively: ${fileName}`);
-  
-  const response = await fetch(fileUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to download PDF: ${response.status}`);
-  }
-  
-  const arrayBuffer = await response.arrayBuffer();
-  
-  try {
-    // Load PDF using pdf.js
-    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-    const pdf = await loadingTask.promise;
-    
-    const textParts: string[] = [];
-    
-    // Extract text from each page
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
-      if (pageText.trim()) {
-        textParts.push(pageText);
-      }
-    }
-    
-    const extractedText = textParts.join('\n\n');
-    console.log(`Native extraction got ${extractedText.length} characters from ${pdf.numPages} pages`);
-    
-    if (!extractedText || extractedText.trim().length < 100) {
-      throw new Error('PDF appears to be scanned/image-based with minimal text');
-    }
-    
-    return extractedText;
-  } catch (error) {
-    console.error('Native PDF extraction failed:', error);
-    throw error;
-  }
 }
 
 // Extract text from document using base64 data
@@ -463,28 +414,16 @@ serve(async (req) => {
     if (isPdf) {
       // PDF Processing Strategy:
       // - Small PDFs (<5MB): AI extraction with OCR capability
-      // - Medium PDFs (5-8MB): Native pdf.js extraction (text-based only)
-      // - Large PDFs (>8MB): Reject - edge function memory limits
-      
-      if (fileSize > NATIVE_EXTRACTION_LIMIT) {
-        throw new Error(`PDF too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum size for PDFs is 8MB due to processing limits. Please compress or split the file.`);
-      }
+      // - Large PDFs (>5MB): Reject - base64 encoding + AI processing exceeds memory limits
       
       if (fileSize > AI_EXTRACTION_LIMIT) {
-        // Medium PDF: Use native extraction (no base64 needed)
-        console.log(`Medium PDF (${Math.round(fileSize / 1024 / 1024)}MB), using native extraction`);
-        try {
-          extractedText = await extractTextFromPDFNative(fileUrl, document.file_name);
-        } catch (nativeError) {
-          console.log('Native extraction failed:', nativeError);
-          throw new Error(`PDF extraction failed. This PDF may be scanned/image-based and requires OCR. Please use a smaller file (<5MB) for scanned documents.`);
-        }
-      } else {
-        // Small PDF: Use AI extraction with OCR
-        console.log(`Small PDF (${Math.round(fileSize / 1024 / 1024)}MB), using AI extraction`);
-        const fileData = await downloadAndEncodeFile(fileUrl, mimeType, fileSize);
-        extractedText = await extractTextFromDocument(fileData.url, document.file_name);
+        throw new Error(`PDF too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum size for PDFs is 5MB due to processing limits. Please compress or split the file.`);
       }
+      
+      // Use AI extraction with OCR support
+      console.log(`Processing PDF (${Math.round(fileSize / 1024 / 1024)}MB) with AI extraction`);
+      const fileData = await downloadAndEncodeFile(fileUrl, mimeType, fileSize);
+      extractedText = await extractTextFromDocument(fileData.url, document.file_name);
     } else if (
       fileType.includes('video') || 
       fileType.includes('audio') ||
