@@ -2942,9 +2942,14 @@ export type Database = {
           email: string | null
           id: string
           is_active: boolean
+          last_four_ssn: string | null
+          loan_number: string | null
+          mortgage_site: string | null
           name: string
           phone: string | null
           phone_extension: string | null
+          portal_password: string | null
+          portal_username: string | null
           updated_at: string
         }
         Insert: {
@@ -2953,9 +2958,14 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
+          last_four_ssn?: string | null
+          loan_number?: string | null
+          mortgage_site?: string | null
           name: string
           phone?: string | null
           phone_extension?: string | null
+          portal_password?: string | null
+          portal_username?: string | null
           updated_at?: string
         }
         Update: {
@@ -2964,9 +2974,14 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
+          last_four_ssn?: string | null
+          loan_number?: string | null
+          mortgage_site?: string | null
           name?: string
           phone?: string | null
           phone_extension?: string | null
+          portal_password?: string | null
+          portal_username?: string | null
           updated_at?: string
         }
         Relationships: []
