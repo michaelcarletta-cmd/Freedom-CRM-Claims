@@ -353,41 +353,43 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
                 </Button>
               </div>
             </div>
-            <ScrollArea className="max-h-[300px]">
-              <div className="space-y-3">
+            <ScrollArea className="max-h-[400px]">
+              <div className="space-y-4 pr-4">
                 {Object.entries(groupedAnalyses).map(([type, analyses]) => (
                   <div key={type} className="space-y-2">
-                    <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                    <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2 sticky top-0 bg-background py-1">
                       {ANALYSIS_TYPE_LABELS[type]?.icon}
-                      {ANALYSIS_TYPE_LABELS[type]?.label || type.replace(/_/g, ' ')}
+                      {ANALYSIS_TYPE_LABELS[type]?.label || type.replace(/_/g, ' ')} ({analyses.length})
                     </h5>
-                    {analyses.map((analysis) => (
-                      <div
-                        key={analysis.id}
-                        className="flex items-start gap-3 p-3 rounded-lg border bg-background"
-                      >
-                        <Checkbox
-                          id={analysis.id}
-                          checked={selectedAnalyses.includes(analysis.id)}
-                          onCheckedChange={() => toggleAnalysis(analysis.id)}
-                          disabled={isBuilding}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <Label
-                            htmlFor={analysis.id}
-                            className="cursor-pointer text-sm"
-                          >
-                            {analysis.input_summary 
-                              ? analysis.input_summary.substring(0, 60) + (analysis.input_summary.length > 60 ? "..." : "")
-                              : `Analysis from ${format(new Date(analysis.created_at), "MMM d, yyyy")}`
-                            }
-                          </Label>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(analysis.created_at), "MMM d, yyyy 'at' h:mm a")}
-                          </p>
+                    <div className="space-y-2">
+                      {analyses.map((analysis) => (
+                        <div
+                          key={analysis.id}
+                          className="flex items-start gap-3 p-2 rounded-lg border bg-background hover:bg-muted/50 transition-colors"
+                        >
+                          <Checkbox
+                            id={analysis.id}
+                            checked={selectedAnalyses.includes(analysis.id)}
+                            onCheckedChange={() => toggleAnalysis(analysis.id)}
+                            disabled={isBuilding}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <Label
+                              htmlFor={analysis.id}
+                              className="cursor-pointer text-sm"
+                            >
+                              {analysis.input_summary 
+                                ? analysis.input_summary.substring(0, 50) + (analysis.input_summary.length > 50 ? "..." : "")
+                                : `Analysis from ${format(new Date(analysis.created_at), "MMM d, yyyy")}`
+                              }
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(analysis.created_at), "MMM d, yyyy")}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
