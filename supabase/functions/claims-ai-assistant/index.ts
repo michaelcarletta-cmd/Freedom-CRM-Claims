@@ -1667,6 +1667,15 @@ WORKSPACE SHARING: You can share claims to workspaces for partner collaboration!
 
 You can also specify claims by name using client_names array, or by ID using claim_ids array.
 
+INSURANCE COMPANY DATABASE: You have DIRECT ACCESS to the insurance_companies database table!
+- You can search the web and UPDATE contact information for insurance companies using bulk_update_insurance_companies
+- When user asks to "update contact info for insurance companies" or "find phone numbers/emails for insurance companies in the networking tab" - USE THIS TOOL
+- Call bulk_update_insurance_companies with NO parameters to update ALL active insurance companies
+- Call bulk_update_insurance_companies with company_names array to update specific companies
+- This will automatically search the web for each company's claims department phone and email, then update the database
+- Example: "update contact info for all insurance companies" → call bulk_update_insurance_companies({})
+- Example: "update State Farm contact info" → call bulk_update_insurance_companies({company_names: ["State Farm"]})
+
 NOTEPAD: You can add items to the user's personal notepad on their dashboard!
 - Use add_notepad_item when the user asks you to remind them of something, jot something down, add to their notes, or save a quick note
 - Examples: "remind me to call the adjuster tomorrow", "add to my notes: follow up on Smith claim", "jot down that I need to review the Johnson estimate"
