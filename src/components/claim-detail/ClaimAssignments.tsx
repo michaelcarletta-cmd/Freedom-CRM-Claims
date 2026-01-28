@@ -26,6 +26,13 @@ interface MortgageCompany {
   id: string;
   name: string;
   contact_name: string | null;
+  phone: string | null;
+  email: string | null;
+  loan_number: string | null;
+  last_four_ssn: string | null;
+  portal_username: string | null;
+  portal_password: string | null;
+  mortgage_site: string | null;
 }
 
 interface AssignedContractor {
@@ -471,8 +478,9 @@ export function ClaimAssignments({ claimId, currentMortgageCompanyId, loanNumber
             </Select>
           )}
           
-          {selectedMortgageCompany !== "none" && (
+          {selectedMortgageCompany !== "none" && selectedMortgageCompany && (
             <>
+              {/* Claim-specific mortgage details */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="loanNumber">Loan Number</Label>
@@ -497,6 +505,55 @@ export function ClaimAssignments({ claimId, currentMortgageCompanyId, loanNumber
               <Button onClick={handleUpdateMortgageDetails} className="w-full">
                 Save Mortgage Details
               </Button>
+
+              {/* Portal Access Info from Mortgage Company */}
+              {(() => {
+                const selectedCompany = mortgageCompanies.find(c => c.id === selectedMortgageCompany);
+                if (selectedCompany && (selectedCompany.mortgage_site || selectedCompany.portal_username)) {
+                  return (
+                    <div className="border-t pt-4 mt-4 space-y-3">
+                      <p className="text-sm font-medium text-muted-foreground">Portal Access Info</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        {selectedCompany.mortgage_site && (
+                          <div className="space-y-1">
+                            <p className="text-muted-foreground">Portal Site</p>
+                            <a 
+                              href={selectedCompany.mortgage_site.startsWith('http') ? selectedCompany.mortgage_site : `https://${selectedCompany.mortgage_site}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium text-primary hover:underline break-all"
+                            >
+                              {selectedCompany.mortgage_site}
+                            </a>
+                          </div>
+                        )}
+                        {selectedCompany.portal_username && (
+                          <div className="space-y-1">
+                            <p className="text-muted-foreground">Username</p>
+                            <p className="font-medium">{selectedCompany.portal_username}</p>
+                          </div>
+                        )}
+                        {selectedCompany.portal_password && (
+                          <div className="space-y-1">
+                            <p className="text-muted-foreground">Password</p>
+                            <p className="font-medium font-mono">••••••••</p>
+                          </div>
+                        )}
+                        {selectedCompany.phone && (
+                          <div className="space-y-1">
+                            <p className="text-muted-foreground">Phone</p>
+                            <p className="font-medium">{selectedCompany.phone}</p>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Edit portal info in Networking → Mortgage Companies
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </>
           )}
         </CardContent>
