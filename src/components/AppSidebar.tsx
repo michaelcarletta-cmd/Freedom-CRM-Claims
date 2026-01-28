@@ -1,6 +1,6 @@
 import { Home, FileText, CheckSquare, Inbox, Users, Network, DollarSign, FileStack, Settings, LogOut, MessageCircle } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import logo from "@/assets/freedom-claims-logo.svg";
+import logo from "@/assets/freedom-adjustment-logo.png";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { queryClient } from "@/App";
