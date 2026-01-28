@@ -98,7 +98,7 @@ Extract the following information and return it as a JSON object:
     "non_recoverable_depreciation": <number>
   },
   "pwi": {
-    "rcv": <number - Paid When Incurred RCV - items that are paid when work is completed>,
+    "rcv": <number - Paid When Incurred / Ordinance and Law RCV - code upgrade costs paid when work is completed>,
     "recoverable_depreciation": <number>,
     "non_recoverable_depreciation": <number>,
     "deductible": <number>
@@ -125,7 +125,8 @@ Important guidelines:
 - If a value is not found in the document, use 0
 - Look for common estimate sections: Summary, Line Items, Depreciation Schedule
 - For Xactimate estimates, look for "Replacement Cost Value", "Less Depreciation", "Actual Cash Value"
-- PWI (Paid When Incurred) items are costs that are paid when the work is actually completed - look for this section separately
+- PWI (Paid When Incurred) is also called "Ordinance and Law" - these are code upgrade costs paid when work is completed
+- Look for sections labeled "O&L", "Ordinance & Law", "Ordinance and Law", "PWI", or "Paid When Incurred"
 - Extract as many line items as possible with their categories
 - The deductible is usually shown separately from depreciation
 - Return ONLY the JSON object, no other text`;
