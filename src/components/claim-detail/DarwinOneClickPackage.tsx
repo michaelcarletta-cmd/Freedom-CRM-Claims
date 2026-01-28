@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { DarwinInlineNudges } from "@/components/claim-detail/DarwinInlineNudges";
 
 interface DarwinOneClickPackageProps {
   claimId: string;
@@ -290,6 +291,9 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
         <p className="text-sm text-muted-foreground">
           Automatically compile all claim materials into a single comprehensive package
         </p>
+        
+        {/* Darwin Strategic Nudges */}
+        <DarwinInlineNudges claimId={claimId} context="package_builder" maxNudges={2} />
 
         {/* Standard Components */}
         <div>
