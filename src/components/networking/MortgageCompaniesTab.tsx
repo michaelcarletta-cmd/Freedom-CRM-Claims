@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Home, Mail, Phone, User, Plus, Search, Pencil, Key } from "lucide-react";
+import { Home, Mail, Phone, User, Plus, Search, Pencil } from "lucide-react";
 import { formatPhoneNumber } from "@/lib/utils";
 import { MaskedField } from "@/components/ui/masked-field";
 
@@ -19,7 +19,6 @@ interface MortgageCompany {
   phone_extension: string | null;
   email: string | null;
   is_active: boolean;
-  last_four_ssn: string | null;
   portal_username: string | null;
   portal_password: string | null;
 }
@@ -36,7 +35,6 @@ export const MortgageCompaniesTab = () => {
     email: "",
     phone: "",
     phone_extension: "",
-    last_four_ssn: "",
     portal_username: "",
     portal_password: "",
   });
@@ -81,7 +79,6 @@ export const MortgageCompaniesTab = () => {
         email: company.email || "",
         phone: company.phone || "",
         phone_extension: company.phone_extension || "",
-        last_four_ssn: company.last_four_ssn || "",
         portal_username: company.portal_username || "",
         portal_password: company.portal_password || "",
       });
@@ -93,7 +90,6 @@ export const MortgageCompaniesTab = () => {
         email: "", 
         phone: "", 
         phone_extension: "",
-        last_four_ssn: "",
         portal_username: "",
         portal_password: "",
       });
@@ -113,7 +109,6 @@ export const MortgageCompaniesTab = () => {
       phone: formData.phone || null,
       phone_extension: formData.phone_extension || null,
       email: formData.email || null,
-      last_four_ssn: formData.last_four_ssn || null,
       portal_username: formData.portal_username || null,
       portal_password: formData.portal_password || null,
     };
@@ -149,7 +144,6 @@ export const MortgageCompaniesTab = () => {
       phone: "", 
       phone_extension: "", 
       email: "",
-      last_four_ssn: "",
       portal_username: "",
       portal_password: "",
     });
@@ -291,25 +285,6 @@ export const MortgageCompaniesTab = () => {
                       placeholder="1234"
                     />
                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Additional Info Section */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-medium text-muted-foreground border-b pb-2">Additional Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label className="flex items-center gap-2">
-                    <Key className="h-4 w-4" />
-                    Last 4 of SSN
-                  </Label>
-                  <Input
-                    value={formData.last_four_ssn}
-                    onChange={(e) => setFormData({ ...formData, last_four_ssn: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-                    placeholder="1234"
-                    maxLength={4}
-                  />
                 </div>
               </div>
             </div>
