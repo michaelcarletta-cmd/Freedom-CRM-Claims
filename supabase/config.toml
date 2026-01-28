@@ -122,3 +122,6 @@ verify_jwt = true
 
 [functions.darwin-weather-history]
 verify_jwt = true
+
+[functions.darwin-strategic-intelligence]
+verify_jwt = true

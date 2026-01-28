@@ -406,6 +406,63 @@ export type Database = {
         }
         Relationships: []
       }
+      carrier_behavior_profiles: {
+        Row: {
+          adjuster_notes: Json | null
+          avg_initial_response_days: number | null
+          avg_supplement_response_days: number | null
+          carrier_name: string
+          common_lowball_tactics: Json | null
+          counter_sequences: Json | null
+          created_at: string
+          escalation_effectiveness: Json | null
+          first_offer_vs_final_ratio: number | null
+          id: string
+          last_updated: string
+          preferred_communication: string | null
+          recommended_approach: string | null
+          supplement_approval_rate: number | null
+          total_claims_tracked: number | null
+          typical_denial_reasons: Json | null
+        }
+        Insert: {
+          adjuster_notes?: Json | null
+          avg_initial_response_days?: number | null
+          avg_supplement_response_days?: number | null
+          carrier_name: string
+          common_lowball_tactics?: Json | null
+          counter_sequences?: Json | null
+          created_at?: string
+          escalation_effectiveness?: Json | null
+          first_offer_vs_final_ratio?: number | null
+          id?: string
+          last_updated?: string
+          preferred_communication?: string | null
+          recommended_approach?: string | null
+          supplement_approval_rate?: number | null
+          total_claims_tracked?: number | null
+          typical_denial_reasons?: Json | null
+        }
+        Update: {
+          adjuster_notes?: Json | null
+          avg_initial_response_days?: number | null
+          avg_supplement_response_days?: number | null
+          carrier_name?: string
+          common_lowball_tactics?: Json | null
+          counter_sequences?: Json | null
+          created_at?: string
+          escalation_effectiveness?: Json | null
+          first_offer_vs_final_ratio?: number | null
+          id?: string
+          last_updated?: string
+          preferred_communication?: string | null
+          recommended_approach?: string | null
+          supplement_approval_rate?: number | null
+          total_claims_tracked?: number | null
+          typical_denial_reasons?: Json | null
+        }
+        Relationships: []
+      }
       claim_adjusters: {
         Row: {
           adjuster_email: string | null
@@ -1466,6 +1523,86 @@ export type Database = {
           },
         ]
       }
+      claim_outcomes: {
+        Row: {
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          days_to_final_settlement: number | null
+          days_to_first_payment: number | null
+          effective_evidence: Json | null
+          failed_arguments: Json | null
+          final_settlement: number | null
+          id: string
+          initial_estimate: number | null
+          key_leverage_points: Json | null
+          missing_evidence_impact: string | null
+          notes: string | null
+          recovery_percentage: number | null
+          resolution_date: string | null
+          resolution_type: string | null
+          settlement_variance: number | null
+          supplements_approved: number | null
+          total_supplements_submitted: number | null
+          updated_at: string
+          winning_arguments: Json | null
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          days_to_final_settlement?: number | null
+          days_to_first_payment?: number | null
+          effective_evidence?: Json | null
+          failed_arguments?: Json | null
+          final_settlement?: number | null
+          id?: string
+          initial_estimate?: number | null
+          key_leverage_points?: Json | null
+          missing_evidence_impact?: string | null
+          notes?: string | null
+          recovery_percentage?: number | null
+          resolution_date?: string | null
+          resolution_type?: string | null
+          settlement_variance?: number | null
+          supplements_approved?: number | null
+          total_supplements_submitted?: number | null
+          updated_at?: string
+          winning_arguments?: Json | null
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          days_to_final_settlement?: number | null
+          days_to_first_payment?: number | null
+          effective_evidence?: Json | null
+          failed_arguments?: Json | null
+          final_settlement?: number | null
+          id?: string
+          initial_estimate?: number | null
+          key_leverage_points?: Json | null
+          missing_evidence_impact?: string | null
+          notes?: string | null
+          recovery_percentage?: number | null
+          resolution_date?: string | null
+          resolution_type?: string | null
+          settlement_variance?: number | null
+          supplements_approved?: number | null
+          total_supplements_submitted?: number | null
+          updated_at?: string
+          winning_arguments?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_outcomes_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_partner_assignments: {
         Row: {
           assigned_at: string | null
@@ -1780,6 +1917,83 @@ export type Database = {
         }
         Relationships: []
       }
+      claim_strategic_insights: {
+        Row: {
+          analysis_version: string | null
+          auto_refresh_enabled: boolean | null
+          claim_id: string
+          counter_strategies: Json | null
+          coverage_strength_score: number | null
+          coverage_triggers_detected: Json | null
+          created_at: string
+          documentation_holes: Json | null
+          evidence_gaps: Json | null
+          evidence_quality_score: number | null
+          id: string
+          last_analyzed_at: string
+          leverage_points: Json | null
+          leverage_score: number | null
+          overall_health_score: number | null
+          recommended_next_moves: Json | null
+          senior_pa_opinion: string | null
+          timeline_risk_score: number | null
+          updated_at: string
+          warnings: Json | null
+        }
+        Insert: {
+          analysis_version?: string | null
+          auto_refresh_enabled?: boolean | null
+          claim_id: string
+          counter_strategies?: Json | null
+          coverage_strength_score?: number | null
+          coverage_triggers_detected?: Json | null
+          created_at?: string
+          documentation_holes?: Json | null
+          evidence_gaps?: Json | null
+          evidence_quality_score?: number | null
+          id?: string
+          last_analyzed_at?: string
+          leverage_points?: Json | null
+          leverage_score?: number | null
+          overall_health_score?: number | null
+          recommended_next_moves?: Json | null
+          senior_pa_opinion?: string | null
+          timeline_risk_score?: number | null
+          updated_at?: string
+          warnings?: Json | null
+        }
+        Update: {
+          analysis_version?: string | null
+          auto_refresh_enabled?: boolean | null
+          claim_id?: string
+          counter_strategies?: Json | null
+          coverage_strength_score?: number | null
+          coverage_triggers_detected?: Json | null
+          created_at?: string
+          documentation_holes?: Json | null
+          evidence_gaps?: Json | null
+          evidence_quality_score?: number | null
+          id?: string
+          last_analyzed_at?: string
+          leverage_points?: Json | null
+          leverage_score?: number | null
+          overall_health_score?: number | null
+          recommended_next_moves?: Json | null
+          senior_pa_opinion?: string | null
+          timeline_risk_score?: number | null
+          updated_at?: string
+          warnings?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_strategic_insights_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_updates: {
         Row: {
           claim_id: string
@@ -1811,6 +2025,80 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "claim_updates_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_warnings_log: {
+        Row: {
+          action_taken: string | null
+          claim_id: string
+          context: Json | null
+          created_at: string
+          dismiss_reason: string | null
+          dismissed_at: string | null
+          dismissed_by: string | null
+          id: string
+          is_dismissed: boolean | null
+          is_resolved: boolean | null
+          message: string
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+          shown_in_context: string | null
+          suggested_action: string | null
+          times_shown: number | null
+          title: string
+          warning_type: string
+        }
+        Insert: {
+          action_taken?: string | null
+          claim_id: string
+          context?: Json | null
+          created_at?: string
+          dismiss_reason?: string | null
+          dismissed_at?: string | null
+          dismissed_by?: string | null
+          id?: string
+          is_dismissed?: boolean | null
+          is_resolved?: boolean | null
+          message: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity: string
+          shown_in_context?: string | null
+          suggested_action?: string | null
+          times_shown?: number | null
+          title: string
+          warning_type: string
+        }
+        Update: {
+          action_taken?: string | null
+          claim_id?: string
+          context?: Json | null
+          created_at?: string
+          dismiss_reason?: string | null
+          dismissed_at?: string | null
+          dismissed_by?: string | null
+          id?: string
+          is_dismissed?: boolean | null
+          is_resolved?: boolean | null
+          message?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          shown_in_context?: string | null
+          suggested_action?: string | null
+          times_shown?: number | null
+          title?: string
+          warning_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_warnings_log_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
@@ -2526,6 +2814,62 @@ export type Database = {
           rotated_at?: string | null
         }
         Relationships: []
+      }
+      evidence_effectiveness: {
+        Row: {
+          carrier_response: string | null
+          claim_id: string | null
+          created_at: string
+          created_by: string | null
+          evidence_category: string | null
+          evidence_type: string
+          id: string
+          improvement_suggestions: Json | null
+          moved_settlement: boolean | null
+          quality_score: number | null
+          settlement_impact_amount: number | null
+          sufficiency_rating: string | null
+          was_cited_in_settlement: boolean | null
+        }
+        Insert: {
+          carrier_response?: string | null
+          claim_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          evidence_category?: string | null
+          evidence_type: string
+          id?: string
+          improvement_suggestions?: Json | null
+          moved_settlement?: boolean | null
+          quality_score?: number | null
+          settlement_impact_amount?: number | null
+          sufficiency_rating?: string | null
+          was_cited_in_settlement?: boolean | null
+        }
+        Update: {
+          carrier_response?: string | null
+          claim_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          evidence_category?: string | null
+          evidence_type?: string
+          id?: string
+          improvement_suggestions?: Json | null
+          moved_settlement?: boolean | null
+          quality_score?: number | null
+          settlement_impact_amount?: number | null
+          sufficiency_rating?: string | null
+          was_cited_in_settlement?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evidence_effectiveness_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       extracted_document_data: {
         Row: {

@@ -1,11 +1,12 @@
 import { useState, lazy, Suspense } from "react";
-import { Brain, ChevronDown, ChevronRight, Loader2, MessageSquare, FileText, Shield, Calculator, Zap, Search, Clock, Sparkles } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, Loader2, MessageSquare, FileText, Shield, Calculator, Zap, Search, Clock, Sparkles, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
 // Lazy load all Darwin components
+const DarwinInsightsPanel = lazy(() => import("@/components/claim-detail/DarwinInsightsPanel").then(m => ({ default: m.DarwinInsightsPanel })));
 const DarwinDenialAnalyzer = lazy(() => import("@/components/claim-detail/DarwinDenialAnalyzer").then(m => ({ default: m.DarwinDenialAnalyzer })));
 const DarwinNextSteps = lazy(() => import("@/components/claim-detail/DarwinNextSteps").then(m => ({ default: m.DarwinNextSteps })));
 const DarwinSupplementGenerator = lazy(() => import("@/components/claim-detail/DarwinSupplementGenerator").then(m => ({ default: m.DarwinSupplementGenerator })));
@@ -147,12 +148,17 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             </CardContent>
           </Card>
 
+          {/* Strategic Insights - NEW PRIMARY */}
+          <Suspense fallback={<LoadingFallback />}>
+            <DarwinInsightsPanel claimId={claimId} claim={claim} />
+          </Suspense>
+
           {/* Claim Intelligence */}
           <ToolCategory
             title="Claim Intelligence"
             description="AI-powered insights and recommendations"
             icon={<Search className="h-4 w-4" />}
-            defaultOpen={true}
+            defaultOpen={false}
           >
             <DarwinClaimBriefing claimId={claimId} claim={claim} />
             <DarwinNextSteps claimId={claimId} claim={claim} />

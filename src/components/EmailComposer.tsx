@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { DarwinInlineNudges } from "@/components/claim-detail/DarwinInlineNudges";
 
 interface Recipient {
   email: string;
@@ -438,6 +439,9 @@ export function EmailComposer({
           <DialogTitle>Compose Email</DialogTitle>
           <DialogDescription>Send an email to one or more recipients</DialogDescription>
         </DialogHeader>
+        
+        {/* Darwin Strategic Nudges */}
+        <DarwinInlineNudges claimId={claimId} context="email_composer" maxNudges={2} />
         
         <div className="space-y-4">
           <div className="space-y-2">
