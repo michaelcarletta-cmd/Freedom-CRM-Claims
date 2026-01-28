@@ -68,9 +68,25 @@ serve(async (req) => {
 
     console.log(`Processing estimate file: ${file.name}, type: ${file.type}, size: ${file.size}`);
 
-    // Convert file to base64 for AI processing
+    // Check file size - limit to 8MB to prevent memory issues
+    const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 8MB.`);
+    }
+
+    // Convert file to base64 for AI processing - use chunked approach to avoid stack overflow
     const arrayBuffer = await file.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    // Process in chunks to avoid "Maximum call stack size exceeded"
+    let base64 = '';
+    const chunkSize = 32768; // 32KB chunks
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.slice(i, i + chunkSize);
+      base64 += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    base64 = btoa(base64);
+    
     const mimeType = file.type || "application/pdf";
 
     // Use Lovable AI to extract data from the estimate
