@@ -10,6 +10,8 @@ const corsHeaders = {
 
 // Maximum file size: 20MB (matches upload limit)
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+// Maximum size for PDF/document base64 encoding (edge function memory limit)
+const MAX_PDF_SIZE = 8 * 1024 * 1024; // 8MB limit for PDFs
 
 // Split text into chunks for RAG
 function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[] {
@@ -76,6 +78,11 @@ async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize
   
   // Only images can use direct URLs - PDFs and documents MUST be base64 encoded
   const canUseDirectUrl = isImageMimeType(mimeType);
+  
+  // For PDFs and documents, check against the stricter size limit
+  if (!canUseDirectUrl && fileSize && fileSize > MAX_PDF_SIZE) {
+    throw new Error(`PDF/document too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum supported size for documents is 8MB due to processing limits. Please compress or split the file.`);
+  }
   
   if (canUseDirectUrl && fileSize && fileSize > 10 * 1024 * 1024) {
     // Only use direct URL for large images
