@@ -259,9 +259,9 @@ export function EstimateUploadDialog({
                   </div>
                 </div>
 
-                {/* PWI */}
+                {/* PWI / Ordinance and Law */}
                 <div className="p-4 border rounded-lg space-y-2">
-                  <h4 className="font-semibold">Paid When Incurred (PWI)</h4>
+                  <h4 className="font-semibold">Ordinance & Law (PWI)</h4>
                   <div className="text-sm space-y-1">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">RCV:</span>
