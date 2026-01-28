@@ -25,40 +25,18 @@ function base64ToUtf8(base64: string): string {
   }
 }
 
-// Detect if content is binary/image data
-function isBinaryContent(text: string): boolean {
-  // Check for PNG header
-  if (text.includes('\x89PNG') || text.includes('PNG') && text.includes('IHDR')) {
-    return true;
-  }
-  // Check for JPEG header
-  if (text.includes('\xFF\xD8\xFF') || text.includes('JFIF')) {
-    return true;
-  }
-  // Check for high concentration of non-printable characters
-  const nonPrintable = text.match(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g);
-  if (nonPrintable && nonPrintable.length > text.length * 0.1) {
-    return true;
-  }
-  return false;
-}
-
 // Clean up email text for display
 function cleanEmailText(text: string): string {
-  // If the whole thing looks like binary data, return a placeholder
-  if (isBinaryContent(text)) {
-    return '[Email contains image/attachment - view original email for full content]';
-  }
-  
   return text
     // Convert Windows line endings to Unix
     .replace(/\r\n/g, '\n')
     // Remove PNG binary data sections (raw image data that leaked into text)
-    .replace(/PNG[\s\S]*?IEND[^\n]*/g, '[Image]')
-    .replace(/\x89PNG[\s\S]*?IEND[^\n]*/g, '[Image]')
-    // Remove any content that looks like raw image data (IHDR, tEXt, IDAT markers)
-    .replace(/IHDR[\x00-\xFF]*?(?=\n\n|$)/g, '[Image]')
-    // Remove gibberish that results from binary data being interpreted as text
+    // Match from PNG header markers through to end of binary data
+    .replace(/\x89PNG[\s\S]*?(?:IEND|$)/g, '[Image]')
+    .replace(/PNG\s*\n?\s*IHDR[\s\S]*?(?:IEND|$)/g, '[Image]')
+    // Remove lines that are mostly non-printable characters (binary data)
+    .replace(/^[^\x20-\x7E\n]*[\x00-\x1F\x7F-\xFF]{10,}[^\x20-\x7E\n]*$/gm, '')
+    // Remove gibberish sequences (20+ non-ASCII chars in a row)
     .replace(/[^\x20-\x7E\n\r\t]{20,}/g, '')
     // Remove email reply/thread content (everything after "From:" header in replies)
     .replace(/\n\nFrom:[\s\S]*$/m, '')
@@ -77,6 +55,15 @@ function cleanEmailText(text: string): string {
     .trim();
 }
 
+// Check if text is readable (mostly printable ASCII)
+function isReadableText(text: string): boolean {
+  if (!text || text.length < 10) return false;
+  // Count printable characters (space through tilde, plus common whitespace)
+  const printable = text.match(/[\x20-\x7E\n\r\t]/g);
+  const ratio = printable ? printable.length / text.length : 0;
+  return ratio > 0.85; // At least 85% printable characters
+}
+
 // Decode base64 encoded email body (for legacy incorrectly stored emails)
 function decodeEmailBody(body: string): string {
   if (!body) return '';
@@ -85,19 +72,28 @@ function decodeEmailBody(body: string): string {
   const boundaryMatch = body.match(/--_[A-Za-z0-9]+_/);
   
   if (boundaryMatch) {
-    // This is raw MIME content - the text before the first boundary is base64 encoded plain text
     const boundary = boundaryMatch[0];
     const parts = body.split(boundary);
     
     if (parts.length > 0 && parts[0].trim()) {
-      // First part before boundary is usually the text/plain base64 content
       const firstPart = parts[0].trim();
       
-      // Check if it looks like base64 (only base64 chars)
+      // Check if it's already readable text (not base64)
+      if (isReadableText(firstPart)) {
+        return cleanEmailText(firstPart);
+      }
+      
+      // If not readable, try base64 decoding
       const cleaned = firstPart.replace(/[\r\n\s]/g, '');
       if (/^[A-Za-z0-9+/=]+$/.test(cleaned) && cleaned.length > 50) {
-        const decoded = base64ToUtf8(cleaned);
-        return cleanEmailText(decoded);
+        try {
+          const decoded = base64ToUtf8(cleaned);
+          if (isReadableText(decoded)) {
+            return cleanEmailText(decoded);
+          }
+        } catch (e) {
+          // Not valid base64
+        }
       }
     }
     
@@ -107,11 +103,9 @@ function decodeEmailBody(body: string): string {
         const encodingMatch = part.match(/Content-Transfer-Encoding:\s*(\S+)/i);
         const encoding = encodingMatch ? encodingMatch[1].toLowerCase() : '';
         
-        // Get content after headers (double newline)
         const contentParts = part.split(/\n\n/);
         if (contentParts.length > 1) {
           let content = contentParts.slice(1).join('\n\n').trim();
-          // Remove trailing boundary
           content = content.replace(/\n--_[A-Za-z0-9_]+--?\s*$/g, '').trim();
           
           if (encoding === 'base64') {
@@ -123,17 +117,18 @@ function decodeEmailBody(body: string): string {
     }
   }
   
-  // Check if body looks like pure base64 (no MIME structure)
-  const cleaned = body.replace(/[\r\n\s]/g, '');
-  if (/^[A-Za-z0-9+/=]+$/.test(cleaned) && cleaned.length > 100 && cleaned.length % 4 === 0) {
-    try {
-      const decoded = base64ToUtf8(cleaned);
-      // Validate it's readable text
-      if (decoded && !decoded.includes('\x00')) {
-        return cleanEmailText(decoded);
+  // Check if body looks like pure base64 (no MIME structure, no readable text)
+  if (!isReadableText(body)) {
+    const cleaned = body.replace(/[\r\n\s]/g, '');
+    if (/^[A-Za-z0-9+/=]+$/.test(cleaned) && cleaned.length > 100 && cleaned.length % 4 === 0) {
+      try {
+        const decoded = base64ToUtf8(cleaned);
+        if (decoded && !decoded.includes('\x00') && isReadableText(decoded)) {
+          return cleanEmailText(decoded);
+        }
+      } catch (e) {
+        // Not valid base64
       }
-    } catch (e) {
-      // Not valid base64
     }
   }
   
