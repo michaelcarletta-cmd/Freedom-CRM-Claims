@@ -100,10 +100,10 @@ export const DarwinSmartExtraction = ({ claimId, claim }: DarwinSmartExtractionP
         });
         return;
       }
-      if (file.size > 10 * 1024 * 1024) {
+      if (file.size > 20 * 1024 * 1024) {
         toast({
           title: "File too large",
-          description: "Please upload a file smaller than 10MB",
+          description: "Please upload a file smaller than 20MB",
           variant: "destructive"
         });
         return;

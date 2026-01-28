@@ -1,11 +1,44 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// @ts-ignore - pdf-parse types
+import pdfParse from "https://esm.sh/pdf-parse@1.1.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Size threshold for using native extraction vs AI multimodal (8MB base64 ~ 6MB file)
+const AI_EXTRACTION_LIMIT = 8 * 1024 * 1024;
+
+// Extract text from PDF using native parsing (no AI, lower memory usage)
+async function extractTextFromPDFNative(base64Content: string, fileName: string): Promise<string> {
+  console.log(`Native PDF extraction for: ${fileName}`);
+  
+  try {
+    // Decode base64 to bytes
+    const binaryString = atob(base64Content);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    const data = await pdfParse(bytes);
+    const extractedText = data.text || '';
+    
+    console.log(`Native extraction got ${extractedText.length} characters from ${data.numpages} pages`);
+    
+    if (!extractedText || extractedText.trim().length < 100) {
+      throw new Error('PDF appears to be scanned/image-based with minimal text');
+    }
+    
+    return extractedText;
+  } catch (error) {
+    console.error('Native PDF extraction failed:', error);
+    throw error;
+  }
+}
 
 // Reuse the same knowledge base search logic as the main Claims AI Assistant
 // so Darwin can leverage uploaded training materials (including ACV audio).
@@ -1806,6 +1839,20 @@ Please provide a comprehensive document comparison that includes:
       case 'smart_extraction': {
         const docType = additionalContext?.documentType || 'estimate';
         
+        // Check if PDF is large and needs native extraction
+        let extractedPdfText = '';
+        const isLargePdf = pdfContent && pdfContent.length > AI_EXTRACTION_LIMIT;
+        
+        if (isLargePdf) {
+          console.log(`Large PDF detected (${Math.round(pdfContent.length / 1024 / 1024)}MB base64), using native extraction first`);
+          try {
+            extractedPdfText = await extractTextFromPDFNative(pdfContent, pdfFileName || 'document.pdf');
+          } catch (nativeError) {
+            console.error('Native extraction failed for large PDF:', nativeError);
+            throw new Error(`This PDF is too large for AI processing and native text extraction failed. The PDF may be scanned/image-based. Please use a smaller file (<8MB) for scanned documents, or ensure the PDF has selectable text.`);
+          }
+        }
+        
         systemPrompt = `You are Darwin, an expert AI specializing in extracting structured data from insurance claim documents. Your role is to parse PDFs and extract key financial and line item data into a structured format.
 
 FORMATTING REQUIREMENT: Return a JSON object with the extracted data. Do NOT include markdown code blocks or any other formatting - just the raw JSON.
@@ -1823,7 +1870,10 @@ Be precise with numbers. If a value is not present, omit it from the response.`;
 
 DOCUMENT TYPE: ${docType}
 
-${pdfContent ? `A PDF document has been provided. Extract all structured data from it.` : `DOCUMENT CONTENT:\n${content || 'No content provided'}`}
+${isLargePdf && extractedPdfText ? `EXTRACTED DOCUMENT TEXT:
+${extractedPdfText.substring(0, 100000)}
+
+Extract all structured data from the text above.` : pdfContent ? `A PDF document has been provided. Extract all structured data from it.` : `DOCUMENT CONTENT:\n${content || 'No content provided'}`}
 
 Extract all financial data and line items from this document. Return a JSON object with this structure:
 {
@@ -1844,6 +1894,11 @@ Extract all financial data and line items from this document. Return a JSON obje
 }
 
 Return ONLY the JSON object, no additional text or formatting.`;
+        
+        // For large PDFs, we've extracted text so don't use multimodal
+        if (isLargePdf) {
+          additionalContext._useTextOnly = true;
+        }
         break;
       }
 
@@ -2454,7 +2509,7 @@ Return ONLY valid JSON with the classification.`;
       ];
       
       console.log(`Supplement analysis with ${additionalContext?.ourEstimatePdf ? 1 : 0} our estimate + ${(additionalContext?.insuranceEstimatePdf || pdfContent) ? 1 : 0} insurance estimate`);
-    } else if (pdfContent && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'document_compilation' || analysisType === 'estimate_work_summary' || analysisType === 'document_comparison' || analysisType === 'smart_extraction')) {
+    } else if (pdfContent && !additionalContext?._useTextOnly && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'document_compilation' || analysisType === 'estimate_work_summary' || analysisType === 'document_comparison' || analysisType === 'smart_extraction')) {
       // Use multimodal format for PDF analysis with Gemini-compatible inline_data format
       messages = [
         { role: 'system', content: systemPrompt },
@@ -2484,7 +2539,7 @@ Return ONLY valid JSON with the classification.`;
 
     // Call Lovable AI with model fallback chain for reliability
     const hasPdfContent = pdfContent || (pdfContents && pdfContents.length > 0) || additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf;
-    const needsPdfProcessing = hasPdfContent && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package', 'document_comparison', 'smart_extraction'].includes(analysisType);
+    const needsPdfProcessing = hasPdfContent && !additionalContext?._useTextOnly && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package', 'document_comparison', 'smart_extraction'].includes(analysisType);
     
     // Model fallback chain - use only Gemini models for PDF processing (OpenAI doesn't support PDF multimodal)
     // For text-only analysis, we can use OpenAI as fallback
