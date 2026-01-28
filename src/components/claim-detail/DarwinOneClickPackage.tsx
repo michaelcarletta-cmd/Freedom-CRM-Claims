@@ -4,10 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Package, Loader2, Download, FileText, Image, Receipt, FileCheck, Mail, Calendar } from "lucide-react";
+import { 
+  Package, Loader2, Download, FileText, Image, Receipt, 
+  FileCheck, Mail, Calendar, Brain, AlertTriangle, Scale,
+  FileSearch, Sparkles
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 
 interface DarwinOneClickPackageProps {
   claimId: string;
@@ -23,6 +29,25 @@ interface PackageComponent {
   count?: number;
 }
 
+interface DarwinAnalysis {
+  id: string;
+  analysis_type: string;
+  input_summary: string | null;
+  created_at: string;
+  result: string;
+}
+
+const ANALYSIS_TYPE_LABELS: Record<string, { label: string; icon: React.ReactNode }> = {
+  engineer_report_rebuttal: { label: "Engineer Report Rebuttal", icon: <Scale className="h-4 w-4" /> },
+  denial_rebuttal: { label: "Denial Rebuttal", icon: <AlertTriangle className="h-4 w-4" /> },
+  correspondence: { label: "Correspondence Analysis", icon: <Mail className="h-4 w-4" /> },
+  supplement: { label: "Supplement Generator", icon: <FileSearch className="h-4 w-4" /> },
+  demand_package: { label: "Demand Package", icon: <Package className="h-4 w-4" /> },
+  weakness_detection: { label: "Weakness Detection", icon: <AlertTriangle className="h-4 w-4" /> },
+  next_steps: { label: "Next Steps Analysis", icon: <Sparkles className="h-4 w-4" /> },
+  context_notes: { label: "Context Notes", icon: <FileText className="h-4 w-4" /> },
+};
+
 export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageProps) => {
   const { toast } = useToast();
   const [selectedComponents, setSelectedComponents] = useState<string[]>([
@@ -32,6 +57,7 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
     "settlement",
     "communications",
   ]);
+  const [selectedAnalyses, setSelectedAnalyses] = useState<string[]>([]);
   const [isBuilding, setIsBuilding] = useState(false);
   const [progress, setProgress] = useState(0);
   const [packageUrl, setPackageUrl] = useState<string | null>(null);
@@ -57,6 +83,29 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
         tasks: tasks.count || 0,
         inspections: inspections.count || 0,
       };
+    },
+  });
+
+  // Fetch Darwin analysis results for this claim
+  const { data: darwinAnalyses } = useQuery({
+    queryKey: ["darwin-analyses", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("darwin_analysis_results")
+        .select("id, analysis_type, input_summary, created_at, result")
+        .eq("claim_id", claimId)
+        .in("analysis_type", [
+          "engineer_report_rebuttal",
+          "denial_rebuttal",
+          "correspondence",
+          "supplement",
+          "demand_package",
+          "weakness_detection",
+        ])
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return data as DarwinAnalysis[];
     },
   });
 
@@ -116,11 +165,27 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
     );
   };
 
+  const toggleAnalysis = (id: string) => {
+    setSelectedAnalyses((prev) =>
+      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllAnalyses = () => {
+    if (darwinAnalyses) {
+      setSelectedAnalyses(darwinAnalyses.map(a => a.id));
+    }
+  };
+
+  const deselectAllAnalyses = () => {
+    setSelectedAnalyses([]);
+  };
+
   const handleBuildPackage = async () => {
-    if (selectedComponents.length === 0) {
+    if (selectedComponents.length === 0 && selectedAnalyses.length === 0) {
       toast({
         title: "Select components",
-        description: "Please select at least one component to include",
+        description: "Please select at least one component or analysis to include",
         variant: "destructive",
       });
       return;
@@ -136,6 +201,16 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
         setProgress((prev) => Math.min(prev + 10, 90));
       }, 500);
 
+      // Get selected analysis content
+      const selectedAnalysisContent = darwinAnalyses
+        ?.filter(a => selectedAnalyses.includes(a.id))
+        .map(a => ({
+          type: ANALYSIS_TYPE_LABELS[a.analysis_type]?.label || a.analysis_type,
+          date: a.created_at,
+          content: a.result,
+          summary: a.input_summary,
+        })) || [];
+
       const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
         body: {
           claimId,
@@ -147,6 +222,7 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
             includeSettlement: selectedComponents.includes("settlement"),
             includeCommunications: selectedComponents.includes("communications"),
             includeInspections: selectedComponents.includes("inspections"),
+            darwinAnalyses: selectedAnalysisContent,
           },
           claim,
         },
@@ -194,6 +270,14 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
     }
   };
 
+  // Group analyses by type for display
+  const groupedAnalyses = darwinAnalyses?.reduce((acc, analysis) => {
+    const type = analysis.analysis_type;
+    if (!acc[type]) acc[type] = [];
+    acc[type].push(analysis);
+    return acc;
+  }, {} as Record<string, DarwinAnalysis[]>) || {};
+
   return (
     <Card>
       <CardHeader>
@@ -207,36 +291,119 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
           Automatically compile all claim materials into a single comprehensive package
         </p>
 
-        <div className="grid gap-3 md:grid-cols-2">
-          {components.map((component) => (
-            <div
-              key={component.id}
-              className={`flex items-start gap-3 p-3 rounded-lg border ${
-                component.available ? "bg-background" : "bg-muted/50 opacity-60"
-              }`}
-            >
-              <Checkbox
-                id={component.id}
-                checked={selectedComponents.includes(component.id)}
-                onCheckedChange={() => toggleComponent(component.id)}
-                disabled={!component.available || isBuilding}
-              />
-              <div className="flex-1">
-                <Label
-                  htmlFor={component.id}
-                  className="flex items-center gap-2 cursor-pointer"
+        {/* Standard Components */}
+        <div>
+          <h4 className="text-sm font-medium mb-2">Claim Data</h4>
+          <div className="grid gap-3 md:grid-cols-2">
+            {components.map((component) => (
+              <div
+                key={component.id}
+                className={`flex items-start gap-3 p-3 rounded-lg border ${
+                  component.available ? "bg-background" : "bg-muted/50 opacity-60"
+                }`}
+              >
+                <Checkbox
+                  id={component.id}
+                  checked={selectedComponents.includes(component.id)}
+                  onCheckedChange={() => toggleComponent(component.id)}
+                  disabled={!component.available || isBuilding}
+                />
+                <div className="flex-1">
+                  <Label
+                    htmlFor={component.id}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    {component.icon}
+                    <span>{component.label}</span>
+                    {component.count !== undefined && (
+                      <span className="text-xs text-muted-foreground">({component.count})</span>
+                    )}
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">{component.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Darwin Analyses Section */}
+        {darwinAnalyses && darwinAnalyses.length > 0 && (
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium flex items-center gap-2">
+                <Brain className="h-4 w-4 text-primary" />
+                Darwin Analyses & Rebuttals ({darwinAnalyses.length})
+              </h4>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={selectAllAnalyses}
+                  disabled={isBuilding}
                 >
-                  {component.icon}
-                  <span>{component.label}</span>
-                  {component.count !== undefined && (
-                    <span className="text-xs text-muted-foreground">({component.count})</span>
-                  )}
-                </Label>
-                <p className="text-xs text-muted-foreground mt-1">{component.description}</p>
+                  Select All
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={deselectAllAnalyses}
+                  disabled={isBuilding}
+                >
+                  Clear
+                </Button>
               </div>
             </div>
-          ))}
-        </div>
+            <ScrollArea className="max-h-[300px]">
+              <div className="space-y-3">
+                {Object.entries(groupedAnalyses).map(([type, analyses]) => (
+                  <div key={type} className="space-y-2">
+                    <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                      {ANALYSIS_TYPE_LABELS[type]?.icon}
+                      {ANALYSIS_TYPE_LABELS[type]?.label || type.replace(/_/g, ' ')}
+                    </h5>
+                    {analyses.map((analysis) => (
+                      <div
+                        key={analysis.id}
+                        className="flex items-start gap-3 p-3 rounded-lg border bg-background"
+                      >
+                        <Checkbox
+                          id={analysis.id}
+                          checked={selectedAnalyses.includes(analysis.id)}
+                          onCheckedChange={() => toggleAnalysis(analysis.id)}
+                          disabled={isBuilding}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <Label
+                            htmlFor={analysis.id}
+                            className="cursor-pointer text-sm"
+                          >
+                            {analysis.input_summary 
+                              ? analysis.input_summary.substring(0, 60) + (analysis.input_summary.length > 60 ? "..." : "")
+                              : `Analysis from ${format(new Date(analysis.created_at), "MMM d, yyyy")}`
+                            }
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(analysis.created_at), "MMM d, yyyy 'at' h:mm a")}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+
+        {/* No analyses message */}
+        {(!darwinAnalyses || darwinAnalyses.length === 0) && (
+          <div className="border-t pt-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 bg-muted/30 rounded-lg">
+              <Brain className="h-4 w-4" />
+              <span>No Darwin analyses available yet. Generate rebuttals or analyses from the Darwin tools to include them here.</span>
+            </div>
+          </div>
+        )}
 
         {isBuilding && (
           <div className="space-y-2">
@@ -250,7 +417,7 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
         <div className="flex gap-2">
           <Button
             onClick={handleBuildPackage}
-            disabled={isBuilding || selectedComponents.length === 0}
+            disabled={isBuilding || (selectedComponents.length === 0 && selectedAnalyses.length === 0)}
             className="flex-1"
           >
             {isBuilding ? (
@@ -261,7 +428,7 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
             ) : (
               <>
                 <Package className="h-4 w-4 mr-2" />
-                Build Package
+                Build Package {selectedAnalyses.length > 0 && `(+${selectedAnalyses.length} analyses)`}
               </>
             )}
           </Button>
