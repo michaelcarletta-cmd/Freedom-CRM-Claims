@@ -463,6 +463,51 @@ export type Database = {
         }
         Relationships: []
       }
+      carrier_playbooks: {
+        Row: {
+          action_type: string | null
+          carrier_name: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          priority: number | null
+          recommended_action: string
+          sample_size: number | null
+          state_code: string | null
+          success_rate: number | null
+          trigger_condition: Json
+          updated_at: string | null
+        }
+        Insert: {
+          action_type?: string | null
+          carrier_name: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          priority?: number | null
+          recommended_action: string
+          sample_size?: number | null
+          state_code?: string | null
+          success_rate?: number | null
+          trigger_condition: Json
+          updated_at?: string | null
+        }
+        Update: {
+          action_type?: string | null
+          carrier_name?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          priority?: number | null
+          recommended_action?: string
+          sample_size?: number | null
+          state_code?: string | null
+          success_rate?: number | null
+          trigger_condition?: Json
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       claim_adjusters: {
         Row: {
           adjuster_email: string | null
@@ -1597,7 +1642,7 @@ export type Database = {
           {
             foreignKeyName: "claim_outcomes_claim_id_fkey"
             columns: ["claim_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "claims"
             referencedColumns: ["id"]
           },
@@ -1765,6 +1810,63 @@ export type Database = {
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_policy_analysis: {
+        Row: {
+          analyzed_at: string | null
+          claim_id: string
+          contradictions_found: Json | null
+          coverage_limits: Json | null
+          created_at: string | null
+          exclusions: Json | null
+          id: string
+          policy_file_id: string | null
+          policy_summary: string | null
+          special_conditions: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          analyzed_at?: string | null
+          claim_id: string
+          contradictions_found?: Json | null
+          coverage_limits?: Json | null
+          created_at?: string | null
+          exclusions?: Json | null
+          id?: string
+          policy_file_id?: string | null
+          policy_summary?: string | null
+          special_conditions?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          analyzed_at?: string | null
+          claim_id?: string
+          contradictions_found?: Json | null
+          coverage_limits?: Json | null
+          created_at?: string | null
+          exclusions?: Json | null
+          id?: string
+          policy_file_id?: string | null
+          policy_summary?: string | null
+          special_conditions?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_policy_analysis_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_policy_analysis_policy_file_id_fkey"
+            columns: ["policy_file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
             referencedColumns: ["id"]
           },
         ]
@@ -2034,6 +2136,7 @@ export type Database = {
       }
       claim_warnings_log: {
         Row: {
+          action_recommendation: string | null
           action_taken: string | null
           claim_id: string
           context: Json | null
@@ -2045,6 +2148,7 @@ export type Database = {
           is_dismissed: boolean | null
           is_resolved: boolean | null
           message: string
+          precedent_claim_ids: string[] | null
           resolved_at: string | null
           resolved_by: string | null
           severity: string
@@ -2052,9 +2156,11 @@ export type Database = {
           suggested_action: string | null
           times_shown: number | null
           title: string
+          trigger_context: string | null
           warning_type: string
         }
         Insert: {
+          action_recommendation?: string | null
           action_taken?: string | null
           claim_id: string
           context?: Json | null
@@ -2066,6 +2172,7 @@ export type Database = {
           is_dismissed?: boolean | null
           is_resolved?: boolean | null
           message: string
+          precedent_claim_ids?: string[] | null
           resolved_at?: string | null
           resolved_by?: string | null
           severity: string
@@ -2073,9 +2180,11 @@ export type Database = {
           suggested_action?: string | null
           times_shown?: number | null
           title: string
+          trigger_context?: string | null
           warning_type: string
         }
         Update: {
+          action_recommendation?: string | null
           action_taken?: string | null
           claim_id?: string
           context?: Json | null
@@ -2087,6 +2196,7 @@ export type Database = {
           is_dismissed?: boolean | null
           is_resolved?: boolean | null
           message?: string
+          precedent_claim_ids?: string[] | null
           resolved_at?: string | null
           resolved_by?: string | null
           severity?: string
@@ -2094,6 +2204,7 @@ export type Database = {
           suggested_action?: string | null
           times_shown?: number | null
           title?: string
+          trigger_context?: string | null
           warning_type?: string
         }
         Relationships: [

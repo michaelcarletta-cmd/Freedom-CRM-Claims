@@ -1,5 +1,5 @@
 import { useState, lazy, Suspense } from "react";
-import { Brain, ChevronDown, ChevronRight, Loader2, MessageSquare, FileText, Shield, Calculator, Zap, Search, Clock, Sparkles, TrendingUp } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, Loader2, MessageSquare, FileText, Shield, Calculator, Zap, Search, Clock, Sparkles, TrendingUp, Swords, Building2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -42,6 +42,11 @@ const ProofOfLossGenerator = lazy(() => import("@/components/claim-detail/ProofO
 const EnhancedEstimateBuilder = lazy(() => import("@/components/claim-detail/EnhancedEstimateBuilder").then(m => ({ default: m.EnhancedEstimateBuilder })));
 const RecoverableDepreciationInvoice = lazy(() => import("@/components/claim-detail/RecoverableDepreciationInvoice").then(m => ({ default: m.RecoverableDepreciationInvoice })));
 const ClaimAutomationSettings = lazy(() => import("@/components/claim-detail/ClaimAutomationSettings").then(m => ({ default: m.ClaimAutomationSettings })));
+
+// New Strategic Components
+const ClaimWarRoom = lazy(() => import("@/components/claim-detail/ClaimWarRoom").then(m => ({ default: m.ClaimWarRoom })));
+const CarrierPlaybookDialog = lazy(() => import("@/components/claim-detail/CarrierPlaybookDialog").then(m => ({ default: m.CarrierPlaybookDialog })));
+const DarwinSecondBrain = lazy(() => import("@/components/claim-detail/DarwinSecondBrain").then(m => ({ default: m.DarwinSecondBrain })));
 
 interface DarwinTabProps {
   claimId: string;
@@ -130,6 +135,25 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
       <div className={cn("grid gap-6", showCopilot ? "lg:grid-cols-[1fr,400px]" : "grid-cols-1")}>
         {/* Tools Column */}
         <div className="space-y-4 order-2 lg:order-1">
+          {/* Strategic Command Center - NEW */}
+          <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Swords className="h-4 w-4 text-primary" />
+                Strategic Command
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Suspense fallback={<LoadingFallback />}>
+                <ClaimWarRoom claimId={claimId} claim={claim} />
+                <CarrierPlaybookDialog 
+                  carrierName={claim?.insurance_company} 
+                  stateCode={claim?.property_state}
+                />
+              </Suspense>
+            </CardContent>
+          </Card>
+
           {/* Quick Actions - Always visible */}
           <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
             <CardHeader className="pb-3">
