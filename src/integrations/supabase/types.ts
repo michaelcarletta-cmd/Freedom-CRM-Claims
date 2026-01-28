@@ -1858,6 +1858,9 @@ export type Database = {
           loss_type: string | null
           loss_type_id: string | null
           mortgage_company_id: string | null
+          mortgage_portal_password: string | null
+          mortgage_portal_site: string | null
+          mortgage_portal_username: string | null
           other_structures_limit: number | null
           partner_assigned_user_email: string | null
           partner_assigned_user_id: string | null
@@ -1915,6 +1918,9 @@ export type Database = {
           loss_type?: string | null
           loss_type_id?: string | null
           mortgage_company_id?: string | null
+          mortgage_portal_password?: string | null
+          mortgage_portal_site?: string | null
+          mortgage_portal_username?: string | null
           other_structures_limit?: number | null
           partner_assigned_user_email?: string | null
           partner_assigned_user_id?: string | null
@@ -1972,6 +1978,9 @@ export type Database = {
           loss_type?: string | null
           loss_type_id?: string | null
           mortgage_company_id?: string | null
+          mortgage_portal_password?: string | null
+          mortgage_portal_site?: string | null
+          mortgage_portal_username?: string | null
           other_structures_limit?: number | null
           partner_assigned_user_email?: string | null
           partner_assigned_user_id?: string | null
@@ -4286,6 +4295,9 @@ export type Database = {
           loss_type: string | null
           loss_type_id: string | null
           mortgage_company_id: string | null
+          mortgage_portal_password: string | null
+          mortgage_portal_site: string | null
+          mortgage_portal_username: string | null
           other_structures_limit: number | null
           partner_assigned_user_email: string | null
           partner_assigned_user_id: string | null

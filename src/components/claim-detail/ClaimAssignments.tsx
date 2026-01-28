@@ -14,6 +14,9 @@ interface ClaimAssignmentsProps {
   currentMortgageCompanyId?: string | null;
   loanNumber?: string | null;
   ssnLastFour?: string | null;
+  mortgagePortalSite?: string | null;
+  mortgagePortalUsername?: string | null;
+  mortgagePortalPassword?: string | null;
 }
 
 interface Contractor {
@@ -51,7 +54,15 @@ interface AssignedStaff {
   profiles: Staff;
 }
 
-export function ClaimAssignments({ claimId, currentMortgageCompanyId, loanNumber, ssnLastFour }: ClaimAssignmentsProps) {
+export function ClaimAssignments({ 
+  claimId, 
+  currentMortgageCompanyId, 
+  loanNumber, 
+  ssnLastFour,
+  mortgagePortalSite,
+  mortgagePortalUsername,
+  mortgagePortalPassword 
+}: ClaimAssignmentsProps) {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [assignedStaff, setAssignedStaff] = useState<AssignedStaff[]>([]);
   const [contractors, setContractors] = useState<Contractor[]>([]);
@@ -62,6 +73,9 @@ export function ClaimAssignments({ claimId, currentMortgageCompanyId, loanNumber
   const [selectedMortgageCompany, setSelectedMortgageCompany] = useState<string>(currentMortgageCompanyId || "none");
   const [editLoanNumber, setEditLoanNumber] = useState<string>(loanNumber || "");
   const [editSsnLastFour, setEditSsnLastFour] = useState<string>(ssnLastFour || "");
+  const [editPortalSite, setEditPortalSite] = useState<string>(mortgagePortalSite || "");
+  const [editPortalUsername, setEditPortalUsername] = useState<string>(mortgagePortalUsername || "");
+  const [editPortalPassword, setEditPortalPassword] = useState<string>(mortgagePortalPassword || "");
   const [addMortgageOpen, setAddMortgageOpen] = useState(false);
   const [newMortgageName, setNewMortgageName] = useState("");
 
@@ -297,7 +311,10 @@ export function ClaimAssignments({ claimId, currentMortgageCompanyId, loanNumber
       .from("claims")
       .update({ 
         loan_number: editLoanNumber || null, 
-        ssn_last_four: editSsnLastFour || null 
+        ssn_last_four: editSsnLastFour || null,
+        mortgage_portal_site: editPortalSite || null,
+        mortgage_portal_username: editPortalUsername || null,
+        mortgage_portal_password: editPortalPassword || null
       })
       .eq("id", claimId);
 
@@ -481,73 +498,105 @@ export function ClaimAssignments({ claimId, currentMortgageCompanyId, loanNumber
           {selectedMortgageCompany !== "none" && selectedMortgageCompany && (
             <>
               {/* Claim-specific mortgage details */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="loanNumber">Loan Number</Label>
-                  <Input
-                    id="loanNumber"
-                    value={editLoanNumber}
-                    onChange={(e) => setEditLoanNumber(e.target.value)}
-                    placeholder="Enter loan number"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="ssnLastFour">SSN Last Four</Label>
-                  <Input
-                    id="ssnLastFour"
-                    value={editSsnLastFour}
-                    onChange={(e) => setEditSsnLastFour(e.target.value)}
-                    placeholder="Enter last 4 digits"
-                    maxLength={4}
-                  />
+              <div className="space-y-4">
+                <p className="text-sm font-medium text-muted-foreground">Loan Information</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="loanNumber">Loan Number</Label>
+                    <Input
+                      id="loanNumber"
+                      value={editLoanNumber}
+                      onChange={(e) => setEditLoanNumber(e.target.value)}
+                      placeholder="Enter loan number"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ssnLastFour">SSN Last Four</Label>
+                    <Input
+                      id="ssnLastFour"
+                      value={editSsnLastFour}
+                      onChange={(e) => setEditSsnLastFour(e.target.value)}
+                      placeholder="Enter last 4 digits"
+                      maxLength={4}
+                    />
+                  </div>
                 </div>
               </div>
+
+              {/* Client Portal Credentials */}
+              <div className="space-y-4 border-t pt-4">
+                <p className="text-sm font-medium text-muted-foreground">Client Portal Access</p>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="portalSite">Portal Site</Label>
+                    <Input
+                      id="portalSite"
+                      value={editPortalSite}
+                      onChange={(e) => setEditPortalSite(e.target.value)}
+                      placeholder="e.g., insuranceclaimcheck.com"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="portalUsername">Username</Label>
+                      <Input
+                        id="portalUsername"
+                        value={editPortalUsername}
+                        onChange={(e) => setEditPortalUsername(e.target.value)}
+                        placeholder="Portal username"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="portalPassword">Password</Label>
+                      <Input
+                        id="portalPassword"
+                        type="password"
+                        value={editPortalPassword}
+                        onChange={(e) => setEditPortalPassword(e.target.value)}
+                        placeholder="Portal password"
+                      />
+                    </div>
+                  </div>
+                  {editPortalSite && (
+                    <a 
+                      href={editPortalSite.startsWith('http') ? editPortalSite : `https://${editPortalSite}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline inline-flex items-center gap-1"
+                    >
+                      Open Portal →
+                    </a>
+                  )}
+                </div>
+              </div>
+
               <Button onClick={handleUpdateMortgageDetails} className="w-full">
                 Save Mortgage Details
               </Button>
 
-              {/* Portal Access Info from Mortgage Company */}
+              {/* Company Contact Info (from Mortgage Company record) */}
               {(() => {
                 const selectedCompany = mortgageCompanies.find(c => c.id === selectedMortgageCompany);
-                if (selectedCompany && (selectedCompany.mortgage_site || selectedCompany.portal_username)) {
+                if (selectedCompany && (selectedCompany.phone || selectedCompany.email)) {
                   return (
-                    <div className="border-t pt-4 mt-4 space-y-3">
-                      <p className="text-sm font-medium text-muted-foreground">Portal Access Info</p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        {selectedCompany.mortgage_site && (
-                          <div className="space-y-1">
-                            <p className="text-muted-foreground">Portal Site</p>
-                            <a 
-                              href={selectedCompany.mortgage_site.startsWith('http') ? selectedCompany.mortgage_site : `https://${selectedCompany.mortgage_site}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-medium text-primary hover:underline break-all"
-                            >
-                              {selectedCompany.mortgage_site}
-                            </a>
-                          </div>
-                        )}
-                        {selectedCompany.portal_username && (
-                          <div className="space-y-1">
-                            <p className="text-muted-foreground">Username</p>
-                            <p className="font-medium">{selectedCompany.portal_username}</p>
-                          </div>
-                        )}
-                        {selectedCompany.portal_password && (
-                          <div className="space-y-1">
-                            <p className="text-muted-foreground">Password</p>
-                            <p className="font-medium font-mono">••••••••</p>
-                          </div>
-                        )}
+                    <div className="border-t pt-4 mt-2 space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">Company Contact</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                         {selectedCompany.phone && (
-                          <div className="space-y-1">
-                            <p className="text-muted-foreground">Phone</p>
-                            <p className="font-medium">{selectedCompany.phone}</p>
+                          <div>
+                            <span className="text-muted-foreground">Phone: </span>
+                            <span className="font-medium">{selectedCompany.phone}</span>
+                          </div>
+                        )}
+                        {selectedCompany.email && (
+                          <div>
+                            <span className="text-muted-foreground">Email: </span>
+                            <span className="font-medium">{selectedCompany.email}</span>
                           </div>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Edit portal info in Networking → Mortgage Companies
+                        Edit company info in Networking → Mortgage Companies
                       </p>
                     </div>
                   );

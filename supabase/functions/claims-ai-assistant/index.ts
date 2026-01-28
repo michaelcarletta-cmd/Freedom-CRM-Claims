@@ -8,7 +8,8 @@ const corsHeaders = {
 
 // Helper function to search web using Perplexity
 async function searchWeb(query: string): Promise<string> {
-  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
+  // Try both possible API key names from connector
+  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY") || Deno.env.get("PERPLEXITY_API_KEY_1");
   if (!PERPLEXITY_API_KEY) {
     return "Web search unavailable: API key not configured";
   }
@@ -52,7 +53,7 @@ async function searchWeb(query: string): Promise<string> {
 
 // Helper function to find leads based on recent storm activity and property records
 async function findLeads(location: string, damageType?: string): Promise<string> {
-  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
+  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY") || Deno.env.get("PERPLEXITY_API_KEY_1");
   if (!PERPLEXITY_API_KEY) {
     return "Lead search unavailable: Perplexity API key not configured";
   }
@@ -155,7 +156,7 @@ ${propertyInfo || 'Property record search resources not available for this area.
 
 // Helper function to get weather for a specific date and location
 async function getWeatherReport(location: string, date: string): Promise<string> {
-  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
+  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY") || Deno.env.get("PERPLEXITY_API_KEY_1");
   if (!PERPLEXITY_API_KEY) {
     return "Weather search unavailable: API key not configured";
   }
@@ -882,6 +883,81 @@ const tools = [
           }
         },
         required: ["client_name"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "web_search",
+      description: "Search the web for information about insurance companies, building codes, manufacturer specifications, regulations, or any other publicly available information. Use this when the user asks you to find, look up, or research information from the internet.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "The search query to look up on the web"
+          },
+          context: {
+            type: "string",
+            description: "Additional context about what the user is looking for"
+          }
+        },
+        required: ["query"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_insurance_company",
+      description: "Update an insurance company's contact information in the database. Use this after performing a web search to get updated contact info for an insurance company.",
+      parameters: {
+        type: "object",
+        properties: {
+          company_name: {
+            type: "string",
+            description: "The name of the insurance company to update"
+          },
+          phone: {
+            type: "string",
+            description: "The new phone number"
+          },
+          email: {
+            type: "string",
+            description: "The new email address"
+          },
+          claims_phone: {
+            type: "string",
+            description: "Claims department phone number"
+          },
+          claims_email: {
+            type: "string",
+            description: "Claims department email"
+          }
+        },
+        required: ["company_name"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "lookup_building_code",
+      description: "Search for building codes, manufacturer specifications, installation requirements, or industry standards. Use this when the user asks about code requirements, proper installation methods, or manufacturer guidelines.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "The building code, product, or specification to look up (e.g., 'IRC roofing requirements', 'GAF shingle installation specs', 'Florida Building Code wind resistance')"
+          },
+          state: {
+            type: "string",
+            description: "Optional state for state-specific codes"
+          }
+        },
+        required: ["query"]
       }
     }
   }
@@ -2138,6 +2214,85 @@ ${knowledgeBaseContext || ''}`
           } catch (parseErr) {
             console.error("Error in get_full_claim_context:", parseErr);
             answer += `\n\n❌ **Error getting claim context:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "web_search") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Performing web search:", params.query);
+            
+            const searchResult = await searchWeb(params.query);
+            
+            if (searchResult && !searchResult.includes("unavailable")) {
+              answer += `\n\n🔍 **Web Search Results for "${params.query}":**\n\n${searchResult}`;
+            } else {
+              answer += `\n\n❌ **Web search failed:** ${searchResult}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in web_search:", parseErr);
+            answer += `\n\n❌ **Error performing web search:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "update_insurance_company") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Updating insurance company:", params.company_name);
+            
+            // Find the insurance company by name
+            const { data: companies, error: findError } = await supabase
+              .from("insurance_companies")
+              .select("id, name")
+              .ilike("name", `%${params.company_name}%`)
+              .limit(5);
+            
+            if (findError || !companies || companies.length === 0) {
+              answer += `\n\n❌ **Insurance company "${params.company_name}" not found in database.**`;
+              continue;
+            }
+            
+            // Update the company
+            const updateData: any = {};
+            if (params.phone) updateData.phone = params.phone;
+            if (params.email) updateData.email = params.email;
+            if (params.claims_phone) updateData.claims_phone = params.claims_phone;
+            if (params.claims_email) updateData.claims_email = params.claims_email;
+            
+            if (Object.keys(updateData).length === 0) {
+              answer += `\n\n❌ **No update data provided for ${params.company_name}.**`;
+              continue;
+            }
+            
+            const { error: updateError } = await supabase
+              .from("insurance_companies")
+              .update(updateData)
+              .eq("id", companies[0].id);
+            
+            if (updateError) {
+              answer += `\n\n❌ **Failed to update ${companies[0].name}:** ${updateError.message}`;
+            } else {
+              const updates = Object.entries(updateData).map(([k, v]) => `${k}: ${v}`).join(", ");
+              answer += `\n\n✅ **Updated ${companies[0].name}:** ${updates}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in update_insurance_company:", parseErr);
+            answer += `\n\n❌ **Error updating insurance company:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "lookup_building_code") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            const query = params.state 
+              ? `${params.query} ${params.state} building code requirements`
+              : params.query;
+            console.log("Looking up building code:", query);
+            
+            const searchResult = await searchWeb(query);
+            
+            if (searchResult && !searchResult.includes("unavailable")) {
+              answer += `\n\n📋 **Building Code / Manufacturer Spec Lookup:**\n\n${searchResult}`;
+            } else {
+              answer += `\n\n❌ **Could not find information for:** ${params.query}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in lookup_building_code:", parseErr);
+            answer += `\n\n❌ **Error looking up building code:** Invalid parameters`;
           }
         }
       }
