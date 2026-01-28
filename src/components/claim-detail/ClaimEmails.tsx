@@ -25,11 +25,41 @@ function base64ToUtf8(base64: string): string {
   }
 }
 
+// Detect if content is binary/image data
+function isBinaryContent(text: string): boolean {
+  // Check for PNG header
+  if (text.includes('\x89PNG') || text.includes('PNG') && text.includes('IHDR')) {
+    return true;
+  }
+  // Check for JPEG header
+  if (text.includes('\xFF\xD8\xFF') || text.includes('JFIF')) {
+    return true;
+  }
+  // Check for high concentration of non-printable characters
+  const nonPrintable = text.match(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g);
+  if (nonPrintable && nonPrintable.length > text.length * 0.1) {
+    return true;
+  }
+  return false;
+}
+
 // Clean up email text for display
 function cleanEmailText(text: string): string {
+  // If the whole thing looks like binary data, return a placeholder
+  if (isBinaryContent(text)) {
+    return '[Email contains image/attachment - view original email for full content]';
+  }
+  
   return text
     // Convert Windows line endings to Unix
     .replace(/\r\n/g, '\n')
+    // Remove PNG binary data sections (raw image data that leaked into text)
+    .replace(/PNG[\s\S]*?IEND[^\n]*/g, '[Image]')
+    .replace(/\x89PNG[\s\S]*?IEND[^\n]*/g, '[Image]')
+    // Remove any content that looks like raw image data (IHDR, tEXt, IDAT markers)
+    .replace(/IHDR[\x00-\xFF]*?(?=\n\n|$)/g, '[Image]')
+    // Remove gibberish that results from binary data being interpreted as text
+    .replace(/[^\x20-\x7E\n\r\t]{20,}/g, '')
     // Remove email reply/thread content (everything after "From:" header in replies)
     .replace(/\n\nFrom:[\s\S]*$/m, '')
     // Remove image placeholders like [A computer and phone with a screen...]
@@ -42,6 +72,8 @@ function cleanEmailText(text: string): string {
     .replace(/<https?:\/\/[^>]+>/g, '')
     // Clean up multiple newlines
     .replace(/\n{3,}/g, '\n\n')
+    // Clean up multiple [Image] placeholders
+    .replace(/(\[Image\]\s*)+/g, '[Image]\n')
     .trim();
 }
 
