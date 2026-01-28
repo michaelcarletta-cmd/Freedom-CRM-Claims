@@ -8,14 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2, Sofa } from "lucide-react";
+import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2, Sofa, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ClaimPayments } from "./ClaimPayments";
 import { InvoiceDialog } from "@/components/InvoiceDialog";
-
+import { EstimateUploadDialog } from "./EstimateUploadDialog";
 interface ClaimAccountingProps {
   claim: any;
   userRole: string | null;
@@ -26,6 +26,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [estimateUploadOpen, setEstimateUploadOpen] = useState(false);
 
   // Fetch settlement data
   const { data: settlement } = useQuery({
@@ -105,8 +106,12 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
 
   return (
     <div className="space-y-6">
-      {/* Invoice Button */}
-      <div className="flex justify-end">
+      {/* Action Buttons */}
+      <div className="flex justify-end gap-2">
+        <Button onClick={() => setEstimateUploadOpen(true)} variant="outline">
+          <Upload className="h-4 w-4 mr-2" />
+          Upload Estimate
+        </Button>
         <Button onClick={() => setInvoiceOpen(true)} variant="outline">
           <FileOutput className="h-4 w-4 mr-2" />
           Create Invoice
@@ -198,6 +203,13 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
           email: claim.policyholder_email || "",
           address: claim.policyholder_address || "",
         }}
+      />
+
+      {/* Estimate Upload Dialog */}
+      <EstimateUploadDialog
+        open={estimateUploadOpen}
+        onOpenChange={setEstimateUploadOpen}
+        claimId={claim.id}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy } from "lucide-react";
+import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ClaimTemplates } from "./ClaimTemplates";
+import { EstimateUploadDialog } from "./EstimateUploadDialog";
 
 
 interface ClaimFilesProps {
@@ -46,6 +47,9 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewFileType, setPreviewFileType] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<any>(null);
+  const [estimateUploadOpen, setEstimateUploadOpen] = useState(false);
+  const [estimatePromptOpen, setEstimatePromptOpen] = useState(false);
+  const [pendingEstimateFile, setPendingEstimateFile] = useState<any>(null);
   const [templateForm, setTemplateForm] = useState({
     name: "",
     description: "",
@@ -53,6 +57,22 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
   });
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Helper to detect if a file is likely an estimate
+  const isEstimateFile = (fileName: string, folderName: string | null) => {
+    const estimatePatterns = [
+      /estimate/i,
+      /xactimate/i,
+      /symbility/i,
+      /rcv/i,
+      /acv/i,
+      /settlement/i,
+      /scope/i,
+    ];
+    const isInEstimateFolder = folderName?.toLowerCase().includes("estimate");
+    const fileMatchesPattern = estimatePatterns.some(p => p.test(fileName));
+    return isInEstimateFolder || fileMatchesPattern;
+  };
 
   // Fetch folders
   const { data: folders } = useQuery({
@@ -168,17 +188,33 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
   });
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const uploadedFiles = e.target.files;
+    if (!uploadedFiles || uploadedFiles.length === 0) return;
+
+    // Get folder name for estimate detection
+    const folder = folders?.find(f => f.id === selectedFolderId);
+    const folderName = folder?.name || null;
 
     setUploadingFile(true);
     try {
-      const uploadPromises = Array.from(files).map(file => uploadFileMutation.mutateAsync(file));
-      await Promise.all(uploadPromises);
+      const uploadPromises = Array.from(uploadedFiles).map(file => uploadFileMutation.mutateAsync(file));
+      const results = await Promise.all(uploadPromises);
+      
       toast({
-        title: files.length > 1 ? "Files uploaded" : "File uploaded",
-        description: `${files.length} file${files.length > 1 ? 's' : ''} uploaded successfully.`,
+        title: uploadedFiles.length > 1 ? "Files uploaded" : "File uploaded",
+        description: `${uploadedFiles.length} file${uploadedFiles.length > 1 ? 's' : ''} uploaded successfully.`,
       });
+
+      // Check if any uploaded file is an estimate
+      const firstFile = uploadedFiles[0];
+      if (uploadedFiles.length === 1 && isEstimateFile(firstFile.name, folderName)) {
+        // Store the file info for potential estimate extraction
+        setPendingEstimateFile({
+          file: firstFile,
+          dbRecord: results[0],
+        });
+        setEstimatePromptOpen(true);
+      }
     } catch (error) {
       // Error handled by mutation
     } finally {
@@ -648,6 +684,48 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
           <ClaimTemplates claimId={claimId} claim={claim} />
         </TabsContent>
       )}
+
+      {/* Estimate Upload Dialog (direct upload) */}
+      <EstimateUploadDialog
+        open={estimateUploadOpen}
+        onOpenChange={setEstimateUploadOpen}
+        claimId={claimId}
+      />
+
+      {/* Estimate Detection Prompt */}
+      <Dialog open={estimatePromptOpen} onOpenChange={setEstimatePromptOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5" />
+              Estimate Detected
+            </DialogTitle>
+            <DialogDescription>
+              This file appears to be an insurance estimate. Would you like to extract the financial figures and populate them into the Accounting tab?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEstimatePromptOpen(false);
+                setPendingEstimateFile(null);
+              }}
+            >
+              No, just upload
+            </Button>
+            <Button
+              onClick={() => {
+                setEstimatePromptOpen(false);
+                setEstimateUploadOpen(true);
+              }}
+            >
+              <Calculator className="h-4 w-4 mr-2" />
+              Extract & Populate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Tabs>
   );
 };
