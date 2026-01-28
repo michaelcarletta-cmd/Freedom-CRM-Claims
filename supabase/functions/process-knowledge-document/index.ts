@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
+// @ts-ignore - pdf-parse types
+import pdfParse from "https://esm.sh/pdf-parse@1.1.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,8 +12,8 @@ const corsHeaders = {
 
 // Maximum file size: 20MB (matches upload limit)
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-// Maximum size for PDF/document base64 encoding (edge function memory limit)
-const MAX_PDF_SIZE = 8 * 1024 * 1024; // 8MB limit for PDFs
+// Size threshold for using AI vs native extraction (AI uses more memory)
+const AI_EXTRACTION_LIMIT = 8 * 1024 * 1024; // 8MB - use native extraction above this
 
 // Split text into chunks for RAG
 function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[] {
@@ -79,11 +81,6 @@ async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize
   // Only images can use direct URLs - PDFs and documents MUST be base64 encoded
   const canUseDirectUrl = isImageMimeType(mimeType);
   
-  // For PDFs and documents, check against the stricter size limit
-  if (!canUseDirectUrl && fileSize && fileSize > MAX_PDF_SIZE) {
-    throw new Error(`PDF/document too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum supported size for documents is 8MB due to processing limits. Please compress or split the file.`);
-  }
-  
   if (canUseDirectUrl && fileSize && fileSize > 10 * 1024 * 1024) {
     // Only use direct URL for large images
     console.log(`Large image (${Math.round(fileSize / 1024 / 1024)}MB), using direct URL`);
@@ -103,6 +100,35 @@ async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize
   console.log(`Encoded file: ${arrayBuffer.byteLength} bytes as base64`);
   
   return { url: `data:${mimeType};base64,${base64}`, isDirectUrl: false };
+}
+
+// Extract text from PDF using native parsing (no AI, lower memory usage)
+async function extractTextFromPDFNative(fileUrl: string, fileName: string): Promise<string> {
+  console.log(`Extracting text from PDF natively: ${fileName}`);
+  
+  const response = await fetch(fileUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download PDF: ${response.status}`);
+  }
+  
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = new Uint8Array(arrayBuffer);
+  
+  try {
+    const data = await pdfParse(buffer);
+    const extractedText = data.text || '';
+    
+    console.log(`Native extraction got ${extractedText.length} characters from ${data.numpages} pages`);
+    
+    if (!extractedText || extractedText.trim().length < 100) {
+      throw new Error('PDF appears to be scanned/image-based with minimal text');
+    }
+    
+    return extractedText;
+  } catch (error) {
+    console.error('Native PDF extraction failed:', error);
+    throw error;
+  }
 }
 
 // Extract text from document using base64 data
@@ -420,7 +446,21 @@ serve(async (req) => {
     // Process based on file type - ORDER MATTERS!
     // PowerPoint must be checked before Word docs since both contain "document" in MIME type
     if (fileType === 'application/pdf' || document.file_name.endsWith('.pdf')) {
-      extractedText = await extractTextFromDocument(imageUrl, document.file_name);
+      // For large PDFs, use native extraction (lower memory usage)
+      // For smaller PDFs or if native fails, use AI extraction (better for scanned docs)
+      const isLargePdf = document.file_size && document.file_size > AI_EXTRACTION_LIMIT;
+      
+      if (isLargePdf) {
+        console.log(`Large PDF (${Math.round(document.file_size! / 1024 / 1024)}MB), using native extraction`);
+        try {
+          extractedText = await extractTextFromPDFNative(fileUrl, document.file_name);
+        } catch (nativeError) {
+          console.log('Native extraction failed, this PDF may be scanned/image-based');
+          throw new Error(`Large PDF extraction failed. This PDF may be scanned/image-based and requires OCR. Please use a smaller file (<8MB) for scanned documents, or use a text-based PDF.`);
+        }
+      } else {
+        extractedText = await extractTextFromDocument(imageUrl, document.file_name);
+      }
     } else if (
       fileType.includes('video') || 
       fileType.includes('audio') ||
