@@ -2320,27 +2320,66 @@ Address the email to the adjuster (${claim.adjuster_name || 'Claims Adjuster'}) 
 3. The rebuttals should be presented as professional, referenced arguments
 4. Include all supporting data (claim details, financials) as context for the rebuttals
 5. Format as a professional legal-style document ready for carrier submission
+6. IMPORTANT: When photos are included, REFERENCE THEM AS EVIDENCE throughout the document
+   - Cite specific photos by name when discussing damage
+   - Group photo evidence by damage type (hail, wind, water, etc.)
+   - Note dates photos were taken to establish timeline of damage
+   - Use photos to corroborate claims in rebuttals
 
 === DOCUMENT STRUCTURE ===
 If Darwin rebuttals are included, structure as:
 1. COVER LETTER - Professional introduction stating purpose of package
-2. CLAIM SUMMARY - Key claim facts and current status
-3. FORMAL REBUTTALS & DEMANDS - Present each Darwin analysis as a formal section
-4. SUPPORTING DOCUMENTATION - List of attached evidence
-5. FINANCIAL SUMMARY - Amounts claimed and calculations
-6. CONCLUSION & DEMANDS - Clear statement of what is being requested
+2. CLAIM SUMMARY - Key claim facts and current status  
+3. PHOTOGRAPHIC EVIDENCE - Detailed inventory of all photos with descriptions, organized by damage type
+4. FORMAL REBUTTALS & DEMANDS - Present each Darwin analysis as a formal section, REFERENCING specific photos as supporting evidence
+5. SUPPORTING DOCUMENTATION - List of attached evidence
+6. FINANCIAL SUMMARY - Amounts claimed and calculations
+7. CONCLUSION & DEMANDS - Clear statement of what is being requested
 
 Use professional legal formatting with proper section numbering.
-Each rebuttal should be presented as a formal argument with citations preserved.`;
+Each rebuttal should be presented as a formal argument with citations preserved.
+When discussing damage, ALWAYS reference the specific photos that document it.`;
+
+        // Build detailed photo documentation section
+        let photoDocumentation = '';
+        if (additionalContext?.includePhotos && context.photos?.length > 0) {
+          photoDocumentation = `\n\n=== PHOTOGRAPHIC EVIDENCE (${context.photos.length} photos) ===\n`;
+          photoDocumentation += `These photos document the damage and support the claim:\n\n`;
+          
+          // Group photos by category
+          const photosByCategory: Record<string, any[]> = {};
+          context.photos.forEach((photo: any) => {
+            const category = photo.category || 'Uncategorized';
+            if (!photosByCategory[category]) {
+              photosByCategory[category] = [];
+            }
+            photosByCategory[category].push(photo);
+          });
+          
+          Object.entries(photosByCategory).forEach(([category, photos]) => {
+            photoDocumentation += `\n**${category}** (${photos.length} photos):\n`;
+            photos.forEach((photo: any) => {
+              photoDocumentation += `  - ${photo.file_name}`;
+              if (photo.description) {
+                photoDocumentation += `: ${photo.description}`;
+              }
+              if (photo.taken_at) {
+                photoDocumentation += ` (taken: ${new Date(photo.taken_at).toLocaleDateString()})`;
+              }
+              photoDocumentation += `\n`;
+            });
+          });
+          
+          photoDocumentation += `\nIMPORTANT: Reference these photos as evidence when presenting rebuttals. Photos documenting hail damage, storm damage, or other loss conditions are critical supporting evidence.\n`;
+        }
 
         userPrompt = `${claimSummary}
 
 REQUESTED COMPONENTS: ${components.join(', ')}
-
-${additionalContext?.includePhotos ? `PHOTOS: ${context.files?.filter((f: any) => f.file_type?.startsWith('image/'))?.length || 0} photos available` : ''}
-${additionalContext?.includeDocuments ? `DOCUMENTS: ${context.files?.filter((f: any) => !f.file_type?.startsWith('image/'))?.length || 0} documents available` : ''}
-${additionalContext?.includeCommunications ? `COMMUNICATIONS: ${context.emails?.length || 0} emails on file` : ''}
-${additionalContext?.includeInspections ? `INSPECTIONS:\n${context.inspections?.map((i: any) => `- ${i.inspection_type}: ${i.inspection_date} (${i.status})`).join('\n') || 'None scheduled'}` : ''}
+${photoDocumentation}
+${additionalContext?.includeDocuments ? `\nDOCUMENTS ON FILE: ${context.files?.filter((f: any) => !f.file_type?.startsWith('image/'))?.length || 0} documents available` : ''}
+${additionalContext?.includeCommunications ? `\nCOMMUNICATIONS: ${context.emails?.length || 0} emails on file` : ''}
+${additionalContext?.includeInspections ? `\nINSPECTIONS:\n${context.inspections?.map((i: any) => `- ${i.inspection_type}: ${i.inspection_date} (${i.status})`).join('\n') || 'None scheduled'}` : ''}
 ${darwinAnalysesSection}
 
 ${darwinAnalyses.length > 0 ? `
