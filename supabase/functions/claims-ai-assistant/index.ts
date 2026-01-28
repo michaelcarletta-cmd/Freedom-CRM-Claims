@@ -2339,11 +2339,11 @@ ${knowledgeBaseContext || ''}`
               continue;
             }
             
-            answer += `\n\n🔄 **Updating ${companies.length} insurance companies...**\n`;
+            answer += `\n\n🔄 **Processing ${companies.length} insurance companies...**\n\n`;
             
-            let successCount = 0;
-            let failCount = 0;
-            const updates: string[] = [];
+            const successfulUpdates: { name: string; phone?: string; email?: string }[] = [];
+            const needsReview: { name: string; reason: string }[] = [];
+            const alreadyComplete: string[] = [];
             
             // Process each company
             for (const company of companies) {
@@ -2353,7 +2353,7 @@ ${knowledgeBaseContext || ''}`
                 const searchResult = await searchWeb(searchQuery);
                 
                 if (!searchResult || searchResult.includes("unavailable")) {
-                  failCount++;
+                  needsReview.push({ name: company.name, reason: "Web search failed" });
                   continue;
                 }
                 
@@ -2381,7 +2381,7 @@ ${knowledgeBaseContext || ''}`
                 });
                 
                 if (!extractResponse.ok) {
-                  failCount++;
+                  needsReview.push({ name: company.name, reason: "AI extraction failed" });
                   continue;
                 }
                 
@@ -2390,14 +2390,12 @@ ${knowledgeBaseContext || ''}`
                 
                 try {
                   const content = extractData.choices[0].message.content || "";
-                  // Try to parse JSON from the response
                   const jsonMatch = content.match(/\{[\s\S]*\}/);
                   if (jsonMatch) {
                     extracted = JSON.parse(jsonMatch[0]);
                   }
                 } catch (parseErr) {
-                  console.error("Failed to parse extraction for", company.name);
-                  failCount++;
+                  needsReview.push({ name: company.name, reason: "Could not parse contact info" });
                   continue;
                 }
                 
@@ -2417,15 +2415,14 @@ ${knowledgeBaseContext || ''}`
                     .eq("id", company.id);
                   
                   if (!updateError) {
-                    successCount++;
-                    const changedFields = Object.entries(updateData).map(([k, v]) => `${k}: ${v}`).join(", ");
-                    updates.push(`• ${company.name}: ${changedFields}`);
+                    successfulUpdates.push({ name: company.name, ...updateData });
                   } else {
-                    failCount++;
+                    needsReview.push({ name: company.name, reason: "Database update failed" });
                   }
+                } else if (!extracted.phone && !extracted.email) {
+                  needsReview.push({ name: company.name, reason: "No contact info found online" });
                 } else {
-                  // No new info found or same as existing
-                  updates.push(`• ${company.name}: no new info found`);
+                  alreadyComplete.push(company.name);
                 }
                 
                 // Add small delay to avoid rate limiting
@@ -2433,12 +2430,40 @@ ${knowledgeBaseContext || ''}`
                 
               } catch (companyErr) {
                 console.error(`Error updating ${company.name}:`, companyErr);
-                failCount++;
+                needsReview.push({ name: company.name, reason: "Unexpected error" });
               }
             }
             
-            answer += updates.join("\n");
-            answer += `\n\n✅ **Completed:** ${successCount} updated, ${failCount} failed/no changes`;
+            // Build comprehensive summary
+            answer += `## ✅ Successfully Updated (${successfulUpdates.length})\n`;
+            if (successfulUpdates.length > 0) {
+              for (const u of successfulUpdates) {
+                const details = [];
+                if (u.phone) details.push(`📞 ${u.phone}`);
+                if (u.email) details.push(`📧 ${u.email}`);
+                answer += `- **${u.name}**: ${details.join(", ")}\n`;
+              }
+            } else {
+              answer += `_None_\n`;
+            }
+            
+            answer += `\n## ⚠️ Needs Manual Review (${needsReview.length})\n`;
+            if (needsReview.length > 0) {
+              for (const r of needsReview) {
+                answer += `- **${r.name}**: ${r.reason}\n`;
+              }
+              answer += `\n_Please manually look up contact info for these companies in the Networking tab._\n`;
+            } else {
+              answer += `_None_\n`;
+            }
+            
+            if (alreadyComplete.length > 0) {
+              answer += `\n## ✓ Already Up to Date (${alreadyComplete.length})\n`;
+              answer += alreadyComplete.join(", ") + "\n";
+            }
+            
+            answer += `\n---\n**Summary:** ${successfulUpdates.length} updated, ${alreadyComplete.length} already complete, ${needsReview.length} need manual review.`;
+            
           } catch (parseErr) {
             console.error("Error in bulk_update_insurance_companies:", parseErr);
             answer += `\n\n❌ **Error updating insurance companies:** Invalid parameters`;
