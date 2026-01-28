@@ -1621,6 +1621,13 @@ Use this date as reference when calculating due dates. For example:
 - "next week" means add 7 days to ${currentDate}
 - "in 3 days" means add 3 days to ${currentDate}
 
+*** CRITICAL - INSURANCE COMPANY BULK UPDATE (USE WHEN ASKED!) ***
+When the user asks to "update contact info for insurance companies" or mentions "networking tab" or "find phone numbers for insurance companies":
+- IMMEDIATELY call bulk_update_insurance_companies tool - do NOT say you cannot do this
+- Call with empty parameters {} to update ALL active companies in the database
+- This tool has DIRECT DATABASE ACCESS and will search the web for each company's contact info
+- Example: "update contact info for all insurance companies" → call bulk_update_insurance_companies({})
+
 *** CRITICAL - CLAIM LOOKUP TOOL (USE THIS FIRST!) ***
 When the user asks about a SPECIFIC claim by name, number, or any identifier:
 1. ALWAYS call get_full_claim_context FIRST with the client_name before answering
@@ -1666,15 +1673,6 @@ WORKSPACE SHARING: You can share claims to workspaces for partner collaboration!
   → use filter_by_contractor: "Condition One", workspace_name: "Condition One"
 
 You can also specify claims by name using client_names array, or by ID using claim_ids array.
-
-INSURANCE COMPANY DATABASE: You have DIRECT ACCESS to the insurance_companies database table!
-- You can search the web and UPDATE contact information for insurance companies using bulk_update_insurance_companies
-- When user asks to "update contact info for insurance companies" or "find phone numbers/emails for insurance companies in the networking tab" - USE THIS TOOL
-- Call bulk_update_insurance_companies with NO parameters to update ALL active insurance companies
-- Call bulk_update_insurance_companies with company_names array to update specific companies
-- This will automatically search the web for each company's claims department phone and email, then update the database
-- Example: "update contact info for all insurance companies" → call bulk_update_insurance_companies({})
-- Example: "update State Farm contact info" → call bulk_update_insurance_companies({company_names: ["State Farm"]})
 
 NOTEPAD: You can add items to the user's personal notepad on their dashboard!
 - Use add_notepad_item when the user asks you to remind them of something, jot something down, add to their notes, or save a quick note
