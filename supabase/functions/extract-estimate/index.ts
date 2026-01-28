@@ -25,6 +25,12 @@ interface ExtractedEstimate {
     recoverable_depreciation: number;
     non_recoverable_depreciation: number;
   };
+  pwi: {
+    rcv: number;
+    recoverable_depreciation: number;
+    non_recoverable_depreciation: number;
+    deductible: number;
+  };
   line_items: Array<{
     description: string;
     quantity: number;
@@ -91,6 +97,12 @@ Extract the following information and return it as a JSON object:
     "recoverable_depreciation": <number>,
     "non_recoverable_depreciation": <number>
   },
+  "pwi": {
+    "rcv": <number - Paid When Incurred RCV - items that are paid when work is completed>,
+    "recoverable_depreciation": <number>,
+    "non_recoverable_depreciation": <number>,
+    "deductible": <number>
+  },
   "line_items": [
     {
       "description": "<string>",
@@ -113,6 +125,7 @@ Important guidelines:
 - If a value is not found in the document, use 0
 - Look for common estimate sections: Summary, Line Items, Depreciation Schedule
 - For Xactimate estimates, look for "Replacement Cost Value", "Less Depreciation", "Actual Cash Value"
+- PWI (Paid When Incurred) items are costs that are paid when the work is actually completed - look for this section separately
 - Extract as many line items as possible with their categories
 - The deductible is usually shown separately from depreciation
 - Return ONLY the JSON object, no other text`;
@@ -201,6 +214,10 @@ Important guidelines:
         personal_property_rcv: extractedData.contents?.rcv || 0,
         personal_property_recoverable_depreciation: extractedData.contents?.recoverable_depreciation || 0,
         personal_property_non_recoverable_depreciation: extractedData.contents?.non_recoverable_depreciation || 0,
+        pwi_rcv: extractedData.pwi?.rcv || 0,
+        pwi_recoverable_depreciation: extractedData.pwi?.recoverable_depreciation || 0,
+        pwi_non_recoverable_depreciation: extractedData.pwi?.non_recoverable_depreciation || 0,
+        pwi_deductible: extractedData.pwi?.deductible || 0,
       };
 
       if (existingSettlement) {
