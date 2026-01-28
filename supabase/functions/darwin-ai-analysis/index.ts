@@ -2292,15 +2292,46 @@ Address the email to the adjuster (${claim.adjuster_name || 'Claims Adjuster'}) 
       }
 
       case 'one_click_package': {
-        // Compile comprehensive claim package
+        // Compile comprehensive claim package with Darwin analyses
         const components = additionalContext?.components || [];
+        const darwinAnalyses = additionalContext?.darwinAnalyses || [];
         
-        systemPrompt = `You are Darwin, an expert public adjuster AI. Your task is to compile a comprehensive claim package summary that can be used for carrier submission or internal review.
+        // Build Darwin analyses section for the package
+        let darwinAnalysesSection = '';
+        if (darwinAnalyses.length > 0) {
+          darwinAnalysesSection = `\n\nDARWIN AI ANALYSES & REBUTTALS TO INCLUDE:\n`;
+          darwinAnalysesSection += `The following ${darwinAnalyses.length} Darwin-generated analyses should be incorporated as formal rebuttals and supporting documentation:\n\n`;
+          
+          darwinAnalyses.forEach((analysis: any, index: number) => {
+            darwinAnalysesSection += `=== ${analysis.type.toUpperCase()} (${new Date(analysis.date).toLocaleDateString()}) ===\n`;
+            if (analysis.summary) {
+              darwinAnalysesSection += `Source Document: ${analysis.summary}\n`;
+            }
+            darwinAnalysesSection += `\n${analysis.content}\n\n`;
+            darwinAnalysesSection += `${'─'.repeat(80)}\n\n`;
+          });
+        }
+        
+        systemPrompt = `You are Darwin, an expert public adjuster AI. Your task is to compile a comprehensive claim package that serves as a FORMAL SUBMISSION to the insurance carrier.
 
-Create a professional, well-organized document that includes all requested components.
-Use clear section headers and formatting.
-Include all relevant dates, amounts, and status information.
-Format for easy reading and professional presentation.`;
+=== CRITICAL REQUIREMENTS ===
+1. When Darwin analyses/rebuttals are included, they form the CORE of this package
+2. Structure the package as a formal demand/rebuttal document
+3. The rebuttals should be presented as professional, referenced arguments
+4. Include all supporting data (claim details, financials) as context for the rebuttals
+5. Format as a professional legal-style document ready for carrier submission
+
+=== DOCUMENT STRUCTURE ===
+If Darwin rebuttals are included, structure as:
+1. COVER LETTER - Professional introduction stating purpose of package
+2. CLAIM SUMMARY - Key claim facts and current status
+3. FORMAL REBUTTALS & DEMANDS - Present each Darwin analysis as a formal section
+4. SUPPORTING DOCUMENTATION - List of attached evidence
+5. FINANCIAL SUMMARY - Amounts claimed and calculations
+6. CONCLUSION & DEMANDS - Clear statement of what is being requested
+
+Use professional legal formatting with proper section numbering.
+Each rebuttal should be presented as a formal argument with citations preserved.`;
 
         userPrompt = `${claimSummary}
 
@@ -2310,7 +2341,19 @@ ${additionalContext?.includePhotos ? `PHOTOS: ${context.files?.filter((f: any) =
 ${additionalContext?.includeDocuments ? `DOCUMENTS: ${context.files?.filter((f: any) => !f.file_type?.startsWith('image/'))?.length || 0} documents available` : ''}
 ${additionalContext?.includeCommunications ? `COMMUNICATIONS: ${context.emails?.length || 0} emails on file` : ''}
 ${additionalContext?.includeInspections ? `INSPECTIONS:\n${context.inspections?.map((i: any) => `- ${i.inspection_type}: ${i.inspection_date} (${i.status})`).join('\n') || 'None scheduled'}` : ''}
+${darwinAnalysesSection}
 
+${darwinAnalyses.length > 0 ? `
+IMPORTANT: This package includes ${darwinAnalyses.length} Darwin-generated rebuttals/analyses. 
+You MUST:
+1. Present these as formal, professional rebuttals addressed to the carrier
+2. Preserve all citations, code references, and technical arguments
+3. Structure them under clear section headers (e.g., "SECTION 3: REBUTTAL TO ENGINEER REPORT")
+4. Include a cover letter explaining this is a formal response with supporting documentation
+5. End with a clear DEMANDS section stating what the carrier must do
+
+Compile this as a FORMAL CARRIER SUBMISSION PACKAGE, not just a summary.
+` : `
 Compile a comprehensive claim package summary including:
 1. Executive Summary - Current claim status and key metrics
 2. Claim Details - All relevant claim information
@@ -2318,8 +2361,9 @@ Compile a comprehensive claim package summary including:
 4. Documentation Inventory - List of all files and photos
 5. Communication Timeline - Summary of carrier correspondence
 6. Next Steps - Recommended actions and pending items
+`}
 
-Format this as a professional document ready for review or submission.`;
+Format this as a professional document ready for carrier submission.`;
         break;
       }
 
