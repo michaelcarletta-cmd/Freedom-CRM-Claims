@@ -1,8 +1,8 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-// @ts-ignore - pdf-parse types
-import pdfParse from "https://esm.sh/pdf-parse@1.1.1";
+// @ts-ignore - pdf.js for Deno
+import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.0.379/build/pdf.min.mjs";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,7 +12,7 @@ const corsHeaders = {
 // Size threshold for using native extraction vs AI multimodal (8MB base64 ~ 6MB file)
 const AI_EXTRACTION_LIMIT = 8 * 1024 * 1024;
 
-// Extract text from PDF using native parsing (no AI, lower memory usage)
+// Extract text from PDF using pdf.js (Deno-compatible, no AI, lower memory usage)
 async function extractTextFromPDFNative(base64Content: string, fileName: string): Promise<string> {
   console.log(`Native PDF extraction for: ${fileName}`);
   
@@ -24,10 +24,26 @@ async function extractTextFromPDFNative(base64Content: string, fileName: string)
       bytes[i] = binaryString.charCodeAt(i);
     }
     
-    const data = await pdfParse(bytes);
-    const extractedText = data.text || '';
+    // Load PDF using pdf.js
+    const loadingTask = pdfjsLib.getDocument({ data: bytes.buffer });
+    const pdf = await loadingTask.promise;
     
-    console.log(`Native extraction got ${extractedText.length} characters from ${data.numpages} pages`);
+    const textParts: string[] = [];
+    
+    // Extract text from each page
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ');
+      if (pageText.trim()) {
+        textParts.push(pageText);
+      }
+    }
+    
+    const extractedText = textParts.join('\n\n');
+    console.log(`Native extraction got ${extractedText.length} characters from ${pdf.numPages} pages`);
     
     if (!extractedText || extractedText.trim().length < 100) {
       throw new Error('PDF appears to be scanned/image-based with minimal text');
