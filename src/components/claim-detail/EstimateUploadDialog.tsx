@@ -35,6 +35,12 @@ interface ExtractedData {
     recoverable_depreciation: number;
     non_recoverable_depreciation: number;
   };
+  pwi: {
+    rcv: number;
+    recoverable_depreciation: number;
+    non_recoverable_depreciation: number;
+    deductible: number;
+  };
   totals: {
     gross_total: number;
     total_depreciation: number;
@@ -253,22 +259,41 @@ export function EstimateUploadDialog({
                   </div>
                 </div>
 
-                {/* Totals */}
-                <div className="p-4 border rounded-lg space-y-2 bg-muted/30">
-                  <h4 className="font-semibold">Totals</h4>
+                {/* PWI */}
+                <div className="p-4 border rounded-lg space-y-2">
+                  <h4 className="font-semibold">Paid When Incurred (PWI)</h4>
                   <div className="text-sm space-y-1">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Gross Total:</span>
-                      <span className="font-medium">{formatCurrency(extractedData.totals?.gross_total)}</span>
+                      <span className="text-muted-foreground">RCV:</span>
+                      <span>{formatCurrency(extractedData.pwi?.rcv)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total Depreciation:</span>
-                      <span>{formatCurrency(extractedData.totals?.total_depreciation)}</span>
+                      <span className="text-muted-foreground">Recoverable Dep:</span>
+                      <span>{formatCurrency(extractedData.pwi?.recoverable_depreciation)}</span>
                     </div>
-                    <div className="flex justify-between border-t pt-1 mt-1">
-                      <span className="font-medium">Net Total:</span>
-                      <span className="font-semibold text-primary">{formatCurrency(extractedData.totals?.net_total)}</span>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Non-Rec Dep:</span>
+                      <span>{formatCurrency(extractedData.pwi?.non_recoverable_depreciation)}</span>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Totals Summary */}
+              <div className="p-4 border rounded-lg space-y-2 bg-muted/30">
+                <h4 className="font-semibold">Totals</h4>
+                <div className="text-sm space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Gross Total:</span>
+                    <span className="font-medium">{formatCurrency(extractedData.totals?.gross_total)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Depreciation:</span>
+                    <span>{formatCurrency(extractedData.totals?.total_depreciation)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-1 mt-1">
+                    <span className="font-medium">Net Total:</span>
+                    <span className="font-semibold text-primary">{formatCurrency(extractedData.totals?.net_total)}</span>
                   </div>
                 </div>
               </div>
