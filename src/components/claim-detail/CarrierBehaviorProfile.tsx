@@ -160,7 +160,7 @@ export const CarrierBehaviorProfile = ({ carrierName, compact = false }: Carrier
       <CardContent className="space-y-4">
         {/* Metrics Grid */}
         {profile && (
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <MetricCard 
               label="Avg Response" 
               value={profile.avg_initial_response_days ? `${profile.avg_initial_response_days}d` : '--'} 

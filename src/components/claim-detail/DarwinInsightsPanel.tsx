@@ -213,7 +213,7 @@ export const DarwinInsightsPanel = ({ claimId, claim }: DarwinInsightsPanelProps
         {insights && (
           <>
             {/* Health Score Dashboard */}
-            <div className="grid grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
               <ScoreCard 
                 label="Overall" 
                 score={insights.overall_health_score} 
