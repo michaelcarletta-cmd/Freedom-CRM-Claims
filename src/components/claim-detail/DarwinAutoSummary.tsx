@@ -72,6 +72,23 @@ export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) =>
       });
 
       if (error) throw error;
+      
+      // Save the analysis result to the database
+      if (data?.result) {
+        const { data: userData } = await supabase.auth.getUser();
+        const { error: insertError } = await supabase.from("darwin_analysis_results").insert({
+          claim_id: claimId,
+          analysis_type: "auto_summary",
+          input_summary: `Auto summary for ${claim?.claim_number || claimId}`,
+          result: data.result,
+          created_by: userData.user?.id,
+        });
+        
+        if (insertError) {
+          console.error("Failed to save summary:", insertError);
+        }
+      }
+      
       return data;
     },
     onSuccess: (data) => {
