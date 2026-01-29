@@ -167,7 +167,7 @@ export const CarrierPlaybookDialog = ({ carrierName, stateCode, trigger }: Carri
                     <CardTitle className="text-sm">Carrier Profile</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                       <div>
                         <div className="text-muted-foreground text-xs">Avg Response</div>
                         <div className="font-bold">{profile.avg_initial_response_days ?? '--'} days</div>
@@ -203,7 +203,7 @@ export const CarrierPlaybookDialog = ({ carrierName, stateCode, trigger }: Carri
                     <Target className="h-4 w-4" />
                     Tactical Playbook
                   </h3>
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap gap-1">
                     {actionTypes.map(type => (
                       <Badge
                         key={type}

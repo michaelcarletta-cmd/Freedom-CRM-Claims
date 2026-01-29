@@ -153,7 +153,7 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
         <ScrollArea className="max-h-[calc(90vh-120px)]">
           <div className="p-6 space-y-6">
             {/* Quick Stats Row */}
-            <div className="grid grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
               <Card className="bg-gradient-to-br from-primary/10 to-primary/5">
                 <CardContent className="p-4 text-center">
                   <div className={`text-3xl font-bold ${getScoreTextColor(insights?.overall_health_score)}`}>
@@ -189,7 +189,7 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
             </div>
 
             {/* Main Content - 4 Quadrant Layout */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Q1: Causality Timeline */}
               <Card className="border-2">
                 <CardHeader className="py-3 px-4 bg-muted/30">
