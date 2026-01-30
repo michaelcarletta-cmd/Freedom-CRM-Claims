@@ -91,13 +91,13 @@ export const DarwinInlineNudges = ({
   const getSeverityStyles = (severity: string) => {
     switch (severity?.toLowerCase()) {
       case 'critical':
-        return 'border-red-500/50 bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-200';
+        return 'border-destructive bg-destructive/10 text-foreground [&_svg]:text-destructive';
       case 'high':
-        return 'border-orange-500/50 bg-orange-50 dark:bg-orange-950/20 text-orange-800 dark:text-orange-200';
+        return 'border-warning bg-warning/10 text-foreground [&_svg]:text-warning';
       case 'medium':
-        return 'border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20 text-yellow-800 dark:text-yellow-200';
+        return 'border-warning/70 bg-warning/5 text-foreground [&_svg]:text-warning';
       default:
-        return 'border-blue-500/50 bg-blue-50 dark:bg-blue-950/20 text-blue-800 dark:text-blue-200';
+        return 'border-primary bg-primary/10 text-foreground [&_svg]:text-primary';
     }
   };
 
