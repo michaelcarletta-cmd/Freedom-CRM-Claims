@@ -2035,6 +2035,7 @@ export type Database = {
           last_analyzed_at: string
           leverage_points: Json | null
           leverage_score: number | null
+          matched_playbooks: Json | null
           overall_health_score: number | null
           recommended_next_moves: Json | null
           senior_pa_opinion: string | null
@@ -2057,6 +2058,7 @@ export type Database = {
           last_analyzed_at?: string
           leverage_points?: Json | null
           leverage_score?: number | null
+          matched_playbooks?: Json | null
           overall_health_score?: number | null
           recommended_next_moves?: Json | null
           senior_pa_opinion?: string | null
@@ -2079,6 +2081,7 @@ export type Database = {
           last_analyzed_at?: string
           leverage_points?: Json | null
           leverage_score?: number | null
+          matched_playbooks?: Json | null
           overall_health_score?: number | null
           recommended_next_moves?: Json | null
           senior_pa_opinion?: string | null

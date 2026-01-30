@@ -243,48 +243,58 @@ CRITICAL RULES:
 
 ${claimContext}
 
-Generate a COMPLETE strategic analysis with the following structure:
+Generate a COMPLETE strategic analysis. You MUST return ONLY valid JSON matching this EXACT structure (no markdown, no code blocks, just raw JSON):
 
-1. HEALTH SCORE (rate each 1-100):
-   - Coverage Strength: How strong is their coverage position?
-   - Evidence Quality: Is the documentation sufficient to prove the claim?
-   - Leverage Score: How much negotiating power do they have?
-   - Timeline Risk: Are there deadline/timing concerns?
-   - OVERALL HEALTH SCORE (weighted average)
+{
+  "health_score": {
+    "coverage_strength": 75,
+    "evidence_quality": 60,
+    "leverage_score": 80,
+    "timeline_risk": 50,
+    "overall": 66
+  },
+  "warnings": [
+    {
+      "type": "deadline_risk|evidence_gap|coverage_opportunity|carrier_violation|documentation_issue|strategy_alert",
+      "severity": "critical|high|medium|low",
+      "title": "Brief warning title",
+      "message": "Detailed explanation",
+      "suggested_action": "What to do"
+    }
+  ],
+  "leverage_opportunities": [
+    {
+      "title": "Leverage point name",
+      "description": "Why this creates pressure",
+      "how_to_use": "Specific action to take"
+    }
+  ],
+  "coverage_trigger_analysis": [
+    {
+      "trigger": "What condition exists",
+      "coverage_opportunity": "What coverage this unlocks",
+      "reasoning": "Why this applies",
+      "confidence": "high|medium|low",
+      "action_required": "What to do"
+    }
+  ],
+  "evidence_assessment": {
+    "strong_evidence": ["List of strong evidence"],
+    "weak_missing_evidence": ["List of gaps or weak evidence"],
+    "recommendations": ["Specific recommendations"]
+  },
+  "recommended_next_moves": [
+    {
+      "priority": 1,
+      "action": "What to do",
+      "timeline": "immediately|this_week|can_wait",
+      "rationale": "Why this matters"
+    }
+  ],
+  "senior_pa_opinion": "A 2-3 sentence opinion of what a senior PA would focus on and what could change the outcome."
+}
 
-2. CRITICAL WARNINGS (if any):
-   - List any immediate concerns that need attention
-   - Include severity (critical/high/medium/low)
-   - Suggest specific actions for each
-
-3. LEVERAGE OPPORTUNITIES:
-   - Identify specific leverage points (delays, violations, strong evidence)
-   - Explain why each creates pressure on the carrier
-   - Suggest how to use each leverage point
-
-4. COVERAGE TRIGGER ANALYSIS:
-   - Look for if/then coverage opportunities:
-     - Wind/hail + code upgrade needs → Ordinance coverage?
-     - Structural damage + ALE limits → Loss of use claim?
-     - Multiple trades affected → Matching requirements?
-   - Flag any coverage that may be available but not being pursued
-
-5. EVIDENCE ASSESSMENT:
-   - Strong evidence: What's working well
-   - Weak/missing evidence: What needs improvement
-   - Specific recommendations (e.g., "Get moisture mapping", "Need engineer letter")
-   - Sufficiency rating for causation, scope, pricing
-
-6. RECOMMENDED NEXT MOVES (prioritized):
-   - What should happen IMMEDIATELY
-   - What should happen THIS WEEK
-   - What can wait
-
-7. SENIOR PA OPINION:
-   - If you were handling this claim personally, what would you do?
-   - What's the one thing that could change the outcome?
-
-Format your response as structured JSON.`;
+CRITICAL: Return ONLY the JSON object. No explanation, no markdown formatting, no code blocks.`;
 
       responseFormat = 'strategic_analysis';
     } else if (analysisType === 'quick_warnings') {
@@ -418,27 +428,84 @@ Give me:
       const nextMoves = parsedResult.recommended_next_moves || parsedResult.nextMoves || [];
       const seniorPaOpinion = parsedResult.senior_pa_opinion || parsedResult.seniorPaOpinion || '';
 
+      // Fetch matching carrier playbooks based on claim conditions
+      let matchedPlaybooks: any[] = [];
+      if (claim.insurance_company) {
+        const { data: playbooks } = await supabase
+          .from('carrier_playbooks')
+          .select('*')
+          .eq('is_active', true)
+          .ilike('carrier_name', `%${claim.insurance_company.split(' ')[0]}%`)
+          .order('priority', { ascending: true })
+          .limit(10);
+        
+        if (playbooks && playbooks.length > 0) {
+          // Match playbooks to current claim conditions
+          const claimAge = daysOpen || 0;
+          const hasSupplementPending = claim.status?.toLowerCase().includes('supplement');
+          const checksCount = checks.length;
+          
+          matchedPlaybooks = playbooks.filter((pb: any) => {
+            const trigger = pb.trigger_condition;
+            if (!trigger || typeof trigger !== 'object') return true; // General tactics
+            
+            // Check delay conditions
+            if (trigger.delay_days?.gte && claimAge >= trigger.delay_days.gte) return true;
+            if (trigger.days_waiting?.gte && claimAge >= trigger.days_waiting.gte) return true;
+            
+            // Check supplement conditions
+            if (trigger.supplement_pending && hasSupplementPending) return true;
+            
+            // Check denial conditions
+            if (trigger.first_denial && hasDenialLetter) return true;
+            
+            // Check engineer report conditions
+            if (trigger.engineer_report_received && hasEngineerReport) return true;
+            
+            // Check communication gaps
+            if (trigger.communication_gap_days?.gte) {
+              const lastComm = diary[0]?.communication_date;
+              if (lastComm) {
+                const daysSinceComm = Math.floor((Date.now() - new Date(lastComm).getTime()) / (1000 * 60 * 60 * 24));
+                if (daysSinceComm >= trigger.communication_gap_days.gte) return true;
+              }
+            }
+            
+            return false;
+          }).slice(0, 5);
+        }
+      }
+
+      console.log(`Matched ${matchedPlaybooks.length} carrier playbooks for ${claim.insurance_company}`);
+
       // Upsert strategic insights
-      await supabase
+      const { error: upsertError } = await supabase
         .from('claim_strategic_insights')
         .upsert({
           claim_id: claimId,
-          coverage_strength_score: healthScore.coverage_strength || healthScore.coverageStrength,
-          evidence_quality_score: healthScore.evidence_quality || healthScore.evidenceQuality,
-          leverage_score: healthScore.leverage_score || healthScore.leverageScore,
-          timeline_risk_score: healthScore.timeline_risk || healthScore.timelineRisk,
-          overall_health_score: healthScore.overall || healthScore.overallHealthScore,
+          coverage_strength_score: healthScore.coverage_strength ?? healthScore.coverageStrength ?? null,
+          evidence_quality_score: healthScore.evidence_quality ?? healthScore.evidenceQuality ?? null,
+          leverage_score: healthScore.leverage_score ?? healthScore.leverageScore ?? null,
+          timeline_risk_score: healthScore.timeline_risk ?? healthScore.timelineRisk ?? null,
+          overall_health_score: healthScore.overall ?? healthScore.overallHealthScore ?? null,
           warnings: warnings,
           leverage_points: leveragePoints,
           coverage_triggers_detected: coverageTriggers,
           evidence_gaps: evidenceGaps,
           recommended_next_moves: nextMoves,
+          matched_playbooks: matchedPlaybooks,
           senior_pa_opinion: typeof seniorPaOpinion === 'string' ? seniorPaOpinion : JSON.stringify(seniorPaOpinion),
           last_analyzed_at: new Date().toISOString(),
           analysis_version: '1.0'
         }, {
           onConflict: 'claim_id'
         });
+
+      if (upsertError) {
+        console.error('Error saving insights:', upsertError);
+      } else {
+        console.log('Strategic insights saved successfully for claim', claimId);
+      }
 
       // Log warnings for tracking
       if (Array.isArray(warnings) && warnings.length > 0) {

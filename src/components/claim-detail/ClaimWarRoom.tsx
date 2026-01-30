@@ -48,6 +48,7 @@ interface StrategicInsights {
   evidence_gaps: any[];
   recommended_next_moves: any[];
   senior_pa_opinion: string | null;
+  matched_playbooks?: any[];
 }
 
 export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
@@ -292,6 +293,33 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
                 <CardContent className="p-4 min-h-[300px]">
                   {insights ? (
                     <div className="space-y-4">
+                      {/* Matched Carrier Playbooks */}
+                      {Array.isArray(insights.matched_playbooks) && insights.matched_playbooks.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold mb-2 flex items-center gap-1">
+                            <Building2 className="h-3 w-3 text-orange-600" />
+                            Carrier-Specific Tactics ({claim?.insurance_company})
+                          </h4>
+                          <div className="space-y-2">
+                            {insights.matched_playbooks.slice(0, 3).map((playbook: any, i: number) => (
+                              <div key={i} className="text-xs p-2 bg-orange-50 dark:bg-orange-950/30 rounded border border-orange-200 dark:border-orange-800">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-semibold capitalize text-orange-700 dark:text-orange-300">
+                                    {playbook.action_type}
+                                  </span>
+                                  {playbook.success_rate && (
+                                    <span className="text-[10px] bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-1.5 rounded">
+                                      {playbook.success_rate}% success
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-muted-foreground">{playbook.recommended_action}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Next Moves */}
                       {Array.isArray(insights.recommended_next_moves) && insights.recommended_next_moves.length > 0 && (
                         <div>
@@ -331,12 +359,14 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
                         </div>
                       )}
 
-                      {/* Carrier Intelligence */}
-                      <div className="mt-4">
-                        <Suspense fallback={null}>
-                          <CarrierBehaviorProfile carrierName={claim?.insurance_company} compact />
-                        </Suspense>
-                      </div>
+                      {/* Carrier Intelligence (Fallback if no matched playbooks) */}
+                      {(!insights.matched_playbooks || insights.matched_playbooks.length === 0) && (
+                        <div className="mt-4">
+                          <Suspense fallback={null}>
+                            <CarrierBehaviorProfile carrierName={claim?.insurance_company} compact />
+                          </Suspense>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
