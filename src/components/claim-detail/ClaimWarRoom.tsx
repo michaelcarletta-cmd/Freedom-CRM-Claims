@@ -105,16 +105,16 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
 
   const getScoreColor = (score: number | null) => {
     if (!score) return 'bg-muted';
-    if (score >= 75) return 'bg-green-500';
-    if (score >= 50) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (score >= 75) return 'bg-success';
+    if (score >= 50) return 'bg-warning';
+    return 'bg-destructive';
   };
 
   const getScoreTextColor = (score: number | null) => {
     if (!score) return 'text-muted-foreground';
-    if (score >= 75) return 'text-green-600';
-    if (score >= 50) return 'text-yellow-600';
-    return 'text-red-600';
+    if (score >= 75) return 'text-success';
+    if (score >= 50) return 'text-warning';
+    return 'text-destructive';
   };
 
   // Calculate strategic metrics
@@ -171,19 +171,19 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
               </Card>
               <Card>
                 <CardContent className="p-4 text-center">
-                  <div className="text-3xl font-bold text-red-600">{overdueDeadlines.length}</div>
+                  <div className="text-3xl font-bold text-destructive">{overdueDeadlines.length}</div>
                   <div className="text-xs text-muted-foreground mt-1">Overdue Deadlines</div>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4 text-center">
-                  <div className="text-3xl font-bold text-orange-600">{badFaithIndicators.length}</div>
+                  <div className="text-3xl font-bold text-warning">{badFaithIndicators.length}</div>
                   <div className="text-xs text-muted-foreground mt-1">Bad Faith Flags</div>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4 text-center">
-                  <div className="text-3xl font-bold text-green-600">{insights?.leverage_points?.length ?? 0}</div>
+                  <div className="text-3xl font-bold text-success">{insights?.leverage_points?.length ?? 0}</div>
                   <div className="text-xs text-muted-foreground mt-1">Leverage Points</div>
                 </CardContent>
               </Card>
@@ -229,12 +229,12 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
                       {Array.isArray(insights.leverage_points) && insights.leverage_points.length > 0 && (
                         <div className="mt-4">
                           <h4 className="text-xs font-semibold mb-2 flex items-center gap-1">
-                            <TrendingUp className="h-3 w-3 text-green-600" />
+                            <TrendingUp className="h-3 w-3 text-success" />
                             Leverage Points
                           </h4>
                           <div className="space-y-1">
                             {insights.leverage_points.slice(0, 3).map((point: any, i: number) => (
-                              <div key={i} className="text-xs p-2 bg-green-50 dark:bg-green-950/30 rounded border border-green-200 dark:border-green-800">
+                              <div key={i} className="text-xs p-2 bg-success/10 rounded border border-success/30 text-foreground">
                                 {typeof point === 'string' ? point : point.title || point.description}
                               </div>
                             ))}
@@ -246,12 +246,12 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
                       {Array.isArray(insights.warnings) && insights.warnings.filter((w: any) => w.severity === 'critical' || w.severity === 'high').length > 0 && (
                         <div className="mt-4">
                           <h4 className="text-xs font-semibold mb-2 flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3 text-red-600" />
+                            <AlertTriangle className="h-3 w-3 text-destructive" />
                             Risk Indicators
                           </h4>
                           <div className="space-y-1">
                             {insights.warnings.filter((w: any) => w.severity === 'critical' || w.severity === 'high').slice(0, 3).map((warning: any, i: number) => (
-                              <div key={i} className="text-xs p-2 bg-red-50 dark:bg-red-950/30 rounded border border-red-200 dark:border-red-800">
+                              <div key={i} className="text-xs p-2 bg-destructive/10 rounded border border-destructive/30 text-foreground">
                                 {warning.title}
                               </div>
                             ))}
@@ -297,18 +297,18 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
                       {Array.isArray(insights.matched_playbooks) && insights.matched_playbooks.length > 0 && (
                         <div>
                           <h4 className="text-xs font-semibold mb-2 flex items-center gap-1">
-                            <Building2 className="h-3 w-3 text-orange-600" />
+                            <Building2 className="h-3 w-3 text-warning" />
                             Carrier-Specific Tactics ({claim?.insurance_company})
                           </h4>
                           <div className="space-y-2">
                             {insights.matched_playbooks.slice(0, 3).map((playbook: any, i: number) => (
-                              <div key={i} className="text-xs p-2 bg-orange-50 dark:bg-orange-950/30 rounded border border-orange-200 dark:border-orange-800">
+                              <div key={i} className="text-xs p-2 bg-warning/10 rounded border border-warning/30">
                                 <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-semibold capitalize text-orange-700 dark:text-orange-300">
+                                  <span className="font-semibold capitalize text-foreground">
                                     {playbook.action_type}
                                   </span>
                                   {playbook.success_rate && (
-                                    <span className="text-[10px] bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-1.5 rounded">
+                                    <span className="text-[10px] bg-success/20 text-success px-1.5 rounded">
                                       {playbook.success_rate}% success
                                     </span>
                                   )}
@@ -344,15 +344,15 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
                       {Array.isArray(insights.coverage_triggers_detected) && insights.coverage_triggers_detected.length > 0 && (
                         <div className="mt-4">
                           <h4 className="text-xs font-semibold mb-2 flex items-center gap-1">
-                            <Target className="h-3 w-3 text-blue-600" />
+                            <Target className="h-3 w-3 text-primary" />
                             Coverage Triggers
                           </h4>
                           <div className="space-y-1">
                             {insights.coverage_triggers_detected.slice(0, 2).map((trigger: any, i: number) => (
-                              <div key={i} className="text-xs p-2 bg-blue-50 dark:bg-blue-950/30 rounded border border-blue-200 dark:border-blue-800">
-                                <span className="font-medium text-blue-600">IF</span> {trigger.trigger || trigger.condition}
+                              <div key={i} className="text-xs p-2 bg-primary/5 rounded border border-primary/20 text-foreground">
+                                <span className="font-medium text-primary">IF</span> {trigger.trigger || trigger.condition}
                                 <ArrowRight className="inline h-3 w-3 mx-1" />
-                                <span className="font-medium text-green-600">THEN</span> {trigger.coverage_opportunity || trigger.opportunity}
+                                <span className="font-medium text-success">THEN</span> {trigger.coverage_opportunity || trigger.opportunity}
                               </div>
                             ))}
                           </div>
@@ -404,9 +404,9 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
 const ScoreBar = ({ label, score }: { label: string; score: number | null }) => {
   const getColor = () => {
     if (!score) return 'bg-muted';
-    if (score >= 75) return 'bg-green-500';
-    if (score >= 50) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (score >= 75) return 'bg-success';
+    if (score >= 50) return 'bg-warning';
+    return 'bg-destructive';
   };
 
   return (
