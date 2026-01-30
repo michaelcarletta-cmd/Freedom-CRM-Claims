@@ -364,38 +364,6 @@ export function ProfileSettings() {
       {/* Full Licenses Management */}
       <LicensesSettings />
 
-      {/* Legacy single license fields - kept for backward compatibility */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Primary License (Legacy)</CardTitle>
-          <CardDescription>
-            Your primary license for quick display. Use "Professional Licenses" above for full tracking.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="license_number">License Number</Label>
-              <Input
-                id="license_number"
-                value={profile.license_number || ""}
-                onChange={(e) => setProfile({ ...profile, license_number: e.target.value })}
-                placeholder="PA-12345"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="license_state">License State</Label>
-              <Input
-                id="license_state"
-                value={profile.license_state || ""}
-                onChange={(e) => setProfile({ ...profile, license_state: e.target.value })}
-                placeholder="FL"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader>
           <CardTitle>Email Signature</CardTitle>
