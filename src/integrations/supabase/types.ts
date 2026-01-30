@@ -4342,6 +4342,57 @@ export type Database = {
           },
         ]
       }
+      user_licenses: {
+        Row: {
+          ce_credits_completed: number | null
+          ce_credits_required: number | null
+          ce_renewal_date: string | null
+          created_at: string
+          expiration_date: string | null
+          id: string
+          is_active: boolean | null
+          issue_date: string | null
+          license_number: string
+          license_state: string
+          license_type: string
+          notes: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ce_credits_completed?: number | null
+          ce_credits_required?: number | null
+          ce_renewal_date?: string | null
+          created_at?: string
+          expiration_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          issue_date?: string | null
+          license_number: string
+          license_state: string
+          license_type?: string
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ce_credits_completed?: number | null
+          ce_credits_required?: number | null
+          ce_renewal_date?: string | null
+          created_at?: string
+          expiration_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          issue_date?: string | null
+          license_number?: string
+          license_state?: string
+          license_type?: string
+          notes?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_notes: {
         Row: {
           content: string
@@ -4785,6 +4836,17 @@ export type Database = {
       encrypt_pii: {
         Args: { p_key_name?: string; p_plaintext: string }
         Returns: string
+      }
+      get_expiring_licenses: {
+        Args: { p_days_ahead?: number; p_user_id: string }
+        Returns: {
+          days_until_expiration: number
+          expiration_date: string
+          id: string
+          license_number: string
+          license_state: string
+          license_type: string
+        }[]
       }
       get_or_create_notification_preferences: {
         Args: { p_user_id: string }
