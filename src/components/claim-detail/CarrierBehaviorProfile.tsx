@@ -118,7 +118,7 @@ export const CarrierBehaviorProfile = ({ carrierName, compact = false }: Carrier
     return (
       <div className="space-y-2">
         <h4 className="text-xs font-semibold flex items-center gap-1">
-          <Building2 className="h-3 w-3 text-orange-600" />
+          <Building2 className="h-3 w-3 text-warning" />
           Carrier: {carrierName}
         </h4>
         
@@ -127,22 +127,22 @@ export const CarrierBehaviorProfile = ({ carrierName, compact = false }: Carrier
             {profile.avg_initial_response_days && (
               <div className="p-2 bg-muted/50 rounded">
                 <div className="text-muted-foreground">Avg Response</div>
-                <div className="font-medium">{profile.avg_initial_response_days} days</div>
+                <div className="font-medium text-foreground">{profile.avg_initial_response_days} days</div>
               </div>
             )}
             {profile.supplement_approval_rate && (
               <div className="p-2 bg-muted/50 rounded">
                 <div className="text-muted-foreground">Supp. Approval</div>
-                <div className="font-medium">{profile.supplement_approval_rate}%</div>
+                <div className="font-medium text-foreground">{profile.supplement_approval_rate}%</div>
               </div>
             )}
           </div>
         )}
 
         {playbooks.length > 0 && (
-          <div className="text-xs p-2 bg-orange-50 dark:bg-orange-950/30 rounded border border-orange-200 dark:border-orange-800">
-            <div className="font-medium text-orange-700 dark:text-orange-300 mb-1">Playbook Tip:</div>
-            <div className="text-orange-600 dark:text-orange-400">{playbooks[0].recommended_action.substring(0, 100)}...</div>
+          <div className="text-xs p-2 bg-warning/10 rounded border border-warning/30">
+            <div className="font-medium text-foreground mb-1">Playbook Tip:</div>
+            <div className="text-muted-foreground">{playbooks[0].recommended_action.substring(0, 100)}...</div>
           </div>
         )}
       </div>
@@ -222,7 +222,7 @@ export const CarrierBehaviorProfile = ({ carrierName, compact = false }: Carrier
         {profile?.typical_denial_reasons && Array.isArray(profile.typical_denial_reasons) && profile.typical_denial_reasons.length > 0 && (
           <div>
             <div className="text-xs font-semibold mb-2 flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3 text-orange-600" />
+              <AlertTriangle className="h-3 w-3 text-warning" />
               Common Denial Patterns
             </div>
             <div className="flex flex-wrap gap-1">
@@ -252,9 +252,9 @@ const MetricCard = ({
 }) => (
   <div className="p-2 bg-muted/50 rounded-lg text-center">
     <div className={cn(
-      "text-lg font-bold",
-      positive === true && "text-green-600",
-      positive === false && "text-red-600"
+      "text-lg font-bold text-foreground",
+      positive === true && "text-success",
+      positive === false && "text-destructive"
     )}>
       {value}
     </div>

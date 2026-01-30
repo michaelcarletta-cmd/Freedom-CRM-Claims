@@ -166,10 +166,10 @@ export const DarwinInsightsPanel = ({ claimId, claim }: DarwinInsightsPanelProps
 
   const getSeverityColor = (severity: string) => {
     switch (severity?.toLowerCase()) {
-      case 'critical': return 'bg-red-500 text-white';
-      case 'high': return 'bg-orange-500 text-white';
-      case 'medium': return 'bg-yellow-500 text-black';
-      default: return 'bg-blue-500 text-white';
+      case 'critical': return 'bg-destructive text-destructive-foreground';
+      case 'high': return 'bg-warning text-warning-foreground';
+      case 'medium': return 'bg-yellow-100 text-yellow-900 dark:bg-yellow-900 dark:text-yellow-100';
+      default: return 'bg-primary text-primary-foreground';
     }
   };
 
@@ -351,15 +351,15 @@ export const DarwinInsightsPanel = ({ claimId, claim }: DarwinInsightsPanelProps
               >
                 <div className="space-y-2">
                   {insights.leverage_points.map((point: any, i: number) => (
-                    <div key={i} className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
-                      <div className="font-medium text-sm text-green-800 dark:text-green-200">
+                    <div key={i} className="p-3 bg-success/10 rounded-lg border border-success/30">
+                      <div className="font-medium text-sm text-foreground">
                         {typeof point === 'string' ? point : point.title || point.type || point.description}
                       </div>
                       {point.explanation && (
-                        <p className="text-xs text-green-700 dark:text-green-300 mt-1">{point.explanation}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{point.explanation}</p>
                       )}
                       {point.how_to_use && (
-                        <div className="flex items-center gap-1 mt-2 text-xs text-green-600">
+                        <div className="flex items-center gap-1 mt-2 text-xs text-success">
                           <ArrowRight className="h-3 w-3" />
                           <span>{point.how_to_use}</span>
                         </div>
@@ -378,21 +378,21 @@ export const DarwinInsightsPanel = ({ claimId, claim }: DarwinInsightsPanelProps
                 count={insights.coverage_triggers_detected.length}
                 isOpen={sectionsOpen.coverage}
                 onToggle={() => toggleSection('coverage')}
-                badge={<Badge className="bg-blue-500 text-xs">If/Then Opportunities</Badge>}
+                badge={<Badge className="bg-primary text-primary-foreground text-xs">If/Then Opportunities</Badge>}
               >
                 <div className="space-y-2">
                   {insights.coverage_triggers_detected.map((trigger: any, i: number) => (
-                    <div key={i} className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div key={i} className="p-3 bg-primary/5 rounded-lg border border-primary/20">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-blue-600 bg-blue-100 dark:bg-blue-900 px-2 py-0.5 rounded">IF</span>
-                        <span className="text-sm">{trigger.trigger || trigger.condition}</span>
+                        <span className="text-xs font-medium text-primary-foreground bg-primary px-2 py-0.5 rounded">IF</span>
+                        <span className="text-sm text-foreground">{trigger.trigger || trigger.condition}</span>
                       </div>
                       <div className="flex items-center gap-2 mt-2">
-                        <span className="text-xs font-medium text-green-600 bg-green-100 dark:bg-green-900 px-2 py-0.5 rounded">THEN</span>
-                        <span className="text-sm font-medium">{trigger.coverage_opportunity || trigger.opportunity}</span>
+                        <span className="text-xs font-medium text-success-foreground bg-success px-2 py-0.5 rounded">THEN</span>
+                        <span className="text-sm font-medium text-foreground">{trigger.coverage_opportunity || trigger.opportunity}</span>
                       </div>
                       {trigger.action_required && (
-                        <div className="flex items-center gap-1 mt-2 text-xs text-blue-600">
+                        <div className="flex items-center gap-1 mt-2 text-xs text-primary">
                           <ArrowRight className="h-3 w-3" />
                           <span>{trigger.action_required}</span>
                         </div>
@@ -414,12 +414,12 @@ export const DarwinInsightsPanel = ({ claimId, claim }: DarwinInsightsPanelProps
               >
                 <div className="space-y-2">
                   {insights.evidence_gaps.map((gap: any, i: number) => (
-                    <div key={i} className="flex items-start gap-3 p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                      <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5" />
+                    <div key={i} className="flex items-start gap-3 p-3 bg-warning/10 rounded-lg border border-warning/30">
+                      <AlertCircle className="h-4 w-4 text-warning mt-0.5" />
                       <div>
-                        <span className="text-sm">{typeof gap === 'string' ? gap : gap.description || gap.item}</span>
+                        <span className="text-sm text-foreground">{typeof gap === 'string' ? gap : gap.description || gap.item}</span>
                         {gap.recommendation && (
-                          <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">{gap.recommendation}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{gap.recommendation}</p>
                         )}
                       </div>
                     </div>
@@ -435,10 +435,10 @@ export const DarwinInsightsPanel = ({ claimId, claim }: DarwinInsightsPanelProps
                 icon={<Brain className="h-4 w-4 text-purple-600" />}
                 isOpen={sectionsOpen.paOpinion}
                 onToggle={() => toggleSection('paOpinion')}
-                badge={<Badge className="bg-purple-500 text-xs">Expert View</Badge>}
+                badge={<Badge className="bg-accent text-accent-foreground text-xs">Expert View</Badge>}
               >
-                <div className="p-4 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-800">
-                  <p className="text-sm italic text-purple-800 dark:text-purple-200 whitespace-pre-wrap">
+                <div className="p-4 bg-accent/10 rounded-lg border border-accent/30">
+                  <p className="text-sm italic text-foreground whitespace-pre-wrap">
                     "{insights.senior_pa_opinion}"
                   </p>
                 </div>
@@ -472,9 +472,9 @@ const ScoreCard = ({
 
   const getBgColor = () => {
     if (!score) return 'bg-muted/50';
-    if (score >= 75) return 'bg-green-50 dark:bg-green-950/30';
-    if (score >= 50) return 'bg-yellow-50 dark:bg-yellow-950/30';
-    return 'bg-red-50 dark:bg-red-950/30';
+    if (score >= 75) return 'bg-success/10';
+    if (score >= 50) return 'bg-warning/10';
+    return 'bg-destructive/10';
   };
 
   return (
