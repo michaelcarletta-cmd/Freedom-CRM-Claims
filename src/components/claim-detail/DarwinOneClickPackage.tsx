@@ -302,8 +302,10 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
             {components.map((component) => (
               <div
                 key={component.id}
-                className={`flex items-start gap-3 p-3 rounded-lg border ${
-                  component.available ? "bg-background" : "bg-muted/50 opacity-60"
+                className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                  component.available 
+                    ? "bg-card text-card-foreground border-border" 
+                    : "bg-muted/30 text-muted-foreground opacity-60"
                 }`}
               >
                 <Checkbox
@@ -315,12 +317,12 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
                 <div className="flex-1">
                   <Label
                     htmlFor={component.id}
-                    className="flex items-center gap-2 cursor-pointer"
+                    className="flex items-center gap-2 cursor-pointer text-foreground"
                   >
-                    {component.icon}
+                    <span className="text-primary">{component.icon}</span>
                     <span>{component.label}</span>
                     {component.count !== undefined && (
-                      <span className="text-xs text-muted-foreground">({component.count})</span>
+                      <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">({component.count})</span>
                     )}
                   </Label>
                   <p className="text-xs text-muted-foreground mt-1">{component.description}</p>
@@ -361,15 +363,16 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
               <div className="space-y-4 pr-4">
                 {Object.entries(groupedAnalyses).map(([type, analyses]) => (
                   <div key={type} className="space-y-2">
-                    <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2 sticky top-0 bg-background py-1">
-                      {ANALYSIS_TYPE_LABELS[type]?.icon}
-                      {ANALYSIS_TYPE_LABELS[type]?.label || type.replace(/_/g, ' ')} ({analyses.length})
+                    <h5 className="text-xs font-medium uppercase tracking-wide flex items-center gap-2 sticky top-0 bg-card text-card-foreground py-1 px-2 rounded border-l-2 border-primary">
+                      <span className="text-primary">{ANALYSIS_TYPE_LABELS[type]?.icon}</span>
+                      <span>{ANALYSIS_TYPE_LABELS[type]?.label || type.replace(/_/g, ' ')}</span>
+                      <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[10px]">{analyses.length}</span>
                     </h5>
                     <div className="space-y-2">
                       {analyses.map((analysis) => (
                         <div
                           key={analysis.id}
-                          className="flex items-start gap-3 p-2 rounded-lg border bg-background hover:bg-muted/50 transition-colors"
+                          className="flex items-start gap-3 p-2 rounded-lg border border-border bg-card text-card-foreground hover:bg-accent/50 transition-colors"
                         >
                           <Checkbox
                             id={analysis.id}
@@ -380,7 +383,7 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
                           <div className="flex-1 min-w-0">
                             <Label
                               htmlFor={analysis.id}
-                              className="cursor-pointer text-sm"
+                              className="cursor-pointer text-sm text-foreground"
                             >
                               {analysis.input_summary 
                                 ? analysis.input_summary.substring(0, 50) + (analysis.input_summary.length > 50 ? "..." : "")
@@ -404,8 +407,8 @@ export const DarwinOneClickPackage = ({ claimId, claim }: DarwinOneClickPackageP
         {/* No analyses message */}
         {(!darwinAnalyses || darwinAnalyses.length === 0) && (
           <div className="border-t pt-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 bg-muted/30 rounded-lg">
-              <Brain className="h-4 w-4" />
+            <div className="flex items-center gap-2 text-sm p-3 bg-muted/50 text-foreground rounded-lg border border-border">
+              <Brain className="h-4 w-4 text-primary" />
               <span>No Darwin analyses available yet. Generate rebuttals or analyses from the Darwin tools to include them here.</span>
             </div>
           </div>
