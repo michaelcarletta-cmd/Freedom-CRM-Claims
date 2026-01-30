@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Save, User, Bell, Mail, MessageSquare, ChevronDown, Loader2, Upload, Building2, X } from "lucide-react";
 import { formatPhoneNumber } from "@/lib/utils";
+import { LicensesSettings } from "./LicensesSettings";
 
 interface ProfileData {
   full_name: string | null;
@@ -360,11 +361,15 @@ export function ProfileSettings() {
         </CardContent>
       </Card>
 
+      {/* Full Licenses Management */}
+      <LicensesSettings />
+
+      {/* Legacy single license fields - kept for backward compatibility */}
       <Card>
         <CardHeader>
-          <CardTitle>Licensing Information</CardTitle>
+          <CardTitle>Primary License (Legacy)</CardTitle>
           <CardDescription>
-            Your professional licensing details
+            Your primary license for quick display. Use "Professional Licenses" above for full tracking.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

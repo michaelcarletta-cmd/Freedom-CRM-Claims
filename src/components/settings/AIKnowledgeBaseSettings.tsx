@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe } from "lucide-react";
+import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe, AlignLeft } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +35,8 @@ const CATEGORIES = [
 
 const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a,.webm,.jpg,.jpeg,.png,.gif,.webp,.bmp";
 
+type UploadTab = "files" | "url" | "text";
+
 export const AIKnowledgeBaseSettings = () => {
   const queryClient = useQueryClient();
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -47,6 +49,13 @@ export const AIKnowledgeBaseSettings = () => {
   // URL upload state
   const [urlInput, setUrlInput] = useState("");
   const [urlCategory, setUrlCategory] = useState<string>("");
+  
+  // Text upload state
+  const [textTitle, setTextTitle] = useState("");
+  const [textContent, setTextContent] = useState("");
+  const [textCategory, setTextCategory] = useState<string>("");
+  const [textDescription, setTextDescription] = useState("");
+  const [textUploading, setTextUploading] = useState(false);
   const [urlDescription, setUrlDescription] = useState("");
   const [urlUploading, setUrlUploading] = useState(false);
 
@@ -252,6 +261,59 @@ export const AIKnowledgeBaseSettings = () => {
     }
   };
 
+  const handleTextUpload = async () => {
+    if (!textContent || !textCategory || !textTitle) {
+      toast.error("Please enter a title, content, and select a category");
+      return;
+    }
+
+    setTextUploading(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Create document record for text content
+      const { data: docData, error: docError } = await supabase
+        .from("ai_knowledge_documents")
+        .insert({
+          file_name: textTitle,
+          file_path: `text-content-${Date.now()}`,
+          file_type: "text",
+          file_size: new Blob([textContent]).size,
+          category: textCategory,
+          description: textDescription || null,
+          uploaded_by: user.id,
+          status: "pending",
+        })
+        .select()
+        .single();
+
+      if (docError) throw docError;
+
+      // Trigger text processing - store the text content directly
+      supabase.functions.invoke(
+        "process-knowledge-text",
+        { body: { documentId: docData.id, content: textContent, title: textTitle } }
+      ).catch(err => console.error("Text processing trigger error:", err));
+
+      toast.success("Text content submitted for processing");
+
+      // Reset form
+      setTextTitle("");
+      setTextContent("");
+      setTextCategory("");
+      setTextDescription("");
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
+
+    } catch (error: any) {
+      console.error("Text upload error:", error);
+      toast.error(error.message || "Failed to submit text content");
+    } finally {
+      setTextUploading(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
@@ -268,6 +330,9 @@ export const AIKnowledgeBaseSettings = () => {
   const getFileIcon = (fileName: string, fileType?: string) => {
     if (fileType === 'url') {
       return <Globe className="h-5 w-5 text-cyan-400" />;
+    }
+    if (fileType === 'text') {
+      return <AlignLeft className="h-5 w-5 text-emerald-400" />;
     }
     if (fileName.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)) {
       return <Video className="h-5 w-5 text-purple-400" />;
@@ -294,19 +359,23 @@ export const AIKnowledgeBaseSettings = () => {
             AI Knowledge Base
           </CardTitle>
           <CardDescription>
-            Upload documents, images, videos, or add URLs to train the AI assistant.
+            Upload documents, images, videos, add URLs, or enter text to train the AI assistant.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Tabs defaultValue="files" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="files" className="flex items-center gap-2">
                 <Upload className="h-4 w-4" />
-                Upload Files
+                Files
               </TabsTrigger>
               <TabsTrigger value="url" className="flex items-center gap-2">
                 <Link className="h-4 w-4" />
-                Add URL
+                URL
+              </TabsTrigger>
+              <TabsTrigger value="text" className="flex items-center gap-2">
+                <AlignLeft className="h-4 w-4" />
+                Text
               </TabsTrigger>
             </TabsList>
             
@@ -439,6 +508,82 @@ export const AIKnowledgeBaseSettings = () => {
               </Button>
               <p className="text-xs text-muted-foreground mt-2">
                 The AI will fetch and analyze the webpage content. Processing takes 30-60 seconds.
+              </p>
+            </TabsContent>
+            
+            <TabsContent value="text" className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label>Title *</Label>
+                <Input
+                  value={textTitle}
+                  onChange={(e) => setTextTitle(e.target.value)}
+                  placeholder="e.g., State Farm Denial Response Template"
+                  disabled={textUploading}
+                />
+              </div>
+              
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Category *</Label>
+                  <Select value={textCategory} onValueChange={setTextCategory} disabled={textUploading}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Description (optional)</Label>
+                  <Input
+                    value={textDescription}
+                    onChange={(e) => setTextDescription(e.target.value)}
+                    placeholder="Brief description..."
+                    disabled={textUploading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Content *</Label>
+                <Textarea
+                  value={textContent}
+                  onChange={(e) => setTextContent(e.target.value)}
+                  placeholder="Enter statements, paragraphs, verbiage, policy language, response templates, or any other text content for the AI to learn..."
+                  disabled={textUploading}
+                  rows={8}
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {textContent.length} characters
+                </p>
+              </div>
+
+              <Button
+                onClick={handleTextUpload}
+                disabled={!textContent || !textCategory || !textTitle || textUploading}
+                className="w-full md:w-auto"
+              >
+                {textUploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <AlignLeft className="h-4 w-4 mr-2" />
+                    Add Text Content
+                  </>
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Add policy language, response templates, verbiage, statements, or any text the AI should know.
               </p>
             </TabsContent>
           </Tabs>

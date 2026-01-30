@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +51,6 @@ interface StrategicInsights {
 }
 
 export const DarwinInsightsPanel = ({ claimId, claim }: DarwinInsightsPanelProps) => {
-  const [insights, setInsights] = useState<StrategicInsights | null>(null);
   const [loading, setLoading] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState({
     warnings: true,
@@ -61,23 +61,54 @@ export const DarwinInsightsPanel = ({ claimId, claim }: DarwinInsightsPanelProps
     paOpinion: false
   });
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  // Load existing insights on mount
+  // Use React Query for insights with automatic refetching
+  const { data: insights, refetch: refetchInsights } = useQuery({
+    queryKey: ['darwin-insights', claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('claim_strategic_insights')
+        .select('*')
+        .eq('claim_id', claimId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching insights:', error);
+      }
+      return data as StrategicInsights | null;
+    },
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
+  // Subscribe to claim data changes to trigger re-analysis prompt
   useEffect(() => {
-    loadInsights();
-  }, [claimId]);
+    // Subscribe to multiple tables that affect Darwin analysis
+    const channels = [
+      supabase.channel(`claim-files-${claimId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'claim_files', filter: `claim_id=eq.${claimId}` }, () => {
+          queryClient.invalidateQueries({ queryKey: ['darwin-insights', claimId] });
+        }),
+      supabase.channel(`claim-photos-${claimId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'claim_photos', filter: `claim_id=eq.${claimId}` }, () => {
+          queryClient.invalidateQueries({ queryKey: ['darwin-insights', claimId] });
+        }),
+      supabase.channel(`claim-checks-${claimId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'claim_checks', filter: `claim_id=eq.${claimId}` }, () => {
+          queryClient.invalidateQueries({ queryKey: ['darwin-insights', claimId] });
+        }),
+      supabase.channel(`emails-${claimId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'emails', filter: `claim_id=eq.${claimId}` }, () => {
+          queryClient.invalidateQueries({ queryKey: ['darwin-insights', claimId] });
+        }),
+    ];
 
-  const loadInsights = async () => {
-    const { data, error } = await supabase
-      .from('claim_strategic_insights')
-      .select('*')
-      .eq('claim_id', claimId)
-      .single();
+    channels.forEach(channel => channel.subscribe());
 
-    if (data && !error) {
-      setInsights(data as unknown as StrategicInsights);
-    }
-  };
+    return () => {
+      channels.forEach(channel => supabase.removeChannel(channel));
+    };
+  }, [claimId, queryClient]);
 
   const runAnalysis = async () => {
     setLoading(true);
@@ -100,8 +131,8 @@ export const DarwinInsightsPanel = ({ claimId, claim }: DarwinInsightsPanelProps
         description: "Darwin has analyzed your claim and generated insights"
       });
 
-      // Reload insights from database
-      await loadInsights();
+      // Reload insights from database using React Query
+      await refetchInsights();
 
     } catch (error: any) {
       console.error("Strategic analysis error:", error);
