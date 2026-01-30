@@ -33,6 +33,7 @@ const DarwinQualifyingLanguage = lazy(() => import("@/components/claim-detail/Da
 const DarwinCarrierEmailDrafter = lazy(() => import("@/components/claim-detail/DarwinCarrierEmailDrafter").then(m => ({ default: m.DarwinCarrierEmailDrafter })));
 const DarwinWeatherHistory = lazy(() => import("@/components/claim-detail/DarwinWeatherHistory").then(m => ({ default: m.DarwinWeatherHistory })));
 const DarwinOneClickPackage = lazy(() => import("@/components/claim-detail/DarwinOneClickPackage").then(m => ({ default: m.DarwinOneClickPackage })));
+const DarwinAutoDraftRebuttal = lazy(() => import("@/components/claim-detail/DarwinAutoDraftRebuttal").then(m => ({ default: m.DarwinAutoDraftRebuttal })));
 const DarwinAutoSummary = lazy(() => import("@/components/claim-detail/DarwinAutoSummary").then(m => ({ default: m.DarwinAutoSummary })));
 const DarwinSmartDocumentSort = lazy(() => import("@/components/claim-detail/DarwinSmartDocumentSort").then(m => ({ default: m.DarwinSmartDocumentSort })));
 const VisualClaimTimeline = lazy(() => import("@/components/claim-detail/VisualClaimTimeline").then(m => ({ default: m.VisualClaimTimeline })));
@@ -208,6 +209,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             description="Counter carrier denials and engineer reports"
             icon={<Shield className="h-4 w-4" />}
           >
+            <DarwinAutoDraftRebuttal claimId={claimId} claim={claim} />
             <div className="grid gap-4 lg:grid-cols-2">
               <DarwinDenialAnalyzer claimId={claimId} claim={claim} />
               <DarwinEngineerReportAnalyzer claimId={claimId} claim={claim} />

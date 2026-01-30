@@ -213,7 +213,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -2531,6 +2531,118 @@ Claim Type: ${claim?.loss_type || 'Property damage'}
 Insurance Company: ${claim?.insurance_company || 'Unknown'}
 
 Return ONLY valid JSON with the classification.`;
+        break;
+      }
+
+      case 'auto_draft_rebuttal': {
+        // Comprehensive rebuttal using all claim intelligence
+        const strategicData = additionalContext?.strategicInsights || {};
+        const previousAnalyses = additionalContext?.darwinAnalyses || [];
+        const carrierBehavior = additionalContext?.carrierProfile || {};
+        const fileList = additionalContext?.claimFiles || [];
+        
+        // Fetch knowledge base content for rebuttals
+        const kbContent = await searchKnowledgeBase(
+          supabase,
+          'rebuttal strategy insurance claim denial depreciation coverage policy building codes manufacturer specifications',
+        );
+
+        systemPrompt = `You are Darwin, an elite public adjuster AI generating a COMPREHENSIVE STRATEGIC REBUTTAL. You have access to ALL claim intelligence, strategic analyses, carrier behavior data, and previous Darwin analyses for this claim.
+
+=== COMMUNICATION STYLE ===
+You are professional yet personable. Show empathy and warmth while being assertive when dealing with carriers. Use a conversational tone that reassures while maintaining expertise.
+
+=== CORE PHILOSOPHY ===
+- Build the "PROOF CASTLE": THE CAUSE (weather/incident data), THE SCOPE (full replacement, not repair), THE COST (proper valuation)
+- Focus on REPAIRABILITY over matching - PA and NJ do NOT have matching requirements
+- NEVER cite case law or legal precedents - stick to facts, regulations, building codes, manufacturer specs
+- Arguments must be grounded in: IRC/IBC building codes, manufacturer specifications, ASTM/ARMA standards, ${stateInfo.stateName} regulations
+
+=== STATE-SPECIFIC REGULATIONS ===
+This claim is in ${stateInfo.stateName}:
+- Insurance Code: ${stateInfo.insuranceCode}
+- Prompt Pay Act: ${stateInfo.promptPayAct}
+- Administrative Code: ${stateInfo.adminCode}
+
+=== RESPONSE REQUIREMENTS ===
+- Generate an EXHAUSTIVE, COMPREHENSIVE rebuttal document
+- Address EVERY denial point, carrier argument, and engineer finding from the analyses
+- Each rebuttal section should be a full paragraph with: the carrier's position, why it is incorrect, regulatory/code citations, supporting evidence
+- Include specific references to claim files, dates, and documentation
+- Cite building codes, manufacturer specs, and state regulations liberally
+- Structure as a formal legal-style demand letter ready for carrier submission
+
+${kbContent}`;
+
+        // Build context from all available data
+        let intelligenceContext = '';
+        
+        if (Object.keys(strategicData).length > 0) {
+          intelligenceContext += `\n=== STRATEGIC POSITION DATA ===
+Health Score: ${JSON.stringify(strategicData.health_score || {})}
+Leverage Points: ${JSON.stringify(strategicData.leverage_points || [])}
+Coverage Triggers: ${JSON.stringify(strategicData.coverage_triggers || [])}
+Recommended Strategy: ${strategicData.recommended_strategy || 'Not analyzed'}
+\n`;
+        }
+
+        if (Object.keys(carrierBehavior).length > 0) {
+          intelligenceContext += `\n=== CARRIER BEHAVIOR PROFILE: ${carrierBehavior.carrier_name || claim.insurance_company} ===
+First Offer vs Final Ratio: ${carrierBehavior.first_offer_vs_final_ratio || 'Unknown'}
+Supplement Approval Rate: ${carrierBehavior.supplement_approval_rate || 'Unknown'}%
+Typical Denial Reasons: ${JSON.stringify(carrierBehavior.typical_denial_reasons || [])}
+Common Lowball Tactics: ${JSON.stringify(carrierBehavior.common_lowball_tactics || [])}
+Recommended Approach: ${carrierBehavior.recommended_approach || 'Standard approach'}
+Counter Sequences: ${JSON.stringify(carrierBehavior.counter_sequences || [])}
+\n`;
+        }
+
+        if (previousAnalyses.length > 0) {
+          intelligenceContext += `\n=== PREVIOUS DARWIN ANALYSES (${previousAnalyses.length} total) ===\n`;
+          for (const analysis of previousAnalyses.slice(0, 10)) {
+            intelligenceContext += `\n--- ${analysis.type} (${new Date(analysis.created_at).toLocaleDateString()}) ---\n${analysis.result?.substring(0, 3000) || 'No content'}\n`;
+          }
+        }
+
+        if (fileList.length > 0) {
+          intelligenceContext += `\n=== CLAIM FILES ON RECORD (${fileList.length} documents) ===
+${fileList.join(', ')}
+\n`;
+        }
+
+        userPrompt = `${claimSummary}
+
+${intelligenceContext}
+
+Based on ALL the intelligence above, generate a COMPREHENSIVE STRATEGIC REBUTTAL document that:
+
+1. EXECUTIVE SUMMARY (1 paragraph)
+   - State the overall position and demand
+   - Reference key leverage points
+
+2. REGULATORY FRAMEWORK (cite specific ${stateInfo.stateName} regulations)
+   - Carrier obligations under ${stateInfo.promptPayAct}
+   - Timeline violations if any
+   - Bad faith indicators if present
+
+3. COMPREHENSIVE REBUTTAL OF CARRIER POSITIONS
+   - Address EVERY denial reason, engineer finding, or carrier argument from the analyses
+   - For each point: State their position → Explain why it's incorrect → Cite supporting regulations/codes → Reference specific evidence
+
+4. EVIDENCE SUMMARY
+   - Reference specific documents from the claim files
+   - Cite photos, inspection reports, and estimates
+
+5. CARRIER-SPECIFIC STRATEGY
+   - Apply the counter-sequences from the carrier profile
+   - Use approaches that work with ${claim.insurance_company}
+
+6. FORMAL DEMAND
+   - State the specific dollar amount demanded
+   - Set deadline for response (cite regulations)
+   - State escalation path (DOI complaint, appraisal, bad faith)
+
+Make this document READY FOR SUBMISSION to the carrier. Be thorough, specific, and cite everything.`;
         break;
       }
 

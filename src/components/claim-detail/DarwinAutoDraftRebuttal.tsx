@@ -1,0 +1,316 @@
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { 
+  Sparkles, Loader2, Copy, Download, FileText, 
+  Brain, Target, Shield, AlertTriangle, CheckCircle2
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+
+interface DarwinAutoDraftRebuttalProps {
+  claimId: string;
+  claim: any;
+}
+
+export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebuttalProps) => {
+  const { toast } = useToast();
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [rebuttal, setRebuttal] = useState<string | null>(null);
+  const [editableRebuttal, setEditableRebuttal] = useState<string>("");
+
+  // Fetch all strategic intelligence data
+  const { data: strategicInsights } = useQuery({
+    queryKey: ["strategic-insights", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_strategic_insights")
+        .select("*")
+        .eq("claim_id", claimId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch Darwin analysis results
+  const { data: darwinAnalyses } = useQuery({
+    queryKey: ["darwin-analyses-all", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("darwin_analysis_results")
+        .select("*")
+        .eq("claim_id", claimId)
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch carrier behavior profile
+  const { data: carrierProfile } = useQuery({
+    queryKey: ["carrier-profile", claim?.insurance_company],
+    queryFn: async () => {
+      if (!claim?.insurance_company) return null;
+      const { data } = await supabase
+        .from("carrier_behavior_profiles")
+        .select("*")
+        .ilike("carrier_name", `%${claim.insurance_company}%`)
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!claim?.insurance_company,
+  });
+
+  // Fetch claim files for context
+  const { data: claimFiles } = useQuery({
+    queryKey: ["claim-files-list", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_files")
+        .select("file_name, file_type, uploaded_at")
+        .eq("claim_id", claimId);
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const dataPoints = [
+    { 
+      label: "Strategic Insights", 
+      available: !!strategicInsights,
+      icon: Target 
+    },
+    { 
+      label: "Darwin Analyses", 
+      available: (darwinAnalyses?.length || 0) > 0,
+      count: darwinAnalyses?.length,
+      icon: Brain 
+    },
+    { 
+      label: "Carrier Profile", 
+      available: !!carrierProfile,
+      icon: Shield 
+    },
+    { 
+      label: "Claim Files", 
+      available: (claimFiles?.length || 0) > 0,
+      count: claimFiles?.length,
+      icon: FileText 
+    },
+  ];
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
+        body: {
+          claimId,
+          analysisType: "auto_draft_rebuttal",
+          additionalContext: {
+            strategicInsights,
+            darwinAnalyses: darwinAnalyses?.map(a => ({
+              type: a.analysis_type,
+              result: a.result,
+              created_at: a.created_at,
+            })),
+            carrierProfile,
+            claimFiles: claimFiles?.map(f => f.file_name),
+          },
+          claim,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.result) {
+        setRebuttal(data.result);
+        setEditableRebuttal(data.result);
+        
+        // Save to darwin_analysis_results
+        const { data: userData } = await supabase.auth.getUser();
+        await supabase.from("darwin_analysis_results").insert({
+          claim_id: claimId,
+          analysis_type: "auto_draft_rebuttal",
+          input_summary: "Full strategic rebuttal using all claim intelligence",
+          result: data.result,
+          created_by: userData.user?.id,
+        });
+
+        toast({
+          title: "Rebuttal drafted",
+          description: "Darwin has compiled a comprehensive rebuttal using all available intelligence",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error generating rebuttal:", error);
+      toast({
+        title: "Generation failed",
+        description: error.message || "Failed to generate rebuttal",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(editableRebuttal);
+    toast({ title: "Copied", description: "Rebuttal copied to clipboard" });
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([editableRebuttal], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Strategic_Rebuttal_${claim.claim_number || claimId}_${new Date().toISOString().split("T")[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const availableDataCount = dataPoints.filter(d => d.available).length;
+
+  return (
+    <Card className="border-primary/20">
+      <CardHeader className="bg-primary/5 border-b">
+        <CardTitle className="flex items-center gap-2 text-foreground">
+          <Sparkles className="h-5 w-5 text-primary" />
+          Darwin Auto-Draft Rebuttal
+        </CardTitle>
+        <CardDescription className="text-muted-foreground">
+          Let Darwin compile a comprehensive rebuttal using all strategic intelligence, 
+          analyses, carrier behavior data, and claim documentation
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-4">
+        {/* Data Sources Summary */}
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+            <Brain className="h-4 w-4 text-primary" />
+            Intelligence Sources ({availableDataCount}/{dataPoints.length})
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {dataPoints.map((point) => {
+              const Icon = point.icon;
+              return (
+                <Badge
+                  key={point.label}
+                  variant={point.available ? "default" : "secondary"}
+                  className={`flex items-center gap-1.5 ${
+                    point.available 
+                      ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/20" 
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {point.available ? (
+                    <CheckCircle2 className="h-3 w-3" />
+                  ) : (
+                    <AlertTriangle className="h-3 w-3" />
+                  )}
+                  <Icon className="h-3 w-3" />
+                  {point.label}
+                  {point.count && <span className="ml-1">({point.count})</span>}
+                </Badge>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Warning if missing data */}
+        {availableDataCount < 2 && (
+          <div className="p-3 bg-warning/10 border border-warning/30 rounded-lg text-sm text-foreground">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning mt-0.5" />
+              <div>
+                <p className="font-medium">Limited data available</p>
+                <p className="text-muted-foreground text-xs mt-1">
+                  Run Strategic Analysis in the War Room and generate analyses from Darwin tools for best results.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* What Darwin will include */}
+        <div className="p-3 bg-card border rounded-lg">
+          <h5 className="text-sm font-medium text-foreground mb-2">Darwin will compile:</h5>
+          <ul className="text-xs text-muted-foreground space-y-1">
+            <li className="flex items-center gap-2">
+              <CheckCircle2 className="h-3 w-3 text-primary" />
+              Strategic position analysis & health scores
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle2 className="h-3 w-3 text-primary" />
+              All previous rebuttals & denial analyses
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle2 className="h-3 w-3 text-primary" />
+              Carrier-specific tactics & counter-strategies
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle2 className="h-3 w-3 text-primary" />
+              Evidence citations from uploaded documents
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle2 className="h-3 w-3 text-primary" />
+              Building codes & regulatory references (no case law)
+            </li>
+          </ul>
+        </div>
+
+        <Button
+          onClick={handleGenerate}
+          disabled={isGenerating}
+          className="w-full"
+          size="lg"
+        >
+          {isGenerating ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Darwin is compiling comprehensive rebuttal...
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4 mr-2" />
+              Generate Strategic Rebuttal
+            </>
+          )}
+        </Button>
+
+        {rebuttal && (
+          <div className="space-y-3 pt-4 border-t">
+            <div className="flex items-center justify-between">
+              <h4 className="font-medium text-foreground">Generated Rebuttal</h4>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleCopy}>
+                  <Copy className="h-4 w-4 mr-1" />
+                  Copy
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleDownload}>
+                  <Download className="h-4 w-4 mr-1" />
+                  Download
+                </Button>
+              </div>
+            </div>
+            <Textarea
+              value={editableRebuttal}
+              onChange={(e) => setEditableRebuttal(e.target.value)}
+              className="min-h-[400px] font-mono text-sm bg-card text-card-foreground"
+            />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
