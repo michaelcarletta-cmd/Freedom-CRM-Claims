@@ -2093,7 +2093,7 @@ export type Database = {
           {
             foreignKeyName: "claim_strategic_insights_claim_id_fkey"
             columns: ["claim_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "claims"
             referencedColumns: ["id"]
           },
