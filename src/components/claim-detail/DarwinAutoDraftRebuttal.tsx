@@ -85,6 +85,35 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
     },
   });
 
+  // Fetch AI-analyzed photos for evidence
+  const { data: aiPhotos } = useQuery({
+    queryKey: ["ai-photos-for-rebuttal", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_photos")
+        .select("file_name, ai_condition_rating, ai_condition_notes, ai_detected_damages, ai_material_type, ai_analysis_summary, category")
+        .eq("claim_id", claimId)
+        .not("ai_analyzed_at", "is", null);
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Process AI photo data for display
+  const poorConditionPhotos = aiPhotos?.filter(p => 
+    p.ai_condition_rating === 'Poor' || p.ai_condition_rating === 'Failed'
+  ) || [];
+  const photosWithDamages = aiPhotos?.filter(p => {
+    if (!p.ai_detected_damages) return false;
+    try {
+      const damages = typeof p.ai_detected_damages === 'string' 
+        ? JSON.parse(p.ai_detected_damages) 
+        : p.ai_detected_damages;
+      return Array.isArray(damages) && damages.length > 0;
+    } catch { return false; }
+  }) || [];
+
   const dataPoints = [
     { 
       label: "Strategic Insights", 
@@ -108,6 +137,15 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
       count: claimFiles?.length,
       icon: FileText 
     },
+    { 
+      label: "AI Photo Analysis", 
+      available: (aiPhotos?.length || 0) > 0,
+      count: aiPhotos?.length,
+      icon: FileText,
+      description: poorConditionPhotos.length > 0 
+        ? `${poorConditionPhotos.length} poor/failed, ${photosWithDamages.length} with damages`
+        : undefined
+    },
   ];
 
   const handleGenerate = async () => {
@@ -126,6 +164,22 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
             })),
             carrierProfile,
             claimFiles: claimFiles?.map(f => f.file_name),
+            // Include AI photo analysis for evidence in rebuttals
+            aiPhotoAnalysis: aiPhotos?.map(p => ({
+              fileName: p.file_name,
+              category: p.category,
+              material: p.ai_material_type,
+              condition: p.ai_condition_rating,
+              conditionNotes: p.ai_condition_notes,
+              summary: p.ai_analysis_summary,
+              detectedDamages: p.ai_detected_damages,
+            })),
+            photoAnalysisSummary: {
+              totalAnalyzed: aiPhotos?.length || 0,
+              poorConditionCount: poorConditionPhotos.length,
+              withDamagesCount: photosWithDamages.length,
+              materials: [...new Set(aiPhotos?.map(p => p.ai_material_type).filter(Boolean) || [])],
+            }
           },
           claim,
         },
@@ -261,6 +315,10 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
             <li className="flex items-center gap-2">
               <CheckCircle2 className="h-3 w-3 text-primary" />
               Evidence citations from uploaded documents
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle2 className="h-3 w-3 text-primary" />
+              AI photo analysis (conditions, damages, materials)
             </li>
             <li className="flex items-center gap-2">
               <CheckCircle2 className="h-3 w-3 text-primary" />

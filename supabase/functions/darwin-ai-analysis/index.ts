@@ -2540,6 +2540,8 @@ Return ONLY valid JSON with the classification.`;
         const previousAnalyses = additionalContext?.darwinAnalyses || [];
         const carrierBehavior = additionalContext?.carrierProfile || {};
         const fileList = additionalContext?.claimFiles || [];
+        const aiPhotoAnalysis = additionalContext?.aiPhotoAnalysis || [];
+        const photoAnalysisSummary = additionalContext?.photoAnalysisSummary || {};
         
         // Fetch knowledge base content for rebuttals
         const kbContent = await searchKnowledgeBase(
@@ -2607,6 +2609,27 @@ Counter Sequences: ${JSON.stringify(carrierBehavior.counter_sequences || [])}
         if (fileList.length > 0) {
           intelligenceContext += `\n=== CLAIM FILES ON RECORD (${fileList.length} documents) ===
 ${fileList.join(', ')}
+\n`;
+        }
+
+        // Add AI photo analysis evidence - critical for rebuttals
+        if (aiPhotoAnalysis.length > 0) {
+          intelligenceContext += `\n=== DARWIN AI PHOTO ANALYSIS (${aiPhotoAnalysis.length} photos analyzed) ===
+Summary: ${photoAnalysisSummary.totalAnalyzed || 0} analyzed, ${photoAnalysisSummary.poorConditionCount || 0} in poor/failed condition, ${photoAnalysisSummary.withDamagesCount || 0} with detected damages
+Materials Identified: ${(photoAnalysisSummary.materials || []).join(', ') || 'Various'}
+
+DETAILED PHOTO EVIDENCE:
+${aiPhotoAnalysis.slice(0, 20).map((p: any, i: number) => {
+  const damages = p.detectedDamages ? (typeof p.detectedDamages === 'string' ? JSON.parse(p.detectedDamages) : p.detectedDamages) : [];
+  const damageList = Array.isArray(damages) ? damages.map((d: any) => `${d.type || d.damage_type}: ${d.description || ''} (${d.severity || 'Unknown'} severity)`).join('; ') : '';
+  return `${i + 1}. ${p.fileName} (${p.category || 'Uncategorized'})
+   Material: ${p.material || 'Not identified'}
+   Condition: ${p.condition || 'Not assessed'} - ${p.conditionNotes || ''}
+   AI Summary: ${p.summary || 'No summary'}
+   Detected Damages: ${damageList || 'None detected'}`;
+}).join('\n\n')}
+
+*** USE THIS PHOTO EVIDENCE in the rebuttal to counter carrier claims about property condition ***
 \n`;
         }
 
