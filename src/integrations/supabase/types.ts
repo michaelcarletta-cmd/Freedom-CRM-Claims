@@ -508,6 +508,42 @@ export type Database = {
         }
         Relationships: []
       }
+      causation_rubric_weights: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          indicator_key: string
+          indicator_label: string
+          is_active: boolean | null
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          indicator_key: string
+          indicator_label: string
+          is_active?: boolean | null
+          updated_at?: string
+          weight?: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          indicator_key?: string
+          indicator_label?: string
+          is_active?: boolean | null
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: []
+      }
       claim_adjusters: {
         Row: {
           adjuster_email: string | null
@@ -805,6 +841,101 @@ export type Database = {
             columns: ["regulation_id"]
             isOneToOne: false
             referencedRelation: "state_insurance_regulations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_causation_tests: {
+        Row: {
+          alternatives_considered: Json | null
+          claim_id: string
+          collateral_damage: Json | null
+          competing_causes: Json | null
+          created_at: string
+          created_by: string | null
+          damage_noticed_date: string | null
+          damage_type: string
+          decision: string | null
+          decision_statement: string | null
+          directional_indicators: Json | null
+          event_date: string | null
+          evidence_gaps: Json | null
+          id: string
+          manufacturer: string | null
+          observations_notes: string | null
+          pattern_dispersion: string | null
+          peril_tested: string
+          prior_repairs: string | null
+          reasoning: Json | null
+          roof_age: number | null
+          score_breakdown: Json | null
+          shingle_type: string | null
+          total_score: number | null
+          updated_at: string
+          weather_evidence: string | null
+        }
+        Insert: {
+          alternatives_considered?: Json | null
+          claim_id: string
+          collateral_damage?: Json | null
+          competing_causes?: Json | null
+          created_at?: string
+          created_by?: string | null
+          damage_noticed_date?: string | null
+          damage_type: string
+          decision?: string | null
+          decision_statement?: string | null
+          directional_indicators?: Json | null
+          event_date?: string | null
+          evidence_gaps?: Json | null
+          id?: string
+          manufacturer?: string | null
+          observations_notes?: string | null
+          pattern_dispersion?: string | null
+          peril_tested: string
+          prior_repairs?: string | null
+          reasoning?: Json | null
+          roof_age?: number | null
+          score_breakdown?: Json | null
+          shingle_type?: string | null
+          total_score?: number | null
+          updated_at?: string
+          weather_evidence?: string | null
+        }
+        Update: {
+          alternatives_considered?: Json | null
+          claim_id?: string
+          collateral_damage?: Json | null
+          competing_causes?: Json | null
+          created_at?: string
+          created_by?: string | null
+          damage_noticed_date?: string | null
+          damage_type?: string
+          decision?: string | null
+          decision_statement?: string | null
+          directional_indicators?: Json | null
+          event_date?: string | null
+          evidence_gaps?: Json | null
+          id?: string
+          manufacturer?: string | null
+          observations_notes?: string | null
+          pattern_dispersion?: string | null
+          peril_tested?: string
+          prior_repairs?: string | null
+          reasoning?: Json | null
+          roof_age?: number | null
+          score_breakdown?: Json | null
+          shingle_type?: string | null
+          total_score?: number | null
+          updated_at?: string
+          weather_evidence?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_causation_tests_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
             referencedColumns: ["id"]
           },
         ]
