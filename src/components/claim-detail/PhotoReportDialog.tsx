@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Download, Grid, Columns, Sparkles, Loader2, Cloud, Wind, Droplets, Thermometer, File, FolderOpen, Image } from "lucide-react";
+import { FileText, Download, Grid, Columns, Sparkles, Loader2, Cloud, Wind, Droplets, Thermometer, File, FolderOpen, Image, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import html2pdf from "html2pdf.js";
@@ -22,6 +22,13 @@ interface ClaimPhoto {
   annotated_file_path: string | null;
   before_after_type: string | null;
   before_after_pair_id: string | null;
+  // AI analysis fields
+  ai_condition_rating?: string | null;
+  ai_condition_notes?: string | null;
+  ai_detected_damages?: any;
+  ai_material_type?: string | null;
+  ai_analysis_summary?: string | null;
+  ai_analyzed_at?: string | null;
 }
 
 interface SupportingDocument {
@@ -83,6 +90,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [includeDescriptions, setIncludeDescriptions] = useState(true);
   const [includeCategories, setIncludeCategories] = useState(true);
+  const [includeAIAnalysis, setIncludeAIAnalysis] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState<"standard" | "ai">("ai");
   const [aiReportType, setAiReportType] = useState("demand-package");
@@ -523,7 +531,20 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       
       // Batch fetch signed URLs with concurrency limit for better performance
       const BATCH_SIZE = 8;
-      const photoUrls: { url: string; fileName: string; category: string; description: string; photoNumber: number }[] = [];
+      const photoUrls: { 
+        url: string; 
+        fileName: string; 
+        category: string; 
+        description: string; 
+        photoNumber: number;
+        aiAnalysis?: {
+          material_type: string | null;
+          condition_rating: string | null;
+          condition_notes: string | null;
+          detected_damages: any;
+          summary: string | null;
+        } | null;
+      }[] = [];
       
       for (let i = 0; i < selectedPhotoData.length; i += BATCH_SIZE) {
         const batch = selectedPhotoData.slice(i, i + BATCH_SIZE);
@@ -539,6 +560,14 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
               category: photo.category || "General",
               description: photo.description || "",
               photoNumber: i + batchIdx + 1,
+              // Include AI analysis data if available and requested
+              aiAnalysis: includeAIAnalysis && photo.ai_analyzed_at ? {
+                material_type: photo.ai_material_type || null,
+                condition_rating: photo.ai_condition_rating || null,
+                condition_notes: photo.ai_condition_notes || null,
+                detected_damages: photo.ai_detected_damages || [],
+                summary: photo.ai_analysis_summary || null,
+              } : null,
             };
           })
         );
@@ -552,6 +581,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
           reportTitle,
           photoUrls,
           companyBranding,
+          includeAiContext: includeAIAnalysis,
         },
       });
 
@@ -980,6 +1010,16 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
                   onCheckedChange={(c) => setIncludeCategories(!!c)}
                 />
                 Include Categories
+              </label>
+              <label className="flex items-center gap-2">
+                <Checkbox
+                  checked={includeAIAnalysis}
+                  onCheckedChange={(c) => setIncludeAIAnalysis(!!c)}
+                />
+                <span className="flex items-center gap-1">
+                  <Brain className="h-3 w-3" />
+                  Include Darwin AI Analysis
+                </span>
               </label>
             </div>
 
