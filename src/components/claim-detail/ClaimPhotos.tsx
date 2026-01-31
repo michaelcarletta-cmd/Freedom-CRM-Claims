@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Camera, Upload, Pencil, Trash2, Link2, FileText, Grid, Columns, X, Download, Eye, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
+import { Camera, Upload, Pencil, Trash2, Link2, FileText, Grid, Columns, X, Download, Eye, Sparkles, ChevronLeft, ChevronRight, Brain, Loader2, AlertTriangle, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PhotoAnnotationEditor } from "./PhotoAnnotationEditor";
@@ -30,6 +31,13 @@ interface ClaimPhoto {
   uploaded_by: string | null;
   created_at: string;
   updated_at: string;
+  // AI analysis fields
+  ai_condition_rating: string | null;
+  ai_condition_notes: string | null;
+  ai_detected_damages: any;
+  ai_material_type: string | null;
+  ai_analysis_summary: string | null;
+  ai_analyzed_at: string | null;
 }
 
 interface ClaimPhotosProps {
@@ -192,10 +200,35 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
     setLoading(false);
   };
 
+  // Trigger AI analysis for a single photo
+  const analyzePhoto = async (photoId: string) => {
+    try {
+      console.log(`Triggering AI analysis for photo ${photoId}...`);
+      const { data, error } = await supabase.functions.invoke("analyze-single-photo", {
+        body: { photoId, claimId },
+      });
+
+      if (error) {
+        console.error("AI analysis error:", error);
+        return;
+      }
+
+      if (data?.success) {
+        console.log(`AI analysis complete for photo ${photoId}:`, data.analysis);
+        // Refresh photos to show the analysis
+        fetchPhotos();
+      }
+    } catch (err) {
+      console.error("Failed to analyze photo:", err);
+    }
+  };
+
   const handleUpload = async () => {
     if (uploadFiles.length === 0) return;
     
     setUploading(true);
+    const uploadedPhotoIds: string[] = [];
+    
     try {
       for (const file of uploadFiles) {
         const fileExt = file.name.split(".").pop();
@@ -208,7 +241,7 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
         
         if (uploadError) throw uploadError;
         
-        const { error: dbError } = await supabase.from("claim_photos").insert({
+        const { data: insertedPhoto, error: dbError } = await supabase.from("claim_photos").insert({
           claim_id: claimId,
           file_path: filePath,
           file_name: file.name,
@@ -216,9 +249,12 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
           category: uploadCategory,
           description: uploadDescription || null,
           before_after_type: uploadBeforeAfter,
-        });
+        }).select("id").single();
         
         if (dbError) throw dbError;
+        if (insertedPhoto) {
+          uploadedPhotoIds.push(insertedPhoto.id);
+        }
       }
       
       toast({ title: `${uploadFiles.length} photo(s) uploaded successfully` });
@@ -228,6 +264,18 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
       setUploadDescription("");
       setUploadBeforeAfter(null);
       fetchPhotos();
+
+      // Trigger AI analysis for each uploaded photo (in background)
+      for (const photoId of uploadedPhotoIds) {
+        analyzePhoto(photoId);
+      }
+      
+      if (uploadedPhotoIds.length > 0) {
+        toast({ 
+          title: "Darwin is analyzing photos", 
+          description: "AI analysis will appear shortly for each photo."
+        });
+      }
     } catch (error: any) {
       console.error("Upload error:", error);
       toast({ title: "Error uploading photos", description: error.message, variant: "destructive" });
@@ -361,19 +409,28 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
         
         if (uploadError) throw uploadError;
         
-        const { error: dbError } = await supabase.from("claim_photos").insert({
+        const { data: insertedPhoto, error: dbError } = await supabase.from("claim_photos").insert({
           claim_id: claimId,
           file_path: filePath,
           file_name: fileName,
           file_size: blob.size,
           category: uploadCategory,
           taken_at: new Date().toISOString(),
-        });
+        }).select("id").single();
         
         if (dbError) throw dbError;
         
         toast({ title: "Photo captured successfully" });
         fetchPhotos();
+
+        // Trigger AI analysis in background
+        if (insertedPhoto) {
+          analyzePhoto(insertedPhoto.id);
+          toast({ 
+            title: "Darwin is analyzing photo", 
+            description: "AI analysis will appear shortly."
+          });
+        }
       } catch (error: any) {
         toast({ title: "Error saving photo", description: error.message, variant: "destructive" });
       } finally {
@@ -762,7 +819,7 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
 
       {/* Preview Dialog */}
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedPhoto?.file_name}</DialogTitle>
           </DialogHeader>
@@ -777,6 +834,88 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
                   )}
                 </div>
               </div>
+
+              {/* AI Analysis Section */}
+              {selectedPhoto.ai_analyzed_at ? (
+                <div className="border rounded-lg p-4 bg-card space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Brain className="h-4 w-4 text-primary" />
+                    <span>Darwin AI Analysis</span>
+                    <Badge variant="outline" className="ml-auto text-xs">
+                      {new Date(selectedPhoto.ai_analyzed_at).toLocaleDateString()}
+                    </Badge>
+                  </div>
+
+                  {/* Material & Condition */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {selectedPhoto.ai_material_type && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Material</p>
+                        <p className="text-sm font-medium capitalize">{selectedPhoto.ai_material_type}</p>
+                      </div>
+                    )}
+                    {selectedPhoto.ai_condition_rating && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Condition</p>
+                        <ConditionBadge rating={selectedPhoto.ai_condition_rating} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Condition Notes */}
+                  {selectedPhoto.ai_condition_notes && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Condition Notes</p>
+                      <p className="text-sm">{selectedPhoto.ai_condition_notes}</p>
+                    </div>
+                  )}
+
+                  {/* Detected Damages */}
+                  {selectedPhoto.ai_detected_damages && Array.isArray(selectedPhoto.ai_detected_damages) && selectedPhoto.ai_detected_damages.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">Detected Damages</p>
+                      <div className="space-y-2">
+                        {selectedPhoto.ai_detected_damages.map((damage: any, idx: number) => (
+                          <div key={idx} className="flex items-start gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-sm">
+                            <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                            <div>
+                              <span className="font-medium">{damage.type}</span>
+                              <span className="text-muted-foreground"> ({damage.severity})</span>
+                              {damage.location && <span className="text-muted-foreground"> - {damage.location}</span>}
+                              {damage.notes && <p className="text-xs text-muted-foreground mt-1">{damage.notes}</p>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Summary */}
+                  {selectedPhoto.ai_analysis_summary && (
+                    <div className="p-2 bg-muted rounded text-sm">
+                      <p className="text-xs text-muted-foreground mb-1">Summary</p>
+                      {selectedPhoto.ai_analysis_summary}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="border rounded-lg p-4 bg-muted/50 text-center">
+                  <Brain className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">AI analysis not yet available</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={() => {
+                      analyzePhoto(selectedPhoto.id);
+                      toast({ title: "Darwin is analyzing this photo..." });
+                    }}
+                  >
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    Analyze Now
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
@@ -857,60 +996,140 @@ const PhotoCard = memo(function PhotoCard({
   compact?: boolean;
 }) {
   return (
-    <Card 
-      className={`overflow-hidden cursor-pointer transition-all ${selected ? "ring-2 ring-primary" : ""}`}
-      onClick={onSelect}
-    >
-      <div className="relative aspect-square">
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={photo.file_name}
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <div className="w-full h-full bg-muted flex items-center justify-center">
-            <Camera className="h-8 w-8 text-muted-foreground animate-pulse" />
-          </div>
-        )}
-        {photo.annotated_file_path && (
-          <Badge className="absolute top-2 left-2" variant="secondary">
-            <Pencil className="h-3 w-3 mr-1" />
-            Annotated
-          </Badge>
-        )}
-        {photo.before_after_type && (
-          <Badge className="absolute top-2 right-2" variant="outline">
-            {photo.before_after_type === "before" ? "Before" : "After"}
-          </Badge>
-        )}
-      </div>
-      {!compact && (
-        <CardContent className="p-2">
-          <p className="text-xs font-medium truncate">{photo.category}</p>
-          {photo.description && (
-            <p className="text-xs text-muted-foreground truncate">{photo.description}</p>
+    <TooltipProvider>
+      <Card 
+        className={`overflow-hidden cursor-pointer transition-all ${selected ? "ring-2 ring-primary" : ""}`}
+        onClick={onSelect}
+      >
+        <div className="relative aspect-square">
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={photo.file_name}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full bg-muted flex items-center justify-center">
+              <Camera className="h-8 w-8 text-muted-foreground animate-pulse" />
+            </div>
           )}
-          <div className="flex gap-1 mt-2" onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onPreview}>
-              <Eye className="h-3 w-3" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onAnnotate}>
-              <Pencil className="h-3 w-3" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
-              <FileText className="h-3 w-3" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={onDelete}>
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          </div>
-        </CardContent>
-      )}
-    </Card>
+          {photo.annotated_file_path && (
+            <Badge className="absolute top-2 left-2" variant="secondary">
+              <Pencil className="h-3 w-3 mr-1" />
+              Annotated
+            </Badge>
+          )}
+          {photo.before_after_type && (
+            <Badge className="absolute top-2 right-2" variant="outline">
+              {photo.before_after_type === "before" ? "Before" : "After"}
+            </Badge>
+          )}
+          {/* AI Analysis Indicator */}
+          {photo.ai_analyzed_at && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="absolute bottom-2 left-2">
+                  <ConditionIndicator rating={photo.ai_condition_rating} damages={photo.ai_detected_damages} />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                <div className="text-xs space-y-1">
+                  {photo.ai_material_type && <p><strong>Material:</strong> {photo.ai_material_type}</p>}
+                  {photo.ai_condition_rating && <p><strong>Condition:</strong> {photo.ai_condition_rating}</p>}
+                  {photo.ai_detected_damages && Array.isArray(photo.ai_detected_damages) && photo.ai_detected_damages.length > 0 && (
+                    <p><strong>Damages:</strong> {photo.ai_detected_damages.map((d: any) => d.type).join(", ")}</p>
+                  )}
+                  {photo.ai_analysis_summary && <p className="italic">{photo.ai_analysis_summary}</p>}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+        {!compact && (
+          <CardContent className="p-2">
+            <p className="text-xs font-medium truncate">{photo.category}</p>
+            {photo.ai_analysis_summary ? (
+              <p className="text-xs text-muted-foreground truncate">{photo.ai_analysis_summary}</p>
+            ) : photo.description ? (
+              <p className="text-xs text-muted-foreground truncate">{photo.description}</p>
+            ) : null}
+            <div className="flex gap-1 mt-2" onClick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onPreview}>
+                <Eye className="h-3 w-3" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onAnnotate}>
+                <Pencil className="h-3 w-3" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
+                <FileText className="h-3 w-3" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={onDelete}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+    </TooltipProvider>
   );
 });
+
+// Helper component to show condition indicator on photo cards
+function ConditionIndicator({ rating, damages }: { rating: string | null; damages: any }) {
+  const hasDamages = damages && Array.isArray(damages) && damages.length > 0;
+  
+  if (rating === "failed" || rating === "poor" || hasDamages) {
+    return (
+      <Badge variant="destructive" className="text-xs gap-1">
+        <AlertTriangle className="h-3 w-3" />
+        {hasDamages ? `${damages.length} damage${damages.length > 1 ? 's' : ''}` : rating}
+      </Badge>
+    );
+  }
+  
+  if (rating === "fair") {
+    return (
+      <Badge variant="secondary" className="text-xs gap-1 bg-yellow-500/20 text-yellow-700 dark:text-yellow-400">
+        <HelpCircle className="h-3 w-3" />
+        Fair
+      </Badge>
+    );
+  }
+  
+  if (rating === "good" || rating === "excellent") {
+    return (
+      <Badge variant="secondary" className="text-xs gap-1 bg-green-500/20 text-green-700 dark:text-green-400">
+        <CheckCircle2 className="h-3 w-3" />
+        {rating}
+      </Badge>
+    );
+  }
+  
+  return (
+    <Badge variant="outline" className="text-xs gap-1">
+      <Brain className="h-3 w-3" />
+      AI
+    </Badge>
+  );
+}
+
+// Helper component for condition badge
+function ConditionBadge({ rating }: { rating: string }) {
+  const variants: Record<string, string> = {
+    excellent: "bg-green-500/20 text-green-700 dark:text-green-400",
+    good: "bg-green-500/15 text-green-600 dark:text-green-500",
+    fair: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400",
+    poor: "bg-orange-500/20 text-orange-700 dark:text-orange-400",
+    failed: "bg-destructive/20 text-destructive",
+  };
+  
+  return (
+    <Badge variant="secondary" className={`capitalize ${variants[rating] || ""}`}>
+      {rating}
+    </Badge>
+  );
+}
 
 function PhotoPreview({ photo, imageUrl }: { photo: ClaimPhoto; imageUrl: string }) {
   return imageUrl ? (

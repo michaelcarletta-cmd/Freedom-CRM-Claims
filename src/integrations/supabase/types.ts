@@ -1754,6 +1754,12 @@ export type Database = {
       }
       claim_photos: {
         Row: {
+          ai_analysis_summary: string | null
+          ai_analyzed_at: string | null
+          ai_condition_notes: string | null
+          ai_condition_rating: string | null
+          ai_detected_damages: Json | null
+          ai_material_type: string | null
           annotated_file_path: string | null
           annotations: Json | null
           before_after_pair_id: string | null
@@ -1771,6 +1777,12 @@ export type Database = {
           uploaded_by: string | null
         }
         Insert: {
+          ai_analysis_summary?: string | null
+          ai_analyzed_at?: string | null
+          ai_condition_notes?: string | null
+          ai_condition_rating?: string | null
+          ai_detected_damages?: Json | null
+          ai_material_type?: string | null
           annotated_file_path?: string | null
           annotations?: Json | null
           before_after_pair_id?: string | null
@@ -1788,6 +1800,12 @@ export type Database = {
           uploaded_by?: string | null
         }
         Update: {
+          ai_analysis_summary?: string | null
+          ai_analyzed_at?: string | null
+          ai_condition_notes?: string | null
+          ai_condition_rating?: string | null
+          ai_detected_damages?: Json | null
+          ai_material_type?: string | null
           annotated_file_path?: string | null
           annotations?: Json | null
           before_after_pair_id?: string | null
