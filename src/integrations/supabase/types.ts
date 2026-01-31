@@ -1890,6 +1890,8 @@ export type Database = {
           ai_condition_notes: string | null
           ai_condition_rating: string | null
           ai_detected_damages: Json | null
+          ai_loss_type_consistency: string | null
+          ai_loss_type_consistency_notes: string | null
           ai_material_type: string | null
           annotated_file_path: string | null
           annotations: Json | null
@@ -1913,6 +1915,8 @@ export type Database = {
           ai_condition_notes?: string | null
           ai_condition_rating?: string | null
           ai_detected_damages?: Json | null
+          ai_loss_type_consistency?: string | null
+          ai_loss_type_consistency_notes?: string | null
           ai_material_type?: string | null
           annotated_file_path?: string | null
           annotations?: Json | null
@@ -1936,6 +1940,8 @@ export type Database = {
           ai_condition_notes?: string | null
           ai_condition_rating?: string | null
           ai_detected_damages?: Json | null
+          ai_loss_type_consistency?: string | null
+          ai_loss_type_consistency_notes?: string | null
           ai_material_type?: string | null
           annotated_file_path?: string | null
           annotations?: Json | null

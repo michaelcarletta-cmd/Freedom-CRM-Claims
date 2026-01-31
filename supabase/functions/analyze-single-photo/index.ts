@@ -98,25 +98,32 @@ serve(async (req) => {
 
     // Fetch claim context if available
     let claimContext = "";
+    let lossType = "";
+    let lossDescription = "";
     if (claimId) {
       const { data: claim } = await supabase
         .from("claims")
-        .select("loss_type, loss_description, policyholder_address")
+        .select("loss_type_id, loss_description, policyholder_address, loss_types(name)")
         .eq("id", claimId)
         .single();
 
       if (claim) {
+        lossType = (claim.loss_types as any)?.name || 'Unknown';
+        lossDescription = claim.loss_description || 'Not provided';
         claimContext = `
-Claim Context:
-- Loss Type: ${claim.loss_type || 'Unknown'}
-- Loss Description: ${claim.loss_description || 'Not provided'}
+CRITICAL CLAIM CONTEXT - Use this to guide your analysis:
+- REPORTED CAUSE OF LOSS: ${lossType}
+- LOSS DESCRIPTION: ${lossDescription}
 - Property Location: ${claim.policyholder_address || 'Unknown'}
+
+Your analysis MUST evaluate whether the visible damage is CONSISTENT with the reported cause of loss (${lossType}).
+Look specifically for damage patterns that would be caused by ${lossType}.
 `;
       }
     }
 
-    // Build the analysis prompt - FORENSIC SKEPTIC MODE
-    const analysisPrompt = `FORENSIC DAMAGE ANALYSIS - Look for ALL damage that supports this insurance claim.
+    // Build the analysis prompt - FORENSIC SKEPTIC MODE with LOSS TYPE CORRELATION
+    const analysisPrompt = `FORENSIC DAMAGE ANALYSIS - Evaluate damage in context of REPORTED CAUSE OF LOSS.
 
 ${claimContext}
 
@@ -124,6 +131,26 @@ Photo Details:
 - Filename: ${photo.file_name}
 - Category: ${photo.category || 'Not categorized'}
 - User Description: ${photo.description || 'None provided'}
+
+CRITICAL: Your analysis must answer: "Is this damage CONSISTENT with ${lossType || 'the reported peril'}?"
+
+DAMAGE PATTERN CHECKLIST FOR ${(lossType || 'STORM').toUpperCase()}:
+${lossType?.toLowerCase().includes('wind') ? `□ Directional damage patterns (all facing same direction)?
+□ Lifted, creased, or missing shingles?
+□ Exposed underlayment or decking?
+□ Debris impact marks?` : ''}
+${lossType?.toLowerCase().includes('hail') ? `□ Random/scattered impact pattern?
+□ Circular bruising or dents?
+□ Granule displacement in impact zones?
+□ Soft spots when pressed?
+□ Collateral damage on vents, gutters, AC units?` : ''}
+${lossType?.toLowerCase().includes('water') || lossType?.toLowerCase().includes('flood') ? `□ Water staining patterns?
+□ Warping, swelling, or buckling?
+□ Mold or mildew presence?
+□ High water marks or tide lines?` : ''}
+${!lossType || (!lossType.toLowerCase().includes('wind') && !lossType.toLowerCase().includes('hail') && !lossType.toLowerCase().includes('water') && !lossType.toLowerCase().includes('flood')) ? `□ Damage patterns consistent with reported cause?
+□ Fresh vs weathered damage indicators?
+□ Localized vs widespread damage?` : ''}
 
 CRITICAL CHECKLIST - Look carefully for:
 □ MISSING MATERIALS - Any gaps where shingles, siding, or components should be?
@@ -143,18 +170,21 @@ Respond with ONLY a valid JSON object in this exact format:
   "material_type": "specific material (e.g., 'architectural asphalt shingles', 'vinyl siding', 'painted drywall ceiling')",
   "condition_rating": "one of: excellent, good, fair, poor, failed",
   "condition_notes": "detailed explanation including ALL damage observed and why you chose this rating",
+  "loss_type_consistency": "one of: consistent, inconsistent, inconclusive",
+  "loss_type_consistency_notes": "explain WHY the damage is or is not consistent with ${lossType || 'the reported cause of loss'}",
   "detected_damages": [
     {
       "type": "damage type (e.g., 'missing shingles', 'repair attempt - flex seal', 'hail damage', 'wind damage')",
       "severity": "one of: minor, moderate, severe",
       "location": "where on the material",
-      "notes": "specific forensic observations"
+      "notes": "specific forensic observations",
+      "consistent_with_loss_type": true or false
     }
   ],
-  "summary": "1-2 sentence claim-supporting summary emphasizing damage found"
+  "summary": "1-2 sentence claim-supporting summary emphasizing damage found AND whether it supports the ${lossType || 'reported'} loss claim"
 }
 
-Remember: This photo was taken for an insurance claim. Look HARDER for damage. Be skeptical of "good condition" conclusions.
+Remember: This photo was taken for an insurance claim alleging ${lossType || 'property damage'}. Evaluate whether visible damage supports that claim.
 Respond with ONLY the JSON object, no additional text.`;
 
     console.log(`Analyzing photo ${photoId}...`);
@@ -241,6 +271,8 @@ Respond with ONLY the JSON object, no additional text.`;
         ai_condition_notes: analysis.condition_notes || null,
         ai_detected_damages: analysis.detected_damages || [],
         ai_analysis_summary: analysis.summary || null,
+        ai_loss_type_consistency: analysis.loss_type_consistency || null,
+        ai_loss_type_consistency_notes: analysis.loss_type_consistency_notes || null,
         ai_analyzed_at: new Date().toISOString(),
       })
       .eq("id", photoId);
@@ -264,6 +296,8 @@ Respond with ONLY the JSON object, no additional text.`;
           condition_notes: analysis.condition_notes,
           detected_damages: analysis.detected_damages,
           summary: analysis.summary,
+          loss_type_consistency: analysis.loss_type_consistency,
+          loss_type_consistency_notes: analysis.loss_type_consistency_notes,
           analyzed_at: new Date().toISOString(),
         }
       }),
