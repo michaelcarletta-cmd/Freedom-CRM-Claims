@@ -47,27 +47,65 @@ serve(async (req) => {
     });
 
     // Generate HTML for PDF - photos are referenced by URL, not embedded
-    const photoRowsHtml = photosToInclude.map((photo: any, idx: number) => `
-      <div class="photo-card">
-        <div class="photo-header">
-          <span class="photo-number">Photo ${photo.photoNumber || idx + 1}</span>
-          <span class="photo-category">${escapeHtml(photo.category || 'General')}</span>
-        </div>
-        <div class="photo-container">
-          <img src="${escapeHtml(photo.url)}" alt="Photo ${photo.photoNumber || idx + 1}" />
-        </div>
-        <div class="photo-details">
-          <div class="photo-filename">${escapeHtml(photo.fileName || `Photo ${idx + 1}`)}</div>
-          ${photo.description ? `<div class="photo-description">${escapeHtml(photo.description)}</div>` : ''}
-          ${includeAiContext && photo.aiContext ? `
-            <div class="ai-context">
-              <span class="ai-label">AI Analysis:</span>
-              <span class="ai-text">${escapeHtml(photo.aiContext)}</span>
+    const photoRowsHtml = photosToInclude.map((photo: any, idx: number) => {
+      // Build AI analysis section if available
+      let aiAnalysisHtml = '';
+      if (photo.aiAnalysis) {
+        const analysis = photo.aiAnalysis;
+        aiAnalysisHtml = `
+          <div class="ai-analysis">
+            <div class="ai-header">
+              <span class="ai-icon">🧠</span>
+              <span class="ai-title">Darwin AI Analysis</span>
             </div>
-          ` : ''}
+            <div class="ai-grid">
+              ${analysis.material_type ? `<div class="ai-item"><span class="ai-label">Material:</span> <span class="ai-value">${escapeHtml(analysis.material_type)}</span></div>` : ''}
+              ${analysis.condition_rating ? `<div class="ai-item"><span class="ai-label">Condition:</span> <span class="ai-value ai-condition-${escapeHtml(analysis.condition_rating)}">${escapeHtml(analysis.condition_rating.toUpperCase())}</span></div>` : ''}
+            </div>
+            ${analysis.condition_notes ? `<div class="ai-notes">${escapeHtml(analysis.condition_notes)}</div>` : ''}
+            ${analysis.detected_damages && analysis.detected_damages.length > 0 ? `
+              <div class="ai-damages">
+                <div class="ai-damages-title">Detected Damages:</div>
+                ${analysis.detected_damages.map((d: any) => `
+                  <div class="ai-damage-item">
+                    <span class="damage-type">${escapeHtml(d.type)}</span>
+                    <span class="damage-severity severity-${escapeHtml(d.severity || 'moderate')}">${escapeHtml(d.severity || 'N/A')}</span>
+                    ${d.location ? `<span class="damage-location">at ${escapeHtml(d.location)}</span>` : ''}
+                    ${d.notes ? `<div class="damage-notes">${escapeHtml(d.notes)}</div>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+            ${analysis.summary ? `<div class="ai-summary">"${escapeHtml(analysis.summary)}"</div>` : ''}
+          </div>
+        `;
+      } else if (includeAiContext && photo.aiContext) {
+        // Fallback for legacy aiContext format
+        aiAnalysisHtml = `
+          <div class="ai-context">
+            <span class="ai-label">AI Analysis:</span>
+            <span class="ai-text">${escapeHtml(photo.aiContext)}</span>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="photo-card">
+          <div class="photo-header">
+            <span class="photo-number">Photo ${photo.photoNumber || idx + 1}</span>
+            <span class="photo-category">${escapeHtml(photo.category || 'General')}</span>
+          </div>
+          <div class="photo-container">
+            <img src="${escapeHtml(photo.url)}" alt="Photo ${photo.photoNumber || idx + 1}" />
+          </div>
+          <div class="photo-details">
+            <div class="photo-filename">${escapeHtml(photo.fileName || `Photo ${idx + 1}`)}</div>
+            ${photo.description ? `<div class="photo-description">${escapeHtml(photo.description)}</div>` : ''}
+            ${aiAnalysisHtml}
+          </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
     const html = `
 <!DOCTYPE html>
@@ -167,6 +205,120 @@ serve(async (req) => {
     .ai-text {
       font-size: 13px;
       color: #333;
+      line-height: 1.5;
+    }
+    /* New AI Analysis Styles */
+    .ai-analysis {
+      margin-top: 12px;
+      padding: 14px;
+      background: linear-gradient(135deg, #f8fbff 0%, #f0f7ff 100%);
+      border: 1px solid #d4e5f7;
+      border-left: 4px solid #1976d2;
+      border-radius: 6px;
+    }
+    .ai-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e3f2fd;
+    }
+    .ai-icon { font-size: 16px; }
+    .ai-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1565c0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .ai-grid {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 10px;
+    }
+    .ai-item {
+      font-size: 13px;
+    }
+    .ai-item .ai-label {
+      display: inline;
+      font-weight: 600;
+      color: #555;
+      text-transform: none;
+      margin-bottom: 0;
+    }
+    .ai-item .ai-value {
+      font-weight: 500;
+      color: #333;
+      text-transform: capitalize;
+    }
+    .ai-condition-excellent, .ai-condition-good { color: #2e7d32; font-weight: 600; }
+    .ai-condition-fair { color: #f57c00; font-weight: 600; }
+    .ai-condition-poor { color: #d84315; font-weight: 600; }
+    .ai-condition-failed { color: #c62828; font-weight: 700; }
+    .ai-notes {
+      font-size: 13px;
+      color: #444;
+      line-height: 1.5;
+      margin-bottom: 10px;
+      padding: 8px;
+      background: rgba(255,255,255,0.6);
+      border-radius: 4px;
+    }
+    .ai-damages {
+      margin-top: 10px;
+    }
+    .ai-damages-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #c62828;
+      margin-bottom: 6px;
+    }
+    .ai-damage-item {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      background: #fff5f5;
+      border: 1px solid #ffcdd2;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .damage-type {
+      font-weight: 600;
+      color: #c62828;
+    }
+    .damage-severity {
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .severity-minor { background: #fff3e0; color: #e65100; }
+    .severity-moderate { background: #ffecb3; color: #ff6f00; }
+    .severity-severe { background: #ffcdd2; color: #c62828; }
+    .damage-location {
+      color: #666;
+      font-style: italic;
+    }
+    .damage-notes {
+      width: 100%;
+      margin-top: 4px;
+      font-size: 11px;
+      color: #555;
+      line-height: 1.4;
+    }
+    .ai-summary {
+      margin-top: 10px;
+      padding: 10px;
+      background: #e3f2fd;
+      border-radius: 4px;
+      font-size: 13px;
+      font-style: italic;
+      color: #1565c0;
       line-height: 1.5;
     }
     .footer {
