@@ -43,6 +43,7 @@ const ProofOfLossGenerator = lazy(() => import("@/components/claim-detail/ProofO
 const EnhancedEstimateBuilder = lazy(() => import("@/components/claim-detail/EnhancedEstimateBuilder").then(m => ({ default: m.EnhancedEstimateBuilder })));
 const RecoverableDepreciationInvoice = lazy(() => import("@/components/claim-detail/RecoverableDepreciationInvoice").then(m => ({ default: m.RecoverableDepreciationInvoice })));
 const ClaimAutomationSettings = lazy(() => import("@/components/claim-detail/ClaimAutomationSettings").then(m => ({ default: m.ClaimAutomationSettings })));
+const DarwinButForCausation = lazy(() => import("@/components/claim-detail/DarwinButForCausation").then(m => ({ default: m.DarwinButForCausation })));
 
 // New Strategic Components
 const ClaimWarRoom = lazy(() => import("@/components/claim-detail/ClaimWarRoom").then(m => ({ default: m.ClaimWarRoom })));
@@ -181,10 +182,11 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
           {/* Claim Intelligence */}
           <ToolCategory
             title="Claim Intelligence"
-            description="AI-powered insights and recommendations"
+            description="AI-powered insights, causation analysis, and recommendations"
             icon={<Search className="h-4 w-4" />}
             defaultOpen={false}
           >
+            <DarwinButForCausation claimId={claimId} claim={claim} />
             <DarwinClaimBriefing claimId={claimId} claim={claim} />
             <DarwinNextSteps claimId={claimId} claim={claim} />
             <DarwinWeatherHistory claimId={claimId} claim={claim} />
