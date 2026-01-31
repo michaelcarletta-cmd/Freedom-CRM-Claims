@@ -141,6 +141,61 @@ serve(async (req) => {
     const photoCount = photos.length;
     const categorizedPhotos = photos.filter(p => p.category && p.category !== 'uncategorized');
     const annotatedPhotos = photos.filter(p => p.annotations);
+    
+    // Analyze AI-processed photos for strategic intelligence
+    const aiAnalyzedPhotos = photos.filter(p => p.ai_analyzed_at);
+    const poorConditionPhotos = photos.filter(p => 
+      p.ai_condition_rating === 'Poor' || p.ai_condition_rating === 'Failed'
+    );
+    const photosWithDamages = photos.filter(p => {
+      if (!p.ai_detected_damages) return false;
+      try {
+        const damages = typeof p.ai_detected_damages === 'string' 
+          ? JSON.parse(p.ai_detected_damages) 
+          : p.ai_detected_damages;
+        return Array.isArray(damages) && damages.length > 0;
+      } catch { return false; }
+    });
+    
+    // Aggregate all detected damages across photos
+    const allDetectedDamages: Array<{type: string, description: string, severity: string, material: string}> = [];
+    const allMaterialTypes: string[] = [];
+    photos.forEach(p => {
+      if (p.ai_material_type) {
+        allMaterialTypes.push(p.ai_material_type);
+      }
+      if (p.ai_detected_damages) {
+        try {
+          const damages = typeof p.ai_detected_damages === 'string' 
+            ? JSON.parse(p.ai_detected_damages) 
+            : p.ai_detected_damages;
+          if (Array.isArray(damages)) {
+            damages.forEach((d: any) => {
+              allDetectedDamages.push({
+                type: d.type || d.damage_type || 'Unknown',
+                description: d.description || d.notes || '',
+                severity: d.severity || 'Unknown',
+                material: p.ai_material_type || 'Unknown'
+              });
+            });
+          }
+        } catch {}
+      }
+    });
+    
+    // Count damage types for strategic summary
+    const damageTypeCounts: Record<string, number> = {};
+    allDetectedDamages.forEach(d => {
+      const key = d.type;
+      damageTypeCounts[key] = (damageTypeCounts[key] || 0) + 1;
+    });
+    const topDamageTypes = Object.entries(damageTypeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([type, count]) => `${type} (${count})`);
+    
+    // Unique materials detected
+    const uniqueMaterials = [...new Set(allMaterialTypes)];
 
     // Check for coverage-related files
     const hasOrdinanceInfo = files.some(f => 
@@ -178,11 +233,27 @@ EVIDENCE INVENTORY:
 - Photos: ${photoCount} (${categorizedPhotos.length} categorized, ${annotatedPhotos.length} annotated)
 - Has Estimate: ${hasEstimate ? 'Yes' : 'NO - MISSING'}
 - Has Denial Letter: ${hasDenialLetter ? 'Yes' : 'No'}
-- Has Engineer Report: ${hasDenialLetter ? 'Yes' : 'No'}
+- Has Engineer Report: ${hasEngineerReport ? 'Yes' : 'No'}
 - Has Policy: ${hasPolicy ? 'Yes' : 'NO - RECOMMEND OBTAINING'}
 - Has Proof of Loss: ${hasProofOfLoss ? 'Yes' : 'No'}
 - Has Contractor Invoice: ${hasContractorInvoice ? 'Yes' : 'No'}
 - Has Ordinance/Code Info: ${hasOrdinanceInfo ? 'Yes' : 'No'}
+
+DARWIN AI PHOTO ANALYSIS (CRITICAL EVIDENCE):
+- AI-Analyzed Photos: ${aiAnalyzedPhotos.length} of ${photoCount}
+- Photos with Poor/Failed Condition: ${poorConditionPhotos.length} (SUPPORTS DAMAGE CLAIM)
+- Photos with Detected Damages: ${photosWithDamages.length}
+- Materials Identified: ${uniqueMaterials.join(', ') || 'None analyzed yet'}
+- Damage Types Detected: ${topDamageTypes.join(', ') || 'None detected yet'}
+${allDetectedDamages.length > 0 ? `
+DETAILED DAMAGE FINDINGS FROM PHOTOS:
+${allDetectedDamages.slice(0, 15).map((d, i) => `  ${i + 1}. [${d.severity}] ${d.type} on ${d.material}: ${d.description}`).join('\n')}
+${allDetectedDamages.length > 15 ? `  ... and ${allDetectedDamages.length - 15} more damages detected` : ''}
+` : '- No AI damage analysis available yet - recommend running photo analysis'}
+${poorConditionPhotos.length > 0 ? `
+POOR CONDITION EVIDENCE (Use in rebuttals):
+${poorConditionPhotos.slice(0, 5).map(p => `  - ${p.file_name}: ${p.ai_condition_rating} - ${p.ai_analysis_summary || p.ai_condition_notes || 'See full analysis'}`).join('\n')}
+` : ''}
 
 TIMELINE & ACTIVITY:
 - Inspections: ${inspections.length} (${inspections.filter(i => i.status === 'completed').length} completed)

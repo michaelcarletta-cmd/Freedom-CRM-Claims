@@ -86,15 +86,31 @@ export const EvidenceArsenal = ({ claimId, insights }: EvidenceArsenalProps) => 
       ]
     });
 
-    // Photo Evidence
+    // Photo Evidence with AI Analysis
     const categorizedPhotos = photos.filter(p => p.category && p.category !== 'uncategorized');
     const annotatedPhotos = photos.filter(p => p.annotations);
+    const aiAnalyzedPhotos = photos.filter(p => p.ai_analyzed_at);
+    const poorConditionPhotos = photos.filter(p => 
+      p.ai_condition_rating === 'Poor' || p.ai_condition_rating === 'Failed'
+    );
+    const photosWithDamages = photos.filter(p => {
+      if (!p.ai_detected_damages) return false;
+      try {
+        const damages = typeof p.ai_detected_damages === 'string' 
+          ? JSON.parse(p.ai_detected_damages) 
+          : p.ai_detected_damages;
+        return Array.isArray(damages) && damages.length > 0;
+      } catch { return false; }
+    });
     
     categories.push({
       name: 'Photo Evidence',
-      status: photos.length >= 20 && annotatedPhotos.length > 0 ? 'complete' : photos.length >= 10 ? 'partial' : 'missing',
+      status: photos.length >= 20 && aiAnalyzedPhotos.length > 0 ? 'complete' : photos.length >= 10 ? 'partial' : 'missing',
       items: [
         { id: 'photos-total', name: `${photos.length} Total Photos`, type: 'photo', strength: photos.length >= 20 ? 'strong' : photos.length >= 10 ? 'weak' : 'missing', category: 'Photos' },
+        { id: 'photos-ai', name: `${aiAnalyzedPhotos.length} AI Analyzed`, type: 'photo', strength: aiAnalyzedPhotos.length > 0 ? 'strong' : 'weak', category: 'Photos', description: aiAnalyzedPhotos.length > 0 ? 'Darwin has analyzed these photos' : 'Run photo analysis for damage detection' },
+        { id: 'photos-damages', name: `${photosWithDamages.length} with Detected Damages`, type: 'photo', strength: photosWithDamages.length > 0 ? 'strong' : 'weak', category: 'Photos', description: photosWithDamages.length > 0 ? 'Critical evidence for rebuttals' : 'No damages detected yet' },
+        { id: 'photos-poor', name: `${poorConditionPhotos.length} Poor/Failed Condition`, type: 'photo', strength: poorConditionPhotos.length > 0 ? 'strong' : 'weak', category: 'Photos', description: poorConditionPhotos.length > 0 ? 'Strong evidence of damage severity' : '' },
         { id: 'photos-categorized', name: `${categorizedPhotos.length} Categorized`, type: 'photo', strength: categorizedPhotos.length > 0 ? 'strong' : 'weak', category: 'Photos' },
         { id: 'photos-annotated', name: `${annotatedPhotos.length} Annotated`, type: 'photo', strength: annotatedPhotos.length > 0 ? 'strong' : 'weak', category: 'Photos' }
       ]
