@@ -88,13 +88,15 @@ serve(async (req) => {
           continue;
         }
 
-        // 1. AUTO-COMPLETE TASKS (if enabled)
-        if (automation.auto_complete_tasks) {
+        // 1. AUTO-COMPLETE TASKS (if enabled OR semi/fully autonomous)
+        if (automation.auto_complete_tasks || ['semi_autonomous', 'fully_autonomous'].includes(automation.autonomy_level)) {
           await processAutoCompleteTasks(supabase, claim.id, results);
         }
 
-        // 2. AUTO-SEND PENDING EMAILS (if fully autonomous)
-        if (automation.auto_respond_without_approval) {
+        // 2. AUTO-SEND PENDING EMAILS (if semi or fully autonomous)
+        // Semi-autonomous: auto-send to clients/contractors, queue insurance emails
+        // Fully autonomous: auto-send everything
+        if (['semi_autonomous', 'fully_autonomous'].includes(automation.autonomy_level)) {
           await processAutoSendEmails(supabase, claim.id, automation, results);
         }
 
@@ -184,6 +186,17 @@ async function processAutoSendEmails(
   automation: any,
   results: any
 ) {
+  const isFullyAutonomous = automation.autonomy_level === 'fully_autonomous';
+  
+  // Insurance-related recipient types that require human review for semi-autonomous
+  const INSURANCE_RECIPIENT_TYPES = [
+    'adjuster', 
+    'insurance', 
+    'insurance company', 
+    'primary adjuster',
+    'carrier'
+  ];
+
   // Find pending email drafts that can be auto-sent
   const { data: pendingActions } = await supabase
     .from('claim_ai_pending_actions')
@@ -194,6 +207,35 @@ async function processAutoSendEmails(
 
   for (const action of pendingActions || []) {
     const draft = action.draft_content as any;
+    const recipientType = (draft.recipient_type || '').toLowerCase();
+    
+    // Check if this is an insurance email
+    const isInsuranceEmail = INSURANCE_RECIPIENT_TYPES.some(type => 
+      recipientType.includes(type.toLowerCase())
+    );
+    
+    // For semi-autonomous: skip insurance emails (require human review)
+    if (!isFullyAutonomous && isInsuranceEmail) {
+      console.log(`Skipping insurance email for semi-autonomous: ${draft.to_email}`);
+      
+      // Log that this requires human review
+      await supabase.from('darwin_action_log').insert({
+        claim_id: claimId,
+        action_type: 'pending_review',
+        action_details: { 
+          pending_action_id: action.id,
+          reason: 'insurance_email_requires_review',
+          recipient_type: recipientType,
+          to_email: draft.to_email
+        },
+        was_auto_executed: false,
+        result: `Email to insurance (${draft.to_email}) queued for human review`,
+        trigger_source: 'darwin_autonomous_agent',
+      });
+      
+      results.escalations++;
+      continue;
+    }
     
     // Check for keyword blockers
     const content = `${draft.subject || ''} ${draft.body || ''}`.toLowerCase();
@@ -263,10 +305,11 @@ async function processAutoSendEmails(
             action_details: { 
               pending_action_id: action.id, 
               to: draft.to_email,
-              subject: draft.subject 
+              subject: draft.subject,
+              recipient_type: recipientType
             },
             was_auto_executed: true,
-            result: `Auto-sent email to ${draft.to_email}: ${draft.subject}`,
+            result: `Auto-sent email to ${recipientType || 'recipient'} (${draft.to_email}): ${draft.subject}`,
             trigger_source: 'darwin_autonomous_agent',
           });
 
@@ -274,6 +317,132 @@ async function processAutoSendEmails(
       }
     } catch (err) {
       console.error(`Failed to auto-send email for action ${action.id}:`, err);
+    }
+  }
+
+  // Also process pending SMS for semi/fully autonomous
+  await processAutoSendSMS(supabase, claimId, automation, results);
+}
+
+// Process auto-send SMS for semi/fully autonomous claims
+async function processAutoSendSMS(
+  supabase: any,
+  claimId: string,
+  automation: any,
+  results: any
+) {
+  const isFullyAutonomous = automation.autonomy_level === 'fully_autonomous';
+
+  // Find pending SMS drafts
+  const { data: pendingActions } = await supabase
+    .from('claim_ai_pending_actions')
+    .select('*')
+    .eq('claim_id', claimId)
+    .eq('status', 'pending')
+    .eq('action_type', 'sms');
+
+  for (const action of pendingActions || []) {
+    const draft = action.draft_content as any;
+    const recipientType = (draft.recipient_type || '').toLowerCase();
+    
+    // For semi-autonomous: only auto-send SMS to clients, not adjusters/insurance
+    const isInsuranceSMS = recipientType.includes('adjuster') || recipientType.includes('insurance');
+    
+    if (!isFullyAutonomous && isInsuranceSMS) {
+      console.log(`Skipping insurance SMS for semi-autonomous: ${draft.to_number}`);
+      
+      await supabase.from('darwin_action_log').insert({
+        claim_id: claimId,
+        action_type: 'pending_review',
+        action_details: { 
+          pending_action_id: action.id,
+          reason: 'insurance_sms_requires_review',
+          recipient_type: recipientType,
+          to_number: draft.to_number
+        },
+        was_auto_executed: false,
+        result: `SMS to insurance (${draft.to_number}) queued for human review`,
+        trigger_source: 'darwin_autonomous_agent',
+      });
+      
+      results.escalations++;
+      continue;
+    }
+
+    // Check for keyword blockers in SMS
+    const content = (draft.message || '').toLowerCase();
+    const keywordBlockers = automation.keyword_blockers || ESCALATION_KEYWORDS;
+    
+    const blockedKeyword = keywordBlockers.find((kw: string) => 
+      content.includes(kw.toLowerCase())
+    );
+
+    if (blockedKeyword) {
+      await supabase
+        .from('darwin_action_log')
+        .insert({
+          claim_id: claimId,
+          action_type: 'escalation',
+          action_details: { 
+            pending_action_id: action.id, 
+            blocked_keyword: blockedKeyword,
+          },
+          was_auto_executed: false,
+          result: `SMS blocked due to keyword "${blockedKeyword}" - requires human review`,
+          trigger_source: 'darwin_autonomous_agent',
+        });
+
+      results.escalations++;
+      continue;
+    }
+
+    // Auto-send the SMS
+    try {
+      const smsResponse = await fetch(
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-sms`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            claimId: claimId,
+            toNumber: draft.to_number,
+            messageBody: draft.message,
+          }),
+        }
+      );
+
+      if (smsResponse.ok) {
+        await supabase
+          .from('claim_ai_pending_actions')
+          .update({
+            status: 'sent',
+            auto_executed: true,
+            auto_executed_at: new Date().toISOString(),
+          })
+          .eq('id', action.id);
+
+        await supabase
+          .from('darwin_action_log')
+          .insert({
+            claim_id: claimId,
+            action_type: 'sms_sent',
+            action_details: { 
+              pending_action_id: action.id, 
+              to: draft.to_number,
+              recipient_type: recipientType
+            },
+            was_auto_executed: true,
+            result: `Auto-sent SMS to ${recipientType || 'recipient'} (${draft.to_number})`,
+            trigger_source: 'darwin_autonomous_agent',
+          });
+
+        results.emails_sent++; // Reusing count for simplicity
+      }
+    } catch (err) {
+      console.error(`Failed to auto-send SMS for action ${action.id}:`, err);
     }
   }
 }

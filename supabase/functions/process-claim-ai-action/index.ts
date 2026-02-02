@@ -154,6 +154,24 @@ Draft a clear, professional response addressing their inquiry. The response shou
       const subjectData = await subjectResponse.json();
       const suggestedSubject = subjectData.choices?.[0]?.message?.content || `Re: ${email.subject}`;
 
+      // Determine recipient type based on email address
+      let recipientType = 'unknown';
+      if (email.recipient_email) {
+        const recipientLower = email.recipient_email.toLowerCase();
+        // Check if it's the policyholder
+        if (claim.policyholder_email && recipientLower === claim.policyholder_email.toLowerCase()) {
+          recipientType = 'policyholder';
+        }
+        // Check if it's the adjuster or insurance
+        else if (claim.adjuster_email && recipientLower === claim.adjuster_email.toLowerCase()) {
+          recipientType = 'adjuster';
+        }
+        else if (claim.insurance_email && recipientLower === claim.insurance_email.toLowerCase()) {
+          recipientType = 'insurance';
+        }
+        // Could also check claim_adjusters table but keeping it simple for now
+      }
+
       // Create pending action for approval
       const { data: pendingAction, error: insertError } = await supabase
         .from('claim_ai_pending_actions')
@@ -164,6 +182,7 @@ Draft a clear, professional response addressing their inquiry. The response shou
           draft_content: {
             to_email: email.recipient_email,
             to_name: email.recipient_name,
+            recipient_type: recipientType, // Include recipient type for filtering
             subject: suggestedSubject.trim(),
             body: draftResponse,
             original_subject: email.subject,
