@@ -91,6 +91,10 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
   const [viewMode, setViewMode] = useState<"grid" | "before-after">("grid");
   const [currentPage, setCurrentPage] = useState(1);
   
+  // Analyze all photos state
+  const [analyzingAll, setAnalyzingAll] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState({ current: 0, total: 0 });
+  
   // Upload form state
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadCategory, setUploadCategory] = useState("General");
@@ -201,7 +205,7 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
   };
 
   // Trigger AI analysis for a single photo
-  const analyzePhoto = async (photoId: string) => {
+  const analyzePhoto = async (photoId: string): Promise<boolean> => {
     try {
       console.log(`Triggering AI analysis for photo ${photoId}...`);
       const { data, error } = await supabase.functions.invoke("analyze-single-photo", {
@@ -210,17 +214,73 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
 
       if (error) {
         console.error("AI analysis error:", error);
-        return;
+        return false;
       }
 
       if (data?.success) {
         console.log(`AI analysis complete for photo ${photoId}:`, data.analysis);
-        // Refresh photos to show the analysis
-        fetchPhotos();
+        return true;
       }
+      return false;
     } catch (err) {
       console.error("Failed to analyze photo:", err);
+      return false;
     }
+  };
+
+  // Analyze all photos that haven't been analyzed yet
+  const analyzeAllPhotos = async () => {
+    const unanalyzedPhotos = photos.filter(p => !p.ai_analyzed_at);
+    
+    if (unanalyzedPhotos.length === 0) {
+      toast({ 
+        title: "All photos already analyzed", 
+        description: "All photos have been analyzed by Darwin." 
+      });
+      return;
+    }
+
+    setAnalyzingAll(true);
+    setAnalysisProgress({ current: 0, total: unanalyzedPhotos.length });
+
+    toast({ 
+      title: "Darwin is analyzing photos", 
+      description: `Analyzing ${unanalyzedPhotos.length} photos. This may take a few minutes.`
+    });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    // Process photos in batches of 3 to avoid rate limits
+    const BATCH_SIZE = 3;
+    for (let i = 0; i < unanalyzedPhotos.length; i += BATCH_SIZE) {
+      const batch = unanalyzedPhotos.slice(i, i + BATCH_SIZE);
+      
+      const results = await Promise.all(
+        batch.map(photo => analyzePhoto(photo.id))
+      );
+      
+      results.forEach(success => {
+        if (success) successCount++;
+        else failCount++;
+      });
+      
+      setAnalysisProgress({ current: i + batch.length, total: unanalyzedPhotos.length });
+      
+      // Small delay between batches to avoid overwhelming the API
+      if (i + BATCH_SIZE < unanalyzedPhotos.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    setAnalyzingAll(false);
+    setAnalysisProgress({ current: 0, total: 0 });
+    fetchPhotos();
+
+    toast({ 
+      title: "Analysis complete", 
+      description: `Successfully analyzed ${successCount} photos${failCount > 0 ? `, ${failCount} failed` : ''}.`
+    });
   };
 
   const handleUpload = async () => {
@@ -527,6 +587,24 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
               Clear ({selectedPhotos.length})
             </Button>
           )}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={analyzeAllPhotos}
+            disabled={analyzingAll || photos.length === 0}
+          >
+            {analyzingAll ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Analyzing {analysisProgress.current}/{analysisProgress.total}
+              </>
+            ) : (
+              <>
+                <Brain className="h-4 w-4 mr-2" />
+                Analyze All Photos
+              </>
+            )}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setReportDialogOpen(true)}>
             <FileText className="h-4 w-4 mr-2" />
             Generate Report
