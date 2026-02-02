@@ -450,6 +450,42 @@ async function triggerDeepAnalysis(
   }
 }
 
+// Status mapping: document type -> keywords to find in claim_statuses
+const STATUS_KEYWORDS: Record<string, string[]> = {
+  'estimate': ['estimate received', 'estimate from carrier', 'waiting on carrier estimate'],
+  'denial': ['denial', 'denied', 'carrier denial'],
+  'approval': ['approved', 'check received', 'settlement'],
+  'rfi': ['waiting on', 'documents sent', 'additional'],
+};
+
+// Find the best matching status from the configured statuses
+async function findMatchingStatus(supabase: any, documentType: string, fallback: string): Promise<string> {
+  try {
+    const { data: statuses } = await supabase
+      .from('claim_statuses')
+      .select('name')
+      .eq('is_active', true)
+      .order('display_order');
+
+    if (!statuses || statuses.length === 0) return fallback;
+
+    const keywords = STATUS_KEYWORDS[documentType] || [];
+    
+    // Find a status that contains one of our keywords (case insensitive)
+    for (const keyword of keywords) {
+      const match = statuses.find((s: any) => 
+        s.name.toLowerCase().includes(keyword.toLowerCase())
+      );
+      if (match) return match.name;
+    }
+
+    return fallback;
+  } catch (error) {
+    console.error('Error finding matching status:', error);
+    return fallback;
+  }
+}
+
 async function processDocumentActions(
   supabase: any,
   claimId: string,
@@ -501,11 +537,12 @@ async function processDocumentActions(
 
       // Update claim status if autonomous (semi or fully)
       if (isAutonomous) {
-        await supabase.from('claims').update({ status: 'Denied' }).eq('id', claimId);
+        const denialStatus = await findMatchingStatus(supabase, 'denial', 'Carrier Denial');
+        await supabase.from('claims').update({ status: denialStatus }).eq('id', claimId);
         
         // Draft client notification email for denials (requires review due to sensitivity)
         if (claim?.policyholder_email) {
-          await draftClientUpdateEmail(supabase, claimId, claim, 'Denied', classification.metadata.summary, false);
+          await draftClientUpdateEmail(supabase, claimId, claim, denialStatus, classification.metadata.summary, false);
         }
       }
       break;
@@ -546,7 +583,8 @@ async function processDocumentActions(
 
       // Update status if autonomous (semi or fully)
       if (isAutonomous) {
-        await supabase.from('claims').update({ status: 'Estimate Received' }).eq('id', claimId);
+        const estimateStatus = await findMatchingStatus(supabase, 'estimate', 'Estimate Received from Carrier');
+        await supabase.from('claims').update({ status: estimateStatus }).eq('id', claimId);
         
         // Draft client notification email
         if (claim?.policyholder_email) {
@@ -557,7 +595,7 @@ async function processDocumentActions(
             supabase, 
             claimId, 
             claim, 
-            'Estimate Received', 
+            estimateStatus, 
             `We have received an estimate for your claim.${estimateAmount}`,
             true // Can auto-send for estimates
           );
@@ -578,7 +616,8 @@ async function processDocumentActions(
 
       // Update claim status if autonomous (semi or fully)
       if (isAutonomous) {
-        await supabase.from('claims').update({ status: 'Approved' }).eq('id', claimId);
+        const approvalStatus = await findMatchingStatus(supabase, 'approval', 'Check Received - No Mortgage');
+        await supabase.from('claims').update({ status: approvalStatus }).eq('id', claimId);
         
         // Draft client notification email for approval (good news, can auto-send)
         if (claim?.policyholder_email) {
@@ -589,7 +628,7 @@ async function processDocumentActions(
             supabase, 
             claimId, 
             claim, 
-            'Approved', 
+            approvalStatus, 
             `Great news! Your claim has been approved.${approvalAmount}`,
             true // Can auto-send for approvals
           );
