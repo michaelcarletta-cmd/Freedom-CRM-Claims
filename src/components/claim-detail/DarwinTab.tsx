@@ -43,6 +43,7 @@ const ProofOfLossGenerator = lazy(() => import("@/components/claim-detail/ProofO
 const EnhancedEstimateBuilder = lazy(() => import("@/components/claim-detail/EnhancedEstimateBuilder").then(m => ({ default: m.EnhancedEstimateBuilder })));
 const RecoverableDepreciationInvoice = lazy(() => import("@/components/claim-detail/RecoverableDepreciationInvoice").then(m => ({ default: m.RecoverableDepreciationInvoice })));
 const ClaimAutomationSettings = lazy(() => import("@/components/claim-detail/ClaimAutomationSettings").then(m => ({ default: m.ClaimAutomationSettings })));
+const ClaimAutonomySettings = lazy(() => import("@/components/claim-detail/ClaimAutonomySettings").then(m => ({ default: m.ClaimAutonomySettings })));
 const DarwinButForCausation = lazy(() => import("@/components/claim-detail/DarwinButForCausation").then(m => ({ default: m.DarwinButForCausation })));
 
 // New Strategic Components
@@ -270,9 +271,11 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
           {/* Automation */}
           <ToolCategory
             title="Automation Settings"
-            description="Configure AI-powered automations"
+            description="Configure AI-powered automations and autonomous mode"
             icon={<Zap className="h-4 w-4" />}
+            defaultOpen={true}
           >
+            <ClaimAutonomySettings claimId={claimId} />
             <ClaimAutomationSettings claimId={claimId} />
           </ToolCategory>
         </div>
