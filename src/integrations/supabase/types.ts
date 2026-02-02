@@ -1330,6 +1330,10 @@ export type Database = {
       claim_files: {
         Row: {
           claim_id: string
+          classification_confidence: number | null
+          classification_metadata: Json | null
+          darwin_processed_at: string | null
+          document_classification: string | null
           extracted_text: string | null
           file_name: string
           file_path: string
@@ -1340,6 +1344,7 @@ export type Database = {
           is_latest_version: boolean | null
           ocr_processed_at: string | null
           parent_file_id: string | null
+          processed_by_darwin: boolean | null
           uploaded_at: string | null
           uploaded_by: string | null
           version: number | null
@@ -1347,6 +1352,10 @@ export type Database = {
         }
         Insert: {
           claim_id: string
+          classification_confidence?: number | null
+          classification_metadata?: Json | null
+          darwin_processed_at?: string | null
+          document_classification?: string | null
           extracted_text?: string | null
           file_name: string
           file_path: string
@@ -1357,6 +1366,7 @@ export type Database = {
           is_latest_version?: boolean | null
           ocr_processed_at?: string | null
           parent_file_id?: string | null
+          processed_by_darwin?: boolean | null
           uploaded_at?: string | null
           uploaded_by?: string | null
           version?: number | null
@@ -1364,6 +1374,10 @@ export type Database = {
         }
         Update: {
           claim_id?: string
+          classification_confidence?: number | null
+          classification_metadata?: Json | null
+          darwin_processed_at?: string | null
+          document_classification?: string | null
           extracted_text?: string | null
           file_name?: string
           file_path?: string
@@ -1374,6 +1388,7 @@ export type Database = {
           is_latest_version?: boolean | null
           ocr_processed_at?: string | null
           parent_file_id?: string | null
+          processed_by_darwin?: boolean | null
           uploaded_at?: string | null
           uploaded_by?: string | null
           version?: number | null

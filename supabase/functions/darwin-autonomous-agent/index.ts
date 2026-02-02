@@ -53,8 +53,17 @@ serve(async (req) => {
       tasks_completed: 0,
       emails_sent: 0,
       escalations: 0,
+      documents_processed: 0,
       errors: [] as string[],
     };
+
+    // Get claim IDs for document processing
+    const claimIds = automatedClaims?.map(a => a.claims?.id).filter(Boolean) || [];
+
+    // Process unclassified documents for autonomous claims
+    if (claimIds.length > 0) {
+      await processUnclassifiedDocuments(supabase, claimIds, results);
+    }
 
     for (const automation of automatedClaims || []) {
       const claim = automation.claims;
@@ -350,6 +359,76 @@ async function checkForEscalations(
         });
 
       results.escalations++;
+    }
+  }
+}
+
+// Process unclassified documents for autonomous claims
+async function processUnclassifiedDocuments(
+  supabase: any,
+  claimIds: string[],
+  results: any
+) {
+  console.log(`Checking for unprocessed documents across ${claimIds.length} claims...`);
+
+  // Find unprocessed files for these claims (limit to 10 per run)
+  const { data: unprocessedFiles, error } = await supabase
+    .from('claim_files')
+    .select('id, claim_id, file_name, file_path, file_type, extracted_text')
+    .in('claim_id', claimIds)
+    .is('document_classification', null)
+    .or('processed_by_darwin.is.null,processed_by_darwin.eq.false')
+    .limit(10);
+
+  if (error) {
+    console.error('Error fetching unprocessed files:', error);
+    return;
+  }
+
+  console.log(`Found ${unprocessedFiles?.length || 0} unprocessed documents`);
+
+  for (const file of unprocessedFiles || []) {
+    try {
+      // Skip photos and very small files
+      if (file.file_type?.includes('image') || file.file_name?.match(/\.(jpg|jpeg|png|gif|heic)$/i)) {
+        // Just mark as processed with 'photo' classification
+        await supabase
+          .from('claim_files')
+          .update({
+            document_classification: 'photo',
+            classification_confidence: 1.0,
+            classification_metadata: { method: 'file_type', summary: 'Photo file' },
+            processed_by_darwin: true,
+            darwin_processed_at: new Date().toISOString(),
+          })
+          .eq('id', file.id);
+        
+        results.documents_processed++;
+        continue;
+      }
+
+      // Call darwin-process-document function
+      const response = await fetch(
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/darwin-process-document`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fileId: file.id }),
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`Processed ${file.file_name}: ${result.classification} (${Math.round((result.confidence || 0) * 100)}%)`);
+        results.documents_processed++;
+      } else {
+        console.error(`Failed to process ${file.file_name}: ${response.status}`);
+      }
+    } catch (err) {
+      console.error(`Error processing file ${file.id}:`, err);
     }
   }
 }

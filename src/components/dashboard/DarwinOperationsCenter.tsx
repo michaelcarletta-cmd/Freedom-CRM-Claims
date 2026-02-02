@@ -20,7 +20,8 @@ import {
   Loader2,
   ExternalLink,
   Pause,
-  Play
+  Play,
+  FileText
 } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
@@ -54,6 +55,7 @@ interface ActionStats {
   tasks_completed: number;
   follow_ups_scheduled: number;
   escalations: number;
+  documents_processed: number;
 }
 
 export const DarwinOperationsCenter = () => {
@@ -131,6 +133,7 @@ export const DarwinOperationsCenter = () => {
         tasks_completed: 0,
         follow_ups_scheduled: 0,
         escalations: 0,
+        documents_processed: 0,
       };
 
       data?.forEach((log: any) => {
@@ -146,6 +149,9 @@ export const DarwinOperationsCenter = () => {
             break;
           case "escalation":
             stats.escalations++;
+            break;
+          case "document_classified":
+            stats.documents_processed++;
             break;
         }
       });
@@ -200,6 +206,8 @@ export const DarwinOperationsCenter = () => {
         return <Clock className="h-4 w-4 text-amber-500" />;
       case "escalation":
         return <AlertTriangle className="h-4 w-4 text-red-500" />;
+      case "document_classified":
+        return <FileText className="h-4 w-4 text-purple-500" />;
       default:
         return <Zap className="h-4 w-4 text-primary" />;
     }
@@ -254,6 +262,20 @@ export const DarwinOperationsCenter = () => {
               </div>
               <div className="p-3 bg-green-500/10 rounded-full">
                 <CheckCircle className="h-6 w-6 text-green-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Docs Processed</p>
+                <p className="text-3xl font-bold">{todayStats?.documents_processed || 0}</p>
+              </div>
+              <div className="p-3 bg-purple-500/10 rounded-full">
+                <FileText className="h-6 w-6 text-purple-500" />
               </div>
             </div>
           </CardContent>
