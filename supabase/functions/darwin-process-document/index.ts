@@ -542,7 +542,20 @@ async function processDocumentActions(
         
         // Draft client notification email for denials (requires review due to sensitivity)
         if (claim?.policyholder_email) {
-          await draftClientUpdateEmail(supabase, claimId, claim, denialStatus, classification.metadata.summary, false);
+          try {
+            await draftClientUpdateEmail(supabase, claimId, claim, denialStatus, classification.metadata.summary, false);
+            console.log(`Successfully drafted denial email for claim ${claimId}`);
+          } catch (emailError: any) {
+            console.error(`Failed to draft denial client email:`, emailError);
+            await supabase.from('darwin_action_log').insert({
+              claim_id: claimId,
+              action_type: 'error',
+              action_details: { error: emailError.message, context: 'draftClientUpdateEmail_denial' },
+              was_auto_executed: true,
+              result: `Failed to draft client email: ${emailError.message}`,
+              trigger_source: 'darwin_process_document',
+            });
+          }
         }
       }
       break;
@@ -588,17 +601,30 @@ async function processDocumentActions(
         
         // Draft client notification email
         if (claim?.policyholder_email) {
-          const estimateAmount = classification.metadata.gross_rcv 
-            ? ` The estimate amount is $${classification.metadata.gross_rcv.toLocaleString()}.` 
-            : '';
-          await draftClientUpdateEmail(
-            supabase, 
-            claimId, 
-            claim, 
-            estimateStatus, 
-            `We have received an estimate for your claim.${estimateAmount}`,
-            true // Can auto-send for estimates
-          );
+          try {
+            const estimateAmount = classification.metadata.gross_rcv 
+              ? ` The estimate amount is $${classification.metadata.gross_rcv.toLocaleString()}.` 
+              : '';
+            await draftClientUpdateEmail(
+              supabase, 
+              claimId, 
+              claim, 
+              estimateStatus, 
+              `We have received an estimate for your claim.${estimateAmount}`,
+              true // Can auto-send for estimates
+            );
+            console.log(`Successfully drafted estimate email for claim ${claimId}`);
+          } catch (emailError: any) {
+            console.error(`Failed to draft estimate client email:`, emailError);
+            await supabase.from('darwin_action_log').insert({
+              claim_id: claimId,
+              action_type: 'error',
+              action_details: { error: emailError.message, context: 'draftClientUpdateEmail_estimate' },
+              was_auto_executed: true,
+              result: `Failed to draft client email: ${emailError.message}`,
+              trigger_source: 'darwin_process_document',
+            });
+          }
         }
       }
       break;
@@ -621,17 +647,30 @@ async function processDocumentActions(
         
         // Draft client notification email for approval (good news, can auto-send)
         if (claim?.policyholder_email) {
-          const approvalAmount = classification.metadata.approved_amount 
-            ? ` The approved amount is $${classification.metadata.approved_amount.toLocaleString()}.` 
-            : '';
-          await draftClientUpdateEmail(
-            supabase, 
-            claimId, 
-            claim, 
-            approvalStatus, 
-            `Great news! Your claim has been approved.${approvalAmount}`,
-            true // Can auto-send for approvals
-          );
+          try {
+            const approvalAmount = classification.metadata.approved_amount 
+              ? ` The approved amount is $${classification.metadata.approved_amount.toLocaleString()}.` 
+              : '';
+            await draftClientUpdateEmail(
+              supabase, 
+              claimId, 
+              claim, 
+              approvalStatus, 
+              `Great news! Your claim has been approved.${approvalAmount}`,
+              true // Can auto-send for approvals
+            );
+            console.log(`Successfully drafted approval email for claim ${claimId}`);
+          } catch (emailError: any) {
+            console.error(`Failed to draft approval client email:`, emailError);
+            await supabase.from('darwin_action_log').insert({
+              claim_id: claimId,
+              action_type: 'error',
+              action_details: { error: emailError.message, context: 'draftClientUpdateEmail_approval' },
+              was_auto_executed: true,
+              result: `Failed to draft client email: ${emailError.message}`,
+              trigger_source: 'darwin_process_document',
+            });
+          }
         }
       }
       break;
@@ -663,17 +702,30 @@ async function processDocumentActions(
       
       // Draft client notification email for RFI (may need info from them)
       if (isAutonomous && claim?.policyholder_email) {
-        const deadlineInfo = classification.metadata.deadline_mentioned 
-          ? ` The insurance company has requested a response by ${classification.metadata.deadline_mentioned}.` 
-          : '';
-        await draftClientUpdateEmail(
-          supabase, 
-          claimId, 
-          claim, 
-          'Information Requested', 
-          `The insurance company has requested additional information for your claim.${deadlineInfo} We may need to gather some details from you.`,
-          true // Can auto-send RFI notifications
-        );
+        try {
+          const deadlineInfo = classification.metadata.deadline_mentioned 
+            ? ` The insurance company has requested a response by ${classification.metadata.deadline_mentioned}.` 
+            : '';
+          await draftClientUpdateEmail(
+            supabase, 
+            claimId, 
+            claim, 
+            'Information Requested', 
+            `The insurance company has requested additional information for your claim.${deadlineInfo} We may need to gather some details from you.`,
+            true // Can auto-send RFI notifications
+          );
+          console.log(`Successfully drafted RFI email for claim ${claimId}`);
+        } catch (emailError: any) {
+          console.error(`Failed to draft RFI client email:`, emailError);
+          await supabase.from('darwin_action_log').insert({
+            claim_id: claimId,
+            action_type: 'error',
+            action_details: { error: emailError.message, context: 'draftClientUpdateEmail_rfi' },
+            was_auto_executed: true,
+            result: `Failed to draft client email: ${emailError.message}`,
+            trigger_source: 'darwin_process_document',
+          });
+        }
       }
       break;
 
