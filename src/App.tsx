@@ -91,6 +91,7 @@ function AppRoutes() {
       <Routes>
         {publicRoutes}
         <Route path="/client-portal" element={<Suspense fallback={<PageLoader />}><ClientPortal /></Suspense>} />
+        <Route path="/claims/:id" element={<Suspense fallback={<PageLoader />}><ClaimDetail /></Suspense>} />
         <Route path="*" element={<Navigate to="/client-portal" replace />} />
       </Routes>
     );
