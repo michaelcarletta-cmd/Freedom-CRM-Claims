@@ -2846,6 +2846,54 @@ export type Database = {
         }
         Relationships: []
       }
+      contractor_documents: {
+        Row: {
+          contractor_id: string
+          created_at: string
+          document_name: string
+          document_type: string
+          expiration_date: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          notes: string | null
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          contractor_id: string
+          created_at?: string
+          document_name: string
+          document_type: string
+          expiration_date?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          contractor_id?: string
+          created_at?: string
+          document_name?: string
+          document_type?: string
+          expiration_date?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       counter_arguments: {
         Row: {
           created_at: string
