@@ -102,10 +102,9 @@ serve(async (req) => {
           if (fileType.includes('text') || file.file_name.endsWith('.txt')) {
             textContent = await fileBlob.text();
           } else if (fileType.includes('pdf')) {
-            // For PDFs, we'll send the base64 to AI for analysis
-            const arrayBuffer = await fileBlob.arrayBuffer();
-            const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-            textContent = `[PDF Document - Analyze from base64 if supported, filename: ${file.file_name}]`;
+            // For PDFs, we need to extract text or mark for AI processing
+            // Note: We can't easily extract PDF text without a library, so we mark it
+            textContent = `[PDF Document for analysis, filename: ${file.file_name}]`;
           }
         }
       }
