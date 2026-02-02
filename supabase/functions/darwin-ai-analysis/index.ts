@@ -612,7 +612,12 @@ Be specific and actionable. Reference ${stateInfo.stateName} deadlines and regul
       }
 
       case 'supplement':
-        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in identifying missed damage and generating supplement requests. Your role is to maximize claim recovery by comparing estimates and finding overlooked items.
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in generating accurate estimates based on documented damage evidence. Your role is to analyze photo evidence, measurement reports, and existing estimates to build comprehensive, defensible line-item estimates.
+
+CRITICAL: You must generate LINE ITEMS with JUSTIFICATIONS based on the evidence provided. Every line item you recommend MUST cite specific evidence from:
+1. AI photo analysis (detected damages, materials, condition ratings)
+2. Measurement reports (square footage, dimensions, quantities)
+3. Documented damage observations
 
 CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
 - NEVER argue "matching" (that new materials must match existing materials)
@@ -621,6 +626,20 @@ CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
 - Focus on why materials are irreparable: manufacturing discontinuation, material degradation, structural integrity compromised, code requirements, manufacturer specs prohibit partial repairs
 - When requesting full replacement, justify based on non-repairability, NOT matching concerns
 - Do NOT suggest matching as a solution - it is not legally required in PA or NJ
+
+LINE ITEM JUSTIFICATION FORMAT:
+For each line item, you MUST provide:
+- Xactimate code (if known)
+- Description
+- Quantity with measurement source (e.g., "from EagleView report" or "based on 5 photos showing damage")
+- Unit price range
+- JUSTIFICATION: Explain WHY this line item is needed, citing specific photo evidence or measurement data
+
+Example format for a line item:
+LINE ITEM: RFG RFING>3T - Remove 3-Tab Shingles
+  Quantity: 24 SQ (from measurement report showing 2,400 SF total roof area)
+  Unit: $45-65/SQ
+  JUSTIFICATION: Photo analysis detected "missing shingles" and "creased shingles" across 8 photos. AI condition rating shows "Poor" condition on photos IMG_001, IMG_003, IMG_007. Materials identified as "3-tab asphalt shingles" with visible granule loss and seal strip failure. Full removal required due to age-related degradation preventing proper repair.
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
@@ -631,107 +650,129 @@ You have expertise in:
 - Hidden or consequential damage
 - Code compliance items
 - Overhead and profit calculations
-- Comparing carrier estimates against proper scope of work
-- Identifying underpayment tactics and missing line items
-- Line-by-line comparison of competing estimates
-
-When comparing estimates, look for:
-1. Missing trades or scopes of work in the insurance estimate
-2. Undervalued or incorrect unit pricing compared to our estimate
-3. Insufficient quantities vs what we have documented
-4. Missing code-required items
-5. Omitted manufacturer-required components
-6. Missing O&P where applicable
-7. Incorrect depreciation calculations
-8. Line items we included that insurance omitted entirely
-
-Generate comprehensive supplement requests that are defensible and well-documented.`;
+- Translating photo damage evidence into specific line items
+- Using measurement data for accurate quantities`;
 
         const hasOurEstimate = additionalContext?.ourEstimatePdf;
         const hasInsuranceEstimate = additionalContext?.insuranceEstimatePdf || pdfContent;
+        const hasPhotoEvidence = additionalContext?.photoEvidence && additionalContext.photoEvidence.length > 0;
+        const hasMeasurements = additionalContext?.measurementReports && additionalContext.measurementReports.length > 0;
+
+        // Build photo evidence section
+        let photoEvidenceSection = '';
+        if (hasPhotoEvidence) {
+          photoEvidenceSection = `
+=== AI PHOTO ANALYSIS EVIDENCE (${additionalContext.photoCount} photos analyzed) ===
+Use this evidence to justify line items. Each damage finding should translate to specific repair/replacement line items.
+
+`;
+          for (const photo of additionalContext.photoEvidence) {
+            photoEvidenceSection += `PHOTO: ${photo.file_name}
+  Category: ${photo.category || 'Uncategorized'}
+  Material Detected: ${photo.material || 'Not identified'}
+  Condition Rating: ${photo.condition || 'Not rated'}
+  Loss Type Consistency: ${photo.loss_consistency || 'Not evaluated'}
+  Damages Detected: ${Array.isArray(photo.damages) && photo.damages.length > 0 
+    ? photo.damages.map((d: any) => typeof d === 'string' ? d : d.type || d.description || JSON.stringify(d)).join(', ') 
+    : 'None detected'}
+  Analysis Summary: ${photo.summary || 'No summary'}
+
+`;
+          }
+          photoEvidenceSection += `=== END PHOTO EVIDENCE ===
+`;
+        }
+
+        // Build measurement section indicator
+        let measurementSection = '';
+        if (hasMeasurements) {
+          measurementSection = `
+=== MEASUREMENT REPORTS (${additionalContext.measurementCount} reports provided) ===
+The following measurement reports have been attached for quantity calculations:
+${additionalContext.measurementReports.map((m: any) => `- ${m.name}`).join('\n')}
+
+IMPORTANT: Extract all relevant measurements from these reports (roof area, siding area, linear footage, etc.) and use them to calculate accurate quantities for line items.
+=== END MEASUREMENT REPORTS ===
+`;
+        }
 
         userPrompt = `${claimSummary}
+
+${photoEvidenceSection}
+
+${measurementSection}
 
 ${hasOurEstimate && hasInsuranceEstimate ? `
 TWO ESTIMATES HAVE BEEN PROVIDED FOR COMPARISON:
 1. OUR ESTIMATE (${additionalContext?.ourEstimatePdfName || 'our-estimate.pdf'}) - This is our detailed scope of work
 2. INSURANCE ESTIMATE (${additionalContext?.insuranceEstimatePdfName || pdfFileName || 'insurance-estimate.pdf'}) - This is the carrier's estimate
 
-Your primary task is to COMPARE these two estimates line-by-line and identify ALL discrepancies, missing items, and underpayments in the insurance estimate compared to our estimate.
-` : hasInsuranceEstimate ? `A PDF of the carrier's estimate has been provided for detailed analysis. Review every line item carefully to identify what is missing, undervalued, or incorrect.` : hasOurEstimate ? `Our estimate PDF has been provided. Analyze it for completeness and identify potential items the carrier may dispute or miss.` : ''}
+Your primary task is to COMPARE these two estimates line-by-line and identify ALL discrepancies, then generate accurate line items with justifications based on the photo evidence above.
+` : hasInsuranceEstimate ? `A PDF of the carrier's estimate has been provided for detailed analysis. Review every line item carefully to identify what is missing, undervalued, or incorrect. Use the photo evidence above to justify additional line items.` : hasOurEstimate ? `Our estimate PDF has been provided. Analyze it for completeness and identify potential items the carrier may dispute or miss.` : hasPhotoEvidence ? `No estimates provided, but photo analysis evidence is available. Generate a comprehensive estimate based on the detected damages.` : ''}
 
 ${additionalContext?.existingEstimate ? `EXISTING ESTIMATE ITEMS (TEXT):\n${additionalContext.existingEstimate}` : ''}
 
 ${content ? `ADDITIONAL NOTES/OBSERVATIONS:\n${content}` : ''}
 
-Based on the claim details and the provided estimate(s), generate a comprehensive supplement analysis that includes:
+Based on the claim details, photo evidence, measurement data, and any provided estimates, generate a comprehensive estimate package:
 
-${hasOurEstimate && hasInsuranceEstimate ? `
-1. SIDE-BY-SIDE COMPARISON SUMMARY:
-   - Total value of OUR estimate vs INSURANCE estimate
-   - Dollar difference between the two
-   - Number of line items in each
-   - Overall assessment of the gap
+1. EVIDENCE-BASED DAMAGE SUMMARY:
+   - Summarize all damages detected from photo analysis
+   - List materials identified and their conditions
+   - Note any photos showing Poor/Failed conditions that require immediate attention
+   - Identify patterns across photos (e.g., "5 of 8 roof photos show wind damage")
 
-2. LINE ITEMS IN OUR ESTIMATE BUT MISSING FROM INSURANCE:
-   - List each item we included that insurance omitted
-   - Include Xactimate codes where visible
-   - Provide the value from our estimate
-   - Explain why each item is necessary and supported
+2. MEASUREMENT-BASED QUANTITIES:
+   - Extract key measurements from provided reports
+   - Total roof area (squares)
+   - Siding/exterior areas
+   - Linear footage for gutters, trim, etc.
+   - Any other relevant measurements
 
-3. PRICING DISCREPANCIES:
-   - Items where insurance used lower unit prices than ours
-   - Items where insurance used lower quantities
-   - Labor rate differences
-   - Material pricing differences
+3. DETAILED LINE ITEM ESTIMATE:
+   For EACH line item, provide:
+   - Xactimate Code (where applicable)
+   - Description
+   - Quantity with source (measurement report or photo-based estimate)
+   - Unit price range
+   - JUSTIFICATION citing specific photo evidence or damage findings
+   
+   Organize by trade:
+   ROOFING:
+   [line items with justifications]
+   
+   GUTTERS:
+   [line items with justifications]
+   
+   SIDING:
+   [line items with justifications]
+   
+   INTERIOR:
+   [line items with justifications]
+   
+   CLEANUP/DISPOSAL:
+   [line items with justifications]
 
-4. ` : `1. ESTIMATE ANALYSIS (if estimate provided):
-   - Summary of what the carrier's estimate includes
-   - Total value of carrier's estimate
-   - Obvious gaps or missing scopes
-
-2. MISSING LINE ITEMS:
-   - List specific items NOT in the carrier's estimate that should be included
-   - Include Xactimate codes where possible
-   - Provide estimated quantities and unit prices
-   - Explain why each item is necessary
-
-3. UNDERVALUED ITEMS:
-   - Items where quantities are insufficient
-   - Items where unit pricing is below market
-   - Incorrect labor calculations
-
-4. `}CODE UPGRADE REQUIREMENTS:
+4. CODE UPGRADE REQUIREMENTS:
    - Building codes requiring upgrades beyond like-kind replacement
    - Reference specific code sections
-   - Items carrier estimate fails to account for
+   - Include line items with code citation as justification
 
-5. MANUFACTURER SPECIFICATION ITEMS:
-   - Items required by manufacturer installation guidelines
-   - Warranty requirements that mandate certain work
-   - Components the carrier may have omitted
+5. OVERHEAD & PROFIT:
+   - Whether O&P should apply
+   - Justification for O&P inclusion
 
-6. CONSEQUENTIAL/HIDDEN DAMAGE:
-   - Damage that may not be immediately visible
-   - Areas that should be further inspected
-   - Related damage the carrier missed
+6. ESTIMATE SUMMARY:
+   - Total estimated value by category
+   - Grand total
+   - Priority items
 
-7. OVERHEAD & PROFIT JUSTIFICATION:
-   - Whether O&P was included in carrier estimate
-   - Why O&P should apply to this claim
-   - Supporting arguments for O&P inclusion
+7. EVIDENCE REFERENCE TABLE:
+   A quick-reference table mapping each major line item to its supporting photo evidence:
+   | Line Item | Photo Evidence | Damage Type | Justification |
+   (Use plain text formatting, not markdown tables)
 
-8. SUPPLEMENT VALUE SUMMARY:
-   - Total estimated supplement amount
-   - Breakdown by category
-   - Priority items to pursue first
-
-9. SUPPLEMENT REQUEST LETTER:
-   - Professional letter template requesting the supplement
-   - Itemized list with values
-   - Supporting rationale for each request
-
-Format as a structured supplement package ready for carrier submission.`;
+Format as a structured estimate package ready for contractor or carrier submission.`;
         break;
 
       case 'correspondence':

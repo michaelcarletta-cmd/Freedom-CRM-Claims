@@ -4,15 +4,35 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { PlusCircle, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen } from "lucide-react";
+import { PlusCircle, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen, Camera, Ruler, ChevronDown, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useClaimFiles } from "@/hooks/useClaimFiles";
 import { ClaimFileSelector } from "./ClaimFileSelector";
 
 interface DarwinSupplementGeneratorProps {
   claimId: string;
   claim: any;
+}
+
+interface PhotoAnalysis {
+  id: string;
+  file_name: string;
+  category: string | null;
+  ai_analysis_summary: string | null;
+  ai_material_type: string | null;
+  ai_detected_damages: unknown;
+  ai_condition_rating: string | null;
+  ai_loss_type_consistency: string | null;
+}
+
+interface MeasurementFile {
+  id: string;
+  file_name: string;
+  file_path: string;
+  folder_name: string | null;
 }
 
 export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGeneratorProps) => {
@@ -24,14 +44,62 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
   const [insuranceEstimatePdf, setInsuranceEstimatePdf] = useState<File | null>(null);
   const [selectedOurEstimateId, setSelectedOurEstimateId] = useState<string | null>(null);
   const [selectedInsuranceEstimateId, setSelectedInsuranceEstimateId] = useState<string | null>(null);
+  const [selectedMeasurementIds, setSelectedMeasurementIds] = useState<Set<string>>(new Set());
   const [lastAnalyzed, setLastAnalyzed] = useState<Date | null>(null);
   const [lastFileName, setLastFileName] = useState<string | null>(null);
   const [inputMethod, setInputMethod] = useState<string>("claim-files");
+  const [photoAnalyses, setPhotoAnalyses] = useState<PhotoAnalysis[]>([]);
+  const [measurementFiles, setMeasurementFiles] = useState<MeasurementFile[]>([]);
+  const [loadingEvidence, setLoadingEvidence] = useState(true);
+  const [evidenceExpanded, setEvidenceExpanded] = useState(true);
   const ourEstimateInputRef = useRef<HTMLInputElement>(null);
   const insuranceEstimateInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const { files: claimFiles, loading: loadingFiles, downloadFileAsBase64 } = useClaimFiles(claimId);
+
+  // Load photo analyses and measurement files
+  useEffect(() => {
+    const loadEvidenceData = async () => {
+      setLoadingEvidence(true);
+      try {
+        // Fetch photos with AI analysis
+        const { data: photos } = await supabase
+          .from('claim_photos')
+          .select('id, file_name, category, ai_analysis_summary, ai_material_type, ai_detected_damages, ai_condition_rating, ai_loss_type_consistency')
+          .eq('claim_id', claimId)
+          .not('ai_analysis_summary', 'is', null);
+        
+        setPhotoAnalyses(photos || []);
+
+        // Fetch measurement-related files (look for common patterns)
+        const { data: files } = await supabase
+          .from('claim_files')
+          .select('id, file_name, file_path, claim_folders(name)')
+          .eq('claim_id', claimId);
+        
+        const measurementKeywords = ['measurement', 'eagleview', 'hover', 'roof report', 'diagram', 'sketch', 'scope'];
+        const measurements = (files || []).filter((f: any) => {
+          const fileName = f.file_name?.toLowerCase() || '';
+          const folderName = f.claim_folders?.name?.toLowerCase() || '';
+          return measurementKeywords.some(k => fileName.includes(k) || folderName.includes(k));
+        }).map((f: any) => ({
+          id: f.id,
+          file_name: f.file_name,
+          file_path: f.file_path,
+          folder_name: f.claim_folders?.name || null
+        }));
+        
+        setMeasurementFiles(measurements);
+      } catch (error) {
+        console.error('Error loading evidence data:', error);
+      } finally {
+        setLoadingEvidence(false);
+      }
+    };
+
+    loadEvidenceData();
+  }, [claimId]);
 
   // Load previous analysis on mount
   useEffect(() => {
@@ -108,6 +176,40 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
     return btoa(binary);
   };
 
+  const toggleMeasurementFile = (id: string) => {
+    const newSelected = new Set(selectedMeasurementIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedMeasurementIds(newSelected);
+  };
+
+  const selectAllMeasurements = () => {
+    setSelectedMeasurementIds(new Set(measurementFiles.map(m => m.id)));
+  };
+
+  // Build photo evidence summary for AI
+  const buildPhotoEvidenceSummary = () => {
+    if (photoAnalyses.length === 0) return null;
+    
+    const summary = photoAnalyses.map(photo => {
+      const damages = Array.isArray(photo.ai_detected_damages) ? photo.ai_detected_damages : [];
+      return {
+        file_name: photo.file_name,
+        category: photo.category,
+        material: photo.ai_material_type,
+        condition: photo.ai_condition_rating,
+        damages: damages,
+        loss_consistency: photo.ai_loss_type_consistency,
+        summary: photo.ai_analysis_summary
+      };
+    });
+    
+    return summary;
+  };
+
   const handleGenerate = async () => {
     setLoading(true);
     try {
@@ -139,6 +241,21 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
         }
       }
 
+      // Load selected measurement file contents
+      const measurementContents: Array<{ name: string; content: string }> = [];
+      for (const measurementId of selectedMeasurementIds) {
+        const file = measurementFiles.find(f => f.id === measurementId);
+        if (file) {
+          const content = await downloadFileAsBase64(file.file_path);
+          if (content) {
+            measurementContents.push({ name: file.file_name, content });
+          }
+        }
+      }
+
+      // Build photo evidence summary
+      const photoEvidence = buildPhotoEvidenceSummary();
+
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
         body: {
           claimId,
@@ -151,7 +268,13 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
             ourEstimatePdf: ourEstimateContent,
             ourEstimatePdfName: ourFileName,
             insuranceEstimatePdf: insuranceEstimateContent,
-            insuranceEstimatePdfName: insuranceFileName
+            insuranceEstimatePdfName: insuranceFileName,
+            // NEW: Photo analysis evidence
+            photoEvidence,
+            photoCount: photoAnalyses.length,
+            // NEW: Measurement reports
+            measurementReports: measurementContents,
+            measurementCount: measurementContents.length
           }
         }
       });
@@ -172,15 +295,15 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
       await supabase.from('darwin_analysis_results').insert({
         claim_id: claimId,
         analysis_type: 'supplement',
-        input_summary: fileNames || existingEstimate.substring(0, 200),
+        input_summary: `${fileNames || existingEstimate.substring(0, 100)} | Photos: ${photoAnalyses.length} | Measurements: ${measurementContents.length}`,
         result: data.result,
         pdf_file_name: fileNames || null,
         created_by: userData.user?.id
       });
 
       toast({
-        title: "Supplement generated",
-        description: "Darwin has compared the estimates and identified supplement items"
+        title: "Estimate generated",
+        description: `Darwin analyzed ${photoAnalyses.length} photos and ${measurementContents.length} measurement reports to build the estimate`
       });
     } catch (error: any) {
       console.error("Supplement generation error:", error);
@@ -193,6 +316,17 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
       setLoading(false);
     }
   };
+
+  // Stats for evidence summary
+  const damagePhotosCount = photoAnalyses.filter(p => {
+    const damages = Array.isArray(p.ai_detected_damages) ? p.ai_detected_damages : [];
+    return damages.length > 0;
+  }).length;
+  
+  const criticalPhotosCount = photoAnalyses.filter(p => 
+    p.ai_condition_rating?.toLowerCase() === 'poor' || 
+    p.ai_condition_rating?.toLowerCase() === 'failed'
+  ).length;
 
   const copyToClipboard = () => {
     if (analysis) {
@@ -220,11 +354,11 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <PlusCircle className="h-5 w-5 text-green-600" />
-          Supplement Generator
+          <PlusCircle className="h-5 w-5 text-primary" />
+          AI Estimate Builder
         </CardTitle>
         <CardDescription>
-          Identify missed items, code upgrades, and hidden damage to maximize claim recovery
+          Generate accurate estimates from photo analysis, measurements, and damage documentation
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -235,6 +369,154 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
             {lastFileName && <span className="text-xs">({lastFileName})</span>}
           </div>
         )}
+
+        {/* Evidence Panel */}
+        <Collapsible open={evidenceExpanded} onOpenChange={setEvidenceExpanded}>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" className="w-full justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span>Available Evidence for Estimate</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {loadingEvidence ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Badge variant="secondary" className="text-xs">
+                      {photoAnalyses.length} Photos
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      {measurementFiles.length} Measurements
+                    </Badge>
+                  </>
+                )}
+                <ChevronDown className={`h-4 w-4 transition-transform ${evidenceExpanded ? 'rotate-180' : ''}`} />
+              </div>
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-3 space-y-4">
+            {/* Photo Evidence Summary */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Camera className="h-4 w-4 text-primary" />
+                  <span className="font-medium text-sm">AI Photo Analysis</span>
+                </div>
+                {damagePhotosCount > 0 && (
+                  <Badge variant="destructive" className="text-xs">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    {damagePhotosCount} with damage detected
+                  </Badge>
+                )}
+              </div>
+              
+              {photoAnalyses.length > 0 ? (
+                <ScrollArea className="h-[120px]">
+                  <div className="space-y-2">
+                    {photoAnalyses.map(photo => {
+                      const damages = Array.isArray(photo.ai_detected_damages) ? photo.ai_detected_damages : [];
+                      return (
+                        <div key={photo.id} className="flex items-start gap-2 p-2 bg-muted/50 rounded text-xs">
+                          <CheckCircle2 className="h-3 w-3 text-primary mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{photo.file_name}</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {photo.ai_material_type && (
+                                <Badge variant="outline" className="text-xs">{photo.ai_material_type}</Badge>
+                              )}
+                              {photo.ai_condition_rating && (
+                                <Badge 
+                                  variant={photo.ai_condition_rating.toLowerCase() === 'poor' || photo.ai_condition_rating.toLowerCase() === 'failed' ? 'destructive' : 'secondary'} 
+                                  className="text-xs"
+                                >
+                                  {photo.ai_condition_rating}
+                                </Badge>
+                              )}
+                              {damages.length > 0 && (
+                                <Badge variant="destructive" className="text-xs">
+                                  {damages.length} damage{damages.length > 1 ? 's' : ''}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No AI-analyzed photos found. Analyze photos in the Photos tab first.
+                </p>
+              )}
+
+              {criticalPhotosCount > 0 && (
+                <div className="flex items-center gap-2 p-2 bg-destructive/10 rounded text-xs text-destructive">
+                  <AlertTriangle className="h-3 w-3" />
+                  <span>{criticalPhotosCount} photo(s) show Poor/Failed condition - critical for estimate justification</span>
+                </div>
+              )}
+            </div>
+
+            {/* Measurement Files */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Ruler className="h-4 w-4 text-primary" />
+                  <span className="font-medium text-sm">Measurement Reports</span>
+                </div>
+                {measurementFiles.length > 0 && (
+                  <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={selectAllMeasurements}>
+                    Select All
+                  </Button>
+                )}
+              </div>
+              
+              {measurementFiles.length > 0 ? (
+                <div className="space-y-2">
+                  {measurementFiles.map(file => (
+                    <div 
+                      key={file.id} 
+                      className={`flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-muted/50 ${
+                        selectedMeasurementIds.has(file.id) ? 'border-primary bg-primary/5' : ''
+                      }`}
+                      onClick={() => toggleMeasurementFile(file.id)}
+                    >
+                      <div className={`h-4 w-4 border rounded flex items-center justify-center ${
+                        selectedMeasurementIds.has(file.id) ? 'bg-primary border-primary' : ''
+                      }`}>
+                        {selectedMeasurementIds.has(file.id) && <CheckCircle2 className="h-3 w-3 text-primary-foreground" />}
+                      </div>
+                      <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate">{file.file_name}</p>
+                        {file.folder_name && (
+                          <p className="text-xs text-muted-foreground">{file.folder_name}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No measurement reports found. Upload EagleView, Hover, or other measurement reports to the claim files.
+                </p>
+              )}
+            </div>
+
+            {/* Evidence Summary */}
+            {(photoAnalyses.length > 0 || selectedMeasurementIds.size > 0) && (
+              <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                <p className="text-sm">
+                  <strong>Darwin will use:</strong> {photoAnalyses.length} analyzed photos 
+                  {selectedMeasurementIds.size > 0 && ` + ${selectedMeasurementIds.size} measurement report(s)`} 
+                  {' '}to generate accurate line items with justifications.
+                </p>
+              </div>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
 
         <Tabs value={inputMethod} onValueChange={setInputMethod}>
           <TabsList className="flex flex-col sm:flex-row w-full h-auto gap-1 p-1">
@@ -395,12 +677,12 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Generating Supplement...
+              Building Estimate from Evidence...
             </>
           ) : (
             <>
               <Sparkles className="h-4 w-4 mr-2" />
-              Generate Supplement Package
+              Generate Estimate with Line Item Justifications
             </>
           )}
         </Button>
