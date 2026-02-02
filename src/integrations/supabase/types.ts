@@ -1345,6 +1345,7 @@ export type Database = {
           ocr_processed_at: string | null
           parent_file_id: string | null
           processed_by_darwin: boolean | null
+          source: string | null
           uploaded_at: string | null
           uploaded_by: string | null
           version: number | null
@@ -1367,6 +1368,7 @@ export type Database = {
           ocr_processed_at?: string | null
           parent_file_id?: string | null
           processed_by_darwin?: boolean | null
+          source?: string | null
           uploaded_at?: string | null
           uploaded_by?: string | null
           version?: number | null
@@ -1389,6 +1391,7 @@ export type Database = {
           ocr_processed_at?: string | null
           parent_file_id?: string | null
           processed_by_darwin?: boolean | null
+          source?: string | null
           uploaded_at?: string | null
           uploaded_by?: string | null
           version?: number | null

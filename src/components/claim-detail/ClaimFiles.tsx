@@ -239,8 +239,18 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["claim-files", claimId] });
+      
+      // Trigger Darwin classification immediately (non-blocking)
+      if (data?.id) {
+        supabase.functions.invoke('darwin-process-document', {
+          body: { fileId: data.id }
+        }).then(() => {
+          // Refetch to show updated classification
+          setTimeout(() => refetchFiles(), 2000);
+        }).catch(err => console.error('Darwin processing queued:', err));
+      }
     },
     onError: () => {
       toast({
