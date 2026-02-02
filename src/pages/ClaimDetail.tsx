@@ -416,7 +416,7 @@ const ClaimDetail = () => {
         )}
 
         <TabsContent value="activity" className="mt-6">
-          <ClaimActivity claimId={id || ""} />
+          <ClaimActivity claimId={id || ""} isPortalUser={isPortalUser} />
         </TabsContent>
 
         {isStaffOrAdmin && (
@@ -437,7 +437,7 @@ const ClaimDetail = () => {
         </TabsContent>
 
         <TabsContent value="photos" className="mt-6">
-          <ClaimPhotos claimId={id || ""} claim={claim} />
+          <ClaimPhotos claimId={id || ""} claim={claim} isPortalUser={isPortalUser} />
         </TabsContent>
 
         <TabsContent value="files" className="mt-6">
@@ -479,12 +479,14 @@ const ClaimDetail = () => {
         </div>
       )}
       
-      {/* Floating AI Assistant Button - claim-aware */}
-      <ClaimsAIAssistant 
-        claimId={claim.id} 
-        claimNumber={claim.claim_number} 
-        policyholderName={claim.policyholder_name}
-      />
+      {/* Floating AI Assistant Button - claim-aware (staff only) */}
+      {isStaffOrAdmin && (
+        <ClaimsAIAssistant 
+          claimId={claim.id} 
+          claimNumber={claim.claim_number} 
+          policyholderName={claim.policyholder_name}
+        />
+      )}
     </div>
   );
 };

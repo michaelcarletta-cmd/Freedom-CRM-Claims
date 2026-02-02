@@ -43,6 +43,7 @@ interface ClaimPhoto {
 interface ClaimPhotosProps {
   claimId: string;
   claim: any;
+  isPortalUser?: boolean;
 }
 
 const PHOTO_CATEGORIES = [
@@ -74,7 +75,7 @@ const PHOTO_CATEGORIES = [
 
 const PHOTOS_PER_PAGE = 24;
 
-export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
+export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhotosProps) {
   const [photos, setPhotos] = useState<ClaimPhoto[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -597,37 +598,41 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
               Clear ({selectedPhotos.length})
             </Button>
           )}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={analyzeCurrentPage}
-            disabled={analyzingAll || paginatedPhotos.length === 0}
-          >
-            {analyzingAll ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Analyzing {analysisProgress.current}/{analysisProgress.total}
-              </>
-            ) : (
-              <>
+          {!isPortalUser && (
+            <>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={analyzeCurrentPage}
+                disabled={analyzingAll || paginatedPhotos.length === 0}
+              >
+                {analyzingAll ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Analyzing {analysisProgress.current}/{analysisProgress.total}
+                  </>
+                ) : (
+                  <>
+                    <Brain className="h-4 w-4 mr-2" />
+                    Analyze This Page
+                  </>
+                )}
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={analyzeAllPhotos}
+                disabled={analyzingAll || photos.length === 0}
+              >
                 <Brain className="h-4 w-4 mr-2" />
-                Analyze This Page
-              </>
-            )}
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={analyzeAllPhotos}
-            disabled={analyzingAll || photos.length === 0}
-          >
-            <Brain className="h-4 w-4 mr-2" />
-            Analyze All ({photos.filter(p => !p.ai_analyzed_at).length})
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setReportDialogOpen(true)}>
-            <FileText className="h-4 w-4 mr-2" />
-            Generate Report
-          </Button>
+                Analyze All ({photos.filter(p => !p.ai_analyzed_at).length})
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setReportDialogOpen(true)}>
+                <FileText className="h-4 w-4 mr-2" />
+                Generate Report
+              </Button>
+            </>
+          )}
           <Button variant="outline" size="sm" onClick={startCamera}>
             <Camera className="h-4 w-4 mr-2" />
             Take Photo

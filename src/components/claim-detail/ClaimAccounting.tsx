@@ -23,6 +23,7 @@ interface ClaimAccountingProps {
 
 export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
   const isAdmin = userRole === 'admin';
+  const isPortalUser = userRole === 'client' || userRole === 'contractor';
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [invoiceOpen, setInvoiceOpen] = useState(false);
@@ -189,8 +190,8 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
         isAdmin={isAdmin}
       />
 
-      {/* Payments Released */}
-      <ClaimPayments claimId={claim.id} isAdmin={isAdmin} />
+      {/* Payments Released - hidden for portal users */}
+      {!isPortalUser && <ClaimPayments claimId={claim.id} isAdmin={isAdmin} />}
 
       {/* Invoice Dialog */}
       <InvoiceDialog
