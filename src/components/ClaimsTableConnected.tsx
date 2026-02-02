@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -124,8 +124,31 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       return (data || []) as Claim[];
     },
     enabled: !!user?.id,
-    staleTime: 30000, // Cache for 30 seconds
+    staleTime: 5000, // Reduced cache time for more responsive updates
   });
+
+  // Real-time subscription for claim updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('claims-table-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'claims',
+        },
+        () => {
+          // Invalidate cache to refetch updated claims
+          queryClient.invalidateQueries({ queryKey: ["claims"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   // Fetch active statuses with React Query - ordered by display_order to match Settings
   const { data: activeStatuses = [] } = useQuery({
