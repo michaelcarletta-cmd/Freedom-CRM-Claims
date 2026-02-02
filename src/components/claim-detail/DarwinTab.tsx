@@ -1,5 +1,7 @@
-import { useState, lazy, Suspense } from "react";
-import { Brain, ChevronDown, ChevronRight, Loader2, MessageSquare, FileText, Shield, Calculator, Zap, Search, Clock, Sparkles, TrendingUp, Swords, Building2 } from "lucide-react";
+import { useState, useEffect, lazy, Suspense } from "react";
+import { Brain, ChevronDown, ChevronRight, Loader2, MessageSquare, FileText, Shield, Calculator, Zap, Search, Clock, Sparkles, TrendingUp, Swords, Building2, AlertCircle, Eye } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -107,8 +109,75 @@ const ToolCategory = ({ title, description, icon, defaultOpen = false, children 
   );
 };
 
+// Map analysis types to readable names and scroll targets
+const analysisTypeLabels: Record<string, { label: string; section: string }> = {
+  denial_rebuttal: { label: 'Denial Rebuttal', section: 'rebuttals' },
+  engineer_report_rebuttal: { label: 'Engineer Report Rebuttal', section: 'rebuttals' },
+  estimate_gap_analysis: { label: 'Estimate Gap Analysis', section: 'document-analysis' },
+};
+
 export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
   const [showCopilot, setShowCopilot] = useState(true);
+  const [autoAnalyses, setAutoAnalyses] = useState<Array<{ id: string; analysis_type: string; created_at: string; input_summary: string }>>([]);
+  const [dismissedAnalyses, setDismissedAnalyses] = useState<Set<string>>(new Set());
+
+  // Fetch recent auto-triggered analyses
+  useEffect(() => {
+    const fetchAutoAnalyses = async () => {
+      const { data } = await supabase
+        .from('darwin_analysis_results')
+        .select('id, analysis_type, created_at, input_summary')
+        .eq('claim_id', claimId)
+        .in('analysis_type', ['denial_rebuttal', 'engineer_report_rebuttal', 'estimate_gap_analysis'])
+        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (data) {
+        setAutoAnalyses(data);
+      }
+    };
+
+    fetchAutoAnalyses();
+
+    // Subscribe to new analyses
+    const channel = supabase
+      .channel(`darwin_analyses_${claimId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'darwin_analysis_results',
+          filter: `claim_id=eq.${claimId}`,
+        },
+        (payload) => {
+          const newAnalysis = payload.new as any;
+          if (['denial_rebuttal', 'engineer_report_rebuttal', 'estimate_gap_analysis'].includes(newAnalysis.analysis_type)) {
+            setAutoAnalyses(prev => [newAnalysis, ...prev].slice(0, 5));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [claimId]);
+
+  const handleDismissAnalysis = (id: string) => {
+    setDismissedAnalyses(prev => new Set([...prev, id]));
+  };
+
+  const scrollToSection = (section: string) => {
+    // Find and open the relevant collapsible section
+    const sectionElement = document.querySelector(`[data-section="${section}"]`);
+    if (sectionElement) {
+      sectionElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const visibleAnalyses = autoAnalyses.filter(a => !dismissedAnalyses.has(a.id));
 
   return (
     <div className="space-y-6">
@@ -133,6 +202,58 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
           {showCopilot ? "Hide Chat" : "Show Chat"}
         </Button>
       </div>
+
+      {/* Auto-Analysis Ready Banner */}
+      {visibleAnalyses.length > 0 && (
+        <Alert className="border-primary/50 bg-primary/5">
+          <Brain className="h-4 w-4 text-primary" />
+          <AlertTitle className="flex items-center gap-2">
+            Darwin Analysis Ready
+            <span className="text-xs font-normal text-muted-foreground">
+              ({visibleAnalyses.length} {visibleAnalyses.length === 1 ? 'analysis' : 'analyses'} completed)
+            </span>
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-2">
+            {visibleAnalyses.map(analysis => {
+              const typeInfo = analysisTypeLabels[analysis.analysis_type] || { label: analysis.analysis_type, section: '' };
+              const timeAgo = new Date(analysis.created_at).toLocaleTimeString();
+              
+              return (
+                <div key={analysis.id} className="flex items-center justify-between gap-2 py-1">
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium text-sm">{typeInfo.label}</span>
+                    {analysis.input_summary && (
+                      <span className="text-xs text-muted-foreground ml-2 truncate">
+                        {analysis.input_summary.substring(0, 50)}...
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground ml-2">({timeAgo})</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-7 text-xs gap-1"
+                      onClick={() => scrollToSection(typeInfo.section)}
+                    >
+                      <Eye className="h-3 w-3" />
+                      View
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleDismissAnalysis(analysis.id)}
+                    >
+                      ×
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Main Layout: Copilot + Tools */}
       <div className={cn("grid gap-6", showCopilot ? "lg:grid-cols-[1fr,400px]" : "grid-cols-1")}>
@@ -195,23 +316,26 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
           </ToolCategory>
 
           {/* Document Analysis */}
-          <ToolCategory
-            title="Document Analysis"
-            description="Analyze and compare claim documents"
-            icon={<FileText className="h-4 w-4" />}
-          >
+          <div data-section="document-analysis">
+            <ToolCategory
+              title="Document Analysis"
+              description="Analyze and compare claim documents"
+              icon={<FileText className="h-4 w-4" />}
+            >
             <DarwinSmartExtraction claimId={claimId} claim={claim} />
             <DarwinDocumentComparison claimId={claimId} claim={claim} />
             <DarwinSmartDocumentSort claimId={claimId} claim={claim} />
             <DarwinPhotoLinker claimId={claimId} claim={claim} />
-          </ToolCategory>
+            </ToolCategory>
+          </div>
 
           {/* Rebuttals & Responses */}
-          <ToolCategory
-            title="Rebuttals & Responses"
-            description="Counter carrier denials and engineer reports"
-            icon={<Shield className="h-4 w-4" />}
-          >
+          <div data-section="rebuttals">
+            <ToolCategory
+              title="Rebuttals & Responses"
+              description="Counter carrier denials and engineer reports"
+              icon={<Shield className="h-4 w-4" />}
+            >
             <DarwinAutoDraftRebuttal claimId={claimId} claim={claim} />
             <div className="grid gap-4 lg:grid-cols-2">
               <DarwinDenialAnalyzer claimId={claimId} claim={claim} />
@@ -219,7 +343,8 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             </div>
             <DarwinSupplementGenerator claimId={claimId} claim={claim} />
             <DarwinCorrespondenceAnalyzer claimId={claimId} claim={claim} />
-          </ToolCategory>
+            </ToolCategory>
+          </div>
 
           {/* Package Building */}
           <ToolCategory

@@ -213,7 +213,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -2892,6 +2892,106 @@ Make this document READY FOR SUBMISSION to the carrier. Be thorough, specific, a
         break;
       }
 
+      case 'estimate_gap_analysis': {
+        // Gap analysis for incoming carrier estimates
+        const kbContent = await searchKnowledgeBase(
+          supabase,
+          'estimate line items xactimate supplement missing items O&P overhead profit code upgrade',
+        );
+
+        systemPrompt = `You are Darwin, an expert public adjuster AI analyzing an incoming insurance estimate to identify gaps, underpayments, and supplement opportunities.
+
+=== COMMUNICATION STYLE ===
+Professional, thorough, and actionable. Present findings in a clear format that helps the adjuster immediately understand what's missing or undervalued.
+
+=== YOUR TASK ===
+Analyze the provided estimate and identify:
+1. MISSING LINE ITEMS that should be included based on the scope of work
+2. UNDERPRICED QUANTITIES (e.g., roof area seems too low, insufficient debris removal)
+3. MISSING CATEGORIES (e.g., no O&P, no code upgrade, no detach/reset, no permit fees)
+4. AMBIGUOUS OR LIMITING LANGUAGE that could be challenged
+5. SUPPLEMENT OPPORTUNITIES based on typical scope for this loss type
+
+=== FORMATTING REQUIREMENTS ===
+Use plain text only. Do NOT use markdown formatting.
+Structure your response with clear section headers.
+
+=== STATE-SPECIFIC CONTEXT ===
+This claim is in ${stateInfo.stateName}:
+- Insurance Code: ${stateInfo.insuranceCode}
+- Regulations: ${stateInfo.adminCode}
+
+${kbContent}`;
+
+        userPrompt = `${claimSummary}
+
+${pdfContent ? `An estimate PDF has been provided for analysis. Review it thoroughly.` : `ESTIMATE CONTENT:
+${content || 'No estimate content provided'}`}
+
+Analyze this estimate and provide a comprehensive gap analysis with the following structure:
+
+================================================================================
+ESTIMATE GAP ANALYSIS
+================================================================================
+
+I. ESTIMATE SUMMARY
+   - Estimate Source: [Carrier/Contractor/Xactimate/Symbility]
+   - Total RCV: $X
+   - Total Depreciation: $X
+   - Net Claim Value (ACV): $X
+   - Deductible Applied: $X
+   - Number of Line Items: X
+
+II. MISSING LINE ITEMS
+   List each item that should be included but is missing:
+   1. [Item Name] - Why it should be included, estimated value: $X
+   2. [Continue for all missing items...]
+
+III. QUANTITY CONCERNS
+   Items where quantities appear insufficient:
+   1. [Line Item]: Listed as X units, typical for this scope would be Y units
+      Difference: $X undervalued
+   2. [Continue for all quantity concerns...]
+
+IV. MISSING CATEGORIES
+   Standard categories not present in this estimate:
+   1. Overhead & Profit (O&P) - [Status: Missing/Included/Partial]
+   2. Permit Fees - [Status]
+   3. Code Upgrade/Ordinance & Law - [Status]
+   4. Detach & Reset Items - [Status]
+   5. Debris Removal - [Status]
+   6. Temporary Repairs - [Status]
+
+V. AMBIGUOUS LANGUAGE TO CHALLENGE
+   Phrases that limit scope or are vague:
+   1. "[Quote from estimate]" - Issue: [Why this is problematic]
+      Challenge: [How to address this]
+   2. [Continue for all ambiguous items...]
+
+VI. SUPPLEMENT OPPORTUNITIES
+   Priority items for supplemental claim:
+   HIGH PRIORITY:
+   1. [Item] - Estimated additional: $X - [Brief justification]
+   
+   MEDIUM PRIORITY:
+   1. [Item] - Estimated additional: $X - [Brief justification]
+   
+   LOW PRIORITY:
+   1. [Item] - Estimated additional: $X - [Brief justification]
+
+VII. TOTAL SUPPLEMENT POTENTIAL
+   - Estimated Total Missing: $X
+   - Quantity Adjustments: $X
+   - Total Supplement Opportunity: $X
+
+VIII. RECOMMENDED ACTIONS
+   1. [Specific action to take]
+   2. [Continue for all recommended actions...]
+
+================================================================================`;
+        break;
+      }
+
       default:
         throw new Error(`Unknown analysis type: ${analysisType}`);
 
@@ -2968,7 +3068,7 @@ Make this document READY FOR SUBMISSION to the carrier. Be thorough, specific, a
       ];
       
       console.log(`Supplement analysis with ${additionalContext?.ourEstimatePdf ? 1 : 0} our estimate + ${(additionalContext?.insuranceEstimatePdf || pdfContent) ? 1 : 0} insurance estimate`);
-    } else if (pdfContent && !additionalContext?._useTextOnly && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'document_compilation' || analysisType === 'estimate_work_summary' || analysisType === 'document_comparison' || analysisType === 'smart_extraction')) {
+    } else if (pdfContent && !additionalContext?._useTextOnly && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'document_compilation' || analysisType === 'estimate_work_summary' || analysisType === 'document_comparison' || analysisType === 'smart_extraction' || analysisType === 'estimate_gap_analysis')) {
       // Use multimodal format for PDF analysis with Gemini-compatible inline_data format
       messages = [
         { role: 'system', content: systemPrompt },
@@ -2998,7 +3098,7 @@ Make this document READY FOR SUBMISSION to the carrier. Be thorough, specific, a
 
     // Call Lovable AI with model fallback chain for reliability
     const hasPdfContent = pdfContent || (pdfContents && pdfContents.length > 0) || additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf;
-    const needsPdfProcessing = hasPdfContent && !additionalContext?._useTextOnly && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package', 'document_comparison', 'smart_extraction'].includes(analysisType);
+    const needsPdfProcessing = hasPdfContent && !additionalContext?._useTextOnly && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package', 'document_comparison', 'smart_extraction', 'estimate_gap_analysis'].includes(analysisType);
     
     // Model fallback chain - use only Gemini models for PDF processing (OpenAI doesn't support PDF multimodal)
     // For text-only analysis, we can use OpenAI as fallback
