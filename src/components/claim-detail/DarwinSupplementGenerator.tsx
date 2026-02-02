@@ -62,13 +62,26 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
   // Load photo analyses and measurement files
   useEffect(() => {
     const loadEvidenceData = async () => {
+      if (!claimId) {
+        console.error('AI Estimate Builder: No claimId provided');
+        return;
+      }
+      
       setLoadingEvidence(true);
+      console.log('AI Estimate Builder: Loading evidence for claim', claimId);
+      
       try {
         // Fetch ALL photos (analyzed and unanalyzed)
-        const { data: photos } = await supabase
+        const { data: photos, error: photosError } = await supabase
           .from('claim_photos')
           .select('id, file_name, category, ai_analysis_summary, ai_material_type, ai_detected_damages, ai_condition_rating, ai_loss_type_consistency')
           .eq('claim_id', claimId);
+        
+        if (photosError) {
+          console.error('AI Estimate Builder: Error fetching photos:', photosError);
+        } else {
+          console.log('AI Estimate Builder: Fetched photos from database:', photos?.length);
+        }
         
         // Mark each photo as analyzed or not
         const processedPhotos = (photos || []).map(p => ({
@@ -76,6 +89,7 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
           is_analyzed: !!p.ai_analysis_summary
         }));
         
+        console.log('AI Estimate Builder: Setting photoAnalyses state with', processedPhotos.length, 'photos');
         setPhotoAnalyses(processedPhotos);
 
         // Fetch ALL files for measurement detection
