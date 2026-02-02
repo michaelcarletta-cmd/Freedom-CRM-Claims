@@ -26,6 +26,7 @@ interface PhotoAnalysis {
   ai_detected_damages: unknown;
   ai_condition_rating: string | null;
   ai_loss_type_consistency: string | null;
+  is_analyzed: boolean;
 }
 
 interface MeasurementFile {
@@ -63,14 +64,19 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
     const loadEvidenceData = async () => {
       setLoadingEvidence(true);
       try {
-        // Fetch photos with AI analysis
+        // Fetch ALL photos (analyzed and unanalyzed)
         const { data: photos } = await supabase
           .from('claim_photos')
           .select('id, file_name, category, ai_analysis_summary, ai_material_type, ai_detected_damages, ai_condition_rating, ai_loss_type_consistency')
-          .eq('claim_id', claimId)
-          .not('ai_analysis_summary', 'is', null);
+          .eq('claim_id', claimId);
         
-        setPhotoAnalyses(photos || []);
+        // Mark each photo as analyzed or not
+        const processedPhotos = (photos || []).map(p => ({
+          ...p,
+          is_analyzed: !!p.ai_analysis_summary
+        }));
+        
+        setPhotoAnalyses(processedPhotos);
 
         // Fetch measurement-related files (look for common patterns)
         const { data: files } = await supabase
@@ -318,6 +324,8 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
   };
 
   // Stats for evidence summary
+  const analyzedPhotosCount = photoAnalyses.filter(p => p.is_analyzed).length;
+  const unanalyzedPhotosCount = photoAnalyses.filter(p => !p.is_analyzed).length;
   const damagePhotosCount = photoAnalyses.filter(p => {
     const damages = Array.isArray(p.ai_detected_damages) ? p.ai_detected_damages : [];
     return damages.length > 0;
@@ -384,7 +392,7 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
                 ) : (
                   <>
                     <Badge variant="secondary" className="text-xs">
-                      {photoAnalyses.length} Photos
+                      {photoAnalyses.length} Photos ({analyzedPhotosCount} analyzed)
                     </Badge>
                     <Badge variant="secondary" className="text-xs">
                       {measurementFiles.length} Measurements
@@ -398,27 +406,35 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
           <CollapsibleContent className="pt-3 space-y-4">
             {/* Photo Evidence Summary */}
             <div className="border rounded-lg p-4 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <Camera className="h-4 w-4 text-primary" />
-                  <span className="font-medium text-sm">AI Photo Analysis</span>
+                  <span className="font-medium text-sm">Claim Photos ({photoAnalyses.length} total)</span>
                 </div>
-                {damagePhotosCount > 0 && (
-                  <Badge variant="destructive" className="text-xs">
-                    <AlertTriangle className="h-3 w-3 mr-1" />
-                    {damagePhotosCount} with damage detected
-                  </Badge>
-                )}
+                <div className="flex items-center gap-2">
+                  {unanalyzedPhotosCount > 0 && (
+                    <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                      {unanalyzedPhotosCount} not analyzed
+                    </Badge>
+                  )}
+                  {damagePhotosCount > 0 && (
+                    <Badge variant="destructive" className="text-xs">
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      {damagePhotosCount} with damage
+                    </Badge>
+                  )}
+                </div>
               </div>
               
               {photoAnalyses.length > 0 ? (
-                <ScrollArea className="h-[120px]">
+                <ScrollArea className="h-[160px]">
                   <div className="space-y-2">
-                    {photoAnalyses.map(photo => {
+                    {/* Show analyzed photos first */}
+                    {photoAnalyses.filter(p => p.is_analyzed).map(photo => {
                       const damages = Array.isArray(photo.ai_detected_damages) ? photo.ai_detected_damages : [];
                       return (
                         <div key={photo.id} className="flex items-start gap-2 p-2 bg-muted/50 rounded text-xs">
-                          <CheckCircle2 className="h-3 w-3 text-primary mt-0.5 flex-shrink-0" />
+                          <CheckCircle2 className="h-3 w-3 text-green-600 mt-0.5 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
                             <p className="font-medium truncate">{photo.file_name}</p>
                             <div className="flex flex-wrap gap-1 mt-1">
@@ -443,12 +459,30 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
                         </div>
                       );
                     })}
+                    {/* Show unanalyzed photos */}
+                    {photoAnalyses.filter(p => !p.is_analyzed).map(photo => (
+                      <div key={photo.id} className="flex items-start gap-2 p-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded text-xs">
+                        <Camera className="h-3 w-3 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate text-muted-foreground">{photo.file_name}</p>
+                          <Badge variant="outline" className="text-xs mt-1 text-amber-600 border-amber-300">
+                            Pending AI analysis
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </ScrollArea>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No AI-analyzed photos found. Analyze photos in the Photos tab first.
+                  No photos found for this claim.
                 </p>
+              )}
+
+              {unanalyzedPhotosCount > 0 && (
+                <div className="p-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-700 dark:text-amber-400">
+                  <strong>Tip:</strong> Go to the Photos tab and run "Analyze All Photos" to get AI damage detection for better estimates.
+                </div>
               )}
 
               {criticalPhotosCount > 0 && (
