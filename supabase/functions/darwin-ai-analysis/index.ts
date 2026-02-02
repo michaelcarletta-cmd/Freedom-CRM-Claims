@@ -792,18 +792,23 @@ ${unanalyzedPhotos.length > 20 ? `... and ${unanalyzedPhotos.length - 20} more u
         let measurementSection = '';
         if (hasMeasurements) {
           measurementSection = `
-=== MEASUREMENT REPORTS (${additionalContext.measurementCount} reports) ===
-The following measurement reports contain dimensions needed for quantity calculations:
+=== MEASUREMENT REPORTS PROVIDED (${additionalContext.measurementCount} reports) ===
+CRITICAL INSTRUCTION: You MUST extract the EXACT measurements from these reports. DO NOT guess or double values!
+
+The following measurement reports contain the actual property dimensions:
 ${additionalContext.measurementReports.map((m: any) => `- ${m.name}`).join('\n')}
 
-CRITICAL: Extract these measurements and use them for accurate quantities:
-- Total roof area (in squares - 1 SQ = 100 SF)
-- Hip/ridge linear footage
-- Valley linear footage
-- Eave/rake edge linear footage
-- Roof pitch
+REQUIRED: Extract and use these EXACT values from the measurement report(s):
+- Total roof area in SQUARES (1 SQ = 100 SF) - use the EXACT number from the report
+- Hip/ridge linear footage - use the EXACT number
+- Valley linear footage - use the EXACT number  
+- Eave/rake edge linear footage - use the EXACT number
+- Roof pitch (e.g., 6/12, 8/12)
 - Number of stories/levels
-- Pipe boots, vents, skylights (count each)
+- Count of pipe boots, vents, skylights
+
+IMPORTANT: If the measurement report says 17 SQ, use 17 SQ. DO NOT calculate or double this number.
+The measurement report already accounts for the full roof area.
 === END MEASUREMENT REPORTS ===
 `;
         } else {
@@ -812,6 +817,7 @@ CRITICAL: Extract these measurements and use them for accurate quantities:
 No EagleView, Hover, or measurement reports were selected. 
 If available, recommend the user upload or select measurement reports for accurate quantities.
 Estimate quantities based on photo evidence and typical residential dimensions.
+NOTE: Without measurement reports, quantities are rough estimates only.
 ===
 `;
         }

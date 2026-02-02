@@ -102,27 +102,39 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
           console.error('Error fetching claim files:', filesError);
         }
         
-        // Expanded keywords to catch more measurement-related files
+        // SIMPLIFIED: Only match TRUE measurement reports, NOT inspection reports
+        // Measurement reports contain property dimensions (sq ft, linear ft, roof area)
         const measurementKeywords = [
-          'measurement', 'eagleview', 'hover', 'roof report', 'diagram', 'sketch', 'scope',
-          'report-', 'aerial', 'satellite', 'takeoff', 'square footage', 'dimensions',
-          'property report', 'inspection report', 'roof inspection'
+          'measurement', 'eagleview', 'hover', 'roof report', 
+          'takeoff', 'dimensions', 'aerial', 'satellite'
+        ];
+        
+        // Patterns to EXCLUDE (these are NOT measurement reports)
+        const excludeKeywords = [
+          'inspector', 'inspection', 'engineer', 'adjuster', 'denial', 'letter', 'scope'
         ];
         
         console.log('All claim files for measurement detection:', files?.map((f: any) => f.file_name));
         
-        // Also detect by file naming patterns (like report-XXXXX.pdf)
         const measurements = (files || []).filter((f: any) => {
           const fileName = f.file_name?.toLowerCase() || '';
           const folderName = f.claim_folders?.name?.toLowerCase() || '';
           
-          // Check keywords in filename or folder
+          // EXCLUDE inspector/engineer reports
+          const isExcluded = excludeKeywords.some(k => 
+            fileName.includes(k) || folderName.includes(k)
+          );
+          if (isExcluded) return false;
+          
+          // Match ONLY files that contain measurement-related keywords
           const matchesKeyword = measurementKeywords.some(k => 
             fileName.includes(k) || folderName.includes(k)
           );
           
-          // Match EagleView-style report naming (report-XXXXXX with or without .pdf)
-          const isReportPattern = /^report-[a-z0-9]+/i.test(fileName);
+          // Match EagleView-style naming ONLY if folder suggests measurements OR filename says "report"
+          // Pattern: "report-XXXXX.pdf" in a measurements folder
+          const isReportPattern = /^report-[a-z0-9]+/i.test(fileName) && 
+            (folderName.includes('measurement') || folderName.includes('eagleview') || folderName.includes('hover'));
           
           const isMatch = matchesKeyword || isReportPattern;
           if (isMatch) {
