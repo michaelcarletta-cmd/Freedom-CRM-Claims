@@ -1,105 +1,81 @@
 
+# Fix Client Portal Not Showing Claims
 
-# Fix Darwin Autonomous Agent Scheduling and Email Drafting
+## Problem Identified
 
-## Problem Summary
+When "Michael Carletta (Test)" logs in with the `client` role, no claims appear. The root cause is a **missing RLS policy on the `clients` table**.
 
-Based on my investigation, I found **two critical issues**:
+### How the Client Portal Fetches Claims
 
-1. **The `darwin-autonomous-agent` function has no cron job** - It's never being triggered to process pending emails
-2. **Client notification emails are not being drafted** - The `email_drafted` action is not appearing in logs
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. User logs in with client role                                │
+│ 2. ClaimsTableConnected queries clients table for their record  │
+│    → SELECT id FROM clients WHERE user_id = auth.uid()          │
+│ 3. RLS blocks this query (no policy for client role!)           │
+│ 4. No client record found → returns empty claims array          │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-The good news: **Status updates ARE working** - the claim correctly shows "Estimate Received from Carrier" in the database.
+### Current RLS Policies on `clients` Table
+
+| Policy | Allows |
+|--------|--------|
+| Authenticated users with roles can view clients | admin, staff, read_only only |
+| Staff and admins can manage clients | admin, staff only |
+
+**Missing**: A policy for the `client` role to view their own record.
 
 ---
 
-## Implementation Plan
+## Solution
 
-### Step 1: Create Cron Job for Darwin Autonomous Agent
+Add an RLS policy that allows users with the `client` role to view their own client record (where `clients.user_id = auth.uid()`).
 
-Add a scheduled job to run the darwin-autonomous-agent every minute (like execute-automations):
+### Database Migration
 
 ```sql
-SELECT cron.schedule(
-  'darwin-autonomous-agent-minutely',
-  '* * * * *',
-  $$
-  SELECT net.http_post(
-    url := 'https://tnnzihuszaosnyeyceed.supabase.co/functions/v1/darwin-autonomous-agent',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_service_role_key' LIMIT 1)
-    ),
-    body := '{}'::jsonb
-  ) AS request_id;
-  $$
-);
+-- Allow clients to view their own client record
+CREATE POLICY "Clients can view own record"
+  ON public.clients
+  FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid());
 ```
 
-### Step 2: Re-deploy darwin-process-document Function
-
-The email drafting code exists in the function but may not have been deployed. We'll trigger a redeployment to ensure the latest version with `draftClientUpdateEmail` is live.
-
-### Step 3: Add Error Logging to Email Draft Function
-
-Add explicit try/catch and logging around the `draftClientUpdateEmail` call to diagnose any silent failures:
-
-```typescript
-// In darwin-process-document/index.ts, around line 590
-if (claim?.policyholder_email) {
-  try {
-    await draftClientUpdateEmail(...);
-    console.log(`Successfully drafted email for claim ${claimId}`);
-  } catch (emailError) {
-    console.error(`Failed to draft client email:`, emailError);
-    // Log the failure but don't block status update
-    await supabase.from('darwin_action_log').insert({
-      claim_id: claimId,
-      action_type: 'error',
-      action_details: { error: emailError.message, context: 'draftClientUpdateEmail' },
-      was_auto_executed: true,
-      result: `Failed to draft client email: ${emailError.message}`,
-      trigger_source: 'darwin_process_document',
-    });
-  }
-}
-```
-
-### Step 4: Test the Full Flow
-
-After deployment:
-1. Upload a new estimate document to the test claim
-2. Verify the `email_drafted` action appears in `darwin_action_log`
-3. Verify a pending action is created in `claim_ai_pending_actions`
-4. Wait for the autonomous agent to run and check if email is sent
+This ensures:
+1. Clients can only see their own record (not other clients)
+2. The claims query will work correctly by finding the linked client_id
+3. No changes needed to the application code
 
 ---
 
 ## Technical Details
 
-### Files to Modify
+### Why the Current Claims Policy Depends on This
 
-| File | Change |
-|------|--------|
-| Database (cron.job) | Add scheduled job for darwin-autonomous-agent |
-| `supabase/functions/darwin-process-document/index.ts` | Add error handling/logging around email drafting |
+The existing claims policy for clients is:
+```sql
+"Clients can view their claims"
+USING: EXISTS (SELECT 1 FROM clients WHERE clients.id = claims.client_id AND clients.user_id = auth.uid())
+```
 
-### Current State vs Expected
+This nested query to the `clients` table **also respects RLS**. When a client user can't read the `clients` table, this subquery returns no rows, making the claims invisible.
 
-| Component | Current | Expected |
-|-----------|---------|----------|
-| Status Update | Working | Working |
-| Email Draft Creation | NOT working (no logs) | Should create pending action |
-| Autonomous Agent | NOT scheduled | Should run every minute |
-| Email Sending | Cannot run (no agent) | Should auto-send to clients |
+By adding the new policy, both the direct client lookup in the code AND the nested subquery in the claims RLS policy will work correctly.
+
+### Files Changed
+
+| Location | Change |
+|----------|--------|
+| Database (RLS Policy) | Add "Clients can view own record" policy on `clients` table |
 
 ---
 
 ## Expected Outcome
 
-After these changes:
-1. When Darwin classifies an estimate, it will update the claim status AND draft a client notification email
-2. The autonomous agent will run every minute and process any pending client emails
-3. Client emails will be automatically sent (for semi-autonomous claims)
-4. All actions will be logged for audit purposes
-
+After this fix:
+1. Michael Carletta (Test) logs in
+2. The app queries `clients` for their record → finds `be7018f5-665a-47fe-97eb-7650dd9cfa92`
+3. Queries claims with `client_id = be7018f5-...`
+4. Both claims appear in the portal
