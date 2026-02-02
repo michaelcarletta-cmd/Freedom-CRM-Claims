@@ -611,88 +611,208 @@ Be specific and actionable. Reference ${stateInfo.stateName} deadlines and regul
         break;
       }
 
-      case 'supplement':
-        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in generating accurate estimates based on documented damage evidence. Your role is to analyze photo evidence, measurement reports, and existing estimates to build comprehensive, defensible line-item estimates.
+      case 'supplement': {
+        // Fetch photos directly for the estimate builder
+        const { data: claimPhotos } = await supabase
+          .from('claim_photos')
+          .select('id, file_name, category, ai_analysis_summary, ai_material_type, ai_detected_damages, ai_condition_rating, ai_loss_type_consistency')
+          .eq('claim_id', claimId);
+        
+        console.log(`Estimate Builder: Found ${claimPhotos?.length || 0} photos for claim ${claimId}`);
 
-CRITICAL: You must generate LINE ITEMS with JUSTIFICATIONS based on the evidence provided. Every line item you recommend MUST cite specific evidence from:
-1. AI photo analysis (detected damages, materials, condition ratings)
-2. Measurement reports (square footage, dimensions, quantities)
-3. Documented damage observations
+        systemPrompt = `You are Darwin, an expert public adjuster AI specializing in generating COMPLETE, DETAILED Xactimate-format estimates for property damage claims. Your estimates must be comprehensive and include ALL standard line items required for the scope of work.
 
-CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
-- NEVER argue "matching" (that new materials must match existing materials)
-- Pennsylvania and New Jersey DO NOT have matching requirements in their insurance regulations
-- ALWAYS argue "repairability" - the damaged materials CANNOT BE REPAIRED and must be replaced
-- Focus on why materials are irreparable: manufacturing discontinuation, material degradation, structural integrity compromised, code requirements, manufacturer specs prohibit partial repairs
-- When requesting full replacement, justify based on non-repairability, NOT matching concerns
-- Do NOT suggest matching as a solution - it is not legally required in PA or NJ
+=== CRITICAL: COMPLETE ESTIMATE REQUIREMENTS ===
+You must generate a FULL estimate with ALL applicable line items. A typical roof replacement estimate includes 40-60+ line items. DO NOT abbreviate or summarize. Include EVERY line item needed.
 
-LINE ITEM JUSTIFICATION FORMAT:
-For each line item, you MUST provide:
-- Xactimate code (if known)
-- Description
-- Quantity with measurement source (e.g., "from EagleView report" or "based on 5 photos showing damage")
-- Unit price range
-- JUSTIFICATION: Explain WHY this line item is needed, citing specific photo evidence or measurement data
+=== XACTIMATE CODE REFERENCE FOR ROOFING ===
+TEAR-OFF & REMOVAL:
+- RFG RFING>3T - Remove 3-tab comp. shingles (per SQ)
+- RFG RFING>AR - Remove architectural shingles (per SQ)
+- RFG FELT - Remove felt/underlayment (per SQ)
+- RFG SHTH - Remove roof sheathing (per SF)
+- RFG EDGING - Remove drip edge (per LF)
+- RFG FLASH - Remove step/valley/headwall flashing (per LF)
+- RFG VENTS - Remove roof vents (each)
+- RFG RIDGE>VNT - Remove ridge vent (per LF)
+- RFG BOOT - Remove pipe jack/boot flashing (each)
+- RFG >DEBRIS - Haul debris - roofing (per load)
+- RFG DUMPSTER - Dumpster for roofing debris (per unit)
+- RFG TARP - Temporary roof tarp (per SF)
 
-Example format for a line item:
-LINE ITEM: RFG RFING>3T - Remove 3-Tab Shingles
-  Quantity: 24 SQ (from measurement report showing 2,400 SF total roof area)
-  Unit: $45-65/SQ
-  JUSTIFICATION: Photo analysis detected "missing shingles" and "creased shingles" across 8 photos. AI condition rating shows "Poor" condition on photos IMG_001, IMG_003, IMG_007. Materials identified as "3-tab asphalt shingles" with visible granule loss and seal strip failure. Full removal required due to age-related degradation preventing proper repair.
+INSTALLATION:
+- RFG 3TAB - Shingles - 3 tab - 20/25 yr (per SQ)
+- RFG ARCHS - Shingles - Architectural/laminated (per SQ)
+- RFG FELT>SYN - Synthetic underlayment (per SQ)
+- RFG FELT>15 - 15# felt underlayment (per SQ)
+- RFG FELT>30 - 30# felt underlayment (per SQ)
+- RFG ICE&WTR - Ice & water shield (per SQ)
+- RFG SHTH>OSB - OSB roof sheathing 7/16" (per SF)
+- RFG SHTH>PLY - Plywood roof sheathing 1/2" (per SF)
+- RFG EDGING - Drip edge aluminum (per LF)
+- RFG FLASH>VLY - Valley flashing - metal (per LF)
+- RFG FLASH>STP - Step flashing (per LF)
+- RFG FLASH>HDW - Headwall flashing (per LF)
+- RFG FLASH>CHM - Chimney flashing kit (each)
+- RFG FLASH>SKY - Skylight flashing kit (each)
+- RFG BOOT>3" - Pipe boot/jack 3" (each)
+- RFG BOOT>4" - Pipe boot/jack 4" (each)
+- RFG VENT>BOX - Box vent (each)
+- RFG VENT>OFF - Off-ridge vent (each)
+- RFG VENT>SLT - Slant back vent (each)
+- RFG RIDGE>VNT - Ridge vent (per LF)
+- RFG CAP>3T - Ridge/hip cap - 3 tab (per LF)
+- RFG CAP>AR - Ridge/hip cap - architectural (per LF)
+- RFG STRT>SH - Starter shingles (per LF)
 
-FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
+SPECIALTY ITEMS:
+- RFG STEEP - Steep pitch charge (per SQ) - add for 7/12+
+- RFG HIGH - High roof charge - 2+ stories (per SQ)
+- RFG ACC>2ND - Access/setup 2nd story (per SQ)
+- RFG SEAL - Roof cement/sealant (per tube)
+- RFG NAILS - Hand nail charge when required (per SQ)
 
-You have expertise in:
-- Xactimate line items and pricing
-- Building codes requiring upgrades
-- Manufacturer installation requirements
-- Hidden or consequential damage
-- Code compliance items
-- Overhead and profit calculations
-- Translating photo damage evidence into specific line items
-- Using measurement data for accurate quantities`;
+GUTTERS & DOWNSPOUTS:
+- GTR ALUM>5" - Aluminum gutter 5" (per LF)
+- GTR ALUM>6" - Aluminum gutter 6" (per LF)
+- GTR >DS - Downspout 2x3 aluminum (per LF)
+- GTR ELBOW - Downspout elbow (each)
+- GTR SCREEN - Gutter guard/screen (per LF)
+- GTR SPLASH - Splash block (each)
+- GTR >R&R - R&R gutters for roof access (per LF)
+
+FASCIA & SOFFIT:
+- EXT FASCIA - Fascia board repair (per LF)
+- EXT SOFFIT - Soffit panel repair (per SF)
+- EXT VENT>S - Soffit vent (each)
+
+PAINT & CAULK:
+- PNT EXT>TRIM - Paint exterior trim (per LF)
+- PNT >CAULK - Caulk joint (per LF)
+
+O&P:
+- GC OVRHD - General contractor overhead 10%
+- GC PRFT - General contractor profit 10%
+
+=== LINE ITEM JUSTIFICATION REQUIREMENTS ===
+For EVERY line item, you MUST provide:
+1. Xactimate Code
+2. Description
+3. Quantity with measurement source
+4. Unit (SQ, SF, LF, EA)
+5. JUSTIFICATION: WHY this item is needed, citing:
+   - Specific photo evidence (file names, damage types)
+   - Measurement report data
+   - Building code requirements
+   - Manufacturer installation specs
+
+=== CRITICAL ARGUMENT STRATEGY - REPAIRABILITY NOT MATCHING ===
+- NEVER argue "matching" - PA and NJ have no matching laws
+- Argue materials are NON-REPAIRABLE due to: age degradation, manufacturing discontinuation, code requirements, compromised integrity
+- Full replacement justified by inability to repair, NOT aesthetic matching
+
+=== FORMATTING ===
+Use plain text only. NO markdown formatting (no **, #, *, etc.).
+Use this format for each line item:
+
+CODE: [Xactimate code]
+DESCRIPTION: [Item description]
+QTY: [Number] [Unit] (Source: [measurement report name or photo count])
+JUSTIFICATION: [Specific evidence - photo names, damage types, code citations]
+
+`;
 
         const hasOurEstimate = additionalContext?.ourEstimatePdf;
         const hasInsuranceEstimate = additionalContext?.insuranceEstimatePdf || pdfContent;
-        const hasPhotoEvidence = additionalContext?.photoEvidence && additionalContext.photoEvidence.length > 0;
+        
+        // Use photos from direct query OR from additionalContext
+        const photoData = claimPhotos || [];
+        const hasPhotoEvidence = photoData.length > 0 || (additionalContext?.photoEvidence && additionalContext.photoEvidence.length > 0);
         const hasMeasurements = additionalContext?.measurementReports && additionalContext.measurementReports.length > 0;
 
-        // Build photo evidence section
+        // Build photo evidence section from direct query if additionalContext is empty
         let photoEvidenceSection = '';
-        if (hasPhotoEvidence) {
+        const photosToUse = additionalContext?.photoEvidence?.length > 0 ? additionalContext.photoEvidence : photoData.map((p: any) => ({
+          file_name: p.file_name,
+          category: p.category,
+          material: p.ai_material_type,
+          condition: p.ai_condition_rating,
+          damages: p.ai_detected_damages,
+          loss_consistency: p.ai_loss_type_consistency,
+          summary: p.ai_analysis_summary
+        }));
+
+        if (photosToUse.length > 0) {
+          const analyzedPhotos = photosToUse.filter((p: any) => p.summary || p.material || p.condition);
+          const damagePhotos = photosToUse.filter((p: any) => {
+            const damages = Array.isArray(p.damages) ? p.damages : [];
+            return damages.length > 0;
+          });
+          
           photoEvidenceSection = `
-=== AI PHOTO ANALYSIS EVIDENCE (${additionalContext.photoCount} photos analyzed) ===
-Use this evidence to justify line items. Each damage finding should translate to specific repair/replacement line items.
+=== PHOTO EVIDENCE (${photosToUse.length} total photos, ${analyzedPhotos.length} analyzed by AI) ===
+${damagePhotos.length > 0 ? `CRITICAL: ${damagePhotos.length} photos show detected damage - use these to justify line items!` : ''}
 
 `;
-          for (const photo of additionalContext.photoEvidence) {
-            photoEvidenceSection += `PHOTO: ${photo.file_name}
-  Category: ${photo.category || 'Uncategorized'}
-  Material Detected: ${photo.material || 'Not identified'}
-  Condition Rating: ${photo.condition || 'Not rated'}
-  Loss Type Consistency: ${photo.loss_consistency || 'Not evaluated'}
-  Damages Detected: ${Array.isArray(photo.damages) && photo.damages.length > 0 
-    ? photo.damages.map((d: any) => typeof d === 'string' ? d : d.type || d.description || JSON.stringify(d)).join(', ') 
-    : 'None detected'}
-  Analysis Summary: ${photo.summary || 'No summary'}
+          // Include all photos with analysis data
+          for (const photo of photosToUse) {
+            const damages = Array.isArray(photo.damages) ? photo.damages : [];
+            const hasAnalysis = photo.summary || photo.material || photo.condition || damages.length > 0;
+            
+            if (hasAnalysis) {
+              photoEvidenceSection += `PHOTO: ${photo.file_name}
+  Category: ${photo.category || 'General'}
+  Material: ${photo.material || 'Not identified'}
+  Condition: ${photo.condition || 'Not rated'}
+  Damages: ${damages.length > 0 
+    ? damages.map((d: any) => typeof d === 'string' ? d : d.type || d.description || JSON.stringify(d)).join(', ') 
+    : 'Pending analysis'}
+  Summary: ${photo.summary || 'Pending AI analysis'}
+
+`;
+            }
+          }
+          
+          // List unanalyzed photos too
+          const unanalyzedPhotos = photosToUse.filter((p: any) => !p.summary && !p.material && !p.condition);
+          if (unanalyzedPhotos.length > 0) {
+            photoEvidenceSection += `
+ADDITIONAL PHOTOS (not yet analyzed - ${unanalyzedPhotos.length} photos):
+${unanalyzedPhotos.slice(0, 20).map((p: any) => `- ${p.file_name} (${p.category || 'Uncategorized'})`).join('\n')}
+${unanalyzedPhotos.length > 20 ? `... and ${unanalyzedPhotos.length - 20} more unanalyzed photos` : ''}
 
 `;
           }
+          
           photoEvidenceSection += `=== END PHOTO EVIDENCE ===
 `;
         }
 
-        // Build measurement section indicator
+        // Build measurement section
         let measurementSection = '';
         if (hasMeasurements) {
           measurementSection = `
-=== MEASUREMENT REPORTS (${additionalContext.measurementCount} reports provided) ===
-The following measurement reports have been attached for quantity calculations:
+=== MEASUREMENT REPORTS (${additionalContext.measurementCount} reports) ===
+The following measurement reports contain dimensions needed for quantity calculations:
 ${additionalContext.measurementReports.map((m: any) => `- ${m.name}`).join('\n')}
 
-IMPORTANT: Extract all relevant measurements from these reports (roof area, siding area, linear footage, etc.) and use them to calculate accurate quantities for line items.
+CRITICAL: Extract these measurements and use them for accurate quantities:
+- Total roof area (in squares - 1 SQ = 100 SF)
+- Hip/ridge linear footage
+- Valley linear footage
+- Eave/rake edge linear footage
+- Roof pitch
+- Number of stories/levels
+- Pipe boots, vents, skylights (count each)
 === END MEASUREMENT REPORTS ===
+`;
+        } else {
+          measurementSection = `
+=== NO MEASUREMENT REPORTS PROVIDED ===
+No EagleView, Hover, or measurement reports were selected. 
+If available, recommend the user upload or select measurement reports for accurate quantities.
+Estimate quantities based on photo evidence and typical residential dimensions.
+===
 `;
         }
 
@@ -703,77 +823,119 @@ ${photoEvidenceSection}
 ${measurementSection}
 
 ${hasOurEstimate && hasInsuranceEstimate ? `
-TWO ESTIMATES HAVE BEEN PROVIDED FOR COMPARISON:
-1. OUR ESTIMATE (${additionalContext?.ourEstimatePdfName || 'our-estimate.pdf'}) - This is our detailed scope of work
-2. INSURANCE ESTIMATE (${additionalContext?.insuranceEstimatePdfName || pdfFileName || 'insurance-estimate.pdf'}) - This is the carrier's estimate
+COMPARISON MODE: Two estimates provided
+1. OUR ESTIMATE: ${additionalContext?.ourEstimatePdfName || 'our-estimate.pdf'}
+2. CARRIER ESTIMATE: ${additionalContext?.insuranceEstimatePdfName || pdfFileName || 'carrier-estimate.pdf'}
 
-Your primary task is to COMPARE these two estimates line-by-line and identify ALL discrepancies, then generate accurate line items with justifications based on the photo evidence above.
-` : hasInsuranceEstimate ? `A PDF of the carrier's estimate has been provided for detailed analysis. Review every line item carefully to identify what is missing, undervalued, or incorrect. Use the photo evidence above to justify additional line items.` : hasOurEstimate ? `Our estimate PDF has been provided. Analyze it for completeness and identify potential items the carrier may dispute or miss.` : hasPhotoEvidence ? `No estimates provided, but photo analysis evidence is available. Generate a comprehensive estimate based on the detected damages.` : ''}
+Compare line-by-line and identify ALL missing items, undervalued items, and scope gaps.
+` : hasInsuranceEstimate ? `
+CARRIER ESTIMATE PROVIDED: ${additionalContext?.insuranceEstimatePdfName || pdfFileName || 'carrier-estimate.pdf'}
+Analyze for missing items, undervalued items, and scope gaps. Build supplemental line items.
+` : hasOurEstimate ? `
+OUR ESTIMATE PROVIDED: ${additionalContext?.ourEstimatePdfName || 'our-estimate.pdf'}
+Review for completeness and potential carrier disputes.
+` : `
+NO ESTIMATES PROVIDED - GENERATE NEW ESTIMATE
+Build a complete estimate from photo evidence and claim details.
+`}
 
-${additionalContext?.existingEstimate ? `EXISTING ESTIMATE ITEMS (TEXT):\n${additionalContext.existingEstimate}` : ''}
+${additionalContext?.existingEstimate ? `ADDITIONAL ESTIMATE NOTES:\n${additionalContext.existingEstimate}` : ''}
 
-${content ? `ADDITIONAL NOTES/OBSERVATIONS:\n${content}` : ''}
+${content ? `USER NOTES:\n${content}` : ''}
 
-Based on the claim details, photo evidence, measurement data, and any provided estimates, generate a comprehensive estimate package:
+=== GENERATE COMPLETE ESTIMATE ===
 
-1. EVIDENCE-BASED DAMAGE SUMMARY:
-   - Summarize all damages detected from photo analysis
-   - List materials identified and their conditions
-   - Note any photos showing Poor/Failed conditions that require immediate attention
-   - Identify patterns across photos (e.g., "5 of 8 roof photos show wind damage")
+Based on the claim type (${claim.loss_type || 'Property Damage'}) and available evidence, generate a COMPLETE Xactimate-format estimate with ALL applicable line items.
 
-2. MEASUREMENT-BASED QUANTITIES:
-   - Extract key measurements from provided reports
-   - Total roof area (squares)
-   - Siding/exterior areas
-   - Linear footage for gutters, trim, etc.
-   - Any other relevant measurements
+For a ROOF REPLACEMENT, you MUST include these categories (if applicable based on evidence):
 
-3. DETAILED LINE ITEM ESTIMATE:
-   For EACH line item, provide:
-   - Xactimate Code (where applicable)
-   - Description
-   - Quantity with source (measurement report or photo-based estimate)
-   - Unit price range
-   - JUSTIFICATION citing specific photo evidence or damage findings
-   
-   Organize by trade:
-   ROOFING:
-   [line items with justifications]
-   
-   GUTTERS:
-   [line items with justifications]
-   
-   SIDING:
-   [line items with justifications]
-   
-   INTERIOR:
-   [line items with justifications]
-   
-   CLEANUP/DISPOSAL:
-   [line items with justifications]
+1. TEAR-OFF & REMOVAL (8-12 line items minimum)
+   - Shingle removal
+   - Underlayment removal  
+   - Damaged sheathing removal
+   - Drip edge removal
+   - Flashing removal
+   - Vent removal
+   - Debris haul-off/dumpster
 
-4. CODE UPGRADE REQUIREMENTS:
-   - Building codes requiring upgrades beyond like-kind replacement
-   - Reference specific code sections
-   - Include line items with code citation as justification
+2. ROOFING INSTALLATION (15-20 line items minimum)
+   - Shingles (specify type: 3-tab, architectural, etc.)
+   - Underlayment (synthetic, 15#, 30#)
+   - Ice & water shield
+   - New sheathing (if damaged)
+   - Drip edge
+   - Starter strips
+   - Hip/ridge cap
+   - Valley flashing
+   - Step flashing
+   - Headwall flashing
+   - Chimney/skylight flashing kits
+   - Pipe boots (count each size)
+   - Vents (box, ridge, off-ridge)
+   - Ridge vent
 
-5. OVERHEAD & PROFIT:
-   - Whether O&P should apply
+3. SPECIALTY CHARGES (3-6 line items)
+   - Steep pitch charge (if 7/12 or greater)
+   - High roof charge (if 2+ stories)
+   - Access charges
+   - Hand nail if required
+
+4. GUTTERS & RELATED (4-8 line items if applicable)
+   - R&R gutters for access
+   - New gutters/downspouts if damaged
+   - Gutter guards
+   - Splash blocks
+
+5. FASCIA & SOFFIT (2-6 line items if applicable)
+   - Fascia repairs
+   - Soffit repairs
+   - Soffit vents
+
+6. OVERHEAD & PROFIT
+   - 10% Overhead
+   - 10% Profit
    - Justification for O&P inclusion
 
-6. ESTIMATE SUMMARY:
-   - Total estimated value by category
-   - Grand total
-   - Priority items
+Provide the estimate in this format:
 
-7. EVIDENCE REFERENCE TABLE:
-   A quick-reference table mapping each major line item to its supporting photo evidence:
-   | Line Item | Photo Evidence | Damage Type | Justification |
-   (Use plain text formatting, not markdown tables)
+EVIDENCE-BASED DAMAGE SUMMARY
+[Summarize what the photos show]
 
-Format as a structured estimate package ready for contractor or carrier submission.`;
+MEASUREMENTS USED
+[List key measurements from reports or estimates]
+
+DETAILED LINE ITEM ESTIMATE
+
+TEAR-OFF & REMOVAL
+---------------------
+CODE: RFG RFING>AR
+DESCRIPTION: Remove architectural shingles
+QTY: [X] SQ (Source: [measurement report name])
+JUSTIFICATION: [Cite photo evidence showing damaged shingles]
+
+[Continue for ALL line items...]
+
+ROOFING INSTALLATION
+---------------------
+[All installation line items with justifications]
+
+[Continue for all categories...]
+
+ESTIMATE SUMMARY
+---------------------
+Tear-Off/Removal Subtotal: $X,XXX.XX
+Roofing Installation Subtotal: $X,XXX.XX
+Gutters Subtotal: $X,XXX.XX
+Fascia/Soffit Subtotal: $X,XXX.XX
+Overhead (10%): $X,XXX.XX
+Profit (10%): $X,XXX.XX
+TOTAL ESTIMATE: $XX,XXX.XX
+
+EVIDENCE REFERENCE TABLE
+[Map each major line item to supporting photos]
+`;
         break;
+      }
 
       case 'correspondence':
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in carrier communication strategy. Your role is to analyze adjuster correspondence and provide strategic response recommendations.
