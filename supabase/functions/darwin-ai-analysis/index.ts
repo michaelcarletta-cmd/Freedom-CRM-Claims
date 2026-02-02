@@ -1211,53 +1211,99 @@ ${content || 'No engineer report content provided'}`}
 
 ${additionalContext ? `ADDITIONAL CONTEXT/OBSERVATIONS:\n${additionalContext}` : ''}
 
-Please provide a comprehensive analysis and rebuttal of this engineer report including:
+=== CRITICAL OUTPUT REQUIREMENT ===
+You must generate a FORMAL REBUTTAL LETTER that is ready to send to the insurance company. This is NOT an internal analysis—this IS the document we submit to the carrier.
 
-1. EXECUTIVE SUMMARY:
-   - Brief overview of the engineer's main conclusions
-   - Overall assessment of report credibility
-   - Key vulnerabilities in the report
+The letter must be EXHAUSTIVE and address EVERY finding in the engineer's report. Do NOT summarize or abbreviate. Each paragraph/finding in their report requires a complete rebuttal paragraph (or multiple paragraphs) in your letter.
 
-2. METHODOLOGY CRITIQUE:
-   - Was the inspection adequate? (time on site, areas inspected)
-   - Were proper testing methods used?
-   - Was it a field inspection or desk review?
-   - What should have been done differently?
+=== FORMAL REBUTTAL LETTER FORMAT ===
 
-3. POINT-BY-POINT REBUTTAL:
-   - List each major finding/conclusion from the report
-   - Provide specific counter-arguments for each
-   - Cite relevant standards, codes, or scientific principles
+Generate the complete letter in this structure:
 
-4. EVIDENCE OF BIAS:
-   - Carrier-friendly language or framing
-   - Conclusions that don't match observations
-   - Ignored or dismissed evidence
-   - Selective reporting
+[HEADER]
+RE: Rebuttal to Engineering Report
+Claim Number: ${claim.claim_number || '[Claim Number]'}
+Policy Number: ${claim.policy_number || '[Policy Number]'}
+Insured: ${claim.policyholder_name || '[Insured Name]'}
+Property Address: ${claim.policyholder_address || '[Property Address]'}
+Date of Loss: ${claim.loss_date || '[Date of Loss]'}
 
-5. SCIENTIFIC/TECHNICAL FLAWS:
-   - Incorrect application of building science
-   - Mischaracterization of damage patterns
-   - Failure to consider all causation factors
-   - Improper testing or lack thereof
+[OPENING - 1-2 paragraphs]
+State that we have reviewed the engineering report dated [DATE], prepared by [ENGINEER NAME/FIRM]. Summarize that the report is fundamentally flawed and cannot be relied upon to support a coverage determination.
 
-6. SUPPORTING EVIDENCE NEEDED:
-   - What additional documentation would strengthen rebuttal
-   - Recommended independent testing or inspections
-   - Expert opinions to obtain
+[METHODOLOGY FAILURES - Full section]
+Explain in detail why the engineer's inspection and methodology were inadequate:
+- Time on site inadequate for comprehensive inspection
+- Areas not accessed or examined
+- Testing not performed (destructive testing, core samples, moisture analysis)
+- Equipment not used (drone, thermal imaging, moisture meters)
+- Reliance on visual inspection when physical testing was warranted
+For EACH methodology failure, explain specifically what SHOULD have been done and WHY it matters.
 
-7. PROFESSIONAL REBUTTAL LETTER:
-   - Formal letter template for carrier submission
-   - Professional language challenging the report
-   - Request for re-inspection or independent engineering
+[POINT-BY-POINT REBUTTAL - This is the CORE of the letter]
+For EVERY conclusion, finding, and statement in the engineer's report:
 
-8. REGULATORY STANDARDS (NO CASE LAW):
-   - ${stateInfo.stateName} insurance statutes and administrative codes
-   - Industry standards the engineer may have violated (ASTM, ARMA, manufacturer specs)
-   - ${stateInfo.stateName} building codes that support the claim
-   - NEVER cite case law - it often doesn't pertain to property insurance and undermines credibility
+"The report states: '[QUOTE THEIR EXACT STATEMENT]'
 
-Format as a comprehensive rebuttal package suitable for carrier submission or litigation support.`;
+This conclusion is [incorrect/unsupported/misleading] for the following reasons:
+
+[Provide 2-4 paragraphs of detailed technical rebuttal including:]
+- Why their conclusion is wrong factually
+- What evidence contradicts their conclusion
+- What building codes, ASTM standards, or manufacturer specifications they violated or ignored
+- What they should have concluded based on the actual evidence
+
+[Cite specific codes: IRC Section X, IBC Section Y, ASTM D3161, ARMA TB-201, ${stateInfo.adminCode}, etc.]"
+
+REPEAT THIS STRUCTURE FOR EVERY FINDING IN THEIR REPORT. Do not skip any findings.
+
+[ASTM WIND RATING FALLACY REBUTTAL - If applicable]
+If the engineer cited ASTM D3161 or D7158 wind ratings:
+
+"The engineer's reliance on ASTM D3161/D7158 wind ratings to conclude the shingles 'should have resisted' storm winds represents a fundamental misapplication of laboratory testing standards.
+
+These ASTM tests are certification standards for NEW, factory-fresh materials under controlled laboratory conditions. They are NOT performance guarantees for aged, field-installed materials. The engineer commits a basic scientific error by applying laboratory test data to materials with [X] years of environmental exposure.
+
+Seal strip adhesion degrades significantly over the service life of shingles due to:
+- UV exposure breaking down asphalt polymers
+- Thermal cycling stressing adhesive bonds
+- Oxidation hardening and embrittling seal strips
+As documented in ARMA Technical Bulletin 201, this degradation is expected and normal.
+
+No manufacturer warrants that aged shingles maintain original wind ratings. To suggest otherwise is either incompetent or deliberately misleading."
+
+[EVIDENCE OF BIAS - Full section]
+Detail the indicators of bias in the report:
+- Carrier-friendly language and framing
+- Conclusions that don't match documented observations
+- Evidence photographed but then dismissed or ignored in conclusions
+- Predetermined conclusions obvious from report structure
+- Failure to acknowledge ANY storm-related damage (statistically improbable)
+
+[REGULATORY VIOLATIONS - Full section]
+Cite ${stateInfo.stateName} regulations the carrier may be violating by relying on this deficient report:
+- ${stateInfo.adminCode} requirements for proper claims investigation
+- ${stateInfo.promptPayAct} prohibitions on unfair settlement practices
+- Specific code sections with exact citations
+
+[CONCLUSION AND DEMANDS - 2-3 paragraphs]
+State that based on the foregoing:
+1. The engineering report cannot be relied upon for any coverage determination
+2. We demand the carrier disregard this deficient report
+3. We request an independent re-inspection by a licensed professional engineer of our mutual selection
+4. We reserve all rights under ${stateInfo.stateName} law including the right to invoke appraisal
+5. Failure to respond within [X] days will be considered a denial requiring formal appeal
+
+[CLOSING]
+Professional closing with signature block
+
+=== ADDITIONAL REQUIREMENTS ===
+- The letter should be 3-4x the length of the engineer's report
+- Use plain text only - NO markdown formatting
+- Be AUTHORITATIVE and UNEQUIVOCAL - we are RIGHT and they are WRONG
+- Include specific citations to IRC, IBC, ASTM, manufacturer specs, and ${stateInfo.adminCode}
+- NEVER cite case law - only statutes, regulations, codes, and industry standards
+- Make this letter so comprehensive that the carrier has no choice but to reconsider their position`;
         break;
 
       case 'claim_briefing':
