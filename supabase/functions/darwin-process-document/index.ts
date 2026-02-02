@@ -461,6 +461,17 @@ async function processDocumentActions(
   // Semi-autonomous should also auto-update status (only emails to insurance need review)
   const isAutonomous = ['semi_autonomous', 'fully_autonomous'].includes(automation.autonomy_level);
 
+  // Get claim details for email drafting
+  let claim: any = null;
+  if (isAutonomous) {
+    const { data: claimData } = await supabase
+      .from('claims')
+      .select('id, claim_number, policyholder_name, policyholder_email, policyholder_phone, client_id')
+      .eq('id', claimId)
+      .single();
+    claim = claimData;
+  }
+
   switch (classification.classification) {
     case 'denial':
       // Always create escalation for denials (never auto-respond)
@@ -491,6 +502,11 @@ async function processDocumentActions(
       // Update claim status if autonomous (semi or fully)
       if (isAutonomous) {
         await supabase.from('claims').update({ status: 'Denied' }).eq('id', claimId);
+        
+        // Draft client notification email for denials (requires review due to sensitivity)
+        if (claim?.policyholder_email) {
+          await draftClientUpdateEmail(supabase, claimId, claim, 'Denied', classification.metadata.summary, false);
+        }
       }
       break;
 
@@ -531,6 +547,21 @@ async function processDocumentActions(
       // Update status if autonomous (semi or fully)
       if (isAutonomous) {
         await supabase.from('claims').update({ status: 'Estimate Received' }).eq('id', claimId);
+        
+        // Draft client notification email
+        if (claim?.policyholder_email) {
+          const estimateAmount = classification.metadata.gross_rcv 
+            ? ` The estimate amount is $${classification.metadata.gross_rcv.toLocaleString()}.` 
+            : '';
+          await draftClientUpdateEmail(
+            supabase, 
+            claimId, 
+            claim, 
+            'Estimate Received', 
+            `We have received an estimate for your claim.${estimateAmount}`,
+            true // Can auto-send for estimates
+          );
+        }
       }
       break;
 
@@ -548,6 +579,21 @@ async function processDocumentActions(
       // Update claim status if autonomous (semi or fully)
       if (isAutonomous) {
         await supabase.from('claims').update({ status: 'Approved' }).eq('id', claimId);
+        
+        // Draft client notification email for approval (good news, can auto-send)
+        if (claim?.policyholder_email) {
+          const approvalAmount = classification.metadata.approved_amount 
+            ? ` The approved amount is $${classification.metadata.approved_amount.toLocaleString()}.` 
+            : '';
+          await draftClientUpdateEmail(
+            supabase, 
+            claimId, 
+            claim, 
+            'Approved', 
+            `Great news! Your claim has been approved.${approvalAmount}`,
+            true // Can auto-send for approvals
+          );
+        }
       }
       break;
 
@@ -575,6 +621,21 @@ async function processDocumentActions(
         result: `RFI received. ${classification.metadata.deadline_mentioned ? `Deadline: ${classification.metadata.deadline_mentioned}` : 'Respond promptly.'}`,
         trigger_source: 'darwin_document_actions',
       });
+      
+      // Draft client notification email for RFI (may need info from them)
+      if (isAutonomous && claim?.policyholder_email) {
+        const deadlineInfo = classification.metadata.deadline_mentioned 
+          ? ` The insurance company has requested a response by ${classification.metadata.deadline_mentioned}.` 
+          : '';
+        await draftClientUpdateEmail(
+          supabase, 
+          claimId, 
+          claim, 
+          'Information Requested', 
+          `The insurance company has requested additional information for your claim.${deadlineInfo} We may need to gather some details from you.`,
+          true // Can auto-send RFI notifications
+        );
+      }
       break;
 
     case 'engineering_report':
@@ -589,4 +650,63 @@ async function processDocumentActions(
       });
       break;
   }
+}
+
+// Draft a client update email and queue it for sending
+async function draftClientUpdateEmail(
+  supabase: any,
+  claimId: string,
+  claim: any,
+  newStatus: string,
+  updateMessage: string,
+  canAutoSend: boolean = false
+) {
+  const policyholderName = claim.policyholder_name || 'Valued Policyholder';
+  const firstName = policyholderName.split(' ')[0];
+  
+  const emailSubject = `Claim Update: ${claim.claim_number} - ${newStatus}`;
+  const emailBody = `Dear ${firstName},
+
+We wanted to keep you informed about the status of your claim (${claim.claim_number}).
+
+${updateMessage}
+
+Your claim status has been updated to: ${newStatus}
+
+If you have any questions or need additional information, please don't hesitate to reach out to us. You can also view your claim details in the client portal.
+
+Best regards,
+Freedom Claims Team`;
+
+  // Insert pending action for the autonomous agent to process
+  await supabase.from('claim_ai_pending_actions').insert({
+    claim_id: claimId,
+    action_type: 'email_response',
+    draft_content: {
+      to_email: claim.policyholder_email,
+      to_name: policyholderName,
+      subject: emailSubject,
+      body: emailBody,
+      recipient_type: 'client', // This allows auto-send in semi-autonomous mode
+    },
+    ai_reasoning: `Automated client notification for status change to "${newStatus}". ${canAutoSend ? 'Can be auto-sent to client.' : 'Requires review before sending.'}`,
+    status: 'pending',
+  });
+
+  // Log the draft creation
+  await supabase.from('darwin_action_log').insert({
+    claim_id: claimId,
+    action_type: 'email_drafted',
+    action_details: {
+      recipient: claim.policyholder_email,
+      recipient_type: 'client',
+      new_status: newStatus,
+      can_auto_send: canAutoSend,
+    },
+    was_auto_executed: true,
+    result: `Drafted client update email for status change to "${newStatus}" - ${canAutoSend ? 'queued for auto-send' : 'requires review'}`,
+    trigger_source: 'darwin_status_notification',
+  });
+
+  console.log(`Drafted client update email for claim ${claim.claim_number} - status: ${newStatus}`);
 }
