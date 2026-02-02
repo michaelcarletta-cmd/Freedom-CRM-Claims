@@ -78,17 +78,37 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
         
         setPhotoAnalyses(processedPhotos);
 
-        // Fetch measurement-related files (look for common patterns)
-        const { data: files } = await supabase
+        // Fetch ALL files for measurement detection
+        const { data: files, error: filesError } = await supabase
           .from('claim_files')
           .select('id, file_name, file_path, claim_folders(name)')
           .eq('claim_id', claimId);
         
-        const measurementKeywords = ['measurement', 'eagleview', 'hover', 'roof report', 'diagram', 'sketch', 'scope'];
+        if (filesError) {
+          console.error('Error fetching claim files:', filesError);
+        }
+        
+        // Expanded keywords to catch more measurement-related files
+        const measurementKeywords = [
+          'measurement', 'eagleview', 'hover', 'roof report', 'diagram', 'sketch', 'scope',
+          'report-', 'aerial', 'satellite', 'takeoff', 'square footage', 'dimensions',
+          'property report', 'inspection report', 'roof inspection'
+        ];
+        
+        // Also detect by file naming patterns (like report-XXXXX.pdf)
         const measurements = (files || []).filter((f: any) => {
           const fileName = f.file_name?.toLowerCase() || '';
           const folderName = f.claim_folders?.name?.toLowerCase() || '';
-          return measurementKeywords.some(k => fileName.includes(k) || folderName.includes(k));
+          
+          // Check keywords in filename or folder
+          const matchesKeyword = measurementKeywords.some(k => 
+            fileName.includes(k) || folderName.includes(k)
+          );
+          
+          // Also match EagleView-style report naming (report-XXXXXX.pdf)
+          const isReportPattern = /^report-[a-z0-9]+\.pdf$/i.test(fileName);
+          
+          return matchesKeyword || isReportPattern;
         }).map((f: any) => ({
           id: f.id,
           file_name: f.file_name,
@@ -96,6 +116,7 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
           folder_name: f.claim_folders?.name || null
         }));
         
+        console.log('Loaded photos:', photos?.length, 'Measurement files:', measurements.length);
         setMeasurementFiles(measurements);
       } catch (error) {
         console.error('Error loading evidence data:', error);
