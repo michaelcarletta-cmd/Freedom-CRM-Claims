@@ -228,24 +228,22 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
     }
   };
 
-  // Analyze all photos that haven't been analyzed yet
-  const analyzeAllPhotos = async () => {
-    const unanalyzedPhotos = photos.filter(p => !p.ai_analyzed_at);
-    
-    if (unanalyzedPhotos.length === 0) {
+  // Analyze photos helper function
+  const analyzePhotoBatch = async (photosToAnalyze: ClaimPhoto[], label: string) => {
+    if (photosToAnalyze.length === 0) {
       toast({ 
         title: "All photos already analyzed", 
-        description: "All photos have been analyzed by Darwin." 
+        description: "All photos in this selection have been analyzed by Darwin." 
       });
       return;
     }
 
     setAnalyzingAll(true);
-    setAnalysisProgress({ current: 0, total: unanalyzedPhotos.length });
+    setAnalysisProgress({ current: 0, total: photosToAnalyze.length });
 
     toast({ 
       title: "Darwin is analyzing photos", 
-      description: `Analyzing ${unanalyzedPhotos.length} photos. This may take a few minutes.`
+      description: `Analyzing ${photosToAnalyze.length} ${label}. This may take a few minutes.`
     });
 
     let successCount = 0;
@@ -253,8 +251,8 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
 
     // Process photos in batches of 3 to avoid rate limits
     const BATCH_SIZE = 3;
-    for (let i = 0; i < unanalyzedPhotos.length; i += BATCH_SIZE) {
-      const batch = unanalyzedPhotos.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < photosToAnalyze.length; i += BATCH_SIZE) {
+      const batch = photosToAnalyze.slice(i, i + BATCH_SIZE);
       
       const results = await Promise.all(
         batch.map(photo => analyzePhoto(photo.id))
@@ -265,10 +263,10 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
         else failCount++;
       });
       
-      setAnalysisProgress({ current: i + batch.length, total: unanalyzedPhotos.length });
+      setAnalysisProgress({ current: i + batch.length, total: photosToAnalyze.length });
       
       // Small delay between batches to avoid overwhelming the API
-      if (i + BATCH_SIZE < unanalyzedPhotos.length) {
+      if (i + BATCH_SIZE < photosToAnalyze.length) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
@@ -281,6 +279,18 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
       title: "Analysis complete", 
       description: `Successfully analyzed ${successCount} photos${failCount > 0 ? `, ${failCount} failed` : ''}.`
     });
+  };
+
+  // Analyze all photos that haven't been analyzed yet
+  const analyzeAllPhotos = async () => {
+    const unanalyzedPhotos = photos.filter(p => !p.ai_analyzed_at);
+    await analyzePhotoBatch(unanalyzedPhotos, "photos");
+  };
+
+  // Analyze only photos on the current page that haven't been analyzed
+  const analyzeCurrentPage = async () => {
+    const unanalyzedOnPage = paginatedPhotos.filter(p => !p.ai_analyzed_at);
+    await analyzePhotoBatch(unanalyzedOnPage, `photos on this page`);
   };
 
   const handleUpload = async () => {
@@ -590,8 +600,8 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={analyzeAllPhotos}
-            disabled={analyzingAll || photos.length === 0}
+            onClick={analyzeCurrentPage}
+            disabled={analyzingAll || paginatedPhotos.length === 0}
           >
             {analyzingAll ? (
               <>
@@ -601,9 +611,18 @@ export function ClaimPhotos({ claimId, claim }: ClaimPhotosProps) {
             ) : (
               <>
                 <Brain className="h-4 w-4 mr-2" />
-                Analyze All Photos
+                Analyze This Page
               </>
             )}
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={analyzeAllPhotos}
+            disabled={analyzingAll || photos.length === 0}
+          >
+            <Brain className="h-4 w-4 mr-2" />
+            Analyze All ({photos.filter(p => !p.ai_analyzed_at).length})
           </Button>
           <Button variant="outline" size="sm" onClick={() => setReportDialogOpen(true)}>
             <FileText className="h-4 w-4 mr-2" />
