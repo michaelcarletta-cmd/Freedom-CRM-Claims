@@ -451,7 +451,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
         <div className="flex justify-between items-center flex-wrap gap-2">
           <h3 className="text-lg font-semibold">Documents & Files</h3>
           <div className="flex flex-wrap gap-2">
-            {claim?.policyholder_address && (
+            {isStaffOrAdmin && claim?.policyholder_address && (
               <Button
                 variant="outline"
                 onClick={() => {
@@ -466,52 +466,58 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                 Copy Address
               </Button>
             )}
-            <Button
-              variant="outline"
-              onClick={() => window.open("https://ssoext.gaf.com/oauth2/ausclyogeZBNESNcI4x6/v1/authorize?client_id=0oaclwmauH1TXBDzU4x6&code_challenge=5w3eWPZzMixtrRpmMsiaB-kkOrB6f0iptcPGkKehUHU&code_challenge_method=S256&nonce=zCbdYnAIj7cBfgWxzMPjoxyi0ftuviGSK8qw3SiigZHS0KqaDOYVOei142d5znNF&redirect_uri=https%3A%2F%2Fquickmeasure.gaf.com%2Fcallback&response_type=code&state=thy7nldi3KrQQkvaxuvNMe92rjHE0kqxXKEOIjdVXDSOXrjW31jo58XUBnAtEOKi&scope=openid%20profile%20email%20openid%20email%20profile%20CheckCoverage%20IsServiceOpen%20SiteStatus%20SendErrorReport%20SearchOrders%20PlaceOrder%20InitiatePayment%20UpdatePayment%20IsValidPromoCode%20RedeemPromoCode%20SearchReceipts%20DownloadRoofReport%20GetUserProfile%20SaveUserProfile%20GetLookup%20User%3ASavePreferences%20User%3AGetPreferences%20User%3AGetAvailableAddresses%20User%3ASetNotificationLog%20User%3AGetReplenishmentPreferences%20User%3ASaveReplenishmentPreferences%20User%3AGetProductPreferences%20User%3ASaveProductPreferences%20User%3AAcceptTermsAndConditions%20User%3AGetAccountPreferences%20User%3ASaveAccountPreferences%20Track%20Guest%3AAcceptTermsAndConditions%20GetDistributorsForPostalCode%20UpdateOrderService%20DownloadFile%20BPFileupload%20Orders%3AShareOrder%20Orders%3AGetSharedOrder", "_blank")}
-            >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              GAF QuickMeasure
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => window.open("https://xactimate.com/xor/sign-in?utm_source=xactimate&utm_medium=referral&utm_campaign=login_page&utm_content=sign_in_btn", "_blank")}
-            >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Xactimate
-            </Button>
+            {isStaffOrAdmin && (
+              <Button
+                variant="outline"
+                onClick={() => window.open("https://ssoext.gaf.com/oauth2/ausclyogeZBNESNcI4x6/v1/authorize?client_id=0oaclwmauH1TXBDzU4x6&code_challenge=5w3eWPZzMixtrRpmMsiaB-kkOrB6f0iptcPGkKehUHU&code_challenge_method=S256&nonce=zCbdYnAIj7cBfgWxzMPjoxyi0ftuviGSK8qw3SiigZHS0KqaDOYVOei142d5znNF&redirect_uri=https%3A%2F%2Fquickmeasure.gaf.com%2Fcallback&response_type=code&state=thy7nldi3KrQQkvaxuvNMe92rjHE0kqxXKEOIjdVXDSOXrjW31jo58XUBnAtEOKi&scope=openid%20profile%20email%20openid%20email%20profile%20CheckCoverage%20IsServiceOpen%20SiteStatus%20SendErrorReport%20SearchOrders%20PlaceOrder%20InitiatePayment%20UpdatePayment%20IsValidPromoCode%20RedeemPromoCode%20SearchReceipts%20DownloadRoofReport%20GetUserProfile%20SaveUserProfile%20GetLookup%20User%3ASavePreferences%20User%3AGetPreferences%20User%3AGetAvailableAddresses%20User%3ASetNotificationLog%20User%3AGetReplenishmentPreferences%20User%3ASaveReplenishmentPreferences%20User%3AGetProductPreferences%20User%3ASaveProductPreferences%20User%3AAcceptTermsAndConditions%20User%3AGetAccountPreferences%20User%3ASaveAccountPreferences%20Track%20Guest%3AAcceptTermsAndConditions%20GetDistributorsForPostalCode%20UpdateOrderService%20DownloadFile%20BPFileupload%20Orders%3AShareOrder%20Orders%3AGetSharedOrder", "_blank")}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                GAF QuickMeasure
+              </Button>
+            )}
+            {isStaffOrAdmin && (
+              <Button
+                variant="outline"
+                onClick={() => window.open("https://xactimate.com/xor/sign-in?utm_source=xactimate&utm_medium=referral&utm_campaign=login_page&utm_content=sign_in_btn", "_blank")}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Xactimate
+              </Button>
+            )}
             
-            <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <FolderPlus className="h-4 w-4 mr-2" />
-                  New Folder
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create New Folder</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="folderName">Folder Name</Label>
-                    <Input
-                      id="folderName"
-                      value={newFolderName}
-                      onChange={(e) => setNewFolderName(e.target.value)}
-                      placeholder="Enter folder name"
-                    />
-                  </div>
-                  <Button
-                    onClick={() => createFolderMutation.mutate(newFolderName)}
-                    disabled={!newFolderName.trim() || createFolderMutation.isPending}
-                    className="w-full"
-                  >
-                    Create Folder
+            {isStaffOrAdmin && (
+              <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <FolderPlus className="h-4 w-4 mr-2" />
+                    New Folder
                   </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Folder</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="folderName">Folder Name</Label>
+                      <Input
+                        id="folderName"
+                        value={newFolderName}
+                        onChange={(e) => setNewFolderName(e.target.value)}
+                        placeholder="Enter folder name"
+                      />
+                    </div>
+                    <Button
+                      onClick={() => createFolderMutation.mutate(newFolderName)}
+                      disabled={!newFolderName.trim() || createFolderMutation.isPending}
+                      className="w-full"
+                    >
+                      Create Folder
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </div>
 

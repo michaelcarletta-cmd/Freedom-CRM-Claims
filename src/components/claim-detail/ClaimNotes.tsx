@@ -71,7 +71,7 @@ interface AiMessage {
   timestamp: Date;
 }
 
-export const ClaimNotes = ({ claimId }: { claimId: string }) => {
+export const ClaimNotes = ({ claimId, isPortalUser = false }: { claimId: string; isPortalUser?: boolean }) => {
   const [updates, setUpdates] = useState<Update[]>([]);
   const [newUpdate, setNewUpdate] = useState("");
   const [useCustomTimestamp, setUseCustomTimestamp] = useState(false);
@@ -574,14 +574,18 @@ ${timeline}`;
             <MessageSquare className="h-4 w-4" />
             Notes & Updates
           </TabsTrigger>
-          <TabsTrigger value="communications" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap flex items-center gap-2">
-            <Phone className="h-4 w-4" />
-            Communications Log
-          </TabsTrigger>
-          <TabsTrigger value="ai" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap flex items-center gap-2">
-            <Bot className="h-4 w-4" />
-            AI Assistant
-          </TabsTrigger>
+          {!isPortalUser && (
+            <>
+              <TabsTrigger value="communications" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap flex items-center gap-2">
+                <Phone className="h-4 w-4" />
+                Communications Log
+              </TabsTrigger>
+              <TabsTrigger value="ai" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap flex items-center gap-2">
+                <Bot className="h-4 w-4" />
+                AI Assistant
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         <TabsContent value="notes" className="space-y-6">
