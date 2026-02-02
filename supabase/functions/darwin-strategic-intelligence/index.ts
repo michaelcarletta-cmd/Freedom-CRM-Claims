@@ -130,13 +130,27 @@ serve(async (req) => {
     const estimateAmount = settlement?.estimate_amount || claim.claim_amount || 0;
     const totalSettlement = settlement?.total_settlement || 0;
 
-    // Analyze evidence inventory
-    const hasEstimate = files.some(f => f.file_name?.toLowerCase().includes('estimate') || f.folder_id?.toString().includes('estimate'));
-    const hasDenialLetter = files.some(f => f.file_name?.toLowerCase().includes('denial') || f.folder_id?.toString().includes('denial'));
-    const hasEngineerReport = files.some(f => f.file_name?.toLowerCase().includes('engineer') || f.folder_id?.toString().includes('engineer'));
-    const hasPolicy = files.some(f => f.file_name?.toLowerCase().includes('policy') || f.folder_id?.toString().includes('policy'));
+    // Helper function to get actual document date (prefer extracted date from document, fallback to upload date)
+    const getDocumentDate = (file: any): { date: string | null; source: 'document' | 'upload' } => {
+      // Check classification_metadata for date_mentioned (extracted from document content)
+      const metadata = file.classification_metadata;
+      if (metadata && typeof metadata === 'object') {
+        const dateMentioned = (metadata as any).date_mentioned;
+        if (dateMentioned && typeof dateMentioned === 'string' && dateMentioned !== 'null') {
+          return { date: dateMentioned, source: 'document' };
+        }
+      }
+      // Fallback to upload date
+      return { date: file.uploaded_at, source: 'upload' };
+    };
+
+    // Analyze evidence inventory with document dates
+    const hasEstimate = files.some(f => f.document_classification === 'estimate' || f.file_name?.toLowerCase().includes('estimate'));
+    const hasDenialLetter = files.some(f => f.document_classification === 'denial' || f.file_name?.toLowerCase().includes('denial'));
+    const hasEngineerReport = files.some(f => f.document_classification === 'engineering_report' || f.file_name?.toLowerCase().includes('engineer'));
+    const hasPolicy = files.some(f => f.document_classification === 'policy' || f.file_name?.toLowerCase().includes('policy'));
     const hasProofOfLoss = files.some(f => f.file_name?.toLowerCase().includes('proof of loss') || f.file_name?.toLowerCase().includes('pol'));
-    const hasContractorInvoice = files.some(f => f.file_name?.toLowerCase().includes('invoice') || f.file_name?.toLowerCase().includes('contractor'));
+    const hasContractorInvoice = files.some(f => f.document_classification === 'invoice' || f.file_name?.toLowerCase().includes('invoice'));
     
     const photoCount = photos.length;
     const categorizedPhotos = photos.filter(p => p.category && p.category !== 'uncategorized');
@@ -204,6 +218,46 @@ serve(async (req) => {
       f.file_name?.toLowerCase().includes('permit')
     );
 
+    // Build document timeline with ACTUAL document dates (not upload dates)
+    // This is critical for accurate timeline analysis when documents were uploaded late
+    const keyDocuments = files
+      .filter(f => f.document_classification && f.document_classification !== 'photo' && f.document_classification !== 'other')
+      .map(f => {
+        const dateInfo = getDocumentDate(f);
+        const metadata = f.classification_metadata || {};
+        return {
+          type: f.document_classification,
+          fileName: f.file_name,
+          documentDate: dateInfo.date,
+          dateSource: dateInfo.source,
+          uploadedAt: f.uploaded_at,
+          summary: (metadata as any).summary || null,
+          amounts: (metadata as any).amounts || [],
+          deadline: (metadata as any).deadline_mentioned || null,
+          sender: (metadata as any).sender || null,
+        };
+      })
+      .sort((a, b) => {
+        // Sort by document date (actual date from document content)
+        const dateA = a.documentDate ? new Date(a.documentDate).getTime() : 0;
+        const dateB = b.documentDate ? new Date(b.documentDate).getTime() : 0;
+        return dateA - dateB;
+      });
+
+    // Build document timeline summary for AI context
+    const documentTimelineContext = keyDocuments.length > 0 
+      ? keyDocuments.map(d => {
+          const dateLabel = d.documentDate 
+            ? `${new Date(d.documentDate).toLocaleDateString()} (${d.dateSource === 'document' ? 'from document' : 'upload date'})`
+            : 'Date unknown';
+          const amountStr = d.amounts?.length > 0 
+            ? ` | Amounts: ${d.amounts.map((a: any) => `$${a.amount?.toLocaleString()}`).join(', ')}`
+            : '';
+          const deadlineStr = d.deadline ? ` | DEADLINE: ${d.deadline}` : '';
+          return `  - [${d.type?.toUpperCase()}] ${d.fileName} | ${dateLabel}${amountStr}${deadlineStr}${d.summary ? ` | ${d.summary}` : ''}`;
+        }).join('\n')
+      : '  No classified documents yet';
+
     // Build comprehensive context for AI
     const claimContext = `
 === CLAIM STRATEGIC ANALYSIS CONTEXT ===
@@ -238,6 +292,10 @@ EVIDENCE INVENTORY:
 - Has Proof of Loss: ${hasProofOfLoss ? 'Yes' : 'No'}
 - Has Contractor Invoice: ${hasContractorInvoice ? 'Yes' : 'No'}
 - Has Ordinance/Code Info: ${hasOrdinanceInfo ? 'Yes' : 'No'}
+
+DOCUMENT TIMELINE (based on ACTUAL document dates, not upload dates):
+NOTE: These dates are extracted from the documents themselves. Use these for timeline analysis, deadline calculations, and carrier response tracking - NOT the upload dates.
+${documentTimelineContext}
 
 DARWIN AI PHOTO ANALYSIS (CRITICAL EVIDENCE):
 - AI-Analyzed Photos: ${aiAnalyzedPhotos.length} of ${photoCount}
