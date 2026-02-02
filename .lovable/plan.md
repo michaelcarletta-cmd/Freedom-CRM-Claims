@@ -1,63 +1,105 @@
 
-# Semi-Autonomous Mode Enhancement
 
-## Status: ✅ IMPLEMENTED
+# Fix Darwin Autonomous Agent Scheduling and Email Drafting
 
-## Overview
+## Problem Summary
 
-This change redefines autonomy levels so that **semi-autonomous** does everything automatically except send emails to insurance companies/adjusters. Client communications (emails, SMS) will be sent automatically, and all status updates, task completions, and accounting updates will happen without requiring human review.
+Based on my investigation, I found **two critical issues**:
 
----
+1. **The `darwin-autonomous-agent` function has no cron job** - It's never being triggered to process pending emails
+2. **Client notification emails are not being drafted** - The `email_drafted` action is not appearing in logs
 
-## Autonomy Level Definitions (IMPLEMENTED)
-
-| Action | Supervised | Semi-Autonomous | Fully Autonomous |
-|--------|------------|-----------------|------------------|
-| Status updates (Estimate Received, Denied, Approved) | Manual | ✅ Auto | ✅ Auto |
-| Task creation | Auto | ✅ Auto | ✅ Auto |
-| Task completion | Manual | ✅ Auto | ✅ Auto |
-| Accounting updates (RCV extraction) | Auto | ✅ Auto | ✅ Auto |
-| Emails to **clients/policyholders** | Queue for review | ✅ Auto | ✅ Auto |
-| SMS to clients | Queue for review | ✅ Auto | ✅ Auto |
-| Emails to **contractors** | Queue for review | ✅ Auto | ✅ Auto |
-| Emails to **insurance companies/adjusters** | Queue for review | ⏸️ Queue for review | ✅ Auto |
-| Deep analysis (rebuttals, gap analysis) | Auto | ✅ Auto | ✅ Auto |
+The good news: **Status updates ARE working** - the claim correctly shows "Estimate Received from Carrier" in the database.
 
 ---
 
-## Changes Made
+## Implementation Plan
 
-### 1. `darwin-process-document/index.ts` - Status Updates ✅
-- Added `isAutonomous` check that includes both `semi_autonomous` and `fully_autonomous`
-- Status now auto-updates for Denied, Estimate Received, and Approved when `isAutonomous` is true
+### Step 1: Create Cron Job for Darwin Autonomous Agent
 
-### 2. `darwin-autonomous-agent/index.ts` - Email/SMS Auto-Send ✅
-- Updated to process auto-send for both semi and fully autonomous claims
-- Added recipient type filtering: insurance emails require human review for semi-autonomous
-- Added `processAutoSendSMS` function with same filtering logic
-- Task auto-completion now works for semi-autonomous claims too
+Add a scheduled job to run the darwin-autonomous-agent every minute (like execute-automations):
 
-### 3. `process-claim-ai-action/index.ts` - Recipient Type ✅
-- Added `recipient_type` detection when creating email draft pending actions
-- Checks policyholder, adjuster, and insurance email addresses to classify recipient
+```sql
+SELECT cron.schedule(
+  'darwin-autonomous-agent-minutely',
+  '* * * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://tnnzihuszaosnyeyceed.supabase.co/functions/v1/darwin-autonomous-agent',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_service_role_key' LIMIT 1)
+    ),
+    body := '{}'::jsonb
+  ) AS request_id;
+  $$
+);
+```
 
-### 4. `inbound-email/index.ts` - Sender Type Passing ✅
-- Now passes `senderType` to process-claim-ai-action for better recipient classification
+### Step 2: Re-deploy darwin-process-document Function
+
+The email drafting code exists in the function but may not have been deployed. We'll trigger a redeployment to ensure the latest version with `draftClientUpdateEmail` is live.
+
+### Step 3: Add Error Logging to Email Draft Function
+
+Add explicit try/catch and logging around the `draftClientUpdateEmail` call to diagnose any silent failures:
+
+```typescript
+// In darwin-process-document/index.ts, around line 590
+if (claim?.policyholder_email) {
+  try {
+    await draftClientUpdateEmail(...);
+    console.log(`Successfully drafted email for claim ${claimId}`);
+  } catch (emailError) {
+    console.error(`Failed to draft client email:`, emailError);
+    // Log the failure but don't block status update
+    await supabase.from('darwin_action_log').insert({
+      claim_id: claimId,
+      action_type: 'error',
+      action_details: { error: emailError.message, context: 'draftClientUpdateEmail' },
+      was_auto_executed: true,
+      result: `Failed to draft client email: ${emailError.message}`,
+      trigger_source: 'darwin_process_document',
+    });
+  }
+}
+```
+
+### Step 4: Test the Full Flow
+
+After deployment:
+1. Upload a new estimate document to the test claim
+2. Verify the `email_drafted` action appears in `darwin_action_log`
+3. Verify a pending action is created in `claim_ai_pending_actions`
+4. Wait for the autonomous agent to run and check if email is sent
 
 ---
 
-## Summary
+## Technical Details
 
-**Semi-Autonomous claims now automatically**:
-- ✅ Update status when estimates, denials, or approvals arrive
-- ✅ Complete tasks when responses are received
-- ✅ Send emails/SMS to clients and contractors
-- ✅ Run deep analysis on documents
-- ✅ Create escalations for urgent items
+### Files to Modify
 
-**Semi-Autonomous claims still require human review for**:
-- ⏸️ Emails to adjusters
-- ⏸️ Emails to insurance companies
-- ⏸️ Any communication containing escalation keywords (lawsuit, attorney, etc.)
+| File | Change |
+|------|--------|
+| Database (cron.job) | Add scheduled job for darwin-autonomous-agent |
+| `supabase/functions/darwin-process-document/index.ts` | Add error handling/logging around email drafting |
 
-**Fully Autonomous** remains unchanged - everything auto-executes (with keyword blockers still applying).
+### Current State vs Expected
+
+| Component | Current | Expected |
+|-----------|---------|----------|
+| Status Update | Working | Working |
+| Email Draft Creation | NOT working (no logs) | Should create pending action |
+| Autonomous Agent | NOT scheduled | Should run every minute |
+| Email Sending | Cannot run (no agent) | Should auto-send to clients |
+
+---
+
+## Expected Outcome
+
+After these changes:
+1. When Darwin classifies an estimate, it will update the claim status AND draft a client notification email
+2. The autonomous agent will run every minute and process any pending client emails
+3. Client emails will be automatically sent (for semi-autonomous claims)
+4. All actions will be logged for audit purposes
+
