@@ -575,6 +575,7 @@ serve(async (req) => {
             claimId: claim.id,
             emailId: insertedEmail.id,
             autonomyLevel: autonomyLevel,
+            senderType: senderType, // Pass sender type so response draft knows recipient type
           }),
         }).catch(err => console.error('Failed to trigger AI draft:', err));
       }

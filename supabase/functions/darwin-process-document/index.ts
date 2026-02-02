@@ -458,6 +458,8 @@ async function processDocumentActions(
   fileId: string
 ) {
   const isFullyAutonomous = automation.autonomy_level === 'fully_autonomous';
+  // Semi-autonomous should also auto-update status (only emails to insurance need review)
+  const isAutonomous = ['semi_autonomous', 'fully_autonomous'].includes(automation.autonomy_level);
 
   switch (classification.classification) {
     case 'denial':
@@ -486,8 +488,8 @@ async function processDocumentActions(
         status: 'pending',
       });
 
-      // Update claim status if autonomous
-      if (isFullyAutonomous) {
+      // Update claim status if autonomous (semi or fully)
+      if (isAutonomous) {
         await supabase.from('claims').update({ status: 'Denied' }).eq('id', claimId);
       }
       break;
@@ -526,8 +528,8 @@ async function processDocumentActions(
         }
       }
 
-      // Update status if autonomous
-      if (isFullyAutonomous) {
+      // Update status if autonomous (semi or fully)
+      if (isAutonomous) {
         await supabase.from('claims').update({ status: 'Estimate Received' }).eq('id', claimId);
       }
       break;
@@ -543,8 +545,8 @@ async function processDocumentActions(
         status: 'pending',
       });
 
-      // Update claim status if autonomous
-      if (isFullyAutonomous) {
+      // Update claim status if autonomous (semi or fully)
+      if (isAutonomous) {
         await supabase.from('claims').update({ status: 'Approved' }).eq('id', claimId);
       }
       break;
