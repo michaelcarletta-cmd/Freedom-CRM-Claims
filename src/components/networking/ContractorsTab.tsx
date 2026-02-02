@@ -17,11 +17,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { UserPlus, Mail, Phone, Search, Trash2, Link2, Send, Pencil, Upload, X, Image } from "lucide-react";
+import { UserPlus, Mail, Phone, Search, Trash2, Link2, Send, Pencil, Upload, X, Image, FileText } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { Switch } from "@/components/ui/switch";
 import { formatPhoneNumber } from "@/lib/utils";
+import { ContractorDocumentsDialog } from "./ContractorDocumentsDialog";
 
 interface Contractor {
   id: string;
@@ -63,6 +64,13 @@ export const ContractorsTab = () => {
   });
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [editLogoUrl, setEditLogoUrl] = useState<string | null>(null);
+  const [documentsDialogOpen, setDocumentsDialogOpen] = useState(false);
+  const [documentsContractor, setDocumentsContractor] = useState<Contractor | null>(null);
+
+  const handleOpenDocuments = (contractor: Contractor) => {
+    setDocumentsContractor(contractor);
+    setDocumentsDialogOpen(true);
+  };
 
   const handleSendPortalInvite = async (contractor: Contractor) => {
     if (!contractor.email) {
@@ -71,7 +79,6 @@ export const ContractorsTab = () => {
     }
 
     setSendingInvite(contractor.id);
-    
     // Generate a new temporary password
     const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
     
@@ -459,6 +466,14 @@ export const ContractorsTab = () => {
                       <Button
                         variant="ghost"
                         size="icon"
+                        onClick={() => handleOpenDocuments(contractor)}
+                        title="View documents"
+                      >
+                        <FileText className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => handleEditClick(contractor)}
                         title="Edit contractor"
                       >
@@ -669,6 +684,12 @@ export const ContractorsTab = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ContractorDocumentsDialog
+        open={documentsDialogOpen}
+        onOpenChange={setDocumentsDialogOpen}
+        contractor={documentsContractor}
+      />
     </Card>
   );
 };
