@@ -189,120 +189,163 @@ Respond with ONLY the JSON object, no additional text.`;
 
     console.log(`Analyzing photo ${photoId}...`);
 
-    // Call Lovable AI for analysis
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: analysisPrompt },
-              { type: "image_url", image_url: { url: signedUrlData.signedUrl } }
-            ]
+    // Retry logic for rate limits
+    const MAX_RETRIES = 3;
+    let lastError: { status?: number; message: string } | null = null;
+    
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        // Call Lovable AI for analysis
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: [
+              { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: analysisPrompt },
+                  { type: "image_url", image_url: { url: signedUrlData.signedUrl } }
+                ]
+              }
+            ],
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`AI analysis failed (attempt ${attempt}/${MAX_RETRIES}):`, response.status, errorText);
+          
+          if (response.status === 429) {
+            // Rate limited - wait and retry
+            if (attempt < MAX_RETRIES) {
+              const waitTime = Math.pow(2, attempt) * 1000; // Exponential backoff: 2s, 4s, 8s
+              console.log(`Rate limited, waiting ${waitTime}ms before retry...`);
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+              continue;
+            }
+            return new Response(
+              JSON.stringify({ error: "Rate limit exceeded. Please try again later.", details: errorText }),
+              { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
           }
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI analysis failed:", response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required. Please add funds to your Lovable AI workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      return new Response(
-        JSON.stringify({ error: "AI analysis failed" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const aiResult = await response.json();
-    const content = aiResult.choices?.[0]?.message?.content || "";
-
-    // Parse the JSON response
-    let analysis;
-    try {
-      // Clean up the response (remove markdown code blocks if present)
-      let jsonStr = content.trim();
-      if (jsonStr.startsWith("```json")) {
-        jsonStr = jsonStr.slice(7);
-      }
-      if (jsonStr.startsWith("```")) {
-        jsonStr = jsonStr.slice(3);
-      }
-      if (jsonStr.endsWith("```")) {
-        jsonStr = jsonStr.slice(0, -3);
-      }
-      jsonStr = jsonStr.trim();
-      
-      analysis = JSON.parse(jsonStr);
-    } catch (parseError) {
-      console.error("Failed to parse AI response:", content);
-      return new Response(
-        JSON.stringify({ error: "Failed to parse AI analysis", rawResponse: content }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Update the photo record with the analysis results
-    const { error: updateError } = await supabase
-      .from("claim_photos")
-      .update({
-        ai_material_type: analysis.material_type || null,
-        ai_condition_rating: analysis.condition_rating || null,
-        ai_condition_notes: analysis.condition_notes || null,
-        ai_detected_damages: analysis.detected_damages || [],
-        ai_analysis_summary: analysis.summary || null,
-        ai_loss_type_consistency: analysis.loss_type_consistency || null,
-        ai_loss_type_consistency_notes: analysis.loss_type_consistency_notes || null,
-        ai_analyzed_at: new Date().toISOString(),
-      })
-      .eq("id", photoId);
-
-    if (updateError) {
-      console.error("Failed to update photo with analysis:", updateError);
-      return new Response(
-        JSON.stringify({ error: "Failed to save analysis results" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`Photo ${photoId} analyzed successfully`);
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        analysis: {
-          material_type: analysis.material_type,
-          condition_rating: analysis.condition_rating,
-          condition_notes: analysis.condition_notes,
-          detected_damages: analysis.detected_damages,
-          summary: analysis.summary,
-          loss_type_consistency: analysis.loss_type_consistency,
-          loss_type_consistency_notes: analysis.loss_type_consistency_notes,
-          analyzed_at: new Date().toISOString(),
+          
+          if (response.status === 402) {
+            return new Response(
+              JSON.stringify({ error: "Payment required. Please add funds to your Lovable AI workspace." }),
+              { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          
+          lastError = { status: response.status, message: errorText };
+          
+          // For other errors, retry if we have attempts left
+          if (attempt < MAX_RETRIES) {
+            const waitTime = 1000 * attempt;
+            console.log(`Error ${response.status}, waiting ${waitTime}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          }
+          
+          return new Response(
+            JSON.stringify({ error: "AI analysis failed", status: response.status, details: errorText }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+
+        const aiResult = await response.json();
+        const content = aiResult.choices?.[0]?.message?.content || "";
+
+        // Parse the JSON response
+        let analysis;
+        try {
+          // Clean up the response (remove markdown code blocks if present)
+          let jsonStr = content.trim();
+          if (jsonStr.startsWith("```json")) {
+            jsonStr = jsonStr.slice(7);
+          }
+          if (jsonStr.startsWith("```")) {
+            jsonStr = jsonStr.slice(3);
+          }
+          if (jsonStr.endsWith("```")) {
+            jsonStr = jsonStr.slice(0, -3);
+          }
+          jsonStr = jsonStr.trim();
+          
+          analysis = JSON.parse(jsonStr);
+        } catch (parseError) {
+          console.error("Failed to parse AI response:", content);
+          return new Response(
+            JSON.stringify({ error: "Failed to parse AI analysis", rawResponse: content.substring(0, 500) }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Update the photo record with the analysis results
+        const { error: updateError } = await supabase
+          .from("claim_photos")
+          .update({
+            ai_material_type: analysis.material_type || null,
+            ai_condition_rating: analysis.condition_rating || null,
+            ai_condition_notes: analysis.condition_notes || null,
+            ai_detected_damages: analysis.detected_damages || [],
+            ai_analysis_summary: analysis.summary || null,
+            ai_loss_type_consistency: analysis.loss_type_consistency || null,
+            ai_loss_type_consistency_notes: analysis.loss_type_consistency_notes || null,
+            ai_analyzed_at: new Date().toISOString(),
+          })
+          .eq("id", photoId);
+
+        if (updateError) {
+          console.error("Failed to update photo with analysis:", updateError);
+          return new Response(
+            JSON.stringify({ error: "Failed to save analysis results", details: updateError.message }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        console.log(`Photo ${photoId} analyzed successfully`);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            analysis: {
+              material_type: analysis.material_type,
+              condition_rating: analysis.condition_rating,
+              condition_notes: analysis.condition_notes,
+              detected_damages: analysis.detected_damages,
+              summary: analysis.summary,
+              loss_type_consistency: analysis.loss_type_consistency,
+              loss_type_consistency_notes: analysis.loss_type_consistency_notes,
+              analyzed_at: new Date().toISOString(),
+            }
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+        
+      } catch (fetchError: unknown) {
+        console.error(`Fetch error (attempt ${attempt}/${MAX_RETRIES}):`, fetchError);
+        lastError = { message: fetchError instanceof Error ? fetchError.message : String(fetchError) };
+        
+        if (attempt < MAX_RETRIES) {
+          const waitTime = 1000 * attempt;
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+      }
+    }
+    
+    // All retries exhausted
+    return new Response(
+      JSON.stringify({ error: "AI analysis failed after retries", details: lastError?.message || "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+
 
   } catch (error) {
     console.error("Error in analyze-single-photo:", error);
