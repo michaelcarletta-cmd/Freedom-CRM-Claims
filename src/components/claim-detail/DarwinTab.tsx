@@ -38,6 +38,7 @@ const DarwinOneClickPackage = lazy(() => import("@/components/claim-detail/Darwi
 const DarwinAutoDraftRebuttal = lazy(() => import("@/components/claim-detail/DarwinAutoDraftRebuttal").then(m => ({ default: m.DarwinAutoDraftRebuttal })));
 const DarwinAutoSummary = lazy(() => import("@/components/claim-detail/DarwinAutoSummary").then(m => ({ default: m.DarwinAutoSummary })));
 const DarwinSmartDocumentSort = lazy(() => import("@/components/claim-detail/DarwinSmartDocumentSort").then(m => ({ default: m.DarwinSmartDocumentSort })));
+const DarwinEstimateGapAnalysis = lazy(() => import("@/components/claim-detail/DarwinEstimateGapAnalysis").then(m => ({ default: m.DarwinEstimateGapAnalysis })));
 const VisualClaimTimeline = lazy(() => import("@/components/claim-detail/VisualClaimTimeline").then(m => ({ default: m.VisualClaimTimeline })));
 const DarwinComplianceChecker = lazy(() => import("@/components/claim-detail/DarwinComplianceChecker").then(m => ({ default: m.DarwinComplianceChecker })));
 const ClaimTimeline = lazy(() => import("@/components/claim-detail/ClaimTimeline").then(m => ({ default: m.ClaimTimeline })));
@@ -321,7 +322,9 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
               title="Document Analysis"
               description="Analyze and compare claim documents"
               icon={<FileText className="h-4 w-4" />}
+              defaultOpen={autoAnalyses.some(a => a.analysis_type === 'estimate_gap_analysis')}
             >
+            <DarwinEstimateGapAnalysis claimId={claimId} claim={claim} />
             <DarwinSmartExtraction claimId={claimId} claim={claim} />
             <DarwinDocumentComparison claimId={claimId} claim={claim} />
             <DarwinSmartDocumentSort claimId={claimId} claim={claim} />
