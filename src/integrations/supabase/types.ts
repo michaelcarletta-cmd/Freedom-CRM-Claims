@@ -649,6 +649,8 @@ export type Database = {
         Row: {
           action_type: string
           ai_reasoning: string | null
+          auto_executed: boolean | null
+          auto_executed_at: string | null
           claim_id: string
           created_at: string
           draft_content: Json
@@ -662,6 +664,8 @@ export type Database = {
         Insert: {
           action_type: string
           ai_reasoning?: string | null
+          auto_executed?: boolean | null
+          auto_executed_at?: string | null
           claim_id: string
           created_at?: string
           draft_content: Json
@@ -675,6 +679,8 @@ export type Database = {
         Update: {
           action_type?: string
           ai_reasoning?: string | null
+          auto_executed?: boolean | null
+          auto_executed_at?: string | null
           claim_id?: string
           created_at?: string
           draft_content?: Json
@@ -704,9 +710,14 @@ export type Database = {
       }
       claim_automations: {
         Row: {
+          auto_complete_tasks: boolean | null
+          auto_escalate_urgency: boolean | null
+          auto_respond_without_approval: boolean | null
+          autonomy_level: string | null
           claim_id: string
           created_at: string
           created_by: string | null
+          daily_action_limit: number | null
           follow_up_current_count: number
           follow_up_enabled: boolean
           follow_up_interval_days: number
@@ -717,13 +728,19 @@ export type Database = {
           follow_up_stopped_at: string | null
           id: string
           is_enabled: boolean
+          keyword_blockers: string[] | null
           settings: Json
           updated_at: string
         }
         Insert: {
+          auto_complete_tasks?: boolean | null
+          auto_escalate_urgency?: boolean | null
+          auto_respond_without_approval?: boolean | null
+          autonomy_level?: string | null
           claim_id: string
           created_at?: string
           created_by?: string | null
+          daily_action_limit?: number | null
           follow_up_current_count?: number
           follow_up_enabled?: boolean
           follow_up_interval_days?: number
@@ -734,13 +751,19 @@ export type Database = {
           follow_up_stopped_at?: string | null
           id?: string
           is_enabled?: boolean
+          keyword_blockers?: string[] | null
           settings?: Json
           updated_at?: string
         }
         Update: {
+          auto_complete_tasks?: boolean | null
+          auto_escalate_urgency?: boolean | null
+          auto_respond_without_approval?: boolean | null
+          autonomy_level?: string | null
           claim_id?: string
           created_at?: string
           created_by?: string | null
+          daily_action_limit?: number | null
           follow_up_current_count?: number
           follow_up_enabled?: boolean
           follow_up_interval_days?: number
@@ -751,6 +774,7 @@ export type Database = {
           follow_up_stopped_at?: string | null
           id?: string
           is_enabled?: boolean
+          keyword_blockers?: string[] | null
           settings?: Json
           updated_at?: string
         }
@@ -2890,6 +2914,53 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      darwin_action_log: {
+        Row: {
+          action_details: Json | null
+          action_type: string
+          claim_id: string | null
+          created_by: string | null
+          error_message: string | null
+          executed_at: string | null
+          id: string
+          result: string | null
+          trigger_source: string | null
+          was_auto_executed: boolean | null
+        }
+        Insert: {
+          action_details?: Json | null
+          action_type: string
+          claim_id?: string | null
+          created_by?: string | null
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          result?: string | null
+          trigger_source?: string | null
+          was_auto_executed?: boolean | null
+        }
+        Update: {
+          action_details?: Json | null
+          action_type?: string
+          claim_id?: string | null
+          created_by?: string | null
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          result?: string | null
+          trigger_source?: string | null
+          was_auto_executed?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "darwin_action_log_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       darwin_analysis_results: {
         Row: {
