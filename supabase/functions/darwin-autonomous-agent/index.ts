@@ -105,6 +105,12 @@ serve(async (req) => {
           await checkForEscalations(supabase, claim.id, automation, results);
         }
 
+        // 4. SMART CARRIER FOLLOW-UPS (only when awaiting carrier response)
+        await processSmartCarrierFollowUp(supabase, claim, automation, results);
+
+        // 5. BI-WEEKLY IDLE CLAIM UPDATES (client updates when no activity)
+        await processIdleClaimUpdates(supabase, claim, automation, results);
+
         results.processed++;
       } catch (err) {
         const errorMsg = `Error processing claim ${claim.claim_number}: ${err}`;
@@ -599,5 +605,450 @@ async function processUnclassifiedDocuments(
     } catch (err) {
       console.error(`Error processing file ${file.id}:`, err);
     }
+  }
+}
+
+// Statuses that indicate we're waiting on the carrier
+const AWAITING_CARRIER_STATUSES = [
+  'submitted to insurance',
+  'awaiting initial response',
+  'awaiting adjuster assignment',
+  'supplement submitted',
+  'awaiting supplement response',
+  'rfi submitted',
+  'awaiting rfi response',
+  'under review',
+  'inspection scheduled',
+  'pending carrier response'
+];
+
+// Smart carrier follow-up: only send if we're actually waiting on carrier response
+async function processSmartCarrierFollowUp(
+  supabase: any,
+  claim: any,
+  automation: any,
+  results: any
+) {
+  const claimStatus = (claim.status || '').toLowerCase();
+  
+  // Check if this claim is in a status that indicates we're waiting on carrier
+  const isAwaitingCarrier = AWAITING_CARRIER_STATUSES.some(s => 
+    claimStatus.includes(s.toLowerCase()) || s.toLowerCase().includes(claimStatus)
+  );
+  
+  if (!isAwaitingCarrier) {
+    return; // No follow-up needed - not waiting on carrier
+  }
+  
+  // Check when we last contacted the carrier
+  const { data: lastCarrierEmail } = await supabase
+    .from('emails')
+    .select('id, sent_at, subject')
+    .eq('claim_id', claim.id)
+    .neq('recipient_type', 'inbound')
+    .or('recipient_type.eq.adjuster,recipient_type.eq.insurance,recipient_type.ilike.%carrier%')
+    .order('sent_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  
+  // Default follow-up interval: 5 business days (7 calendar days)
+  const followUpIntervalDays = automation.follow_up_interval_days || 7;
+  const followUpThreshold = new Date();
+  followUpThreshold.setDate(followUpThreshold.getDate() - followUpIntervalDays);
+  
+  // No carrier email sent, or last email is older than threshold
+  const shouldFollowUp = !lastCarrierEmail || new Date(lastCarrierEmail.sent_at) < followUpThreshold;
+  
+  if (!shouldFollowUp) {
+    return; // Recent contact exists, no follow-up needed
+  }
+  
+  // Check if we already sent a follow-up today
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const { data: recentFollowUp } = await supabase
+    .from('darwin_action_log')
+    .select('id')
+    .eq('claim_id', claim.id)
+    .eq('action_type', 'carrier_follow_up')
+    .gte('executed_at', today.toISOString())
+    .limit(1);
+  
+  if (recentFollowUp && recentFollowUp.length > 0) {
+    return; // Already followed up today
+  }
+  
+  // Get claim details for email
+  const { data: fullClaim } = await supabase
+    .from('claims')
+    .select('*, claim_adjusters(adjuster_name, adjuster_email)')
+    .eq('id', claim.id)
+    .single();
+  
+  const adjuster = fullClaim?.claim_adjusters?.[0];
+  const recipientEmail = adjuster?.adjuster_email || fullClaim?.adjuster_email;
+  const recipientName = adjuster?.adjuster_name || fullClaim?.adjuster_name || 'Claims Department';
+  
+  if (!recipientEmail) {
+    console.log(`Claim ${claim.claim_number}: No adjuster email for carrier follow-up`);
+    return;
+  }
+  
+  // Generate follow-up email using AI
+  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+  if (!openaiApiKey) {
+    console.error('OPENAI_API_KEY not configured for carrier follow-up');
+    return;
+  }
+  
+  const daysSinceLastContact = lastCarrierEmail 
+    ? Math.floor((Date.now() - new Date(lastCarrierEmail.sent_at).getTime()) / (1000 * 60 * 60 * 24))
+    : 'unknown';
+  
+  const systemPrompt = `You are a professional public adjuster assistant for Freedom Claims. Generate a brief, professional follow-up email to the insurance carrier.
+
+CLAIM CONTEXT:
+- Claim Number: ${claim.claim_number || 'N/A'}
+- Policyholder: ${fullClaim?.policyholder_name || 'N/A'}
+- Insurance Company: ${fullClaim?.insurance_company || 'N/A'}
+- Current Status: ${claim.status || 'N/A'}
+- Days Since Last Contact: ${daysSinceLastContact}
+- Last Email Subject: ${lastCarrierEmail?.subject || 'Initial submission'}
+
+GUIDELINES:
+1. Be professional and assertive but polite
+2. Reference the claim number and policyholder
+3. Request a status update or response timeline
+4. Mention relevant state prompt payment laws if applicable
+5. Keep it concise (under 150 words)
+6. Sign off as "Freedom Claims Team"
+
+Do NOT include a subject line - just the email body.`;
+
+  try {
+    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: 'Generate a carrier follow-up email requesting a status update.' }
+        ],
+        temperature: 0.7,
+      }),
+    });
+
+    const aiData = await aiResponse.json();
+    
+    if (!aiResponse.ok) {
+      console.error('OpenAI error for carrier follow-up:', aiData);
+      return;
+    }
+
+    const emailBody = aiData.choices[0].message.content;
+    const subject = `Follow-Up: Claim ${claim.claim_number} - ${fullClaim?.policyholder_name || 'Status Request'}`;
+
+    // Create pending action for review (or auto-send if fully autonomous)
+    const isFullyAutonomous = automation.autonomy_level === 'fully_autonomous';
+    
+    if (isFullyAutonomous) {
+      // Auto-send the follow-up
+      const sendResponse = await fetch(
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-email`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            recipients: [{ email: recipientEmail, name: recipientName, type: 'adjuster' }],
+            subject,
+            body: emailBody,
+            claimId: claim.id,
+          }),
+        }
+      );
+
+      if (sendResponse.ok) {
+        await supabase.from('darwin_action_log').insert({
+          claim_id: claim.id,
+          action_type: 'carrier_follow_up',
+          action_details: { 
+            to: recipientEmail,
+            subject,
+            days_since_contact: daysSinceLastContact,
+            auto_sent: true
+          },
+          was_auto_executed: true,
+          result: `Auto-sent carrier follow-up to ${recipientEmail}`,
+          trigger_source: 'darwin_autonomous_agent',
+        });
+        results.emails_sent++;
+      }
+    } else {
+      // Queue for human review (semi-autonomous)
+      await supabase.from('claim_ai_pending_actions').insert({
+        claim_id: claim.id,
+        action_type: 'email_response',
+        draft_content: {
+          to_email: recipientEmail,
+          to_name: recipientName,
+          subject,
+          body: emailBody,
+          recipient_type: 'adjuster'
+        },
+        ai_reasoning: `Automatic carrier follow-up: ${daysSinceLastContact} days since last contact. Status: ${claim.status}`,
+        status: 'pending',
+      });
+      
+      await supabase.from('darwin_action_log').insert({
+        claim_id: claim.id,
+        action_type: 'carrier_follow_up',
+        action_details: { 
+          to: recipientEmail,
+          subject,
+          days_since_contact: daysSinceLastContact,
+          queued_for_review: true
+        },
+        was_auto_executed: false,
+        result: `Carrier follow-up drafted for review (${daysSinceLastContact} days since contact)`,
+        trigger_source: 'darwin_autonomous_agent',
+      });
+      results.escalations++;
+    }
+    
+    console.log(`Carrier follow-up ${isFullyAutonomous ? 'sent' : 'queued'} for claim ${claim.claim_number}`);
+    
+  } catch (err) {
+    console.error(`Error creating carrier follow-up for claim ${claim.claim_number}:`, err);
+  }
+}
+
+// Bi-weekly idle claim updates: send client updates when no activity for 2 weeks
+async function processIdleClaimUpdates(
+  supabase: any,
+  claim: any,
+  automation: any,
+  results: any
+) {
+  const idleThresholdDays = 14; // 2 weeks
+  const idleThreshold = new Date();
+  idleThreshold.setDate(idleThreshold.getDate() - idleThresholdDays);
+  
+  // Check for any recent activity
+  const { data: recentActivity } = await supabase
+    .from('claim_updates')
+    .select('id')
+    .eq('claim_id', claim.id)
+    .gte('created_at', idleThreshold.toISOString())
+    .limit(1);
+  
+  const { data: recentEmails } = await supabase
+    .from('emails')
+    .select('id')
+    .eq('claim_id', claim.id)
+    .gte('sent_at', idleThreshold.toISOString())
+    .limit(1);
+  
+  const hasRecentActivity = (recentActivity?.length || 0) > 0 || (recentEmails?.length || 0) > 0;
+  
+  if (hasRecentActivity) {
+    return; // Not idle
+  }
+  
+  // Check if we already sent an idle update recently (within past week)
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  
+  const { data: recentIdleUpdate } = await supabase
+    .from('darwin_action_log')
+    .select('id')
+    .eq('claim_id', claim.id)
+    .eq('action_type', 'idle_claim_update')
+    .gte('executed_at', weekAgo.toISOString())
+    .limit(1);
+  
+  if (recentIdleUpdate && recentIdleUpdate.length > 0) {
+    return; // Already sent idle update recently
+  }
+  
+  // Get claim details including client email
+  const { data: fullClaim } = await supabase
+    .from('claims')
+    .select('*')
+    .eq('id', claim.id)
+    .single();
+  
+  const clientEmail = fullClaim?.policyholder_email;
+  const clientName = fullClaim?.policyholder_name || 'there';
+  
+  if (!clientEmail) {
+    console.log(`Claim ${claim.claim_number}: No client email for idle update`);
+    return;
+  }
+  
+  // Get open tasks to summarize what we're waiting on
+  const { data: openTasks } = await supabase
+    .from('tasks')
+    .select('title, description, priority')
+    .eq('claim_id', claim.id)
+    .eq('is_completed', false)
+    .order('priority', { ascending: true })
+    .limit(5);
+  
+  // Get recent notes for context
+  const { data: recentNotes } = await supabase
+    .from('claim_updates')
+    .select('content, created_at')
+    .eq('claim_id', claim.id)
+    .order('created_at', { ascending: false })
+    .limit(3);
+  
+  // Generate client update email using AI
+  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+  if (!openaiApiKey) {
+    console.error('OPENAI_API_KEY not configured for idle update');
+    return;
+  }
+  
+  const taskSummary = openTasks?.length 
+    ? openTasks.map((t: any) => `- ${t.title}`).join('\n')
+    : 'No specific pending tasks';
+  
+  const notesSummary = recentNotes?.length
+    ? recentNotes.map((n: any) => `- ${n.content?.substring(0, 100)}...`).join('\n')
+    : 'No recent notes';
+  
+  const systemPrompt = `You are a professional public adjuster assistant for Freedom Claims. Generate a warm, empathetic client update email for a claim that has had no recent activity.
+
+CLAIM CONTEXT:
+- Claim Number: ${claim.claim_number || 'N/A'}
+- Client Name: ${clientName}
+- Insurance Company: ${fullClaim?.insurance_company || 'N/A'}
+- Current Status: ${claim.status || 'N/A'}
+- Loss Type: ${fullClaim?.loss_type || 'N/A'}
+
+PENDING TASKS:
+${taskSummary}
+
+RECENT NOTES:
+${notesSummary}
+
+GUIDELINES:
+1. Be warm, empathetic, and reassuring - acknowledge this is a stressful time
+2. Briefly explain what we're currently waiting on (based on tasks/status)
+3. Assure them we're actively monitoring their claim
+4. Invite them to reach out with any questions
+5. Keep it concise (under 150 words)
+6. Use a friendly but professional tone
+7. Sign off as "Freedom Claims Team"
+
+Do NOT include a subject line - just the email body.`;
+
+  try {
+    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: 'Generate a client update email explaining what we\'re waiting on and that we\'re actively monitoring their claim.' }
+        ],
+        temperature: 0.7,
+      }),
+    });
+
+    const aiData = await aiResponse.json();
+    
+    if (!aiResponse.ok) {
+      console.error('OpenAI error for idle update:', aiData);
+      return;
+    }
+
+    const emailBody = aiData.choices[0].message.content;
+    const subject = `Claim Update: ${claim.claim_number} - We're Still Working For You`;
+
+    // For semi-autonomous and fully autonomous, auto-send client updates
+    // (Client communications are safe to auto-send)
+    if (['semi_autonomous', 'fully_autonomous'].includes(automation.autonomy_level)) {
+      const sendResponse = await fetch(
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-email`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            recipients: [{ email: clientEmail, name: clientName, type: 'policyholder' }],
+            subject,
+            body: emailBody,
+            claimId: claim.id,
+          }),
+        }
+      );
+
+      if (sendResponse.ok) {
+        await supabase.from('darwin_action_log').insert({
+          claim_id: claim.id,
+          action_type: 'idle_claim_update',
+          action_details: { 
+            to: clientEmail,
+            subject,
+            open_tasks: openTasks?.length || 0,
+            auto_sent: true
+          },
+          was_auto_executed: true,
+          result: `Auto-sent bi-weekly client update to ${clientEmail}`,
+          trigger_source: 'darwin_autonomous_agent',
+        });
+        results.emails_sent++;
+        console.log(`Idle claim update sent for claim ${claim.claim_number}`);
+      }
+    } else {
+      // Queue for review (supervised mode)
+      await supabase.from('claim_ai_pending_actions').insert({
+        claim_id: claim.id,
+        action_type: 'email_response',
+        draft_content: {
+          to_email: clientEmail,
+          to_name: clientName,
+          subject,
+          body: emailBody,
+          recipient_type: 'policyholder'
+        },
+        ai_reasoning: `Bi-weekly idle claim update: No activity for ${idleThresholdDays}+ days. Summarizing ${openTasks?.length || 0} open tasks.`,
+        status: 'pending',
+      });
+      
+      await supabase.from('darwin_action_log').insert({
+        claim_id: claim.id,
+        action_type: 'idle_claim_update',
+        action_details: { 
+          to: clientEmail,
+          subject,
+          open_tasks: openTasks?.length || 0,
+          queued_for_review: true
+        },
+        was_auto_executed: false,
+        result: `Bi-weekly client update drafted for review`,
+        trigger_source: 'darwin_autonomous_agent',
+      });
+      results.escalations++;
+      console.log(`Idle claim update queued for claim ${claim.claim_number}`);
+    }
+    
+  } catch (err) {
+    console.error(`Error creating idle update for claim ${claim.claim_number}:`, err);
   }
 }
