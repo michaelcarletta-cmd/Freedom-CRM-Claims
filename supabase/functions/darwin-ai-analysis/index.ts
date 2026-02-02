@@ -3354,6 +3354,32 @@ VIII. RECOMMENDED ACTIONS
     
     console.log(`Darwin AI Analysis completed for ${analysisType}, result length: ${analysisResult.length}`);
 
+    // Save analysis result to database for future reference
+    const inputSummary = pdfFileName 
+      ? `PDF: ${pdfFileName}` 
+      : additionalContext?.trigger_reason || `${analysisType} analysis`;
+    
+    try {
+      const { error: saveError } = await supabase
+        .from('darwin_analysis_results')
+        .insert({
+          claim_id: claimId,
+          analysis_type: analysisType,
+          input_summary: inputSummary.substring(0, 500), // Truncate if too long
+          result: analysisResult,
+          pdf_file_name: pdfFileName || null,
+        });
+      
+      if (saveError) {
+        console.error('Failed to save analysis result:', saveError);
+      } else {
+        console.log(`Analysis result saved to darwin_analysis_results for claim ${claimId}`);
+      }
+    } catch (saveErr) {
+      console.error('Error saving analysis result:', saveErr);
+      // Don't fail the request if save fails
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true,
