@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useState, lazy, Suspense } from "react";
+import { useState, lazy, Suspense, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -75,17 +75,44 @@ const ClaimDetail = () => {
         .from("claims")
         .select("*")
         .eq("id", id)
-        .single();
+        .maybeSingle();
       if (error) {
         console.error("Error fetching claim:", error);
         throw error;
       }
-      console.log("Claim fetched successfully:", data?.claim_number);
+      console.log("Claim fetched successfully:", data?.status);
       return data;
     },
     enabled: !!id,
-    staleTime: 30000, // Cache for 30 seconds
+    staleTime: 5000, // Reduced cache time for more responsive updates
   });
+
+  // Real-time subscription for this specific claim
+  useEffect(() => {
+    if (!id) return;
+
+    const channel = supabase
+      .channel(`claim-detail-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'claims',
+          filter: `id=eq.${id}`,
+        },
+        (payload) => {
+          console.log("Claim updated via realtime:", payload.new);
+          // Update the cache with new data
+          queryClient.setQueryData(["claim", id], payload.new);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id, queryClient]);
 
   // Log any claim fetch errors
   if (claimError) {
