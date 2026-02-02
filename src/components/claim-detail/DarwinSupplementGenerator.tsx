@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +13,6 @@ import { useToast } from "@/hooks/use-toast";
 import { PlusCircle, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen, Camera, Ruler, ChevronDown, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useClaimFiles } from "@/hooks/useClaimFiles";
 import { ClaimFileSelector } from "./ClaimFileSelector";
-
 interface DarwinSupplementGeneratorProps {
   claimId: string;
   claim: any;
@@ -56,6 +57,19 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
   const ourEstimateInputRef = useRef<HTMLInputElement>(null);
   const insuranceEstimateInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  
+  // Manual measurement inputs - CRITICAL for accurate quantities
+  const [manualMeasurements, setManualMeasurements] = useState({
+    roofSquares: '',
+    ridgeHipLF: '',
+    valleyLF: '',
+    eaveRakeLF: '',
+    roofPitch: '',
+    stories: '',
+    pipeBoots: '',
+    vents: '',
+    skylights: ''
+  });
 
   const { files: claimFiles, loading: loadingFiles, downloadFileAsBase64 } = useClaimFiles(claimId);
 
@@ -316,6 +330,9 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
       // Build photo evidence summary
       const photoEvidence = buildPhotoEvidenceSummary();
 
+      // Check if manual measurements are provided (these override PDF extraction)
+      const hasManualMeasurements = manualMeasurements.roofSquares || manualMeasurements.ridgeHipLF;
+      
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
         body: {
           claimId,
@@ -329,12 +346,24 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
             ourEstimatePdfName: ourFileName,
             insuranceEstimatePdf: insuranceEstimateContent,
             insuranceEstimatePdfName: insuranceFileName,
-            // NEW: Photo analysis evidence
+            // Photo analysis evidence
             photoEvidence,
             photoCount: photoAnalyses.length,
-            // NEW: Measurement reports
+            // Measurement reports (PDF files)
             measurementReports: measurementContents,
-            measurementCount: measurementContents.length
+            measurementCount: measurementContents.length,
+            // CRITICAL: Manual measurements from user (EXACT values to use)
+            manualMeasurements: hasManualMeasurements ? {
+              roofSquares: manualMeasurements.roofSquares || null,
+              ridgeHipLF: manualMeasurements.ridgeHipLF || null,
+              valleyLF: manualMeasurements.valleyLF || null,
+              eaveRakeLF: manualMeasurements.eaveRakeLF || null,
+              roofPitch: manualMeasurements.roofPitch || null,
+              stories: manualMeasurements.stories || null,
+              pipeBoots: manualMeasurements.pipeBoots || null,
+              vents: manualMeasurements.vents || null,
+              skylights: manualMeasurements.skylights || null
+            } : null
           }
         }
       });
@@ -591,16 +620,145 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
                   No measurement reports found. Upload EagleView, Hover, or other measurement reports to the claim files.
                 </p>
               )}
+
+              {/* Manual Measurement Entry - CRITICAL for accurate quantities */}
+              <div className="mt-4 p-3 bg-primary/5 rounded-lg border border-primary/20 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Ruler className="h-4 w-4 text-primary" />
+                  <span className="font-medium text-sm">Manual Measurements (Required for accuracy)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Enter EXACT values from your measurement report. These override AI guesses.
+                </p>
+                
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="roofSquares" className="text-xs font-medium">Roof Area (SQ)</Label>
+                    <Input
+                      id="roofSquares"
+                      type="text"
+                      placeholder="e.g., 17"
+                      value={manualMeasurements.roofSquares}
+                      onChange={(e) => setManualMeasurements(prev => ({ ...prev, roofSquares: e.target.value }))}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <Label htmlFor="ridgeHipLF" className="text-xs font-medium">Ridge/Hip (LF)</Label>
+                    <Input
+                      id="ridgeHipLF"
+                      type="text"
+                      placeholder="e.g., 145"
+                      value={manualMeasurements.ridgeHipLF}
+                      onChange={(e) => setManualMeasurements(prev => ({ ...prev, ridgeHipLF: e.target.value }))}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <Label htmlFor="valleyLF" className="text-xs font-medium">Valley (LF)</Label>
+                    <Input
+                      id="valleyLF"
+                      type="text"
+                      placeholder="e.g., 68"
+                      value={manualMeasurements.valleyLF}
+                      onChange={(e) => setManualMeasurements(prev => ({ ...prev, valleyLF: e.target.value }))}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <Label htmlFor="eaveRakeLF" className="text-xs font-medium">Eave/Rake (LF)</Label>
+                    <Input
+                      id="eaveRakeLF"
+                      type="text"
+                      placeholder="e.g., 320"
+                      value={manualMeasurements.eaveRakeLF}
+                      onChange={(e) => setManualMeasurements(prev => ({ ...prev, eaveRakeLF: e.target.value }))}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <Label htmlFor="roofPitch" className="text-xs font-medium">Pitch</Label>
+                    <Input
+                      id="roofPitch"
+                      type="text"
+                      placeholder="e.g., 6/12"
+                      value={manualMeasurements.roofPitch}
+                      onChange={(e) => setManualMeasurements(prev => ({ ...prev, roofPitch: e.target.value }))}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <Label htmlFor="stories" className="text-xs font-medium">Stories</Label>
+                    <Input
+                      id="stories"
+                      type="text"
+                      placeholder="e.g., 2"
+                      value={manualMeasurements.stories}
+                      onChange={(e) => setManualMeasurements(prev => ({ ...prev, stories: e.target.value }))}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="pipeBoots" className="text-xs font-medium">Pipe Boots</Label>
+                    <Input
+                      id="pipeBoots"
+                      type="text"
+                      placeholder="e.g., 4"
+                      value={manualMeasurements.pipeBoots}
+                      onChange={(e) => setManualMeasurements(prev => ({ ...prev, pipeBoots: e.target.value }))}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <Label htmlFor="vents" className="text-xs font-medium">Vents</Label>
+                    <Input
+                      id="vents"
+                      type="text"
+                      placeholder="e.g., 2"
+                      value={manualMeasurements.vents}
+                      onChange={(e) => setManualMeasurements(prev => ({ ...prev, vents: e.target.value }))}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <Label htmlFor="skylights" className="text-xs font-medium">Skylights</Label>
+                    <Input
+                      id="skylights"
+                      type="text"
+                      placeholder="e.g., 0"
+                      value={manualMeasurements.skylights}
+                      onChange={(e) => setManualMeasurements(prev => ({ ...prev, skylights: e.target.value }))}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Evidence Summary */}
-            {(photoAnalyses.length > 0 || selectedMeasurementIds.size > 0) && (
+            {(photoAnalyses.length > 0 || selectedMeasurementIds.size > 0 || manualMeasurements.roofSquares) && (
               <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
                 <p className="text-sm">
                   <strong>Darwin will use:</strong> {photoAnalyses.length} analyzed photos 
-                  {selectedMeasurementIds.size > 0 && ` + ${selectedMeasurementIds.size} measurement report(s)`} 
+                  {manualMeasurements.roofSquares && <span className="text-primary font-medium"> + {manualMeasurements.roofSquares} SQ roof</span>}
+                  {selectedMeasurementIds.size > 0 && !manualMeasurements.roofSquares && ` + ${selectedMeasurementIds.size} measurement report(s)`} 
                   {' '}to generate accurate line items with justifications.
                 </p>
+                {manualMeasurements.roofSquares && (
+                  <p className="text-xs text-primary mt-1">
+                    ✓ Manual measurements will be used for exact quantities
+                  </p>
+                )}
               </div>
             )}
           </CollapsibleContent>

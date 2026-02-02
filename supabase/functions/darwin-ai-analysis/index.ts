@@ -788,38 +788,52 @@ ${unanalyzedPhotos.length > 20 ? `... and ${unanalyzedPhotos.length - 20} more u
 `;
         }
 
-        // Build measurement section
+        // Build measurement section - PRIORITIZE manual measurements when provided
         let measurementSection = '';
-        if (hasMeasurements) {
+        const hasManualMeasurements = additionalContext?.manualMeasurements?.roofSquares || 
+                                      additionalContext?.manualMeasurements?.ridgeHipLF;
+        
+        if (hasManualMeasurements) {
+          // Manual measurements provided - USE THESE EXACT VALUES
+          const m = additionalContext.manualMeasurements;
+          measurementSection = `
+=== EXACT MEASUREMENTS PROVIDED BY USER ===
+**CRITICAL: These are the EXACT measurements to use. DO NOT estimate, calculate, or modify these values!**
+
+${m.roofSquares ? `✓ ROOF AREA: ${m.roofSquares} SQ (EXACT - use this value for all roofing quantities)` : ''}
+${m.ridgeHipLF ? `✓ RIDGE/HIP: ${m.ridgeHipLF} LF (EXACT)` : ''}
+${m.valleyLF ? `✓ VALLEY: ${m.valleyLF} LF (EXACT)` : ''}
+${m.eaveRakeLF ? `✓ EAVE/RAKE: ${m.eaveRakeLF} LF (EXACT)` : ''}
+${m.roofPitch ? `✓ PITCH: ${m.roofPitch}` : ''}
+${m.stories ? `✓ STORIES: ${m.stories}` : ''}
+${m.pipeBoots ? `✓ PIPE BOOTS: ${m.pipeBoots} (EXACT count)` : ''}
+${m.vents ? `✓ VENTS: ${m.vents} (EXACT count)` : ''}
+${m.skylights ? `✓ SKYLIGHTS: ${m.skylights} (EXACT count)` : ''}
+
+**MANDATORY RULES:**
+1. If roof area is ${m.roofSquares || 'X'} SQ, your Remove & Replace Shingles line MUST be ${m.roofSquares || 'X'} SQ
+2. DO NOT double, add waste to, or estimate roof square footage - use the EXACT number provided
+3. Apply standard waste factors only to material calculations if needed, NOT to the SQ measurement itself
+=== END EXACT MEASUREMENTS ===
+`;
+        } else if (hasMeasurements) {
           measurementSection = `
 === MEASUREMENT REPORTS PROVIDED (${additionalContext.measurementCount} reports) ===
-CRITICAL INSTRUCTION: You MUST extract the EXACT measurements from these reports. DO NOT guess or double values!
+NOTE: PDF measurement reports were selected but no manual values entered.
+The AI will attempt to reference these reports, but for guaranteed accuracy, 
+the user should enter manual measurements from their report.
 
-The following measurement reports contain the actual property dimensions:
+Reports selected:
 ${additionalContext.measurementReports.map((m: any) => `- ${m.name}`).join('\n')}
-
-REQUIRED: Extract and use these EXACT values from the measurement report(s):
-- Total roof area in SQUARES (1 SQ = 100 SF) - use the EXACT number from the report
-- Hip/ridge linear footage - use the EXACT number
-- Valley linear footage - use the EXACT number  
-- Eave/rake edge linear footage - use the EXACT number
-- Roof pitch (e.g., 6/12, 8/12)
-- Number of stories/levels
-- Count of pipe boots, vents, skylights
-
-IMPORTANT: If the measurement report says 17 SQ, use 17 SQ. DO NOT calculate or double this number.
-The measurement report already accounts for the full roof area.
 === END MEASUREMENT REPORTS ===
 `;
         } else {
           measurementSection = `
-=== NO MEASUREMENT REPORTS PROVIDED ===
-No EagleView, Hover, or measurement reports were selected. 
-If available, recommend the user upload or select measurement reports for accurate quantities.
-Estimate quantities based on photo evidence and typical residential dimensions.
-NOTE: Without measurement reports, quantities are rough estimates only.
+=== NO MEASUREMENTS PROVIDED ===
+No measurement data available. Quantities will be rough estimates only.
+IMPORTANT: Flag to user that measurement data is needed for accurate estimates.
 ===
-`;
+`
         }
 
         userPrompt = `${claimSummary}
