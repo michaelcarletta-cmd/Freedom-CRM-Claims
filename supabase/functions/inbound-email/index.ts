@@ -464,6 +464,10 @@ serve(async (req) => {
       if (settings?.auto_respond_emails) {
         console.log(`Triggering AI response draft for claim ${claim.claim_number}`);
         
+        // Check autonomy level - if fully autonomous, the darwin-autonomous-agent will handle auto-sending
+        const autonomyLevel = automation.autonomy_level || 'supervised';
+        console.log(`Claim autonomy level: ${autonomyLevel}`);
+        
         // Trigger AI to draft a response (fire and forget)
         fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-claim-ai-action`, {
           method: 'POST',
@@ -475,6 +479,7 @@ serve(async (req) => {
             action: 'draft_email_response',
             claimId: claim.id,
             emailId: insertedEmail.id,
+            autonomyLevel: autonomyLevel,
           }),
         }).catch(err => console.error('Failed to trigger AI draft:', err));
       }
