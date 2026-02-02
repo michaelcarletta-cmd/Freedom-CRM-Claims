@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator } from "lucide-react";
+import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -90,13 +91,13 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     },
   });
 
-  // Fetch files
-  const { data: files } = useQuery({
+  // Fetch files with classification data
+  const { data: files, refetch: refetchFiles } = useQuery({
     queryKey: ["claim-files", claimId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_files")
-        .select("*")
+        .select("*, document_classification, classification_confidence, classification_metadata, processed_by_darwin")
         .eq("claim_id", claimId)
         .order("uploaded_at", { ascending: false });
 
@@ -104,6 +105,69 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       return data;
     },
   });
+
+  // Reprocess file with Darwin
+  const reprocessFileMutation = useMutation({
+    mutationFn: async (fileId: string) => {
+      const { data, error } = await supabase.functions.invoke('darwin-process-document', {
+        body: { fileId }
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      refetchFiles();
+      toast({
+        title: "Document Reprocessed",
+        description: `Classified as ${data.classification} (${Math.round((data.confidence || 0) * 100)}% confidence)`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Processing Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Get classification badge color
+  const getClassificationBadge = (classification: string | null, confidence: number | null) => {
+    if (!classification) return null;
+    
+    const colors: Record<string, string> = {
+      estimate: "bg-blue-500/20 text-blue-500 border-blue-500/30",
+      denial: "bg-red-500/20 text-red-500 border-red-500/30",
+      approval: "bg-green-500/20 text-green-500 border-green-500/30",
+      rfi: "bg-amber-500/20 text-amber-500 border-amber-500/30",
+      engineering_report: "bg-purple-500/20 text-purple-500 border-purple-500/30",
+      policy: "bg-indigo-500/20 text-indigo-500 border-indigo-500/30",
+      correspondence: "bg-slate-500/20 text-slate-400 border-slate-500/30",
+      invoice: "bg-emerald-500/20 text-emerald-500 border-emerald-500/30",
+      photo: "bg-pink-500/20 text-pink-500 border-pink-500/30",
+      other: "bg-gray-500/20 text-gray-400 border-gray-500/30",
+    };
+
+    const label = classification.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const confidencePercent = confidence ? Math.round(confidence * 100) : 0;
+    
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className={`${colors[classification] || colors.other} text-xs`}>
+              <Bot className="h-3 w-3 mr-1" />
+              {label}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Darwin classified this as {label}</p>
+            <p className="text-xs text-muted-foreground">Confidence: {confidencePercent}%</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
 
   // Create folder mutation
   const createFolderMutation = useMutation({
@@ -500,6 +564,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                     <div className="space-y-2">
                       {folderFiles.map((file) => {
                         const Icon = getFileIcon(file.file_type);
+                        const isReprocessing = reprocessFileMutation.isPending && reprocessFileMutation.variables === file.id;
                         return (
                           <div
                             key={file.id}
@@ -510,14 +575,22 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                                 <Icon className="h-4 w-4" />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">
-                                  {file.file_name}
-                                </p>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-sm font-medium truncate">
+                                    {file.file_name}
+                                  </p>
+                                  {getClassificationBadge(file.document_classification, file.classification_confidence)}
+                                </div>
                                 <p className="text-xs text-muted-foreground mt-1">
                                   {formatFileSize(file.file_size || 0)} •{" "}
                                   {new Date(file.uploaded_at).toLocaleDateString()}
+                                  {file.classification_metadata && typeof file.classification_metadata === 'object' && 'summary' in file.classification_metadata && (
+                                    <span className="ml-2 text-muted-foreground">
+                                      • {String((file.classification_metadata as Record<string, unknown>).summary)}
+                                    </span>
+                                  )}
                                 </p>
-                                <div className="flex gap-2 mt-2">
+                                <div className="flex gap-2 mt-2 flex-wrap">
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -544,6 +617,28 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                                       Save as Template
                                     </Button>
                                   )}
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => reprocessFileMutation.mutate(file.id)}
+                                          disabled={isReprocessing}
+                                        >
+                                          {isReprocessing ? (
+                                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                          ) : (
+                                            <RefreshCw className="h-3 w-3 mr-1" />
+                                          )}
+                                          {isReprocessing ? "Processing..." : "Reprocess"}
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Re-analyze with Darwin AI</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
                                   <Button
                                     variant="outline"
                                     size="sm"
