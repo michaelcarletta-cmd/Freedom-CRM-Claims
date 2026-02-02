@@ -346,6 +346,101 @@ serve(async (req) => {
 
     console.log(`Email logged to claim ${claim.claim_number} (policy: ${claim.policy_number}) from ${senderEmail}`);
 
+    // Process email attachments if present
+    const attachments = payload.attachments || payload.Attachments || [];
+    const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10MB limit
+    
+    for (const attachment of attachments) {
+      try {
+        const fileName = attachment.filename || attachment.name || attachment.Name || 'attachment';
+        const contentType = attachment.contentType || attachment.content_type || attachment.ContentType || 'application/octet-stream';
+        const content = attachment.content || attachment.Content || attachment.data; // base64 encoded
+        
+        if (!content) {
+          console.log(`Skipping attachment ${fileName}: no content`);
+          continue;
+        }
+        
+        // Decode base64 content
+        let fileBuffer: Uint8Array;
+        try {
+          const binaryString = atob(content.replace(/[\r\n\s]/g, ''));
+          fileBuffer = Uint8Array.from(binaryString, c => c.charCodeAt(0));
+        } catch (decodeError) {
+          console.error(`Failed to decode attachment ${fileName}:`, decodeError);
+          continue;
+        }
+        
+        // Skip large attachments
+        if (fileBuffer.length > MAX_ATTACHMENT_SIZE) {
+          console.log(`Skipping attachment ${fileName}: too large (${fileBuffer.length} bytes)`);
+          continue;
+        }
+        
+        const storagePath = `${claim.id}/email-attachments/${Date.now()}-${fileName}`;
+        
+        // Upload to storage
+        const { error: uploadError } = await supabase.storage
+          .from('claim-files')
+          .upload(storagePath, fileBuffer, { contentType });
+        
+        if (uploadError) {
+          console.error(`Failed to upload attachment ${fileName}:`, uploadError);
+          continue;
+        }
+        
+        // Create file record
+        const { data: fileRecord, error: fileError } = await supabase
+          .from('claim_files')
+          .insert({
+            claim_id: claim.id,
+            file_name: fileName,
+            file_path: storagePath,
+            file_size: fileBuffer.length,
+            file_type: contentType,
+            source: 'email_attachment',
+            uploaded_by: null,
+          })
+          .select()
+          .single();
+        
+        if (fileError) {
+          console.error(`Failed to create file record for ${fileName}:`, fileError);
+          continue;
+        }
+        
+        console.log(`Attachment ${fileName} saved to claim ${claim.id}`);
+        
+        // Trigger Darwin processing (fire and forget)
+        if (fileRecord) {
+          fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/darwin-process-document`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ fileId: fileRecord.id })
+          }).catch(err => console.error('Darwin attachment processing error:', err));
+        }
+        
+        // Log attachment to claim activity
+        await supabase
+          .from('claim_updates')
+          .insert({
+            claim_id: claim.id,
+            content: `📎 Email attachment received: "${fileName}" from ${senderName}`,
+            update_type: 'file_uploaded',
+          });
+          
+      } catch (attachmentError) {
+        console.error('Error processing attachment:', attachmentError);
+      }
+    }
+    
+    if (attachments.length > 0) {
+      console.log(`Processed ${attachments.length} email attachment(s) for claim ${claim.id}`);
+    }
+
     // Identify sender type for automation triggers
     let senderType: 'insurance' | 'client' | 'contractor' | 'unknown' = 'unknown';
     
