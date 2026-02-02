@@ -1,322 +1,213 @@
 
-# Darwin Document Intelligence System
+# Real-Time Document Processing & Email Attachment Integration
 
 ## Overview
 
-This enhancement enables Darwin to automatically detect, classify, and process incoming documents - whether from emails or direct uploads. When an estimate, denial letter, or carrier status update arrives, Darwin will:
-
-1. **Detect** the document type (estimate, denial, approval, RFI, etc.)
-2. **Extract** relevant data (financials, deadlines, key language)
-3. **Take action** (update status, create tasks, flag for escalation)
-4. **Log** everything for audit trail
+This implementation adds two key capabilities:
+1. **Immediate document classification** when files are uploaded (no waiting for batch processing)
+2. **Automatic extraction and processing of email attachments** from inbound carrier emails
 
 ---
 
-## Current State
+## What Will Happen After Implementation
 
-**What exists:**
-- `claim_files` table with OCR fields (`extracted_text`, `ocr_processed_at`)
-- `extracted_document_data` table for structured data extraction
-- `extract-estimate` edge function for estimate parsing
-- `DarwinSmartDocumentSort` component for basic classification
-- `darwin-autonomous-agent` for scheduled autonomous actions
-- `inbound-email` handler that processes email attachments (currently just saves them)
+### When You Upload a Document
 
-**Gap:**
-- No automatic document type detection on upload
-- No automatic extraction when files are added
-- No status/task automation based on document content
-- Inbound email attachments aren't processed for content
+1. File uploads to storage
+2. Database record created
+3. **Immediately** triggers `darwin-process-document` (no waiting)
+4. Within seconds, you see the classification badge appear on the file
+5. If autonomy enabled: tasks created, status updated, escalations flagged
+
+### When an Email with Attachments Arrives
+
+1. Email parsed and logged to claim
+2. Attachments extracted from email payload
+3. Each attachment uploaded to `claim-files` storage
+4. Each attachment record created with source: `email_attachment`
+5. Darwin processes each attachment immediately
+6. Appropriate actions triggered based on content
 
 ---
 
-## Implementation Plan
+## Technical Implementation
 
-### Phase 1: Document Classification Engine
+### Part 1: Real-Time Processing on Upload
 
-**New edge function: `darwin-process-document`**
+**File: `src/components/claim-detail/ClaimFiles.tsx`**
 
-This function will:
-1. Accept a file ID or file data
-2. Use AI to classify the document type:
-   - `estimate` (Xactimate, Symbility, contractor)
-   - `denial` (claim denial letter)
-   - `approval` (claim approval/payment letter)
-   - `rfi` (Request for Information)
-   - `engineering_report`
-   - `policy_document`
-   - `correspondence` (general carrier letter)
-   - `invoice`
-   - `photo`
-   - `other`
-3. Extract key metadata:
-   - Date mentioned
-   - Deadline mentioned
-   - Dollar amounts
-   - Key phrases (denial reason, approval amount, etc.)
-4. Store classification in `claim_files` (new columns)
-5. Trigger appropriate follow-up actions
+Modify the upload mutation to trigger classification immediately after successful upload:
 
-**Database changes:**
+```typescript
+// After insert succeeds, trigger Darwin processing (fire and forget)
+supabase.functions.invoke('darwin-process-document', {
+  body: { fileId: data.id }
+}).catch(err => console.error('Darwin processing queued:', err));
+```
+
+The UI will update automatically when classification completes because we already have the query that fetches classification data.
+
+---
+
+### Part 2: Email Attachment Processing
+
+**File: `supabase/functions/inbound-email/index.ts`**
+
+Add attachment handling after the email is logged:
+
+The Cloudflare Email Workers payload can include attachments. We'll:
+
+1. Check for attachments in the payload
+2. For each attachment:
+   - Decode from base64
+   - Upload to claim-files storage
+   - Create claim_files record with `source: 'email_attachment'`
+   - Trigger `darwin-process-document`
+
+**Database change:**
+
+Add a `source` column to track where files came from:
+
 ```sql
--- Add classification columns to claim_files
 ALTER TABLE claim_files 
-  ADD COLUMN document_classification TEXT,
-  ADD COLUMN classification_confidence NUMERIC(3,2),
-  ADD COLUMN classification_metadata JSONB DEFAULT '{}',
-  ADD COLUMN processed_by_darwin BOOLEAN DEFAULT FALSE,
-  ADD COLUMN darwin_processed_at TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'upload';
+-- Values: 'upload', 'email_attachment', 'template', 'generated'
 ```
 
 ---
 
-### Phase 2: Automatic Processing Triggers
+## Files to Modify
 
-**Option A: Database trigger (realtime)**
-Create a trigger on `claim_files` INSERT that fires a webhook to process new documents.
-
-**Option B: Scheduled processing (batch)**
-Extend `darwin-autonomous-agent` to scan for unprocessed files.
-
-**Recommended: Option B** - More reliable, handles retries better, and can respect rate limits.
-
-**Updates to `darwin-autonomous-agent`:**
-```typescript
-// Add new function: processUnclassifiedDocuments
-// Scans for claim_files where document_classification IS NULL
-// and processes them in batches
-```
+| File | Change |
+|------|--------|
+| `src/components/claim-detail/ClaimFiles.tsx` | Add real-time Darwin processing trigger after upload |
+| `supabase/functions/inbound-email/index.ts` | Add attachment extraction, storage upload, and Darwin processing |
+| Database migration | Add `source` column to `claim_files` |
 
 ---
 
-### Phase 3: Document-Based Automations
+## Implementation Details
 
-**When Darwin detects specific document types:**
+### ClaimFiles.tsx Changes
 
-| Document Type | Automatic Actions |
-|--------------|-------------------|
-| **Estimate** | Extract to accounting, update claim status to "Estimate Received", create task "Review estimate" |
-| **Denial** | Flag escalation, analyze denial reason, draft rebuttal, update status to "Denied", create urgent task |
-| **Approval** | Update status to "Approved", calculate payment amounts, create task "Process payment" |
-| **RFI** | Create urgent task with deadline, draft response template |
-| **Engineering Report** | Link to claim evidence, flag if contradicts carrier position |
-| **Policy Document** | Extract coverage limits, link to claim |
-
-**Updates to `darwin-autonomous-agent`:**
-```typescript
-// Add function: processDocumentActions
-// Based on document_classification, trigger appropriate actions
-```
-
----
-
-### Phase 4: Inbound Email Attachment Processing
-
-**Updates to `inbound-email` edge function:**
-
-Currently, email attachments are handled by `claim-sync-webhook` for some integrations. We need to:
-
-1. Extract attachments from inbound emails
-2. Upload them to the claim's file storage
-3. Trigger document classification
-4. If autonomous mode is enabled, take appropriate actions
-
-**Note:** The current inbound-email handler uses Cloudflare/Mailjet webhooks which may not include full attachment data. We may need to:
-- Store attachment metadata from the webhook
-- Use a separate process to download and process attachments
-- Or rely on manual upload + smart sorting for now
-
----
-
-### Phase 5: UI Enhancements
-
-**Update `ClaimFiles.tsx`:**
-- Show document classification badges
-- Add "Reprocess with Darwin" button
-- Show extraction results in file details
-
-**Update `DarwinOperationsCenter.tsx`:**
-- Add "Documents Processed" metric
-- Show recent document classifications in action log
-
----
-
-## Technical Implementation Details
-
-### New Edge Function: `darwin-process-document`
+In the `uploadFileMutation` `onSuccess` callback, add:
 
 ```typescript
-// supabase/functions/darwin-process-document/index.ts
-
-// Input: { fileId: string } or { claimId: string, fileName: string, fileContent: base64 }
-// 
-// Process:
-// 1. Fetch file from storage (if fileId provided)
-// 2. Send to AI for classification
-// 3. Based on type, perform additional extraction
-// 4. Update claim_files with classification
-// 5. If claim has autonomy enabled, trigger actions
-// 6. Log to darwin_action_log
+// Trigger Darwin classification immediately (non-blocking)
+supabase.functions.invoke('darwin-process-document', {
+  body: { fileId: data.id }
+}).then(() => {
+  // Refetch to show updated classification
+  setTimeout(() => refetchFiles(), 2000);
+}).catch(console.error);
 ```
 
-### AI Prompt for Classification
+### Inbound Email Attachment Handling
 
-```text
-You are a document classifier for insurance claims. Analyze this document and classify it.
-
-Return JSON:
-{
-  "classification": "estimate|denial|approval|rfi|engineering_report|policy|correspondence|invoice|photo|other",
-  "confidence": 0.0-1.0,
-  "metadata": {
-    "date_mentioned": "YYYY-MM-DD or null",
-    "deadline_mentioned": "YYYY-MM-DD or null",
-    "amounts": [{"description": "...", "amount": 0.00}],
-    "key_phrases": ["..."],
-    "sender": "carrier|adjuster|contractor|policyholder|unknown",
-    "requires_action": true/false,
-    "urgency": "high|medium|low",
-    "summary": "One sentence summary"
-  }
-}
-
-For denials, also extract:
-- denial_reason: Main reason given
-- denial_type: "full|partial|coverage|causation|procedure"
-
-For estimates, also extract:
-- estimate_type: "xactimate|symbility|contractor|unknown"
-- gross_rcv: Total before depreciation
-
-For approvals, also extract:
-- approved_amount: Payment amount
-- payment_type: "initial|supplement|final"
-```
-
-### Updates to `darwin-autonomous-agent`
-
-Add new function to process unclassified documents:
+Add after line ~345 (after email is inserted):
 
 ```typescript
-async function processUnclassifiedDocuments(supabase, results) {
-  // Get claims with autonomy enabled
-  const claimIds = [/* from main query */];
+// Process attachments if present
+const attachments = payload.attachments || payload.Attachments || [];
+
+for (const attachment of attachments) {
+  const fileName = attachment.filename || attachment.Name || 'attachment';
+  const contentType = attachment.contentType || attachment.ContentType || 'application/octet-stream';
+  const content = attachment.content || attachment.Content; // base64 encoded
   
-  // Find unprocessed files for these claims
-  const { data: unprocessedFiles } = await supabase
+  if (!content) continue;
+  
+  // Decode and upload
+  const fileBuffer = Uint8Array.from(atob(content), c => c.charCodeAt(0));
+  const storagePath = `${claim.id}/email-attachments/${Date.now()}-${fileName}`;
+  
+  await supabase.storage
+    .from('claim-files')
+    .upload(storagePath, fileBuffer, { contentType });
+  
+  // Create file record
+  const { data: fileRecord } = await supabase
     .from('claim_files')
-    .select('id, claim_id, file_name, file_path')
-    .in('claim_id', claimIds)
-    .is('document_classification', null)
-    .eq('processed_by_darwin', false)
-    .limit(10); // Process in batches
+    .insert({
+      claim_id: claim.id,
+      file_name: fileName,
+      file_path: storagePath,
+      file_size: fileBuffer.length,
+      file_type: contentType,
+      source: 'email_attachment',
+      uploaded_by: null,
+    })
+    .select()
+    .single();
   
-  for (const file of unprocessedFiles) {
-    await processDocument(supabase, file, results);
-  }
-}
-
-async function processDocument(supabase, file, results) {
-  // Call darwin-process-document function
-  const response = await fetch(
-    `${SUPABASE_URL}/functions/v1/darwin-process-document`,
-    {
+  // Trigger Darwin processing
+  if (fileRecord) {
+    fetch(`${SUPABASE_URL}/functions/v1/darwin-process-document`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${SERVICE_ROLE_KEY}` },
-      body: JSON.stringify({ fileId: file.id })
-    }
-  );
-  
-  const result = await response.json();
-  
-  // Handle actions based on classification
-  if (result.classification === 'denial') {
-    await handleDenialDetected(supabase, file.claim_id, result);
-  } else if (result.classification === 'estimate') {
-    await handleEstimateDetected(supabase, file.claim_id, result);
+      headers: {
+        'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fileId: fileRecord.id })
+    }).catch(err => console.error('Darwin attachment processing:', err));
   }
-  // ... etc
 }
 ```
+
+---
+
+## Safety & Performance
+
+- **Non-blocking**: Darwin processing is fire-and-forget, upload completes instantly
+- **UI refresh**: Delayed refetch (2 seconds) shows classification after processing
+- **Large attachments**: Skipped if over 10MB to prevent timeout
+- **Error handling**: Failed classification doesn't affect upload success
+- **Logging**: All attachments logged to claim activity
+
+---
+
+## User Experience After Implementation
+
+### Upload Flow
+1. Click "Upload File" → Select file
+2. File uploads instantly, toast shows "File uploaded"
+3. 1-2 seconds later, classification badge appears on file
+4. If high-priority (denial/RFI): notification appears immediately
+
+### Email with Attachment Flow
+1. Carrier sends email with estimate PDF attached
+2. Email logged to claim communication tab
+3. Attachment appears in Files tab with "email_attachment" source indicator
+4. Classification badge shows "Estimate" 
+5. Task "Review Estimate" created automatically
+6. Accounting updated with extracted RCV value
 
 ---
 
 ## Database Migration
 
 ```sql
--- Add classification columns to claim_files
+-- Add source column to track file origin
 ALTER TABLE claim_files 
-  ADD COLUMN IF NOT EXISTS document_classification TEXT,
-  ADD COLUMN IF NOT EXISTS classification_confidence NUMERIC(3,2),
-  ADD COLUMN IF NOT EXISTS classification_metadata JSONB DEFAULT '{}',
-  ADD COLUMN IF NOT EXISTS processed_by_darwin BOOLEAN DEFAULT FALSE,
-  ADD COLUMN IF NOT EXISTS darwin_processed_at TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'upload';
 
--- Index for efficient queries
-CREATE INDEX IF NOT EXISTS idx_claim_files_unprocessed 
-  ON claim_files(claim_id) 
-  WHERE document_classification IS NULL AND processed_by_darwin = FALSE;
+-- Add index for filtering by source
+CREATE INDEX IF NOT EXISTS idx_claim_files_source 
+  ON claim_files(source);
 
--- Document type index
-CREATE INDEX IF NOT EXISTS idx_claim_files_classification 
-  ON claim_files(document_classification);
-```
-
----
-
-## Files to Create/Modify
-
-### New Files
-- `supabase/functions/darwin-process-document/index.ts` - Document classification and processing
-
-### Files to Modify
-- `supabase/functions/darwin-autonomous-agent/index.ts` - Add document processing loop
-- `src/components/claim-detail/ClaimFiles.tsx` - Show classification badges, reprocess button
-- `src/components/dashboard/DarwinOperationsCenter.tsx` - Add document processing metrics
-
-### Database Migration
-- Add classification columns to `claim_files` table
-
----
-
-## Safety Controls
-
-1. **Batch processing**: Only process 10 documents per run to avoid overloading
-2. **Confidence threshold**: Only auto-act on classifications with confidence > 0.8
-3. **Human review for high-stakes**: Denials always create escalation, never auto-respond
-4. **Logging**: All classifications logged to `darwin_action_log`
-5. **Reprocessing**: Users can manually trigger reprocessing if classification was wrong
-
----
-
-## Cron Setup
-
-To make the autonomous agent run automatically, we'll set up a cron job:
-
-```sql
--- Schedule darwin-autonomous-agent to run every 15 minutes
-SELECT cron.schedule(
-  'darwin-autonomous-agent',
-  '*/15 * * * *',
-  $$
-  SELECT net.http_post(
-    url:='https://tnnzihuszaosnyeyceed.supabase.co/functions/v1/darwin-autonomous-agent',
-    headers:='{"Content-Type": "application/json", "Authorization": "Bearer YOUR_ANON_KEY"}'::jsonb,
-    body:='{}'::jsonb
-  );
-  $$
-);
+-- Add comment for documentation
+COMMENT ON COLUMN claim_files.source IS 
+  'Origin of file: upload, email_attachment, template, generated';
 ```
 
 ---
 
 ## Summary
 
-This implementation will enable Darwin to:
-1. Automatically classify every document uploaded to claims
-2. Extract relevant data from estimates, denials, approvals
-3. Take appropriate actions (update status, create tasks, flag escalations)
-4. Process documents from both direct uploads and email attachments
-5. Provide full audit trail of all document processing
+After this implementation:
 
-The system respects the existing autonomy levels - in supervised mode, it will classify and suggest actions; in autonomous mode, it will execute them.
+- Every uploaded document is classified **within seconds**
+- Email attachments from carriers are **automatically extracted and processed**
+- No more waiting for batch processing
+- Classification badges appear in real-time
+- Tasks and escalations trigger immediately based on document content
