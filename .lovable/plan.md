@@ -1,77 +1,243 @@
 
-# Real-Time Document Processing & Email Attachment Integration
+
+# Darwin Deep Analysis on Document Detection
 
 ## Overview
 
-This implementation adds two key capabilities:
-1. **Immediate document classification** when files are uploaded (no waiting for batch processing)
-2. **Automatic extraction and processing of email attachments** from inbound carrier emails
+This enhancement makes Darwin go beyond classification - when a denial, engineer report, or estimate arrives, Darwin will **automatically run the appropriate analyzer** so when you enter the claim, the analysis is already complete with:
+
+- **Denials**: Full rebuttal drafted, denial reason parsed, ambiguous statements highlighted
+- **Engineer Reports**: Weaknesses identified, contradictions flagged, counter-arguments prepared  
+- **Estimates**: Gap analysis completed, missing line items identified, supplement opportunities noted
 
 ---
 
-## What Will Happen After Implementation
+## What Happens Now vs After Implementation
 
-### When You Upload a Document
+### Current Flow (Classification Only)
 
-1. File uploads to storage
-2. Database record created
-3. **Immediately** triggers `darwin-process-document` (no waiting)
-4. Within seconds, you see the classification badge appear on the file
-5. If autonomy enabled: tasks created, status updated, escalations flagged
+```text
+Document Uploaded → Classification Badge Appears → "Denial" tag shown
+User must manually → Open Denial Analyzer → Select File → Click Generate → Wait
+```
 
-### When an Email with Attachments Arrives
+### New Flow (Deep Analysis)
 
-1. Email parsed and logged to claim
-2. Attachments extracted from email payload
-3. Each attachment uploaded to `claim-files` storage
-4. Each attachment record created with source: `email_attachment`
-5. Darwin processes each attachment immediately
-6. Appropriate actions triggered based on content
+```text
+Document Uploaded → Classification → Auto-Trigger Deep Analysis
+                                    ↓
+When you open the claim:
+  - Rebuttal already drafted
+  - Weaknesses already identified  
+  - Gaps already analyzed
+  - Escalation alert with summary
+```
+
+---
+
+## Document-Specific Deep Analysis
+
+| Document Type | Auto-Analysis Triggered | What You'll See Ready |
+|--------------|------------------------|----------------------|
+| **Denial** | `denial_rebuttal` | Full point-by-point rebuttal with citations, ambiguous language flagged, carrier deadline tracked |
+| **Engineer Report** | `engineer_report_rebuttal` | Technical counter-arguments, code violations identified, contradictions with photos highlighted |
+| **Estimate** | `estimate_gap_analysis` (new) | Missing line items, underpaid quantities, supplement opportunities, comparison to typical scope |
 
 ---
 
 ## Technical Implementation
 
-### Part 1: Real-Time Processing on Upload
+### Modify `darwin-process-document/index.ts`
 
-**File: `src/components/claim-detail/ClaimFiles.tsx`**
-
-Modify the upload mutation to trigger classification immediately after successful upload:
+After classification completes with high confidence (≥0.8), trigger the appropriate deep analysis:
 
 ```typescript
-// After insert succeeds, trigger Darwin processing (fire and forget)
-supabase.functions.invoke('darwin-process-document', {
-  body: { fileId: data.id }
-}).catch(err => console.error('Darwin processing queued:', err));
+// After classification is stored, trigger deep analysis
+if (classificationResult.confidence >= 0.8) {
+  await triggerDeepAnalysis(
+    supabase,
+    targetClaimId,
+    classificationResult.classification,
+    fileId,
+    file?.file_path
+  );
+}
 ```
 
-The UI will update automatically when classification completes because we already have the query that fetches classification data.
+### New Function: `triggerDeepAnalysis`
+
+```typescript
+async function triggerDeepAnalysis(
+  supabase: any,
+  claimId: string,
+  classification: DocumentClassification,
+  fileId: string,
+  filePath: string
+) {
+  // Map classification to analysis type
+  const analysisMap: Record<string, string> = {
+    'denial': 'denial_rebuttal',
+    'engineering_report': 'engineer_report_rebuttal',
+    'estimate': 'estimate_gap_analysis',
+  };
+
+  const analysisType = analysisMap[classification];
+  if (!analysisType) return; // No deep analysis for this type
+
+  console.log(`Triggering deep analysis: ${analysisType} for file ${fileId}`);
+
+  // Download file for analysis
+  const { data: fileBlob } = await supabase.storage
+    .from('claim-files')
+    .download(filePath);
+
+  if (!fileBlob) {
+    console.error('Could not download file for deep analysis');
+    return;
+  }
+
+  // Convert to base64
+  const arrayBuffer = await fileBlob.arrayBuffer();
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+  // Call darwin-ai-analysis
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+  const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  await fetch(`${SUPABASE_URL}/functions/v1/darwin-ai-analysis`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      claimId,
+      analysisType,
+      pdfContent: base64,
+      pdfFileName: filePath.split('/').pop(),
+      additionalContext: {
+        auto_triggered: true,
+        source_file_id: fileId,
+        trigger_reason: `Automatically analyzed upon ${classification} detection`
+      }
+    })
+  });
+
+  // Log the auto-analysis action
+  await supabase.from('darwin_action_log').insert({
+    claim_id: claimId,
+    action_type: 'auto_deep_analysis',
+    action_details: {
+      file_id: fileId,
+      classification,
+      analysis_type: analysisType,
+    },
+    was_auto_executed: true,
+    result: `Automatically triggered ${analysisType} for detected ${classification}`,
+    trigger_source: 'darwin_document_intelligence',
+  });
+}
+```
 
 ---
 
-### Part 2: Email Attachment Processing
+## New Analysis Type: `estimate_gap_analysis`
 
-**File: `supabase/functions/inbound-email/index.ts`**
+Add to `darwin-ai-analysis/index.ts` to analyze incoming estimates for gaps and supplement opportunities:
 
-Add attachment handling after the email is logged:
+```typescript
+case 'estimate_gap_analysis': {
+  systemPrompt = `You are Darwin, analyzing an incoming insurance estimate to identify gaps, underpayments, and supplement opportunities.
 
-The Cloudflare Email Workers payload can include attachments. We'll:
+Your task is to:
+1. Identify MISSING line items that should be included
+2. Flag UNDERPRICED quantities (e.g., roof area seems low)
+3. Spot MISSING categories (e.g., no O&P, no code upgrade, no detach/reset)
+4. Compare to typical scope for this loss type
+5. Note any ambiguous or limiting language
 
-1. Check for attachments in the payload
-2. For each attachment:
-   - Decode from base64
-   - Upload to claim-files storage
-   - Create claim_files record with `source: 'email_attachment'`
-   - Trigger `darwin-process-document`
+Respond with a structured analysis:
 
-**Database change:**
+## ESTIMATE SUMMARY
+- Estimate Type: [Xactimate/Symbility/Contractor]
+- Total RCV: $X
+- Depreciation: $X  
+- Net Claim: $X
 
-Add a `source` column to track where files came from:
+## MISSING LINE ITEMS
+1. [Item] - Typically included for [loss type], estimated value: $X
+2. ...
 
-```sql
-ALTER TABLE claim_files 
-  ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'upload';
--- Values: 'upload', 'email_attachment', 'template', 'generated'
+## QUANTITY CONCERNS
+1. [Line item]: Listed as X SQ, typical for this property would be Y SQ
+2. ...
+
+## SUPPLEMENT OPPORTUNITIES  
+1. [Category]: [Specific opportunity]
+2. ...
+
+## AMBIGUOUS LANGUAGE TO CHALLENGE
+1. "[Quote from estimate]" - This is vague because...
+
+## RECOMMENDED ACTIONS
+1. Request supplement for [items]
+2. Challenge [specific items]
+`;
+  break;
+}
+```
+
+---
+
+## UI: Show Auto-Analysis Results
+
+The existing components (DarwinDenialAnalyzer, DarwinEngineerReportAnalyzer) already load previous analysis on mount:
+
+```typescript
+useEffect(() => {
+  const loadPreviousAnalysis = async () => {
+    const { data } = await supabase
+      .from('darwin_analysis_results')
+      .select('*')
+      .eq('claim_id', claimId)
+      .eq('analysis_type', 'denial_rebuttal')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (data) {
+      setAnalysis(data.result);
+      setLastAnalyzed(new Date(data.created_at));
+    }
+  };
+  loadPreviousAnalysis();
+}, [claimId]);
+```
+
+This means when you open the claim and go to the Darwin tab → Denial Analyzer, **the analysis will already be there**.
+
+### Enhancement: Add Notification Banner
+
+Add a banner to DarwinTab showing pending auto-analyses:
+
+```typescript
+// Show alert when auto-analysis completed
+{autoAnalyses.length > 0 && (
+  <Alert className="mb-4 border-primary/50 bg-primary/10">
+    <Brain className="h-4 w-4" />
+    <AlertTitle>Darwin Analysis Ready</AlertTitle>
+    <AlertDescription>
+      {autoAnalyses.map(a => (
+        <div key={a.id}>
+          <strong>{a.analysis_type}</strong>: {a.input_summary}
+          <Button size="sm" onClick={() => scrollToAnalyzer(a.analysis_type)}>
+            View
+          </Button>
+        </div>
+      ))}
+    </AlertDescription>
+  </Alert>
+)}
 ```
 
 ---
@@ -80,134 +246,56 @@ ALTER TABLE claim_files
 
 | File | Change |
 |------|--------|
-| `src/components/claim-detail/ClaimFiles.tsx` | Add real-time Darwin processing trigger after upload |
-| `supabase/functions/inbound-email/index.ts` | Add attachment extraction, storage upload, and Darwin processing |
-| Database migration | Add `source` column to `claim_files` |
+| `supabase/functions/darwin-process-document/index.ts` | Add `triggerDeepAnalysis` function, call after classification |
+| `supabase/functions/darwin-ai-analysis/index.ts` | Add `estimate_gap_analysis` case |
+| `src/components/claim-detail/DarwinTab.tsx` | Add auto-analysis notification banner |
 
 ---
 
-## Implementation Details
+## Safety Controls
 
-### ClaimFiles.tsx Changes
-
-In the `uploadFileMutation` `onSuccess` callback, add:
-
-```typescript
-// Trigger Darwin classification immediately (non-blocking)
-supabase.functions.invoke('darwin-process-document', {
-  body: { fileId: data.id }
-}).then(() => {
-  // Refetch to show updated classification
-  setTimeout(() => refetchFiles(), 2000);
-}).catch(console.error);
-```
-
-### Inbound Email Attachment Handling
-
-Add after line ~345 (after email is inserted):
-
-```typescript
-// Process attachments if present
-const attachments = payload.attachments || payload.Attachments || [];
-
-for (const attachment of attachments) {
-  const fileName = attachment.filename || attachment.Name || 'attachment';
-  const contentType = attachment.contentType || attachment.ContentType || 'application/octet-stream';
-  const content = attachment.content || attachment.Content; // base64 encoded
-  
-  if (!content) continue;
-  
-  // Decode and upload
-  const fileBuffer = Uint8Array.from(atob(content), c => c.charCodeAt(0));
-  const storagePath = `${claim.id}/email-attachments/${Date.now()}-${fileName}`;
-  
-  await supabase.storage
-    .from('claim-files')
-    .upload(storagePath, fileBuffer, { contentType });
-  
-  // Create file record
-  const { data: fileRecord } = await supabase
-    .from('claim_files')
-    .insert({
-      claim_id: claim.id,
-      file_name: fileName,
-      file_path: storagePath,
-      file_size: fileBuffer.length,
-      file_type: contentType,
-      source: 'email_attachment',
-      uploaded_by: null,
-    })
-    .select()
-    .single();
-  
-  // Trigger Darwin processing
-  if (fileRecord) {
-    fetch(`${SUPABASE_URL}/functions/v1/darwin-process-document`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ fileId: fileRecord.id })
-    }).catch(err => console.error('Darwin attachment processing:', err));
-  }
-}
-```
-
----
-
-## Safety & Performance
-
-- **Non-blocking**: Darwin processing is fire-and-forget, upload completes instantly
-- **UI refresh**: Delayed refetch (2 seconds) shows classification after processing
-- **Large attachments**: Skipped if over 10MB to prevent timeout
-- **Error handling**: Failed classification doesn't affect upload success
-- **Logging**: All attachments logged to claim activity
+1. **Confidence Threshold**: Only trigger deep analysis if classification confidence ≥ 80%
+2. **Rate Limiting**: Don't trigger if same file already analyzed in last hour
+3. **Error Isolation**: Deep analysis failures don't affect classification
+4. **Logging**: All auto-analyses logged to `darwin_action_log`
+5. **Non-blocking**: Deep analysis runs asynchronously (fire-and-forget)
 
 ---
 
 ## User Experience After Implementation
 
-### Upload Flow
-1. Click "Upload File" → Select file
-2. File uploads instantly, toast shows "File uploaded"
-3. 1-2 seconds later, classification badge appears on file
-4. If high-priority (denial/RFI): notification appears immediately
+### When a Denial Letter Arrives (via email or upload)
 
-### Email with Attachment Flow
-1. Carrier sends email with estimate PDF attached
-2. Email logged to claim communication tab
-3. Attachment appears in Files tab with "email_attachment" source indicator
-4. Classification badge shows "Estimate" 
-5. Task "Review Estimate" created automatically
-6. Accounting updated with extracted RCV value
+1. File uploaded and classified as "Denial" (3-5 seconds)
+2. Darwin automatically downloads file and runs denial analysis (15-30 seconds)
+3. User opens claim → sees escalation warning
+4. Goes to Darwin tab → **Rebuttal already drafted and waiting**
+5. User can copy, edit, or use in One-Click Package immediately
 
----
+### When an Engineer Report Arrives
 
-## Database Migration
+1. Classified as "Engineering Report"
+2. Darwin auto-analyzes for weaknesses and contradictions
+3. User opens claim → engineer rebuttal ready
+4. Contradictions with photos already flagged
+5. Counter-arguments citing building codes prepared
 
-```sql
--- Add source column to track file origin
-ALTER TABLE claim_files 
-  ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'upload';
+### When a Carrier Estimate Arrives
 
--- Add index for filtering by source
-CREATE INDEX IF NOT EXISTS idx_claim_files_source 
-  ON claim_files(source);
-
--- Add comment for documentation
-COMMENT ON COLUMN claim_files.source IS 
-  'Origin of file: upload, email_attachment, template, generated';
-```
+1. Classified as "Estimate"  
+2. Darwin extracts RCV to accounting (existing)
+3. **NEW**: Gap analysis runs automatically
+4. User opens claim → sees "Supplement Opportunities" ready
+5. Missing items and underpriced quantities already identified
 
 ---
 
 ## Summary
 
-After this implementation:
+After implementation:
+- **Denials** get automatic rebuttals drafted
+- **Engineer reports** get automatic counter-argument analysis
+- **Estimates** get automatic gap/supplement analysis
+- All analysis is **ready before you open the claim**
+- Nothing left unaddressed - every gap, weakness, and opportunity identified
 
-- Every uploaded document is classified **within seconds**
-- Email attachments from carriers are **automatically extracted and processed**
-- No more waiting for batch processing
-- Classification badges appear in real-time
-- Tasks and escalations trigger immediately based on document content
