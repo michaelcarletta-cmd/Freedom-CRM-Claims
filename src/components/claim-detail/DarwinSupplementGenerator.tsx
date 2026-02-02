@@ -95,6 +95,8 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
           'property report', 'inspection report', 'roof inspection'
         ];
         
+        console.log('All claim files for measurement detection:', files?.map((f: any) => f.file_name));
+        
         // Also detect by file naming patterns (like report-XXXXX.pdf)
         const measurements = (files || []).filter((f: any) => {
           const fileName = f.file_name?.toLowerCase() || '';
@@ -105,10 +107,15 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
             fileName.includes(k) || folderName.includes(k)
           );
           
-          // Also match EagleView-style report naming (report-XXXXXX.pdf)
-          const isReportPattern = /^report-[a-z0-9]+\.pdf$/i.test(fileName);
+          // Match EagleView-style report naming (report-XXXXXX with or without .pdf)
+          const isReportPattern = /^report-[a-z0-9]+/i.test(fileName);
           
-          return matchesKeyword || isReportPattern;
+          const isMatch = matchesKeyword || isReportPattern;
+          if (isMatch) {
+            console.log('Matched measurement file:', fileName, { matchesKeyword, isReportPattern });
+          }
+          
+          return isMatch;
         }).map((f: any) => ({
           id: f.id,
           file_name: f.file_name,
@@ -116,7 +123,7 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
           folder_name: f.claim_folders?.name || null
         }));
         
-        console.log('Loaded photos:', photos?.length, 'Measurement files:', measurements.length);
+        console.log('Evidence loaded - Photos:', photos?.length, 'Measurement files found:', measurements.length, measurements.map(m => m.file_name));
         setMeasurementFiles(measurements);
       } catch (error) {
         console.error('Error loading evidence data:', error);
