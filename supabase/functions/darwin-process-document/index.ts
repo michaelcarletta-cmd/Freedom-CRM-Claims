@@ -191,6 +191,19 @@ serve(async (req) => {
       .eq('is_enabled', true)
       .single();
 
+    // Trigger deep analysis for key document types (high confidence only)
+    if (classificationResult.confidence >= 0.8) {
+      // Fire and forget - don't wait for deep analysis to complete
+      triggerDeepAnalysis(
+        supabase,
+        targetClaimId,
+        classificationResult.classification,
+        fileId,
+        file?.file_path
+      ).catch(err => console.error('Deep analysis trigger error:', err));
+    }
+
+    // Process automation actions if enabled
     if (automation && classificationResult.confidence >= 0.8) {
       await processDocumentActions(
         supabase, 
@@ -335,6 +348,106 @@ For APPROVALS, also include:
         summary: 'Classification fallback due to AI error',
       }
     };
+  }
+}
+
+// Trigger deep analysis for key document types (denial, engineer report, estimate)
+async function triggerDeepAnalysis(
+  supabase: any,
+  claimId: string,
+  classification: DocumentClassification,
+  fileId: string,
+  filePath: string | undefined
+) {
+  // Map classification to analysis type
+  const analysisMap: Record<string, string> = {
+    'denial': 'denial_rebuttal',
+    'engineering_report': 'engineer_report_rebuttal',
+    'estimate': 'estimate_gap_analysis',
+  };
+
+  const analysisType = analysisMap[classification];
+  if (!analysisType || !filePath) return; // No deep analysis for this type
+
+  console.log(`Triggering deep analysis: ${analysisType} for file ${fileId}`);
+
+  try {
+    // Check if this file was already analyzed in the last hour (prevent duplicate analyses)
+    const { data: recentAnalysis } = await supabase
+      .from('darwin_analysis_results')
+      .select('id')
+      .eq('claim_id', claimId)
+      .eq('analysis_type', analysisType)
+      .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
+      .limit(1);
+
+    if (recentAnalysis && recentAnalysis.length > 0) {
+      console.log(`Skipping ${analysisType} - already analyzed recently`);
+      return;
+    }
+
+    // Download file for analysis
+    const { data: fileBlob, error: downloadError } = await supabase.storage
+      .from('claim-files')
+      .download(filePath);
+
+    if (downloadError || !fileBlob) {
+      console.error('Could not download file for deep analysis:', downloadError);
+      return;
+    }
+
+    // Convert to base64
+    const arrayBuffer = await fileBlob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+      binary += String.fromCharCode(...chunk);
+    }
+    const base64 = btoa(binary);
+
+    // Call darwin-ai-analysis
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+    const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    fetch(`${SUPABASE_URL}/functions/v1/darwin-ai-analysis`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        claimId,
+        analysisType,
+        pdfContent: base64,
+        pdfFileName: filePath.split('/').pop(),
+        additionalContext: {
+          auto_triggered: true,
+          source_file_id: fileId,
+          trigger_reason: `Automatically analyzed upon ${classification} detection`
+        }
+      })
+    }).catch(err => console.error('Deep analysis call failed:', err));
+
+    // Log the auto-analysis action
+    await supabase.from('darwin_action_log').insert({
+      claim_id: claimId,
+      action_type: 'auto_deep_analysis',
+      action_details: {
+        file_id: fileId,
+        classification,
+        analysis_type: analysisType,
+      },
+      was_auto_executed: true,
+      result: `Automatically triggered ${analysisType} for detected ${classification}`,
+      trigger_source: 'darwin_document_intelligence',
+    });
+
+    console.log(`Deep analysis ${analysisType} triggered successfully for file ${fileId}`);
+  } catch (error) {
+    console.error('triggerDeepAnalysis error:', error);
+    // Don't throw - deep analysis failure shouldn't affect classification
   }
 }
 
