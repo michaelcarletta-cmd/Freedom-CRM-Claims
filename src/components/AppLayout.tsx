@@ -1,6 +1,6 @@
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
-import { NotificationPopover } from "./NotificationPopover";
+import { QuickTaskBar } from "./QuickTaskBar";
 import { ReactNode, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -28,7 +28,7 @@ const AppLayoutContent = ({ children }: AppLayoutProps) => {
           <div className="ml-4 flex items-center gap-4 flex-1">
             <span className="text-sm text-muted-foreground">Freedom Claims CRM</span>
           </div>
-          <NotificationPopover />
+          <QuickTaskBar />
         </header>
         <main className="flex-1 p-6 animate-fade-in">
           {children}
