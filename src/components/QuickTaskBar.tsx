@@ -76,7 +76,9 @@ export function QuickTaskBar() {
 
   const searchClaims = async (query: string) => {
     setIsSearching(true);
-    const { data } = await supabase
+    
+    // First, search by claim number
+    const { data: claimsByNumber } = await supabase
       .from("claims")
       .select(`
         id,
@@ -84,18 +86,59 @@ export function QuickTaskBar() {
         status,
         loss_type,
         loss_date,
+        client_id,
         clients (
           name,
           email,
           phone
         )
       `)
-      .or(`claim_number.ilike.%${query}%,clients.name.ilike.%${query}%`)
+      .ilike("claim_number", `%${query}%`)
       .limit(10);
-    
-    if (data) {
-      setClaims(data);
+
+    // Second, find clients matching the search and get their claims
+    const { data: matchingClients } = await supabase
+      .from("clients")
+      .select("id")
+      .ilike("name", `%${query}%`)
+      .limit(10);
+
+    let claimsByClient: Claim[] = [];
+    if (matchingClients && matchingClients.length > 0) {
+      const clientIds = matchingClients.map(c => c.id);
+      const { data } = await supabase
+        .from("claims")
+        .select(`
+          id,
+          claim_number,
+          status,
+          loss_type,
+          loss_date,
+          client_id,
+          clients (
+            name,
+            email,
+            phone
+          )
+        `)
+        .in("client_id", clientIds)
+        .limit(10);
+      
+      if (data) {
+        claimsByClient = data as Claim[];
+      }
     }
+
+    // Merge and dedupe results
+    const allClaims = [...(claimsByNumber || []), ...claimsByClient];
+    const uniqueClaims = allClaims.reduce((acc, claim) => {
+      if (!acc.find(c => c.id === claim.id)) {
+        acc.push(claim);
+      }
+      return acc;
+    }, [] as Claim[]);
+
+    setClaims(uniqueClaims.slice(0, 10));
     setIsSearching(false);
   };
 
