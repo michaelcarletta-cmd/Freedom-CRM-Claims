@@ -75,7 +75,11 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
     let topic = "";
     
     // Pattern matching for common document types
-    if (fileName.includes("policy") || fileName.includes("dec") || fileName.includes("declaration")) {
+    // Check for policy number patterns (e.g., H0132PK000001, HO-3, HO3, DP-1, etc.)
+    const policyNumberPattern = /^h[o0][-]?\d|^dp[-]?\d|^ho\d{2,}/i;
+    const isPolicyNumberFormat = policyNumberPattern.test(fileName) || /^[a-z]{1,3}\d{3,}[a-z]*\d*[-_]?\d*/i.test(fileName);
+    
+    if (fileName.includes("policy") || fileName.includes("dec") || fileName.includes("declaration") || isPolicyNumberFormat) {
       suggestedFolder = "Policy Documents";
       documentType = "Policy/Declaration Page";
       confidence = 0.9;
