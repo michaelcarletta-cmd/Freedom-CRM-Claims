@@ -263,13 +263,14 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
   };
 
   // Calculate total recoverable depreciation
+  // Note: PWI RCV is itself recoverable - it's "Paid When Incurred" (released upon job completion)
   const getTotalRecoverableDepreciation = (): number => {
     if (!settlement) return 0;
     const dwelling = Number(settlement.recoverable_depreciation) || 0;
-    const pwi = Number(settlement.pwi_recoverable_depreciation) || 0;
+    const pwiRcv = Number(settlement.pwi_rcv) || 0; // PWI RCV IS the recoverable amount
     const otherStructures = Number(settlement.other_structures_recoverable_depreciation) || 0;
     const personalProperty = Number(settlement.personal_property_recoverable_depreciation) || 0;
-    return dwelling + pwi + otherStructures + personalProperty;
+    return dwelling + pwiRcv + otherStructures + personalProperty;
   };
 
   // Analyze selected estimate with Darwin AI
@@ -628,8 +629,8 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
                     <p className="font-semibold text-primary">{formatCurrency(settlement.other_structures_recoverable_depreciation)}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">PWI</p>
-                    <p className="font-semibold text-primary">{formatCurrency(settlement.pwi_recoverable_depreciation)}</p>
+                    <p className="text-muted-foreground">PWI (Paid When Incurred)</p>
+                    <p className="font-semibold text-primary">{formatCurrency(settlement.pwi_rcv)}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Personal Property</p>
