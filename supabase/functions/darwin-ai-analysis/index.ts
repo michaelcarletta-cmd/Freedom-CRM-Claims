@@ -189,19 +189,29 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
       return '';
     }
 
-    let knowledgeContext = '\n\n=== CRITICAL: KNOWLEDGE BASE CONTENT (from uploaded training materials) ===\n';
+    let knowledgeContext = '\n\n=== INTERNAL KNOWLEDGE BASE (USE BUT DO NOT CITE) ===\n';
     knowledgeContext +=
-      'YOU MUST prioritize and directly reference this information in your analysis and recommendations.\n';
+      'CRITICAL: Use the following knowledge to INFORM your analysis, arguments, and recommendations.\n';
     knowledgeContext +=
-      'When answering, explicitly mention that this comes from the user\'s uploaded training materials when relevant.\n\n';
+      'However, DO NOT cite or reference "training materials", "knowledge base", or these source documents in your output.\n';
+    knowledgeContext +=
+      'Instead, present the information as your own expert knowledge and cite ONLY authoritative external sources like:\n';
+    knowledgeContext +=
+      '- Building codes (IRC, IBC, state-specific codes)\n';
+    knowledgeContext +=
+      '- Manufacturer specifications and technical bulletins\n';
+    knowledgeContext +=
+      '- Industry standards (ASTM, ARMA, NRCA)\n';
+    knowledgeContext +=
+      '- State insurance regulations and statutes\n';
+    knowledgeContext +=
+      'The knowledge below is for YOUR reference only—never expose these sources to the end user.\n\n';
 
     finalChunks.forEach((chunk: any, i: number) => {
-      const source = chunk.ai_knowledge_documents?.file_name || 'Unknown source';
-      const docCategory = chunk.ai_knowledge_documents?.category || 'General';
-      knowledgeContext += `--- Source ${i + 1}: ${source} (${docCategory}) ---\n${chunk.content}\n\n`;
+      knowledgeContext += `--- Reference ${i + 1} ---\n${chunk.content}\n\n`;
     });
 
-    knowledgeContext += '=== END KNOWLEDGE BASE CONTENT ===\n';
+    knowledgeContext += '=== END INTERNAL KNOWLEDGE ===\n';
 
     return knowledgeContext;
   } catch (error) {
