@@ -47,10 +47,15 @@ interface Settlement {
   estimate_amount: number | null;
   pwi_recoverable_depreciation?: number;
   pwi_rcv?: number;
+  pwi_non_recoverable_depreciation?: number;
+  pwi_deductible?: number;
   other_structures_recoverable_depreciation?: number;
   other_structures_rcv?: number;
+  other_structures_non_recoverable_depreciation?: number;
+  other_structures_deductible?: number;
   personal_property_recoverable_depreciation?: number;
   personal_property_rcv?: number;
+  personal_property_non_recoverable_depreciation?: number;
 }
 
 const formatCurrency = (amount: number | null | undefined): string => {
@@ -104,16 +109,14 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
   const loadData = async () => {
     setLoadingData(true);
     try {
-      // Load settlement data
+      // Load settlement data - use maybeSingle() to handle no settlement case gracefully
       const { data: settlementData, error: settlementError } = await supabase
         .from('claim_settlements')
         .select('*')
         .eq('claim_id', claimId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (settlementError && settlementError.code !== 'PGRST116') {
+      if (settlementError) {
         console.error('Error loading settlement:', settlementError);
       }
       setSettlement(settlementData);
@@ -124,7 +127,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
         .select('contractor_id')
         .eq('claim_id', claimId)
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (contractorAssignment?.contractor_id) {
         const { data: contractorProfile } = await supabase
