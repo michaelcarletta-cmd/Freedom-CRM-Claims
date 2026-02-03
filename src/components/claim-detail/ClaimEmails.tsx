@@ -1,11 +1,20 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Mail, Send, Loader2, MailOpen } from "lucide-react";
+import { Mail, Send, Loader2, MailOpen, Reply } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EmailComposer } from "@/components/EmailComposer";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+
+interface ReplyContext {
+  recipientEmail: string;
+  recipientName: string;
+  recipientType: string;
+  originalSubject: string;
+  originalBody: string;
+  originalDate: string;
+}
 
 // Decode base64 to UTF-8 string properly
 function base64ToUtf8(base64: string): string {
@@ -150,6 +159,29 @@ interface ClaimEmailsProps {
 
 export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
   const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [replyContext, setReplyContext] = useState<ReplyContext | undefined>(undefined);
+
+  const handleReply = (email: any) => {
+    setReplyContext({
+      recipientEmail: email.recipient_email,
+      recipientName: email.recipient_name || email.recipient_email,
+      recipientType: email.recipient_type || 'manual',
+      originalSubject: email.subject,
+      originalBody: email.decodedBody,
+      originalDate: format(new Date(email.sent_at), "MMM d, yyyy 'at' h:mm a")
+    });
+    setIsComposerOpen(true);
+  };
+
+  const handleComposeNew = () => {
+    setReplyContext(undefined);
+    setIsComposerOpen(true);
+  };
+
+  const handleCloseComposer = () => {
+    setIsComposerOpen(false);
+    setReplyContext(undefined);
+  };
 
   const { data: emails, isLoading } = useQuery({
     queryKey: ["emails", claimId],
@@ -179,7 +211,7 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
         <h3 className="text-lg font-semibold">Email Communications</h3>
         <Button 
           className="bg-primary hover:bg-primary/90"
-          onClick={() => setIsComposerOpen(true)}
+          onClick={handleComposeNew}
         >
           <Send className="h-4 w-4 mr-2" />
           Compose Email
@@ -228,6 +260,16 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
                 <div className="text-sm text-foreground whitespace-pre-wrap bg-muted/50 rounded p-3">
                   {email.decodedBody}
                 </div>
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleReply(email)}
+                  >
+                    <Reply className="h-4 w-4 mr-2" />
+                    Reply
+                  </Button>
+                </div>
               </div>
             );
           })}
@@ -240,9 +282,10 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
 
       <EmailComposer
         isOpen={isComposerOpen}
-        onClose={() => setIsComposerOpen(false)}
+        onClose={handleCloseComposer}
         claimId={claimId}
         claim={claim}
+        replyTo={replyContext}
       />
     </div>
   );
