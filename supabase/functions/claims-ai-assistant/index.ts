@@ -977,6 +977,120 @@ const tools = [
         }
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_my_activity",
+      description: "Search for claims that the current user updated, created, or modified within a specific time period. Use this when the user asks 'what claims did I update today/yesterday/this week' or 'what have I worked on recently' or 'show me my activity'.",
+      parameters: {
+        type: "object",
+        properties: {
+          time_period: {
+            type: "string",
+            enum: ["today", "yesterday", "this_week", "last_week", "this_month", "last_30_days"],
+            description: "The time period to search for activity"
+          },
+          action_type: {
+            type: "string",
+            enum: ["all", "create", "update", "status_change", "email_sent", "sms_sent", "file_upload", "payment_recorded"],
+            description: "Optional filter for specific action types. Default is 'all'."
+          }
+        },
+        required: ["time_period"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_communications",
+      description: "Search all communications (emails, SMS, notes, communications diary) across all claims for specific topics, people, or keywords. Use this when the user asks about previous discussions with an adjuster, what was said about a specific topic, or to find communications mentioning something specific.",
+      parameters: {
+        type: "object",
+        properties: {
+          search_query: {
+            type: "string",
+            description: "Keywords or topic to search for in communications (e.g., 'depreciation', 'denial', 'settlement offer', adjuster name)"
+          },
+          communication_type: {
+            type: "string",
+            enum: ["all", "emails", "sms", "notes", "communications_diary"],
+            description: "Type of communications to search. Default is 'all'."
+          },
+          time_period: {
+            type: "string",
+            enum: ["all_time", "today", "this_week", "this_month", "last_30_days", "last_90_days"],
+            description: "Time period to limit the search. Default is 'all_time'."
+          },
+          claim_name: {
+            type: "string",
+            description: "Optional: Filter to a specific claim by policyholder name or claim number"
+          }
+        },
+        required: ["search_query"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_claim_history",
+      description: "Search the complete history and timeline of activities across all claims. Use this for questions like 'when did we last contact the adjuster on Smith claim', 'what happened last week on my claims', 'show me all status changes this month'.",
+      parameters: {
+        type: "object",
+        properties: {
+          search_query: {
+            type: "string",
+            description: "Keywords to search for in claim history and activity"
+          },
+          event_type: {
+            type: "string",
+            enum: ["all", "status_changes", "notes_added", "files_uploaded", "emails", "tasks_created", "inspections", "payments"],
+            description: "Type of events to search. Default is 'all'."
+          },
+          time_period: {
+            type: "string",
+            enum: ["all_time", "today", "yesterday", "this_week", "last_week", "this_month", "last_30_days"],
+            description: "Time period to search"
+          },
+          claim_name: {
+            type: "string",
+            description: "Optional: Filter to a specific claim by policyholder name or claim number"
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_adjuster_interactions",
+      description: "Get all interactions and communications with a specific adjuster across all claims. Use this when the user asks about previous dealings with an adjuster, what was discussed, or to find all claims involving a specific adjuster.",
+      parameters: {
+        type: "object",
+        properties: {
+          adjuster_name: {
+            type: "string",
+            description: "Name of the adjuster to search for"
+          },
+          include_emails: {
+            type: "boolean",
+            description: "Include email communications. Default is true."
+          },
+          include_notes: {
+            type: "boolean",
+            description: "Include notes mentioning the adjuster. Default is true."
+          },
+          include_diary: {
+            type: "boolean",
+            description: "Include communications diary entries. Default is true."
+          }
+        },
+        required: ["adjuster_name"]
+      }
+    }
   }
 ];
 // Helper function to get full Darwin-level claim context
@@ -1272,6 +1386,626 @@ async function findStaffByName(supabase: any, staffName: string): Promise<{ id: 
     return { id: data[0].id, name: data[0].full_name || data[0].email };
   }
   return null;
+}
+
+// Helper function to get date range based on time period
+function getDateRange(timePeriod: string): { start: Date; end: Date } {
+  const now = new Date();
+  const end = new Date(now);
+  let start = new Date(now);
+
+  switch (timePeriod) {
+    case "today":
+      start.setHours(0, 0, 0, 0);
+      break;
+    case "yesterday":
+      start.setDate(start.getDate() - 1);
+      start.setHours(0, 0, 0, 0);
+      end.setDate(end.getDate() - 1);
+      end.setHours(23, 59, 59, 999);
+      break;
+    case "this_week":
+      const dayOfWeek = start.getDay();
+      start.setDate(start.getDate() - dayOfWeek);
+      start.setHours(0, 0, 0, 0);
+      break;
+    case "last_week":
+      const currentDay = start.getDay();
+      start.setDate(start.getDate() - currentDay - 7);
+      start.setHours(0, 0, 0, 0);
+      end.setDate(end.getDate() - currentDay - 1);
+      end.setHours(23, 59, 59, 999);
+      break;
+    case "this_month":
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+      break;
+    case "last_30_days":
+      start.setDate(start.getDate() - 30);
+      break;
+    case "last_90_days":
+      start.setDate(start.getDate() - 90);
+      break;
+    case "all_time":
+    default:
+      start = new Date(0); // Beginning of time
+      break;
+  }
+
+  return { start, end };
+}
+
+// Helper function to search user activity via audit logs
+async function searchUserActivity(supabase: any, userId: string, timePeriod: string, actionType?: string): Promise<string> {
+  try {
+    const { start, end } = getDateRange(timePeriod);
+    
+    let query = supabase
+      .from("audit_logs")
+      .select("*")
+      .eq("user_id", userId)
+      .gte("created_at", start.toISOString())
+      .lte("created_at", end.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (actionType && actionType !== "all") {
+      query = query.eq("action", actionType);
+    }
+
+    const { data: logs, error } = await query;
+
+    if (error || !logs || logs.length === 0) {
+      return `No activity found for ${timePeriod.replace("_", " ")}.`;
+    }
+
+    // Group by record type (claims, tasks, etc.)
+    const groupedActivity: Record<string, any[]> = {};
+    for (const log of logs) {
+      const key = log.record_type || "other";
+      if (!groupedActivity[key]) groupedActivity[key] = [];
+      groupedActivity[key].push(log);
+    }
+
+    // Get claim details for claim-related activities
+    const claimIds = [...new Set(logs.filter((l: any) => l.record_type === "claim" && l.record_id).map((l: any) => l.record_id))];
+    let claimNames: Record<string, string> = {};
+    
+    if (claimIds.length > 0) {
+      const { data: claims } = await supabase
+        .from("claims")
+        .select("id, claim_number, policyholder_name")
+        .in("id", claimIds);
+      
+      if (claims) {
+        for (const claim of claims) {
+          claimNames[claim.id] = `${claim.claim_number || 'N/A'} - ${claim.policyholder_name}`;
+        }
+      }
+    }
+
+    let result = `=== YOUR ACTIVITY (${timePeriod.replace("_", " ").toUpperCase()}) ===\n\n`;
+    result += `Total activities: ${logs.length}\n\n`;
+
+    for (const [recordType, activities] of Object.entries(groupedActivity)) {
+      result += `--- ${recordType.toUpperCase()} (${activities.length} actions) ---\n`;
+      
+      for (const activity of activities.slice(0, 15)) {
+        const date = new Date(activity.created_at).toLocaleString();
+        const claimInfo = activity.record_id && claimNames[activity.record_id] 
+          ? ` | Claim: ${claimNames[activity.record_id]}`
+          : "";
+        const details = activity.metadata ? ` | ${JSON.stringify(activity.metadata).substring(0, 100)}` : "";
+        result += `• ${date} - ${activity.action}${claimInfo}${details}\n`;
+      }
+      result += "\n";
+    }
+
+    return result;
+  } catch (err) {
+    console.error("Error searching user activity:", err);
+    return "Error searching activity logs.";
+  }
+}
+
+// Helper function to search communications across all claims
+async function searchCommunications(supabase: any, searchQuery: string, communicationType: string, timePeriod: string, claimName?: string): Promise<string> {
+  try {
+    const { start, end } = getDateRange(timePeriod);
+    const results: any[] = [];
+
+    // Resolve claim ID if name provided
+    let claimId: string | null = null;
+    let claimInfo = "";
+    if (claimName) {
+      const foundClaim = await findClaimByClientName(supabase, claimName);
+      if (foundClaim) {
+        claimId = foundClaim.id;
+        claimInfo = ` for claim ${foundClaim.claim_number} - ${foundClaim.policyholder_name}`;
+      }
+    }
+
+    // Search emails
+    if (communicationType === "all" || communicationType === "emails") {
+      let emailQuery = supabase
+        .from("emails")
+        .select("*, claims!inner(claim_number, policyholder_name)")
+        .or(`subject.ilike.%${searchQuery}%,body.ilike.%${searchQuery}%,from_email.ilike.%${searchQuery}%,to_email.ilike.%${searchQuery}%`)
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (claimId) {
+        emailQuery = emailQuery.eq("claim_id", claimId);
+      }
+
+      const { data: emails } = await emailQuery;
+      if (emails) {
+        for (const email of emails) {
+          results.push({
+            type: "Email",
+            date: email.created_at,
+            claim: `${email.claims?.claim_number || 'N/A'} - ${email.claims?.policyholder_name || 'Unknown'}`,
+            direction: email.direction === "inbound" ? "Received" : "Sent",
+            summary: `${email.direction === "inbound" ? "From" : "To"}: ${email.from_email || email.to_email} | Subject: ${email.subject}`,
+            content: email.body?.substring(0, 300)
+          });
+        }
+      }
+    }
+
+    // Search SMS
+    if (communicationType === "all" || communicationType === "sms") {
+      let smsQuery = supabase
+        .from("sms_messages")
+        .select("*, claims!inner(claim_number, policyholder_name)")
+        .ilike("message", `%${searchQuery}%`)
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (claimId) {
+        smsQuery = smsQuery.eq("claim_id", claimId);
+      }
+
+      const { data: sms } = await smsQuery;
+      if (sms) {
+        for (const msg of sms) {
+          results.push({
+            type: "SMS",
+            date: msg.created_at,
+            claim: `${msg.claims?.claim_number || 'N/A'} - ${msg.claims?.policyholder_name || 'Unknown'}`,
+            direction: msg.direction === "inbound" ? "Received" : "Sent",
+            summary: `${msg.direction === "inbound" ? "From" : "To"}: ${msg.phone_number}`,
+            content: msg.message?.substring(0, 300)
+          });
+        }
+      }
+    }
+
+    // Search claim notes/updates
+    if (communicationType === "all" || communicationType === "notes") {
+      let notesQuery = supabase
+        .from("claim_updates")
+        .select("*, claims!inner(claim_number, policyholder_name)")
+        .ilike("content", `%${searchQuery}%`)
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (claimId) {
+        notesQuery = notesQuery.eq("claim_id", claimId);
+      }
+
+      const { data: notes } = await notesQuery;
+      if (notes) {
+        for (const note of notes) {
+          results.push({
+            type: "Note",
+            date: note.created_at,
+            claim: `${note.claims?.claim_number || 'N/A'} - ${note.claims?.policyholder_name || 'Unknown'}`,
+            direction: "Internal",
+            summary: `Note added`,
+            content: note.content?.substring(0, 300)
+          });
+        }
+      }
+    }
+
+    // Search communications diary
+    if (communicationType === "all" || communicationType === "communications_diary") {
+      let diaryQuery = supabase
+        .from("claim_communications_diary")
+        .select("*, claims!inner(claim_number, policyholder_name)")
+        .or(`summary.ilike.%${searchQuery}%,contact_name.ilike.%${searchQuery}%,promises_made.ilike.%${searchQuery}%,deadlines_mentioned.ilike.%${searchQuery}%`)
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString())
+        .order("communication_date", { ascending: false })
+        .limit(20);
+
+      if (claimId) {
+        diaryQuery = diaryQuery.eq("claim_id", claimId);
+      }
+
+      const { data: diary } = await diaryQuery;
+      if (diary) {
+        for (const entry of diary) {
+          results.push({
+            type: `Diary (${entry.communication_type})`,
+            date: entry.communication_date,
+            claim: `${entry.claims?.claim_number || 'N/A'} - ${entry.claims?.policyholder_name || 'Unknown'}`,
+            direction: entry.direction === "inbound" ? "Received" : "Outbound",
+            summary: `Contact: ${entry.contact_name || 'Unknown'} (${entry.contact_company || 'N/A'})`,
+            content: entry.summary?.substring(0, 300),
+            promises: entry.promises_made,
+            deadlines: entry.deadlines_mentioned
+          });
+        }
+      }
+    }
+
+    if (results.length === 0) {
+      return `No communications found matching "${searchQuery}"${claimInfo} in ${timePeriod.replace("_", " ")}.`;
+    }
+
+    // Sort by date
+    results.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    let output = `=== COMMUNICATIONS SEARCH: "${searchQuery}"${claimInfo} ===\n`;
+    output += `Time period: ${timePeriod.replace("_", " ")} | Found: ${results.length} results\n\n`;
+
+    for (const result of results.slice(0, 25)) {
+      const date = new Date(result.date).toLocaleString();
+      output += `📨 ${result.type} | ${date}\n`;
+      output += `   Claim: ${result.claim}\n`;
+      output += `   ${result.direction}: ${result.summary}\n`;
+      if (result.content) {
+        output += `   Content: ${result.content}...\n`;
+      }
+      if (result.promises) {
+        output += `   ⚠️ Promises Made: ${result.promises}\n`;
+      }
+      if (result.deadlines) {
+        output += `   📅 Deadlines: ${result.deadlines}\n`;
+      }
+      output += "\n";
+    }
+
+    return output;
+  } catch (err) {
+    console.error("Error searching communications:", err);
+    return "Error searching communications.";
+  }
+}
+
+// Helper function to search claim history and timeline
+async function searchClaimHistory(supabase: any, searchQuery: string, eventType: string, timePeriod: string, claimName?: string): Promise<string> {
+  try {
+    const { start, end } = getDateRange(timePeriod);
+    const events: any[] = [];
+
+    // Resolve claim ID if name provided
+    let claimId: string | null = null;
+    let claimInfo = "";
+    if (claimName) {
+      const foundClaim = await findClaimByClientName(supabase, claimName);
+      if (foundClaim) {
+        claimId = foundClaim.id;
+        claimInfo = ` for ${foundClaim.claim_number} - ${foundClaim.policyholder_name}`;
+      }
+    }
+
+    // Search claim updates/notes
+    if (eventType === "all" || eventType === "notes_added") {
+      let query = supabase
+        .from("claim_updates")
+        .select("*, claims!inner(claim_number, policyholder_name)")
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      if (claimId) query = query.eq("claim_id", claimId);
+      if (searchQuery) query = query.ilike("content", `%${searchQuery}%`);
+
+      const { data } = await query;
+      if (data) {
+        for (const item of data) {
+          events.push({
+            type: "Note Added",
+            date: item.created_at,
+            claim: `${item.claims?.claim_number} - ${item.claims?.policyholder_name}`,
+            description: item.content?.substring(0, 200)
+          });
+        }
+      }
+    }
+
+    // Search file uploads
+    if (eventType === "all" || eventType === "files_uploaded") {
+      let query = supabase
+        .from("claim_files")
+        .select("*, claims!inner(claim_number, policyholder_name)")
+        .gte("uploaded_at", start.toISOString())
+        .lte("uploaded_at", end.toISOString())
+        .order("uploaded_at", { ascending: false })
+        .limit(30);
+
+      if (claimId) query = query.eq("claim_id", claimId);
+      if (searchQuery) query = query.ilike("file_name", `%${searchQuery}%`);
+
+      const { data } = await query;
+      if (data) {
+        for (const item of data) {
+          events.push({
+            type: "File Uploaded",
+            date: item.uploaded_at,
+            claim: `${item.claims?.claim_number} - ${item.claims?.policyholder_name}`,
+            description: `${item.file_name} (${item.document_classification || item.file_type || 'unknown type'})`
+          });
+        }
+      }
+    }
+
+    // Search tasks created
+    if (eventType === "all" || eventType === "tasks_created") {
+      let query = supabase
+        .from("tasks")
+        .select("*, claims!inner(claim_number, policyholder_name)")
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      if (claimId) query = query.eq("claim_id", claimId);
+      if (searchQuery) query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+
+      const { data } = await query;
+      if (data) {
+        for (const item of data) {
+          events.push({
+            type: "Task Created",
+            date: item.created_at,
+            claim: `${item.claims?.claim_number} - ${item.claims?.policyholder_name}`,
+            description: `${item.title} | Status: ${item.status} | Priority: ${item.priority || 'normal'}`
+          });
+        }
+      }
+    }
+
+    // Search inspections
+    if (eventType === "all" || eventType === "inspections") {
+      let query = supabase
+        .from("inspections")
+        .select("*, claims!inner(claim_number, policyholder_name)")
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      if (claimId) query = query.eq("claim_id", claimId);
+
+      const { data } = await query;
+      if (data) {
+        for (const item of data) {
+          events.push({
+            type: "Inspection",
+            date: item.inspection_date || item.created_at,
+            claim: `${item.claims?.claim_number} - ${item.claims?.policyholder_name}`,
+            description: `${item.inspection_type} | Status: ${item.status}`
+          });
+        }
+      }
+    }
+
+    // Search payments/checks
+    if (eventType === "all" || eventType === "payments") {
+      let query = supabase
+        .from("claim_checks")
+        .select("*, claims!inner(claim_number, policyholder_name)")
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      if (claimId) query = query.eq("claim_id", claimId);
+
+      const { data } = await query;
+      if (data) {
+        for (const item of data) {
+          events.push({
+            type: "Payment Received",
+            date: item.check_date || item.created_at,
+            claim: `${item.claims?.claim_number} - ${item.claims?.policyholder_name}`,
+            description: `$${item.amount?.toLocaleString()} | ${item.check_type} | Check #${item.check_number || 'N/A'}`
+          });
+        }
+      }
+    }
+
+    // Search emails
+    if (eventType === "all" || eventType === "emails") {
+      let query = supabase
+        .from("emails")
+        .select("*, claims!inner(claim_number, policyholder_name)")
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      if (claimId) query = query.eq("claim_id", claimId);
+      if (searchQuery) query = query.or(`subject.ilike.%${searchQuery}%,body.ilike.%${searchQuery}%`);
+
+      const { data } = await query;
+      if (data) {
+        for (const item of data) {
+          events.push({
+            type: item.direction === "inbound" ? "Email Received" : "Email Sent",
+            date: item.created_at,
+            claim: `${item.claims?.claim_number} - ${item.claims?.policyholder_name}`,
+            description: `Subject: ${item.subject} | ${item.direction === "inbound" ? "From" : "To"}: ${item.from_email || item.to_email}`
+          });
+        }
+      }
+    }
+
+    if (events.length === 0) {
+      return `No events found${claimInfo} in ${timePeriod.replace("_", " ")}${searchQuery ? ` matching "${searchQuery}"` : ""}.`;
+    }
+
+    // Sort by date
+    events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    let output = `=== CLAIM HISTORY${claimInfo} ===\n`;
+    output += `Time period: ${timePeriod.replace("_", " ")} | Found: ${events.length} events\n\n`;
+
+    for (const event of events.slice(0, 40)) {
+      const date = new Date(event.date).toLocaleString();
+      output += `📌 ${event.type} | ${date}\n`;
+      output += `   Claim: ${event.claim}\n`;
+      output += `   ${event.description}\n\n`;
+    }
+
+    return output;
+  } catch (err) {
+    console.error("Error searching claim history:", err);
+    return "Error searching claim history.";
+  }
+}
+
+// Helper function to get adjuster interactions across all claims
+async function getAdjusterInteractions(supabase: any, adjusterName: string, includeEmails: boolean, includeNotes: boolean, includeDiary: boolean): Promise<string> {
+  try {
+    const interactions: any[] = [];
+
+    // Find claims with this adjuster
+    const { data: claims } = await supabase
+      .from("claims")
+      .select("id, claim_number, policyholder_name, adjuster_name, adjuster_phone, adjuster_email")
+      .ilike("adjuster_name", `%${adjusterName}%`);
+
+    // Also check claim_adjusters table
+    const { data: claimAdjusters } = await supabase
+      .from("claim_adjusters")
+      .select("*, claims!inner(id, claim_number, policyholder_name)")
+      .ilike("adjuster_name", `%${adjusterName}%`);
+
+    const allClaimIds: string[] = [];
+    const claimDetails: Record<string, string> = {};
+
+    if (claims) {
+      for (const claim of claims) {
+        allClaimIds.push(claim.id);
+        claimDetails[claim.id] = `${claim.claim_number} - ${claim.policyholder_name}`;
+      }
+    }
+
+    if (claimAdjusters) {
+      for (const ca of claimAdjusters) {
+        if (!allClaimIds.includes(ca.claims.id)) {
+          allClaimIds.push(ca.claims.id);
+          claimDetails[ca.claims.id] = `${ca.claims.claim_number} - ${ca.claims.policyholder_name}`;
+        }
+      }
+    }
+
+    if (allClaimIds.length === 0) {
+      return `No claims found with adjuster "${adjusterName}".`;
+    }
+
+    // Get emails mentioning the adjuster
+    if (includeEmails) {
+      const { data: emails } = await supabase
+        .from("emails")
+        .select("*")
+        .in("claim_id", allClaimIds)
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      if (emails) {
+        for (const email of emails) {
+          interactions.push({
+            type: email.direction === "inbound" ? "Email Received" : "Email Sent",
+            date: email.created_at,
+            claim: claimDetails[email.claim_id] || "Unknown",
+            content: `Subject: ${email.subject}\n${email.body?.substring(0, 200)}...`
+          });
+        }
+      }
+    }
+
+    // Get notes mentioning the adjuster
+    if (includeNotes) {
+      const { data: notes } = await supabase
+        .from("claim_updates")
+        .select("*")
+        .in("claim_id", allClaimIds)
+        .or(`content.ilike.%${adjusterName}%,content.ilike.%adjuster%`)
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      if (notes) {
+        for (const note of notes) {
+          interactions.push({
+            type: "Note",
+            date: note.created_at,
+            claim: claimDetails[note.claim_id] || "Unknown",
+            content: note.content?.substring(0, 200)
+          });
+        }
+      }
+    }
+
+    // Get communications diary entries
+    if (includeDiary) {
+      const { data: diary } = await supabase
+        .from("claim_communications_diary")
+        .select("*")
+        .in("claim_id", allClaimIds)
+        .order("communication_date", { ascending: false })
+        .limit(30);
+
+      if (diary) {
+        for (const entry of diary) {
+          interactions.push({
+            type: `Diary (${entry.communication_type})`,
+            date: entry.communication_date,
+            claim: claimDetails[entry.claim_id] || "Unknown",
+            content: `Contact: ${entry.contact_name} | ${entry.summary}${entry.promises_made ? `\nPromises: ${entry.promises_made}` : ""}${entry.deadlines_mentioned ? `\nDeadlines: ${entry.deadlines_mentioned}` : ""}`
+          });
+        }
+      }
+    }
+
+    // Sort by date
+    interactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    let output = `=== INTERACTIONS WITH ADJUSTER: ${adjusterName.toUpperCase()} ===\n\n`;
+    output += `Claims involving this adjuster: ${allClaimIds.length}\n`;
+    output += `Total interactions found: ${interactions.length}\n\n`;
+
+    output += `--- CLAIMS ---\n`;
+    for (const claimId of allClaimIds) {
+      output += `• ${claimDetails[claimId]}\n`;
+    }
+    output += "\n";
+
+    output += `--- INTERACTION TIMELINE ---\n\n`;
+    for (const interaction of interactions.slice(0, 30)) {
+      const date = new Date(interaction.date).toLocaleString();
+      output += `📋 ${interaction.type} | ${date}\n`;
+      output += `   Claim: ${interaction.claim}\n`;
+      output += `   ${interaction.content}\n\n`;
+    }
+
+    return output;
+  } catch (err) {
+    console.error("Error getting adjuster interactions:", err);
+    return "Error searching adjuster interactions.";
+  }
 }
 
 // Helper function to find workspace by name
@@ -1677,7 +2411,42 @@ You can also specify claims by name using client_names array, or by ID using cla
 NOTEPAD: You can add items to the user's personal notepad on their dashboard!
 - Use add_notepad_item when the user asks you to remind them of something, jot something down, add to their notes, or save a quick note
 - Examples: "remind me to call the adjuster tomorrow", "add to my notes: follow up on Smith claim", "jot down that I need to review the Johnson estimate"
-- The note will appear as a bullet point on their dashboard notepad`;
+- The note will appear as a bullet point on their dashboard notepad
+
+*** SYSTEM-WIDE SEARCH CAPABILITIES ***
+
+SEARCH MY ACTIVITY (search_my_activity):
+- Use this when the user asks "what claims did I update today", "what have I worked on this week", "show me my recent activity"
+- Searches audit logs to find all claims and records the user has modified
+- Time periods: today, yesterday, this_week, last_week, this_month, last_30_days
+- Can filter by action type: create, update, status_change, email_sent, sms_sent, file_upload, payment_recorded
+- Examples: "what claims did I update today" → search_my_activity({ time_period: "today" })
+
+SEARCH COMMUNICATIONS (search_communications):
+- Use this when the user asks about previous discussions, what was said about a topic, or to find specific conversations
+- Searches ALL emails, SMS, notes, and communications diary entries across all claims
+- Can search by keywords, adjuster names, topics, etc.
+- Can optionally filter to a specific claim by name
+- Examples:
+  - "what did the adjuster and I discuss about depreciation" → search_communications({ search_query: "depreciation" })
+  - "find all emails mentioning denial" → search_communications({ search_query: "denial", communication_type: "emails" })
+  - "show me communications with State Farm" → search_communications({ search_query: "State Farm" })
+
+SEARCH CLAIM HISTORY (search_claim_history):
+- Use this for timeline questions like "what happened last week", "when did we last contact...", "show me status changes"
+- Searches notes, files, tasks, inspections, payments, and emails across all claims
+- Can filter by event type: status_changes, notes_added, files_uploaded, emails, tasks_created, inspections, payments
+- Examples:
+  - "what happened on my claims last week" → search_claim_history({ time_period: "last_week" })
+  - "show me all files uploaded this month" → search_claim_history({ event_type: "files_uploaded", time_period: "this_month" })
+
+GET ADJUSTER INTERACTIONS (get_adjuster_interactions):
+- Use this when the user asks about dealings with a specific adjuster
+- Finds all claims involving that adjuster and all related communications
+- Shows emails, notes, and diary entries from those claims
+- Examples:
+  - "tell me about my dealings with John Smith from State Farm" → get_adjuster_interactions({ adjuster_name: "John Smith" })
+  - "what claims does adjuster Mike handle" → get_adjuster_interactions({ adjuster_name: "Mike" })`;
 
     // Fetch available workspaces for context
     let workspacesContext = "";
@@ -2467,6 +3236,81 @@ ${knowledgeBaseContext || ''}`
           } catch (parseErr) {
             console.error("Error in bulk_update_insurance_companies:", parseErr);
             answer += `\n\n❌ **Error updating insurance companies:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "search_my_activity") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Searching user activity:", params);
+            
+            // Get user ID from auth header
+            const authHeader = req.headers.get("authorization");
+            if (!authHeader) {
+              answer += `\n\n❌ **Cannot search activity:** Not authenticated`;
+              continue;
+            }
+            
+            const { data: { user } } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+            if (!user) {
+              answer += `\n\n❌ **Cannot search activity:** User not found`;
+              continue;
+            }
+            
+            const activityResult = await searchUserActivity(supabase, user.id, params.time_period, params.action_type);
+            answer = activityResult;
+          } catch (parseErr) {
+            console.error("Error in search_my_activity:", parseErr);
+            answer += `\n\n❌ **Error searching activity:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "search_communications") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Searching communications:", params);
+            
+            const communicationsResult = await searchCommunications(
+              supabase, 
+              params.search_query, 
+              params.communication_type || "all",
+              params.time_period || "all_time",
+              params.claim_name
+            );
+            answer = communicationsResult;
+          } catch (parseErr) {
+            console.error("Error in search_communications:", parseErr);
+            answer += `\n\n❌ **Error searching communications:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "search_claim_history") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Searching claim history:", params);
+            
+            const historyResult = await searchClaimHistory(
+              supabase,
+              params.search_query || "",
+              params.event_type || "all",
+              params.time_period || "this_week",
+              params.claim_name
+            );
+            answer = historyResult;
+          } catch (parseErr) {
+            console.error("Error in search_claim_history:", parseErr);
+            answer += `\n\n❌ **Error searching claim history:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "get_adjuster_interactions") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Getting adjuster interactions:", params);
+            
+            const adjusterResult = await getAdjusterInteractions(
+              supabase,
+              params.adjuster_name,
+              params.include_emails !== false,
+              params.include_notes !== false,
+              params.include_diary !== false
+            );
+            answer = adjusterResult;
+          } catch (parseErr) {
+            console.error("Error in get_adjuster_interactions:", parseErr);
+            answer += `\n\n❌ **Error getting adjuster interactions:** Invalid parameters`;
           }
         }
       }
