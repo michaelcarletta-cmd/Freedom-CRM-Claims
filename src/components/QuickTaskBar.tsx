@@ -26,10 +26,10 @@ interface Claim {
   } | null;
 }
 
-interface UserProfile {
+interface Assignee {
   id: string;
-  full_name: string | null;
-  email: string;
+  name: string;
+  type: "user" | "contractor" | "admin" | "policyholder";
 }
 
 export function QuickTaskBar() {
@@ -37,7 +37,7 @@ export function QuickTaskBar() {
   const [searchQuery, setSearchQuery] = useState("");
   const [claims, setClaims] = useState<Claim[]>([]);
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(null);
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   
   // Task form state
@@ -50,12 +50,6 @@ export function QuickTaskBar() {
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   useEffect(() => {
-    if (open) {
-      fetchUsers();
-    }
-  }, [open]);
-
-  useEffect(() => {
     if (debouncedSearch.length >= 2) {
       searchClaims(debouncedSearch);
     } else {
@@ -63,15 +57,103 @@ export function QuickTaskBar() {
     }
   }, [debouncedSearch]);
 
-  const fetchUsers = async () => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, full_name, email")
-      .order("full_name");
-    
-    if (data) {
-      setUsers(data);
+  useEffect(() => {
+    if (selectedClaim) {
+      fetchAssigneesForClaim(selectedClaim.id, selectedClaim.clients?.name || null);
+    } else {
+      setAssignees([]);
     }
+  }, [selectedClaim]);
+
+  const fetchAssigneesForClaim = async (claimId: string, clientName: string | null) => {
+    const assigneesList: Assignee[] = [];
+
+    // Add policyholder if available
+    if (clientName) {
+      assigneesList.push({
+        id: "policyholder",
+        name: `${clientName} (Policyholder)`,
+        type: "policyholder"
+      });
+    }
+
+    // Fetch admins
+    const { data: adminRoles } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "admin");
+
+    if (adminRoles && adminRoles.length > 0) {
+      const adminIds = adminRoles.map(r => r.user_id);
+      const { data: adminProfiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", adminIds);
+
+      if (adminProfiles) {
+        adminProfiles.forEach(admin => {
+          assigneesList.push({
+            id: admin.id,
+            name: `${admin.full_name || admin.email} (Admin)`,
+            type: "admin"
+          });
+        });
+      }
+    }
+
+    // Fetch contractors assigned to this claim
+    const { data: claimContractors } = await supabase
+      .from("claim_contractors")
+      .select("contractor_id")
+      .eq("claim_id", claimId);
+
+    if (claimContractors && claimContractors.length > 0) {
+      const contractorIds = claimContractors.map(c => c.contractor_id);
+      const { data: contractorProfiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", contractorIds);
+
+      if (contractorProfiles) {
+        contractorProfiles.forEach(contractor => {
+          assigneesList.push({
+            id: contractor.id,
+            name: `${contractor.full_name || contractor.email} (Contractor)`,
+            type: "contractor"
+          });
+        });
+      }
+    }
+
+    // Fetch staff users assigned to this claim via profiles.assigned_claims or similar
+    // For now, also include all staff members as potential assignees
+    const { data: staffRoles } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "staff");
+
+    if (staffRoles && staffRoles.length > 0) {
+      const staffIds = staffRoles.map(r => r.user_id);
+      const { data: staffProfiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", staffIds);
+
+      if (staffProfiles) {
+        staffProfiles.forEach(user => {
+          // Avoid duplicates (user might already be added as admin)
+          if (!assigneesList.find(a => a.id === user.id)) {
+            assigneesList.push({
+              id: user.id,
+              name: `${user.full_name || user.email} (Staff)`,
+              type: "user"
+            });
+          }
+        });
+      }
+    }
+
+    setAssignees(assigneesList);
   };
 
   const searchClaims = async (query: string) => {
@@ -359,9 +441,9 @@ export function QuickTaskBar() {
                       <SelectValue placeholder="Assign to" />
                     </SelectTrigger>
                     <SelectContent>
-                      {users.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.full_name || user.email}
+                      {assignees.map((assignee) => (
+                        <SelectItem key={assignee.id} value={assignee.id}>
+                          {assignee.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
