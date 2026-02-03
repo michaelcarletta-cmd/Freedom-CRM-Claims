@@ -21,6 +21,7 @@ interface Task {
   priority: string;
   claim_id: string;
   claim_number: string;
+  client_name: string | null;
   assigned_to: string | null;
   created_at: string;
   follow_up_enabled?: boolean | null;
@@ -77,7 +78,7 @@ const Tasks = () => {
         .from("tasks")
         .select(`
           *,
-          claims!inner(claim_number)
+          claims!inner(claim_number, clients(name))
         `)
         .order("due_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false });
@@ -88,6 +89,7 @@ const Tasks = () => {
         data?.map((task: any) => ({
           ...task,
           claim_number: task.claims.claim_number,
+          client_name: task.claims.clients?.name || null,
         })) || [];
 
       setTasks(tasksWithDetails);
@@ -204,7 +206,9 @@ const Tasks = () => {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-4 mt-3 text-sm">
-                    <Badge variant="outline">{task.claim_number}</Badge>
+                    <Badge variant="outline">
+                      {task.claim_number}{task.client_name ? ` - ${task.client_name}` : ''}
+                    </Badge>
                     <Badge
                       variant={
                         priorityColors[task.priority as keyof typeof priorityColors] as
