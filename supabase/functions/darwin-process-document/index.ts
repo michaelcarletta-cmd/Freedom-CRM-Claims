@@ -240,7 +240,12 @@ function classifyByFilename(filename: string): DocumentClassification {
   if (/approval|approved|payment|settlement/i.test(lower)) return 'approval';
   if (/rfi|request.*info|additional.*info/i.test(lower)) return 'rfi';
   if (/engineer|structural|report/i.test(lower)) return 'engineering_report';
-  if (/policy|coverage|dec.*page|declaration/i.test(lower)) return 'policy';
+  
+  // Policy detection: keywords OR policy number patterns (H0132PK..., HO-3, DP-1, etc.)
+  const isPolicyKeyword = /policy|coverage|dec.*page|declaration/i.test(lower);
+  const isPolicyNumberFormat = /^h[o0][-]?\d/i.test(lower) || /^dp[-]?\d/i.test(lower) || /^[a-z]{1,4}\d{4,}/i.test(lower);
+  if (isPolicyKeyword || isPolicyNumberFormat) return 'policy';
+  
   if (/invoice|bill|receipt/i.test(lower)) return 'invoice';
   if (/\.(jpg|jpeg|png|gif|heic|webp)$/i.test(lower)) return 'photo';
   
