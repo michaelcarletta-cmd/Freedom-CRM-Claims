@@ -78,50 +78,61 @@ function decodeEmailBody(body: string): string {
   if (!body) return '';
   
   // Check if body contains MIME boundary markers (multipart message)
-  const boundaryMatch = body.match(/--_[A-Za-z0-9]+_/);
+  const boundaryMatch = body.match(/--([-_A-Za-z0-9]+)/);
   
   if (boundaryMatch) {
     const boundary = boundaryMatch[0];
-    const parts = body.split(boundary);
     
-    if (parts.length > 0 && parts[0].trim()) {
-      const firstPart = parts[0].trim();
-      
-      // Check if it's already readable text (not base64)
-      if (isReadableText(firstPart)) {
-        return cleanEmailText(firstPart);
-      }
-      
-      // If not readable, try base64 decoding
-      const cleaned = firstPart.replace(/[\r\n\s]/g, '');
-      if (/^[A-Za-z0-9+/=]+$/.test(cleaned) && cleaned.length > 50) {
+    // First, check if content BEFORE the first boundary is base64 (common pattern)
+    const firstBoundaryIndex = body.indexOf(boundary);
+    if (firstBoundaryIndex > 50) {
+      const contentBeforeBoundary = body.substring(0, firstBoundaryIndex).trim();
+      // Check if this looks like base64 (no obvious plain text markers)
+      const cleanedPreBoundary = contentBeforeBoundary.replace(/[\r\n\s]/g, '');
+      if (/^[A-Za-z0-9+/=]+$/.test(cleanedPreBoundary) && cleanedPreBoundary.length > 50) {
         try {
-          const decoded = base64ToUtf8(cleaned);
+          const decoded = base64ToUtf8(cleanedPreBoundary);
           if (isReadableText(decoded)) {
             return cleanEmailText(decoded);
           }
         } catch (e) {
-          // Not valid base64
+          // Not valid base64, continue with other methods
         }
       }
     }
     
+    const parts = body.split(new RegExp(boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    
     // Try to find text/plain section in MIME parts
     for (const part of parts) {
-      if (part.includes('Content-Type: text/plain')) {
+      if (part.includes('Content-Type: text/plain') || part.includes('content-type: text/plain')) {
         const encodingMatch = part.match(/Content-Transfer-Encoding:\s*(\S+)/i);
         const encoding = encodingMatch ? encodingMatch[1].toLowerCase() : '';
         
-        const contentParts = part.split(/\n\n/);
+        // Split on double newline to separate headers from content
+        const contentParts = part.split(/\r?\n\r?\n/);
         if (contentParts.length > 1) {
           let content = contentParts.slice(1).join('\n\n').trim();
-          content = content.replace(/\n--_[A-Za-z0-9_]+--?\s*$/g, '').trim();
+          // Remove any trailing boundary markers
+          content = content.replace(/\r?\n--[-_A-Za-z0-9]+--?\s*$/g, '').trim();
           
           if (encoding === 'base64') {
-            return cleanEmailText(base64ToUtf8(content));
+            const decoded = base64ToUtf8(content);
+            if (isReadableText(decoded)) {
+              return cleanEmailText(decoded);
+            }
+          } else if (isReadableText(content)) {
+            return cleanEmailText(content);
           }
-          return cleanEmailText(content);
         }
+      }
+    }
+    
+    // If we have content before the first boundary that's readable, use it
+    if (firstBoundaryIndex > 0) {
+      const contentBefore = body.substring(0, firstBoundaryIndex).trim();
+      if (isReadableText(contentBefore)) {
+        return cleanEmailText(contentBefore);
       }
     }
   }
@@ -143,9 +154,12 @@ function decodeEmailBody(body: string): string {
   
   // Check for Content-Transfer-Encoding header in the body
   if (body.includes('Content-Transfer-Encoding: base64') || body.includes('Content-Transfer-Encoding:base64')) {
-    const base64Match = body.match(/Content-Transfer-Encoding:\s*base64\s*\n\n([A-Za-z0-9+/=\s]+)/i);
+    const base64Match = body.match(/Content-Transfer-Encoding:\s*base64\s*\r?\n\r?\n([A-Za-z0-9+/=\s]+)/i);
     if (base64Match) {
-      return cleanEmailText(base64ToUtf8(base64Match[1]));
+      const decoded = base64ToUtf8(base64Match[1]);
+      if (isReadableText(decoded)) {
+        return cleanEmailText(decoded);
+      }
     }
   }
   
