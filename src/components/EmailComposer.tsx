@@ -36,18 +36,29 @@ interface ClaimFile {
   file_size: number | null;
 }
 
+interface ReplyContext {
+  recipientEmail: string;
+  recipientName: string;
+  recipientType: string;
+  originalSubject: string;
+  originalBody: string;
+  originalDate: string;
+}
+
 interface EmailComposerProps {
   isOpen: boolean;
   onClose: () => void;
   claimId: string;
   claim: any;
+  replyTo?: ReplyContext;
 }
 
 export function EmailComposer({
   isOpen,
   onClose,
   claimId,
-  claim
+  claim,
+  replyTo
 }: EmailComposerProps) {
   const [selectedRecipients, setSelectedRecipients] = useState<Recipient[]>([]);
   const [manualEmail, setManualEmail] = useState("");
@@ -57,12 +68,23 @@ export function EmailComposer({
   const [selectedFiles, setSelectedFiles] = useState<ClaimFile[]>([]);
   const [showFileSelector, setShowFileSelector] = useState(false);
 
-  // Auto-populate subject with claim number when dialog opens
+  // Auto-populate for replies or new emails
   useEffect(() => {
-    if (isOpen && claim?.claim_number && !emailSubject) {
-      setEmailSubject(`Re: Claim #${claim.claim_number}`);
+    if (isOpen) {
+      if (replyTo) {
+        // Set up reply context
+        setSelectedRecipients([{
+          email: replyTo.recipientEmail,
+          name: replyTo.recipientName,
+          type: replyTo.recipientType
+        }]);
+        setEmailSubject(replyTo.originalSubject.startsWith("Re:") ? replyTo.originalSubject : `Re: ${replyTo.originalSubject}`);
+        setBody(`\n\n---\nOn ${replyTo.originalDate}, ${replyTo.recipientName} wrote:\n\n${replyTo.originalBody}`);
+      } else if (claim?.claim_number && !emailSubject) {
+        setEmailSubject(`Re: Claim #${claim.claim_number}`);
+      }
     }
-  }, [isOpen, claim?.claim_number]);
+  }, [isOpen, claim?.claim_number, replyTo]);
 
   // Fetch email templates
   const { data: emailTemplates } = useQuery({
