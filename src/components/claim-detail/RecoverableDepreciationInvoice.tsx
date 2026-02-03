@@ -576,32 +576,84 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Settlement Summary */}
-        <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+        <div className="p-4 bg-muted/50 rounded-lg space-y-4">
           <h3 className="font-medium flex items-center gap-2">
             <Package className="h-4 w-4" />
             Settlement Summary
           </h3>
           {settlement ? (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+            <div className="space-y-4">
+              {/* RCV Values */}
               <div>
-                <p className="text-muted-foreground">Dwelling RD</p>
-                <p className="font-semibold">{formatCurrency(settlement.recoverable_depreciation)}</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Replacement Cost Value (RCV)</p>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Dwelling</p>
+                    <p className="font-semibold">{formatCurrency(settlement.replacement_cost_value)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Other Structures</p>
+                    <p className="font-semibold">{formatCurrency(settlement.other_structures_rcv)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">PWI</p>
+                    <p className="font-semibold">{formatCurrency(settlement.pwi_rcv)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Personal Property</p>
+                    <p className="font-semibold">{formatCurrency(settlement.personal_property_rcv)}</p>
+                  </div>
+                  <div className="border-l pl-4">
+                    <p className="text-muted-foreground">Total RCV</p>
+                    <p className="font-bold text-lg">{formatCurrency(
+                      (Number(settlement.replacement_cost_value) || 0) +
+                      (Number(settlement.other_structures_rcv) || 0) +
+                      (Number(settlement.pwi_rcv) || 0) +
+                      (Number(settlement.personal_property_rcv) || 0)
+                    )}</p>
+                  </div>
+                </div>
               </div>
+
+              {/* Recoverable Depreciation Values */}
               <div>
-                <p className="text-muted-foreground">Other Structures RD</p>
-                <p className="font-semibold">{formatCurrency(settlement.other_structures_recoverable_depreciation)}</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Recoverable Depreciation (RD)</p>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Dwelling</p>
+                    <p className="font-semibold text-primary">{formatCurrency(settlement.recoverable_depreciation)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Other Structures</p>
+                    <p className="font-semibold text-primary">{formatCurrency(settlement.other_structures_recoverable_depreciation)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">PWI</p>
+                    <p className="font-semibold text-primary">{formatCurrency(settlement.pwi_recoverable_depreciation)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Personal Property</p>
+                    <p className="font-semibold text-primary">{formatCurrency(settlement.personal_property_recoverable_depreciation)}</p>
+                  </div>
+                  <div className="border-l pl-4">
+                    <p className="text-muted-foreground">Total Recoverable</p>
+                    <p className="font-bold text-lg text-primary">{formatCurrency(totalRD)}</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-muted-foreground">PWI RD</p>
-                <p className="font-semibold">{formatCurrency(settlement.pwi_recoverable_depreciation)}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Personal Property RD</p>
-                <p className="font-semibold">{formatCurrency(settlement.personal_property_recoverable_depreciation)}</p>
-              </div>
-              <div className="border-l pl-4">
-                <p className="text-muted-foreground">Total Recoverable</p>
-                <p className="font-bold text-lg text-primary">{formatCurrency(totalRD)}</p>
+
+              {/* Deductible */}
+              <div className="pt-2 border-t">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Deductible</p>
+                    <p className="font-semibold">{formatCurrency(settlement.deductible)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Estimate Amount</p>
+                    <p className="font-semibold">{formatCurrency(settlement.estimate_amount)}</p>
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
