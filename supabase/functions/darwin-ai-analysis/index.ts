@@ -1,9 +1,15 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-// @ts-ignore - pdf.js for Deno
-import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.0.379/build/pdf.min.mjs";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
+// Use dynamic import for pdf.js to avoid bundling issues
+let pdfjsLib: any = null;
+async function getPdfJs() {
+  if (!pdfjsLib) {
+    pdfjsLib = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.mjs");
+  }
+  return pdfjsLib;
+}
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -17,6 +23,9 @@ async function extractTextFromPDFNative(base64Content: string, fileName: string)
   console.log(`Native PDF extraction for: ${fileName}`);
   
   try {
+    // Get pdf.js dynamically
+    const pdfjs = await getPdfJs();
+    
     // Decode base64 to bytes
     const binaryString = atob(base64Content);
     const bytes = new Uint8Array(binaryString.length);
@@ -25,7 +34,7 @@ async function extractTextFromPDFNative(base64Content: string, fileName: string)
     }
     
     // Load PDF using pdf.js
-    const loadingTask = pdfjsLib.getDocument({ data: bytes.buffer });
+    const loadingTask = pdfjs.getDocument({ data: bytes.buffer });
     const pdf = await loadingTask.promise;
     
     const textParts: string[] = [];
