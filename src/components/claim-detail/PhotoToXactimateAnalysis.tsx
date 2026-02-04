@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Camera, 
   Loader2, 
@@ -15,7 +16,13 @@ import {
   CheckCircle,
   AlertCircle,
   Calculator,
-  Info
+  Info,
+  FileText,
+  Upload,
+  MapPin,
+  Scale,
+  BookOpen,
+  Gavel
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -25,6 +32,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface ClaimPhoto {
   id: string;
@@ -41,13 +53,18 @@ interface ClaimPhoto {
 
 interface XactimateLineItem {
   category: string;
+  subcategory?: string;
   xactimate_code: string;
   description: string;
   unit: string;
   quantity: number;
   unit_price: number;
+  regional_adjusted_price?: number;
   total: number;
   justification: string;
+  code_citation?: string;
+  photo_reference?: string;
+  manufacturer_spec?: string;
 }
 
 // Format compatible with EnhancedEstimateBuilder
@@ -61,14 +78,42 @@ interface EstimateLineItem {
   total: number;
   xactimateCode?: string;
   justification?: string;
+  codeCitation?: string;
+  photoReference?: string;
+  manufacturerSpec?: string;
 }
 
 interface AnalysisResult {
   summary: string;
   total_estimated_rcv: number;
+  overhead_profit?: number;
+  grand_total?: number;
   line_items: XactimateLineItem[];
+  measurement_source?: string;
   measurement_notes?: string;
   additional_items_to_verify?: string[];
+  code_compliance_items?: string[];
+  advocacy_notes?: string;
+}
+
+interface MeasurementReportData {
+  reportType?: string;
+  totalArea?: string;
+  perimeter?: string;
+  facetCount?: string;
+  pitch?: string;
+  stories?: string;
+  ridges?: string;
+  hips?: string;
+  valleys?: string;
+  eaves?: string;
+  rakes?: string;
+  dripEdge?: string;
+  starter?: string;
+  stepFlashing?: string;
+  headwallFlashing?: string;
+  pipes?: string;
+  wasteFactor?: string;
 }
 
 interface PhotoToXactimateAnalysisProps {
@@ -76,17 +121,37 @@ interface PhotoToXactimateAnalysisProps {
   onLineItemsGenerated: (items: EstimateLineItem[]) => void;
 }
 
+const REGIONS = [
+  { code: 'NJ', name: 'New Jersey', multiplier: 1.25 },
+  { code: 'PA', name: 'Pennsylvania', multiplier: 1.10 },
+  { code: 'NY', name: 'New York', multiplier: 1.35 },
+  { code: 'TX', name: 'Texas', multiplier: 0.95 },
+  { code: 'FL', name: 'Florida', multiplier: 1.15 },
+  { code: 'CO', name: 'Colorado', multiplier: 1.20 },
+  { code: 'CA', name: 'California', multiplier: 1.30 },
+  { code: 'DEFAULT', name: 'National Average', multiplier: 1.00 },
+];
+
 export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: PhotoToXactimateAnalysisProps) => {
   const [photos, setPhotos] = useState<ClaimPhoto[]>([]);
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   
   // Measurement inputs
   const [roofArea, setRoofArea] = useState("");
   const [pitch, setPitch] = useState("");
   const [stories, setStories] = useState("");
+  
+  // Measurement report upload
+  const [measurementFile, setMeasurementFile] = useState<File | null>(null);
+  const [parsingReport, setParsingReport] = useState(false);
+  const [measurementReportData, setMeasurementReportData] = useState<MeasurementReportData | null>(null);
+  
+  // Regional pricing
+  const [selectedRegion, setSelectedRegion] = useState("NJ");
 
   useEffect(() => {
     fetchPhotos();
@@ -129,10 +194,6 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
     setSelectedPhotoIds(new Set());
   };
 
-  const selectAnalyzed = () => {
-    setSelectedPhotoIds(new Set(photos.filter(p => p.ai_analyzed_at).map(p => p.id)));
-  };
-
   const getConditionBadge = (rating: string | null) => {
     if (!rating) return null;
     const variants: Record<string, "default" | "destructive" | "outline" | "secondary"> = {
@@ -147,6 +208,102 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
         {rating}
       </Badge>
     );
+  };
+
+  const handleMeasurementUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (file.type !== "application/pdf") {
+      toast.error("Please upload a PDF file (EagleView, Hover, or similar)");
+      return;
+    }
+    
+    setMeasurementFile(file);
+    setParsingReport(true);
+    
+    try {
+      // Convert PDF to base64 for parsing
+      const arrayBuffer = await file.arrayBuffer();
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      );
+      
+      // Call edge function to parse measurement report
+      const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
+        body: {
+          claimId,
+          analysisType: "smart_extraction",
+          pdfContent: base64,
+          pdfFileName: file.name,
+          additionalContext: {
+            extractionType: "measurement_report",
+            expectedFields: [
+              "totalArea", "perimeter", "facetCount", "pitch", "stories",
+              "ridges", "hips", "valleys", "eaves", "rakes", "dripEdge",
+              "starter", "stepFlashing", "headwallFlashing", "pipes", "wasteFactor"
+            ]
+          }
+        }
+      });
+      
+      if (error) throw error;
+      
+      // Try to parse the extracted data
+      if (data?.result) {
+        try {
+          // Parse JSON from result
+          let jsonStr = data.result;
+          if (jsonStr.includes("```json")) {
+            jsonStr = jsonStr.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+          }
+          if (jsonStr.includes("```")) {
+            jsonStr = jsonStr.replace(/```\n?/g, "");
+          }
+          
+          // Try to find JSON object in the response
+          const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            setMeasurementReportData({
+              reportType: file.name.includes("EagleView") ? "EagleView" : 
+                         file.name.includes("Hover") ? "Hover" : "Roof Measurement Report",
+              totalArea: parsed.totalArea || parsed.total_area || parsed.roofArea,
+              perimeter: parsed.perimeter,
+              facetCount: parsed.facetCount || parsed.facets,
+              pitch: parsed.pitch || parsed.predominantPitch,
+              stories: parsed.stories,
+              ridges: parsed.ridges || parsed.ridgeLength,
+              hips: parsed.hips || parsed.hipLength,
+              valleys: parsed.valleys || parsed.valleyLength,
+              eaves: parsed.eaves || parsed.eaveLength,
+              rakes: parsed.rakes || parsed.rakeLength,
+              dripEdge: parsed.dripEdge || parsed.drip_edge,
+              starter: parsed.starter || parsed.starterStrip,
+              stepFlashing: parsed.stepFlashing || parsed.step_flashing,
+              headwallFlashing: parsed.headwallFlashing || parsed.headwall_flashing,
+              pipes: parsed.pipes || parsed.penetrations,
+              wasteFactor: parsed.wasteFactor || parsed.waste_factor || "15%"
+            });
+            toast.success("Measurement report parsed successfully");
+          } else {
+            // Use text extraction as fallback
+            setMeasurementReportData({
+              reportType: "Roof Measurement Report",
+            });
+            toast.success("Report uploaded - manual measurements may be needed");
+          }
+        } catch (parseError) {
+          console.error("Failed to parse measurement data:", parseError);
+          toast.warning("Could not extract structured data - using manual inputs");
+        }
+      }
+    } catch (error: any) {
+      console.error("Error parsing measurement report:", error);
+      toast.error("Failed to parse measurement report");
+    } finally {
+      setParsingReport(false);
+    }
   };
 
   const analyzePhotos = async () => {
@@ -191,14 +348,14 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
         return;
       }
 
-      // Build measurement data if provided
+      // Build measurement data
       const measurementData = (roofArea || pitch || stories) ? {
         roofArea: roofArea || null,
         pitch: pitch || null,
         stories: stories || null,
       } : null;
 
-      // Call the darwin-ai-analysis function
+      // Call the darwin-ai-analysis function with enhanced parameters
       const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
         body: {
           claimId,
@@ -208,6 +365,8 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
             photoDescriptions,
             existingAnalysis,
             measurementData,
+            measurementReportData,
+            pricingRegion: selectedRegion,
           },
         },
       });
@@ -237,7 +396,7 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
 
       if (analysisResult) {
         setResult(analysisResult);
-        toast.success(`Generated ${analysisResult.line_items?.length || 0} Xactimate line items`);
+        toast.success(`Generated ${analysisResult.line_items?.length || 0} Xactimate line items in Advocacy Mode`);
       }
 
     } catch (error: any) {
@@ -258,14 +417,29 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
         xactimateCode: item.xactimate_code,
         unit: item.unit,
         quantity: item.quantity,
-        unitPrice: item.unit_price,
+        unitPrice: item.regional_adjusted_price || item.unit_price,
         total: item.total,
         justification: item.justification,
+        codeCitation: item.code_citation,
+        photoReference: item.photo_reference,
+        manufacturerSpec: item.manufacturer_spec,
       }));
       onLineItemsGenerated(items);
       toast.success(`Applied ${items.length} line items to estimate`);
     }
   };
+
+  const toggleItemExpanded = (idx: number) => {
+    const newExpanded = new Set(expandedItems);
+    if (newExpanded.has(idx)) {
+      newExpanded.delete(idx);
+    } else {
+      newExpanded.add(idx);
+    }
+    setExpandedItems(newExpanded);
+  };
+
+  const selectedRegionInfo = REGIONS.find(r => r.code === selectedRegion);
 
   if (loading) {
     return (
@@ -288,13 +462,24 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
 
   return (
     <div className="space-y-4">
+      {/* Advocacy Mode Header */}
+      <div className="bg-primary/10 border border-primary/30 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-primary font-semibold">
+          <Scale className="h-4 w-4" />
+          ADVOCACY MODE ACTIVE
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          Maximum line item depth with code citations, manufacturer specs, and regional pricing
+        </p>
+      </div>
+
       {/* Photo Selection */}
       <Card>
         <CardHeader className="py-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm flex items-center gap-2">
               <Camera className="h-4 w-4" />
-              Select Photos to Analyze ({selectedPhotoIds.size} selected)
+              Select Photos ({selectedPhotoIds.size} of {photos.length})
             </CardTitle>
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={selectAll}>All</Button>
@@ -303,7 +488,7 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          <ScrollArea className="h-[200px]">
+          <ScrollArea className="h-[180px]">
             <div className="grid grid-cols-2 gap-2">
               {photos.map((photo) => (
                 <div
@@ -333,11 +518,6 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
                         </span>
                       )}
                     </div>
-                    {photo.category && (
-                      <Badge variant="outline" className="mt-1 text-xs">
-                        {photo.category}
-                      </Badge>
-                    )}
                   </div>
                   {photo.ai_analysis_summary && (
                     <TooltipProvider>
@@ -358,57 +538,118 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
         </CardContent>
       </Card>
 
-      {/* Optional Measurements */}
+      {/* Measurement Report Upload */}
       <Card>
         <CardHeader className="py-3">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Calculator className="h-4 w-4" />
-            Measurements (Optional)
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <Info className="h-3 w-3 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs text-xs">
-                    Providing measurements improves quantity accuracy. Without them, Darwin will estimate from visible damage.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <FileText className="h-4 w-4" />
+            Measurement Report (EagleView/Hover)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 space-y-3">
+          <div className="flex items-center gap-2">
+            <Input
+              type="file"
+              accept=".pdf"
+              onChange={handleMeasurementUpload}
+              className="flex-1"
+              disabled={parsingReport}
+            />
+            {parsingReport && <Loader2 className="h-4 w-4 animate-spin" />}
+          </div>
+          
+          {measurementReportData && (
+            <div className="p-2 bg-primary/10 border border-primary/30 rounded-md">
+              <div className="flex items-center gap-2 text-primary text-sm font-medium">
+                <CheckCircle className="h-4 w-4" />
+                {measurementReportData.reportType} Parsed
+              </div>
+              <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+                {measurementReportData.totalArea && (
+                  <div><span className="text-muted-foreground">Area:</span> {measurementReportData.totalArea} SQ</div>
+                )}
+                {measurementReportData.pitch && (
+                  <div><span className="text-muted-foreground">Pitch:</span> {measurementReportData.pitch}</div>
+                )}
+                {measurementReportData.ridges && (
+                  <div><span className="text-muted-foreground">Ridge:</span> {measurementReportData.ridges} LF</div>
+                )}
+                {measurementReportData.valleys && (
+                  <div><span className="text-muted-foreground">Valley:</span> {measurementReportData.valleys} LF</div>
+                )}
+                {measurementReportData.eaves && (
+                  <div><span className="text-muted-foreground">Eave:</span> {measurementReportData.eaves} LF</div>
+                )}
+                {measurementReportData.pipes && (
+                  <div><span className="text-muted-foreground">Pipes:</span> {measurementReportData.pipes} EA</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!measurementReportData && (
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs">Roof Area (SQ)</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g., 25"
+                  value={roofArea}
+                  onChange={(e) => setRoofArea(e.target.value)}
+                  className="h-8"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Pitch</Label>
+                <Input
+                  placeholder="e.g., 6/12"
+                  value={pitch}
+                  onChange={(e) => setPitch(e.target.value)}
+                  className="h-8"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Stories</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g., 2"
+                  value={stories}
+                  onChange={(e) => setStories(e.target.value)}
+                  className="h-8"
+                />
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Regional Pricing */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <MapPin className="h-4 w-4" />
+            Regional Pricing
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <Label className="text-xs">Roof Area (SQ)</Label>
-              <Input
-                type="number"
-                placeholder="e.g., 25"
-                value={roofArea}
-                onChange={(e) => setRoofArea(e.target.value)}
-                className="h-8"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Pitch</Label>
-              <Input
-                placeholder="e.g., 6/12"
-                value={pitch}
-                onChange={(e) => setPitch(e.target.value)}
-                className="h-8"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Stories</Label>
-              <Input
-                type="number"
-                placeholder="e.g., 2"
-                value={stories}
-                onChange={(e) => setStories(e.target.value)}
-                className="h-8"
-              />
-            </div>
+          <div className="flex items-center gap-3">
+            <Select value={selectedRegion} onValueChange={setSelectedRegion}>
+              <SelectTrigger className="w-[200px] h-8">
+                <SelectValue placeholder="Select region" />
+              </SelectTrigger>
+              <SelectContent>
+                {REGIONS.map((region) => (
+                  <SelectItem key={region.code} value={region.code}>
+                    {region.name} ({region.multiplier}x)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedRegionInfo && (
+              <span className="text-xs text-muted-foreground">
+                {selectedRegionInfo.multiplier}x pricing multiplier applied
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -418,16 +659,17 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
         onClick={analyzePhotos}
         disabled={analyzing || selectedPhotoIds.size === 0}
         className="w-full gap-2"
+        size="lg"
       >
         {analyzing ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
-            Analyzing {selectedPhotoIds.size} photos...
+            Generating Advocacy Estimate from {selectedPhotoIds.size} photos...
           </>
         ) : (
           <>
             <Sparkles className="h-4 w-4" />
-            Generate Xactimate Line Items from Photos
+            Generate Xactimate Estimate (Advocacy Mode)
           </>
         )}
       </Button>
@@ -439,16 +681,39 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-primary" />
-                Analysis Complete
+                Advocacy Estimate Complete
               </CardTitle>
-              <Badge variant="default">
-                ${result.total_estimated_rcv?.toLocaleString() || 0} RCV
-              </Badge>
+              <div className="flex items-center gap-2">
+                {result.overhead_profit && result.overhead_profit > 0 && (
+                  <Badge variant="outline" className="text-xs">
+                    O&P: ${result.overhead_profit.toLocaleString()}
+                  </Badge>
+                )}
+                <Badge variant="default" className="text-sm">
+                  ${(result.grand_total || result.total_estimated_rcv)?.toLocaleString()} RCV
+                </Badge>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="pt-4 space-y-4">
             <p className="text-sm text-muted-foreground">{result.summary}</p>
             
+            {/* Code Compliance Items */}
+            {result.code_compliance_items && result.code_compliance_items.length > 0 && (
+              <div className="p-2 bg-secondary/50 border border-secondary rounded text-xs">
+                <div className="flex items-center gap-2 font-medium text-secondary-foreground mb-1">
+                  <Gavel className="h-3 w-3" />
+                  Code Compliance Items Included
+                </div>
+                <ul className="list-disc list-inside text-muted-foreground">
+                  {result.code_compliance_items.map((item, idx) => (
+                    <li key={idx}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Line Items */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">
@@ -460,24 +725,68 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
                 </Button>
               </div>
               
-              <ScrollArea className="h-[200px] border rounded-md">
+              <ScrollArea className="h-[280px] border rounded-md">
                 <div className="p-2 space-y-2">
                   {result.line_items?.map((item, idx) => (
-                    <div key={idx} className="p-2 bg-muted/50 rounded text-xs space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{item.description}</span>
-                        <span className="font-bold">${item.total?.toFixed(2)}</span>
+                    <Collapsible key={idx} open={expandedItems.has(idx)} onOpenChange={() => toggleItemExpanded(idx)}>
+                      <div className="p-2 bg-muted/50 rounded text-xs space-y-1">
+                        <CollapsibleTrigger className="w-full">
+                          <div className="flex items-center justify-between cursor-pointer">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">{item.xactimate_code}</Badge>
+                              <span className="font-medium text-left">{item.description}</span>
+                            </div>
+                            <span className="font-bold">${item.total?.toFixed(2)}</span>
+                          </div>
+                        </CollapsibleTrigger>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Badge variant="secondary" className="text-xs">{item.category}</Badge>
+                          <span>{item.quantity} {item.unit} @ ${(item.regional_adjusted_price || item.unit_price)?.toFixed(2)}</span>
+                        </div>
+                        
+                        <CollapsibleContent className="pt-2 space-y-1 border-t border-border/50 mt-2">
+                          <p className="text-muted-foreground">{item.justification}</p>
+                          
+                          {item.code_citation && (
+                            <div className="flex items-start gap-1 text-secondary-foreground">
+                              <BookOpen className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                              <span>{item.code_citation}</span>
+                            </div>
+                          )}
+                          
+                          {item.manufacturer_spec && (
+                            <div className="flex items-start gap-1 text-primary">
+                              <FileText className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                              <span>{item.manufacturer_spec}</span>
+                            </div>
+                          )}
+                          
+                          {item.photo_reference && (
+                            <div className="flex items-start gap-1 text-muted-foreground">
+                              <Camera className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                              <span>{item.photo_reference}</span>
+                            </div>
+                          )}
+                        </CollapsibleContent>
                       </div>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Badge variant="outline" className="text-xs">{item.xactimate_code}</Badge>
-                        <span>{item.quantity} {item.unit} @ ${item.unit_price?.toFixed(2)}</span>
-                      </div>
-                      <p className="text-muted-foreground italic">{item.justification}</p>
-                    </div>
+                    </Collapsible>
                   ))}
                 </div>
               </ScrollArea>
             </div>
+
+            {/* Advocacy Notes */}
+            {result.advocacy_notes && (
+              <div className="p-2 bg-accent/50 border border-accent rounded text-xs">
+                <div className="flex items-start gap-2">
+                  <Scale className="h-4 w-4 text-accent-foreground mt-0.5" />
+                  <div>
+                    <span className="font-medium text-accent-foreground">Advocacy Notes:</span>
+                    <p className="text-muted-foreground mt-1">{result.advocacy_notes}</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {result.measurement_notes && (
               <div className="p-2 bg-accent/50 border border-accent rounded text-xs">
@@ -491,7 +800,7 @@ export const PhotoToXactimateAnalysis = ({ claimId, onLineItemsGenerated }: Phot
               </div>
             )}
 
-            {result.additional_items_to_verify?.length > 0 && (
+            {result.additional_items_to_verify && result.additional_items_to_verify.length > 0 && (
               <div className="p-2 bg-muted border border-border rounded text-xs">
                 <span className="font-medium">Items to Verify On-Site:</span>
                 <ul className="list-disc list-inside text-muted-foreground mt-1">
