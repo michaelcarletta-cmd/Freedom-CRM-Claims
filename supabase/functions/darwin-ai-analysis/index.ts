@@ -354,6 +354,13 @@ serve(async (req) => {
       .eq('claim_id', claimId);
     context.files = files || [];
 
+    // Get photos from claim_photos table (separate from claim_files)
+    const { data: photos } = await supabase
+      .from('claim_photos')
+      .select('id, file_name, category, ai_analyzed_at, ai_condition_rating, ai_detected_damages')
+      .eq('claim_id', claimId);
+    context.photos = photos || [];
+
     // Fetch user's Darwin context notes if not provided
     let darwinNotes = providedNotes || '';
     if (!darwinNotes) {
@@ -372,6 +379,13 @@ serve(async (req) => {
     let systemPrompt = '';
     let userPrompt = '';
 
+    // Build photo summary for context
+    const analyzedPhotoCount = context.photos?.filter((p: any) => p.ai_analyzed_at)?.length || 0;
+    const totalPhotoCount = context.photos?.length || 0;
+    const poorConditionPhotoCount = context.photos?.filter((p: any) => 
+      p.ai_condition_rating === 'Poor' || p.ai_condition_rating === 'Failed'
+    )?.length || 0;
+
     const claimSummary = `
 CLAIM DETAILS:
 - Claim Number: ${claim.claim_number || 'N/A'}
@@ -384,6 +398,10 @@ CLAIM DETAILS:
 - Loss Description: ${claim.loss_description || 'N/A'}
 - Current Status: ${claim.status || 'N/A'}
 - Claim Amount: $${claim.claim_amount?.toLocaleString() || 'N/A'}
+
+DOCUMENTATION STATUS:
+- Files Uploaded: ${context.files?.length || 0}
+- Photos on File: ${totalPhotoCount}${analyzedPhotoCount > 0 ? ` (${analyzedPhotoCount} AI-analyzed)` : ''}${poorConditionPhotoCount > 0 ? ` - ${poorConditionPhotoCount} showing poor/failed condition` : ''}
 
 SETTLEMENT DATA:
 ${context.settlements?.length > 0 
