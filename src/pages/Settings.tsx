@@ -44,6 +44,7 @@ import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
 import { SignatureFieldTemplatesSettings } from "@/components/settings/SignatureFieldTemplatesSettings";
 import { CausationRubricSettings } from "@/components/settings/CausationRubricSettings";
+import { RDAutomationSettings } from "@/components/settings/RDAutomationSettings";
 interface ClaimStatus {
   id: string;
   name: string;
@@ -530,8 +531,9 @@ export default function Settings() {
           <UserManagementSettings />
         </TabsContent>
 
-        <TabsContent value="automations" className="w-full">
+        <TabsContent value="automations" className="w-full space-y-6">
           <AutomationsSettings />
+          <RDAutomationSettings />
         </TabsContent>
 
         <TabsContent value="ai-knowledge" className="w-full space-y-6">
