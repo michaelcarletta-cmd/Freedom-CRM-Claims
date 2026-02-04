@@ -74,12 +74,18 @@ const Tasks = () => {
 
   const fetchTasks = async () => {
     try {
+      // Only fetch tasks due within 48 hours or overdue (outstanding)
+      const fortyEightHoursFromNow = new Date();
+      fortyEightHoursFromNow.setHours(fortyEightHoursFromNow.getHours() + 48);
+
       const { data, error } = await supabase
         .from("tasks")
         .select(`
           *,
           claims!inner(claim_number, clients(name))
         `)
+        .not("due_date", "is", null)
+        .lte("due_date", fortyEightHoursFromNow.toISOString())
         .order("due_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false });
 
