@@ -729,6 +729,13 @@ export type Database = {
           id: string
           is_enabled: boolean
           keyword_blockers: string[] | null
+          rd_check_expected_by: string | null
+          rd_check_follow_up_count: number
+          rd_check_last_follow_up_at: string | null
+          rd_check_next_follow_up_at: string | null
+          rd_check_received_at: string | null
+          rd_check_released_at: string | null
+          rd_check_tracking_enabled: boolean
           rd_follow_up_current_count: number
           rd_follow_up_enabled: boolean
           rd_follow_up_interval_days: number
@@ -760,6 +767,13 @@ export type Database = {
           id?: string
           is_enabled?: boolean
           keyword_blockers?: string[] | null
+          rd_check_expected_by?: string | null
+          rd_check_follow_up_count?: number
+          rd_check_last_follow_up_at?: string | null
+          rd_check_next_follow_up_at?: string | null
+          rd_check_received_at?: string | null
+          rd_check_released_at?: string | null
+          rd_check_tracking_enabled?: boolean
           rd_follow_up_current_count?: number
           rd_follow_up_enabled?: boolean
           rd_follow_up_interval_days?: number
@@ -791,6 +805,13 @@ export type Database = {
           id?: string
           is_enabled?: boolean
           keyword_blockers?: string[] | null
+          rd_check_expected_by?: string | null
+          rd_check_follow_up_count?: number
+          rd_check_last_follow_up_at?: string | null
+          rd_check_next_follow_up_at?: string | null
+          rd_check_received_at?: string | null
+          rd_check_released_at?: string | null
+          rd_check_tracking_enabled?: boolean
           rd_follow_up_current_count?: number
           rd_follow_up_enabled?: boolean
           rd_follow_up_interval_days?: number
@@ -3388,6 +3409,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      global_automation_settings: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          setting_key: string
+          setting_value: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          setting_key: string
+          setting_value?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          setting_key?: string
+          setting_value?: Json
+          updated_at?: string
+        }
+        Relationships: []
       }
       hidden_loss_checklist_items: {
         Row: {
