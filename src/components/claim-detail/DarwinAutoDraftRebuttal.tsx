@@ -71,13 +71,13 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
     enabled: !!claim?.insurance_company,
   });
 
-  // Fetch claim files for context
+  // Fetch claim files for context - include all files, not just PDFs
   const { data: claimFiles } = useQuery({
     queryKey: ["claim-files-list", claimId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_files")
-        .select("file_name, file_type, uploaded_at")
+        .select("file_name, file_type, uploaded_at, document_classification, claim_folders(name)")
         .eq("claim_id", claimId);
       
       if (error) throw error;
@@ -114,6 +114,23 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
     } catch { return false; }
   }) || [];
 
+  // Categorize files for display
+  const stormReports = claimFiles?.filter(f => {
+    const name = f.file_name?.toLowerCase() || '';
+    return f.document_classification === 'storm_report' ||
+           f.document_classification === 'weather_report' ||
+           name.includes('storm') || name.includes('weather') ||
+           name.includes('hail') || name.includes('wind') ||
+           name.includes('nws') || name.includes('noaa');
+  }) || [];
+  
+  const beforePhotos = claimFiles?.filter(f => {
+    const name = f.file_name?.toLowerCase() || '';
+    return name.includes('before') || name.includes('pre-storm') ||
+           name.includes('prestorm') || name.includes('prior') ||
+           name.includes('overview') || name.includes('original condition');
+  }) || [];
+
   const dataPoints = [
     { 
       label: "Strategic Insights", 
@@ -130,6 +147,18 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
       label: "Carrier Profile", 
       available: !!carrierProfile,
       icon: Shield 
+    },
+    { 
+      label: "Storm/Weather Reports", 
+      available: stormReports.length > 0,
+      count: stormReports.length,
+      icon: FileText 
+    },
+    { 
+      label: "Before/Pre-Storm Photos", 
+      available: beforePhotos.length > 0,
+      count: beforePhotos.length,
+      icon: FileText 
     },
     { 
       label: "Claim Files", 
