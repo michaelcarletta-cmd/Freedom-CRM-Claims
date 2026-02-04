@@ -502,37 +502,101 @@ ${damageList ? `   Detected Damages:\n${damageList}` : ''}`;
 `;
         }
 
-        // Build document evidence section
+        // Build comprehensive document evidence section with extracted text
+        // Fetch files with extracted text for denial rebuttal
+        const { data: filesWithText } = await supabase
+          .from('claim_files')
+          .select('file_name, document_classification, classification_metadata, uploaded_at, claim_folders(name), extracted_text')
+          .eq('claim_id', claimId);
+
         let documentEvidenceSection = '';
-        if (context.files && context.files.length > 0) {
-          const estimates = context.files.filter((f: any) => 
+        let extractedDocContent = '';
+        
+        if (filesWithText && filesWithText.length > 0) {
+          const fileNameLower = (f: any) => f.file_name?.toLowerCase() || '';
+          
+          const estimates = filesWithText.filter((f: any) => 
             f.document_classification === 'estimate' || 
-            f.file_name?.toLowerCase().includes('estimate') ||
-            f.file_name?.toLowerCase().includes('xactimate')
+            fileNameLower(f).includes('estimate') ||
+            fileNameLower(f).includes('xactimate') ||
+            fileNameLower(f).includes('symbility')
           );
-          const inspectionDocs = context.files.filter((f: any) => 
-            f.file_name?.toLowerCase().includes('inspection') ||
-            f.file_name?.toLowerCase().includes('report')
+          const inspectionDocs = filesWithText.filter((f: any) => 
+            fileNameLower(f).includes('inspection') ||
+            fileNameLower(f).includes('report')
           );
-          const denialDocs = context.files.filter((f: any) => 
+          const denialDocs = filesWithText.filter((f: any) => 
             f.document_classification === 'denial' ||
-            f.file_name?.toLowerCase().includes('denial')
+            fileNameLower(f).includes('denial')
+          );
+          // Storm reports & weather data for causation evidence
+          const stormReports = filesWithText.filter((f: any) => 
+            f.document_classification === 'storm_report' ||
+            f.document_classification === 'weather_report' ||
+            fileNameLower(f).includes('storm') ||
+            fileNameLower(f).includes('weather') ||
+            fileNameLower(f).includes('hail') ||
+            fileNameLower(f).includes('wind') ||
+            fileNameLower(f).includes('nws') ||
+            fileNameLower(f).includes('noaa')
+          );
+          // Before/pre-storm photos showing no damage
+          const beforePhotos = filesWithText.filter((f: any) => 
+            fileNameLower(f).includes('before') ||
+            fileNameLower(f).includes('pre-storm') ||
+            fileNameLower(f).includes('prestorm') ||
+            fileNameLower(f).includes('prior') ||
+            fileNameLower(f).includes('overview') ||
+            fileNameLower(f).includes('original condition')
+          );
+          // Contractor documents
+          const contractorDocs = filesWithText.filter((f: any) => 
+            f.document_classification === 'contractor' ||
+            fileNameLower(f).includes('contractor') ||
+            fileNameLower(f).includes('bid') ||
+            fileNameLower(f).includes('quote')
           );
           
           documentEvidenceSection = `
 
-=== SUPPORTING DOCUMENTS ON FILE (${context.files.length} documents) ===
+=== SUPPORTING DOCUMENTS ON FILE (${filesWithText.length} documents) ===
 CRITICAL: Reference these documents to support your rebuttal arguments.
 
+${stormReports.length > 0 ? `STORM/WEATHER REPORTS (${stormReports.length}) - PROVES CAUSATION:
+${stormReports.map((f: any) => `- ${f.file_name} (uploaded ${new Date(f.uploaded_at).toLocaleDateString()})`).join('\n')}
+` : ''}
+${beforePhotos.length > 0 ? `BEFORE/PRE-STORM EVIDENCE (${beforePhotos.length}) - PROVES PRE-LOSS CONDITION:
+${beforePhotos.map((f: any) => `- ${f.file_name} (uploaded ${new Date(f.uploaded_at).toLocaleDateString()})`).join('\n')}
+` : ''}
 ${estimates.length > 0 ? `ESTIMATES AVAILABLE (${estimates.length}):
 ${estimates.map((f: any) => `- ${f.file_name} (uploaded ${new Date(f.uploaded_at).toLocaleDateString()})`).join('\n')}
 ` : ''}
 ${inspectionDocs.length > 0 ? `INSPECTION/REPORT DOCUMENTS (${inspectionDocs.length}):
 ${inspectionDocs.map((f: any) => `- ${f.file_name}`).join('\n')}
 ` : ''}
+${contractorDocs.length > 0 ? `CONTRACTOR DOCUMENTS (${contractorDocs.length}):
+${contractorDocs.map((f: any) => `- ${f.file_name}`).join('\n')}
+` : ''}
 ALL DOCUMENTS:
-${context.files.map((f: any) => `- ${f.file_name} [${f.document_classification || 'Unclassified'}] ${f.claim_folders?.name ? `(Folder: ${f.claim_folders.name})` : ''}`).join('\n')}
+${filesWithText.map((f: any) => `- ${f.file_name} [${f.document_classification || 'Unclassified'}] ${f.claim_folders?.name ? `(Folder: ${f.claim_folders.name})` : ''}`).join('\n')}
 `;
+
+          // Include extracted text from critical documents for Darwin to read
+          const criticalDocs = [...stormReports, ...inspectionDocs, ...beforePhotos].filter(f => f.extracted_text);
+          if (criticalDocs.length > 0) {
+            extractedDocContent = `
+
+=== DOCUMENT CONTENT (OCR EXTRACTED TEXT) ===
+Use this content to cite specific findings, data, and evidence from the uploaded documents.
+
+`;
+            for (const doc of criticalDocs.slice(0, 5)) {
+              const textContent = doc.extracted_text?.substring(0, 3000) || '';
+              if (textContent.length > 100) {
+                extractedDocContent += `--- ${doc.file_name} ---\n${textContent}\n\n`;
+              }
+            }
+          }
         }
 
         // Combine all knowledge base content
@@ -653,6 +717,8 @@ ${content || 'No denial letter content provided'}`}
 ${photoEvidenceSection}
 
 ${documentEvidenceSection}
+
+${extractedDocContent || ''}
 
 ${combinedKnowledge || ''}
 
@@ -3034,31 +3100,95 @@ Return ONLY valid JSON with the classification.`;
         // Combine all knowledge base content
         const combinedKnowledge = [kbRebuttal, kbBuildingCodes, kbDenialTactics].filter(Boolean).join('\n');
 
-        // Fetch full claim files with classifications for evidence citation
+        // Fetch full claim files with classifications AND extracted text for evidence citation
         const { data: fullClaimFiles } = await supabase
           .from('claim_files')
-          .select('file_name, document_classification, classification_metadata, uploaded_at, claim_folders(name)')
+          .select('file_name, document_classification, classification_metadata, uploaded_at, claim_folders(name), extracted_text, file_type')
           .eq('claim_id', claimId);
         
         // Build detailed document inventory for citations
         let documentInventory = '';
+        let documentContentSection = '';
+        
         if (fullClaimFiles && fullClaimFiles.length > 0) {
+          // Categorize ALL document types for comprehensive evidence
+          const fileNameLower = (f: any) => f.file_name?.toLowerCase() || '';
+          
           const estimates = fullClaimFiles.filter((f: any) => 
-            f.document_classification === 'estimate' || f.file_name?.toLowerCase().includes('estimate')
+            f.document_classification === 'estimate' || 
+            fileNameLower(f).includes('estimate') ||
+            fileNameLower(f).includes('xactimate') ||
+            fileNameLower(f).includes('symbility')
           );
           const denials = fullClaimFiles.filter((f: any) => 
-            f.document_classification === 'denial' || f.file_name?.toLowerCase().includes('denial')
+            f.document_classification === 'denial' || 
+            fileNameLower(f).includes('denial')
           );
           const engineerReports = fullClaimFiles.filter((f: any) => 
-            f.document_classification === 'engineering_report' || f.file_name?.toLowerCase().includes('engineer')
+            f.document_classification === 'engineering_report' || 
+            fileNameLower(f).includes('engineer')
           );
           const policies = fullClaimFiles.filter((f: any) => 
-            f.document_classification === 'policy' || f.file_name?.toLowerCase().includes('policy') || f.file_name?.toLowerCase().includes('declaration')
+            f.document_classification === 'policy' || 
+            fileNameLower(f).includes('policy') || 
+            fileNameLower(f).includes('declaration')
+          );
+          // NEW: Storm reports, weather data
+          const stormReports = fullClaimFiles.filter((f: any) => 
+            f.document_classification === 'storm_report' ||
+            f.document_classification === 'weather_report' ||
+            fileNameLower(f).includes('storm') ||
+            fileNameLower(f).includes('weather') ||
+            fileNameLower(f).includes('hail') ||
+            fileNameLower(f).includes('wind') ||
+            fileNameLower(f).includes('nws') ||
+            fileNameLower(f).includes('noaa')
+          );
+          // NEW: Inspection reports
+          const inspectionReports = fullClaimFiles.filter((f: any) => 
+            f.document_classification === 'inspection' ||
+            f.document_classification === 'inspection_report' ||
+            fileNameLower(f).includes('inspection') ||
+            fileNameLower(f).includes('roof report')
+          );
+          // NEW: Before/pre-storm photos and condition documentation
+          const beforePhotos = fullClaimFiles.filter((f: any) => 
+            fileNameLower(f).includes('before') ||
+            fileNameLower(f).includes('pre-storm') ||
+            fileNameLower(f).includes('prestorm') ||
+            fileNameLower(f).includes('prior') ||
+            fileNameLower(f).includes('original condition') ||
+            fileNameLower(f).includes('overview')
+          );
+          // NEW: Contractor opinions/bids
+          const contractorDocs = fullClaimFiles.filter((f: any) => 
+            f.document_classification === 'contractor' ||
+            fileNameLower(f).includes('contractor') ||
+            fileNameLower(f).includes('bid') ||
+            fileNameLower(f).includes('quote') ||
+            fileNameLower(f).includes('proposal')
+          );
+          // NEW: Correspondence from/to carrier
+          const correspondence = fullClaimFiles.filter((f: any) => 
+            f.document_classification === 'correspondence' ||
+            fileNameLower(f).includes('letter') ||
+            fileNameLower(f).includes('email') ||
+            fileNameLower(f).includes('response')
           );
           
           documentInventory = `
 === DOCUMENTS AVAILABLE FOR CITATION (${fullClaimFiles.length} files) ===
+CRITICAL: Reference these documents by name to support your arguments.
 
+${stormReports.length > 0 ? `STORM/WEATHER REPORTS (${stormReports.length}) - USE FOR CAUSATION:
+${stormReports.map((f: any) => `- ${f.file_name} (uploaded ${new Date(f.uploaded_at).toLocaleDateString()})`).join('\n')}
+` : ''}
+${beforePhotos.length > 0 ? `BEFORE/PRE-STORM PHOTOS (${beforePhotos.length}) - PROVES PRE-LOSS CONDITION:
+${beforePhotos.map((f: any) => `- ${f.file_name} (uploaded ${new Date(f.uploaded_at).toLocaleDateString()})`).join('\n')}
+` : ''}
+${inspectionReports.length > 0 ? `INSPECTION REPORTS (${inspectionReports.length}):
+${inspectionReports.map((f: any) => `- ${f.file_name}`).join('\n')}
+` : ''}
 ${estimates.length > 0 ? `ESTIMATES (${estimates.length}):
 ${estimates.map((f: any) => {
   const meta = f.classification_metadata || {};
@@ -3079,9 +3209,31 @@ ${engineerReports.map((f: any) => `- ${f.file_name}`).join('\n')}
 ${policies.length > 0 ? `POLICY DOCUMENTS (${policies.length}):
 ${policies.map((f: any) => `- ${f.file_name}`).join('\n')}
 ` : ''}
+${contractorDocs.length > 0 ? `CONTRACTOR DOCUMENTS (${contractorDocs.length}):
+${contractorDocs.map((f: any) => `- ${f.file_name}`).join('\n')}
+` : ''}
+${correspondence.length > 0 ? `CORRESPONDENCE (${correspondence.length}):
+${correspondence.map((f: any) => `- ${f.file_name}`).join('\n')}
+` : ''}
 ALL FILES:
 ${fullClaimFiles.map((f: any) => `- ${f.file_name} [${f.document_classification || 'Unclassified'}] ${f.claim_folders?.name ? `(Folder: ${f.claim_folders.name})` : ''}`).join('\n')}
 `;
+
+          // NEW: Include extracted text content from critical documents for Darwin to read
+          const criticalDocs = [...stormReports, ...inspectionReports, ...denials, ...engineerReports].filter(f => f.extracted_text);
+          if (criticalDocs.length > 0) {
+            documentContentSection = `
+=== DOCUMENT CONTENT (from OCR/extraction) ===
+CRITICAL: This is the actual text content from key documents. Use this to cite specific findings, quotes, and data.
+
+`;
+            for (const doc of criticalDocs.slice(0, 8)) { // Limit to prevent token overflow
+              const textContent = doc.extracted_text?.substring(0, 4000) || '';
+              if (textContent.length > 100) {
+                documentContentSection += `\n--- ${doc.file_name} [${doc.document_classification || 'Document'}] ---\n${textContent}\n\n`;
+              }
+            }
+          }
         }
 
         systemPrompt = `You are Darwin, an elite public adjuster AI generating a COMPREHENSIVE STRATEGIC REBUTTAL to OVERTURN the carrier's denial and secure coverage. You have access to ALL claim intelligence, strategic analyses, carrier behavior data, previous Darwin analyses, and the complete evidence file for this claim.
@@ -3163,6 +3315,11 @@ Counter Sequences: ${JSON.stringify(carrierBehavior.counter_sequences || [])}
 
         // Add document inventory
         intelligenceContext += documentInventory;
+        
+        // Add extracted document content (storm reports, inspection reports, etc.)
+        if (documentContentSection) {
+          intelligenceContext += documentContentSection;
+        }
 
         // Add AI photo analysis evidence - critical for rebuttals
         if (aiPhotoAnalysis.length > 0) {
