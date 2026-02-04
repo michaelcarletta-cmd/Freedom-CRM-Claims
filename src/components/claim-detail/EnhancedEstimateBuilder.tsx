@@ -379,14 +379,14 @@ REMEMBER: Output ONLY the JSON array. No explanations.`,
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <TabsList className="grid grid-cols-4">
-            <TabsTrigger value="photos" className="gap-1">
+          <TabsList className="flex flex-row w-full h-auto p-1 gap-1 overflow-x-auto scrollbar-hide">
+            <TabsTrigger value="photos" className="flex-1 gap-1 whitespace-nowrap">
               <Camera className="h-3 w-3" />
               Photos
             </TabsTrigger>
-            <TabsTrigger value="scope">Repair Scope</TabsTrigger>
-            <TabsTrigger value="estimate">Line Items</TabsTrigger>
-            <TabsTrigger value="summary">Summary</TabsTrigger>
+            <TabsTrigger value="scope" className="flex-1 whitespace-nowrap">Repair Scope</TabsTrigger>
+            <TabsTrigger value="estimate" className="flex-1 whitespace-nowrap">Line Items</TabsTrigger>
+            <TabsTrigger value="summary" className="flex-1 whitespace-nowrap">Summary</TabsTrigger>
           </TabsList>
 
           <TabsContent value="photos" className="flex-1 overflow-hidden">
