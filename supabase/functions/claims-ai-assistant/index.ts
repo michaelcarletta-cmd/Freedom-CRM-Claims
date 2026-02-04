@@ -1091,6 +1091,33 @@ const tools = [
         required: ["adjuster_name"]
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_tasks",
+      description: "Search for tasks across all claims by keywords in the title or description. Use fuzzy matching to find tasks even when the exact wording differs. For example, searching for 'photos needed' will also find 'upload photos', 'get completion photos', 'COC', 'certificate of completion', etc. Use this when the user asks about finding tasks with certain keywords, or wants to know which claims have specific types of tasks.",
+      parameters: {
+        type: "object",
+        properties: {
+          keywords: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of keywords or phrases to search for in task titles and descriptions. The search uses fuzzy matching - similar words and abbreviations will be matched (e.g., 'COC' matches 'certificate of completion', 'photos' matches 'pictures', 'photo of completion')."
+          },
+          status: {
+            type: "string",
+            enum: ["pending", "completed", "all"],
+            description: "Filter by task status. Default is 'pending' to find incomplete tasks."
+          },
+          include_closed_claims: {
+            type: "boolean",
+            description: "Whether to include tasks from closed claims. Default is false."
+          }
+        },
+        required: ["keywords"]
+      }
+    }
   }
 ];
 // Helper function to get full Darwin-level claim context
@@ -1386,6 +1413,143 @@ async function findStaffByName(supabase: any, staffName: string): Promise<{ id: 
     return { id: data[0].id, name: data[0].full_name || data[0].email };
   }
   return null;
+}
+
+// Helper function to search tasks with fuzzy keyword matching
+async function searchTasksByKeywords(
+  supabase: any, 
+  keywords: string[], 
+  status: string = "pending",
+  includeClosedClaims: boolean = false
+): Promise<string> {
+  try {
+    // Build expanded keyword list with synonyms and common variations
+    const expandedKeywords: string[] = [];
+    const keywordSynonyms: Record<string, string[]> = {
+      'coc': ['certificate of completion', 'completion certificate', 'coc', 'c.o.c'],
+      'certificate of completion': ['coc', 'completion certificate', 'certificate'],
+      'photos': ['photo', 'pictures', 'picture', 'image', 'images', 'pics'],
+      'photo': ['photos', 'pictures', 'picture', 'image', 'images', 'pics'],
+      'completion': ['complete', 'completed', 'finishing', 'final'],
+      'needed': ['need', 'required', 'missing', 'outstanding', 'get', 'obtain', 'upload'],
+      'upload': ['get', 'obtain', 'send', 'submit', 'needed'],
+      'estimate': ['estimates', 'xactimate', 'scope', 'bid'],
+      'supplement': ['supplements', 'supp', 'supplemental'],
+      'inspection': ['inspections', 'inspect', 're-inspect', 'reinspect'],
+      'follow up': ['follow-up', 'followup', 'follow'],
+      'call': ['phone', 'contact', 'reach out'],
+      'email': ['send email', 'draft email', 'write email'],
+      'denial': ['denied', 'deny', 'rejection', 'rejected'],
+      'rebuttal': ['rebut', 'respond', 'response', 'counter'],
+    };
+    
+    // Expand each keyword with its synonyms
+    for (const keyword of keywords) {
+      const lowerKeyword = keyword.toLowerCase().trim();
+      expandedKeywords.push(lowerKeyword);
+      
+      // Add synonyms if they exist
+      if (keywordSynonyms[lowerKeyword]) {
+        expandedKeywords.push(...keywordSynonyms[lowerKeyword]);
+      }
+      
+      // Also check if any synonym maps TO this keyword
+      for (const [syn, targets] of Object.entries(keywordSynonyms)) {
+        if (targets.includes(lowerKeyword) && !expandedKeywords.includes(syn)) {
+          expandedKeywords.push(syn);
+        }
+      }
+    }
+    
+    // Remove duplicates
+    const uniqueKeywords = [...new Set(expandedKeywords)];
+    console.log("Searching tasks with expanded keywords:", uniqueKeywords);
+    
+    // Build the base query
+    let query = supabase
+      .from("tasks")
+      .select(`
+        id,
+        title,
+        description,
+        status,
+        priority,
+        due_date,
+        created_at,
+        claims!inner(id, claim_number, policyholder_name, status, is_closed)
+      `)
+      .order("created_at", { ascending: false });
+    
+    // Filter by task status
+    if (status !== "all") {
+      query = query.eq("status", status);
+    }
+    
+    // Filter out closed claims unless requested
+    if (!includeClosedClaims) {
+      query = query.eq("claims.is_closed", false);
+    }
+    
+    // Fetch all matching tasks (we'll filter client-side for fuzzy matching)
+    const { data: allTasks, error } = await query.limit(500);
+    
+    if (error) {
+      console.error("Error fetching tasks:", error);
+      return `❌ Error searching tasks: ${error.message}`;
+    }
+    
+    if (!allTasks || allTasks.length === 0) {
+      return `No ${status === "all" ? "" : status + " "}tasks found.`;
+    }
+    
+    // Filter tasks by keywords (fuzzy match on title and description)
+    const matchingTasks = allTasks.filter((task: any) => {
+      const titleLower = (task.title || "").toLowerCase();
+      const descLower = (task.description || "").toLowerCase();
+      const combined = titleLower + " " + descLower;
+      
+      // Check if any expanded keyword matches
+      return uniqueKeywords.some(keyword => combined.includes(keyword));
+    });
+    
+    if (matchingTasks.length === 0) {
+      return `No ${status === "all" ? "" : status + " "}tasks found matching: ${keywords.join(", ")}.\n\nI searched for these terms and variations: ${uniqueKeywords.slice(0, 10).join(", ")}${uniqueKeywords.length > 10 ? "..." : ""}`;
+    }
+    
+    // Build the result
+    let result = `Found ${matchingTasks.length} ${status === "all" ? "" : status + " "}task(s) matching "${keywords.join(", ")}":\n\n`;
+    
+    // Group by claim for better organization
+    const tasksByClaim: Record<string, any[]> = {};
+    for (const task of matchingTasks) {
+      const claimKey = task.claims?.claim_number || task.claims?.policyholder_name || "Unknown Claim";
+      if (!tasksByClaim[claimKey]) {
+        tasksByClaim[claimKey] = [];
+      }
+      tasksByClaim[claimKey].push(task);
+    }
+    
+    for (const [claimKey, tasks] of Object.entries(tasksByClaim)) {
+      const claim = (tasks as any[])[0].claims;
+      result += `📋 ${claim?.policyholder_name || claimKey} (${claim?.claim_number || "No #"}) - ${claim?.status || "Unknown status"}\n`;
+      
+      for (const task of tasks as any[]) {
+        const statusIcon = task.status === "completed" ? "✅" : "⏳";
+        const dueDate = task.due_date ? new Date(task.due_date).toLocaleDateString() : "No due date";
+        const priority = task.priority ? ` [${task.priority}]` : "";
+        result += `  ${statusIcon} ${task.title}${priority} - Due: ${dueDate}\n`;
+        if (task.description) {
+          result += `     ${task.description.substring(0, 80)}${task.description.length > 80 ? "..." : ""}\n`;
+        }
+      }
+      result += "\n";
+    }
+    
+    return result;
+  } catch (err) {
+    console.error("Exception in searchTasksByKeywords:", err);
+    return `❌ Error searching tasks: ${err instanceof Error ? err.message : "Unknown error"}`;
+  }
 }
 
 // Helper function to get date range based on time period
@@ -2446,7 +2610,23 @@ GET ADJUSTER INTERACTIONS (get_adjuster_interactions):
 - Shows emails, notes, and diary entries from those claims
 - Examples:
   - "tell me about my dealings with John Smith from State Farm" → get_adjuster_interactions({ adjuster_name: "John Smith" })
-  - "what claims does adjuster Mike handle" → get_adjuster_interactions({ adjuster_name: "Mike" })`;
+  - "what claims does adjuster Mike handle" → get_adjuster_interactions({ adjuster_name: "Mike" })
+
+*** TASK SEARCH (search_tasks) - USE THIS FOR FINDING TASKS! ***
+- Use this when the user asks to find tasks by keywords, topic, or type
+- Performs FUZZY matching - it will find similar words and common variations automatically
+- Keyword synonyms include: COC ↔ certificate of completion, photos ↔ pictures/images, needed ↔ required/missing/get/upload, etc.
+- Can filter by status: pending, completed, or all
+- Results are grouped by claim for easy viewing
+- Examples:
+  - "find tasks with photos of completion" → search_tasks({ keywords: ["photos", "completion"] })
+  - "which claims have COC tasks" → search_tasks({ keywords: ["COC", "certificate of completion"] })  
+  - "show me tasks about photos needed" → search_tasks({ keywords: ["photos", "needed"] })
+  - "find all tasks mentioning denial" → search_tasks({ keywords: ["denial"] })
+  - "what claims have supplement tasks" → search_tasks({ keywords: ["supplement"] })
+  - "show completed inspection tasks" → search_tasks({ keywords: ["inspection"], status: "completed" })
+
+IMPORTANT: When the user asks about finding tasks with certain words or topics, ALWAYS use the search_tasks tool. The fuzzy matching will find related terms even if the user's wording doesn't exactly match the task titles.`;
 
     // Fetch available workspaces for context
     let workspacesContext = "";
@@ -3311,6 +3491,22 @@ ${knowledgeBaseContext || ''}`
           } catch (parseErr) {
             console.error("Error in get_adjuster_interactions:", parseErr);
             answer += `\n\n❌ **Error getting adjuster interactions:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "search_tasks") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Searching tasks with keywords:", params.keywords);
+            
+            const tasksResult = await searchTasksByKeywords(
+              supabase,
+              params.keywords,
+              params.status || "pending",
+              params.include_closed_claims || false
+            );
+            answer = tasksResult;
+          } catch (parseErr) {
+            console.error("Error in search_tasks:", parseErr);
+            answer += `\n\n❌ **Error searching tasks:** Invalid parameters`;
           }
         }
       }
