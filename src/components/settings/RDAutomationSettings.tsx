@@ -143,46 +143,29 @@ export const RDAutomationSettings = () => {
               <h3 className="font-medium">RD Request Follow-ups</h3>
             </div>
             <p className="text-sm text-muted-foreground">
-              When Darwin is tracking RD release (after invoices submitted), how frequently should he follow up with the carrier?
+              When Darwin is tracking RD release (after invoices submitted), he will follow up with the carrier until the claim status changes to "Waiting on Recoverable Depreciation".
             </p>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Follow-up Interval</Label>
-                <Select 
-                  value={settings.rd_request_interval_days.toString()}
-                  onValueChange={(v) => handleChange('rd_request_interval_days', parseInt(v))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Every 1 day</SelectItem>
-                    <SelectItem value="2">Every 2 days</SelectItem>
-                    <SelectItem value="3">Every 3 days</SelectItem>
-                    <SelectItem value="5">Every 5 days</SelectItem>
-                    <SelectItem value="7">Every 7 days</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Maximum Follow-ups</Label>
-                <Select 
-                  value={settings.rd_request_max_count.toString()}
-                  onValueChange={(v) => handleChange('rd_request_max_count', parseInt(v))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="3">3 follow-ups</SelectItem>
-                    <SelectItem value="5">5 follow-ups</SelectItem>
-                    <SelectItem value="10">10 follow-ups</SelectItem>
-                    <SelectItem value="15">15 follow-ups</SelectItem>
-                    <SelectItem value="20">20 follow-ups</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label>Follow-up Interval</Label>
+              <Select 
+                value={settings.rd_request_interval_days.toString()}
+                onValueChange={(v) => handleChange('rd_request_interval_days', parseInt(v))}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">Every 1 day</SelectItem>
+                  <SelectItem value="2">Every 2 days</SelectItem>
+                  <SelectItem value="3">Every 3 days</SelectItem>
+                  <SelectItem value="5">Every 5 days</SelectItem>
+                  <SelectItem value="7">Every 7 days</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Follow-ups continue until claim enters "Waiting on RD" status (no max limit)
+              </p>
             </div>
           </div>
 
@@ -304,8 +287,8 @@ export const RDAutomationSettings = () => {
             <div className="space-y-1">
               <h4 className="text-sm font-medium">How RD Tracking Works</h4>
               <div className="text-sm text-muted-foreground space-y-2">
-                <p><strong>RD Request Follow-ups:</strong> When a claim enters "Recoverable Depreciation Requested" status with RD tracking enabled, Darwin will automatically email the adjuster to confirm invoice receipt and track RD release.</p>
-                <p><strong>RD Check Receipt:</strong> Once the carrier releases the check, Darwin tracks delivery and checks in with the policyholder to confirm receipt. If overdue, we can trace the check with the carrier.</p>
+                <p><strong>RD Request Follow-ups:</strong> When a claim enters "Recoverable Depreciation Requested" status with RD tracking enabled, Darwin will automatically email the adjuster to confirm invoice receipt and track RD release. Follow-ups continue until the claim status changes to "Waiting on Recoverable Depreciation".</p>
+                <p><strong>RD Check Receipt:</strong> Once the carrier releases the check, Darwin tracks delivery and checks in with both the policyholder and insurance company to confirm receipt. If overdue, we'll request a trace or reissue from the carrier.</p>
               </div>
             </div>
           </div>
