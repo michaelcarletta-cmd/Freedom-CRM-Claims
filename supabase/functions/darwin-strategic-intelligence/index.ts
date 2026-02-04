@@ -115,8 +115,8 @@ serve(async (req) => {
     const diary = diaryResult.data || [];
     const notes = notesResult.data || [];
 
-    const stateCode = claim.property_state || 'PA';
-    const stateInfo = getStateInfo(stateCode);
+    // State code will be determined after property address parsing - placeholder
+    let stateCode = 'PA'; // Default, will be updated after address parsing
 
     // Calculate key metrics
     const daysSinceLoss = claim.loss_date 
@@ -166,11 +166,36 @@ serve(async (req) => {
       return { date: file.uploaded_at, source: 'upload', confidence: 1.0 };
     };
 
+    // Build property address from available sources
+    // Priority: policyholder_address > client address > individual fields
+    const propertyAddress = claim.policyholder_address || 
+      (claim.clients?.street ? `${claim.clients.street}, ${claim.clients.city || ''}, ${claim.clients.state || ''} ${claim.clients.zip_code || ''}` : '') ||
+      'Address not specified';
+    
+    // Parse state from address for regulations lookup
+    stateCode = claim.clients?.state || 
+      claim.policyholder_address?.match(/,\s*([A-Z]{2})\s*[\d,]/i)?.[1] || 
+      'PA';
+    const stateInfo = getStateInfo(stateCode);
+
     // Analyze evidence inventory with document dates
-    const hasEstimate = files.some(f => f.document_classification === 'estimate' || f.file_name?.toLowerCase().includes('estimate'));
+    // Improve estimate detection - check for common estimate filename patterns
+    const hasEstimate = files.some(f => {
+      const fileName = f.file_name?.toLowerCase() || '';
+      const classification = f.document_classification?.toLowerCase() || '';
+      return classification === 'estimate' || 
+             fileName.includes('estimate') ||
+             fileName.includes('xactimate') ||
+             fileName.includes('symbility') ||
+             fileName.includes('rcv') ||
+             fileName.includes('acv') ||
+             fileName.includes('scope') ||
+             // Check for common contractor estimate patterns
+             (classification === 'invoice' && (fileName.includes('contractor') || fileName.includes('repair')));
+    });
     const hasDenialLetter = files.some(f => f.document_classification === 'denial' || f.file_name?.toLowerCase().includes('denial'));
     const hasEngineerReport = files.some(f => f.document_classification === 'engineering_report' || f.file_name?.toLowerCase().includes('engineer'));
-    const hasPolicy = files.some(f => f.document_classification === 'policy' || f.file_name?.toLowerCase().includes('policy'));
+    const hasPolicy = files.some(f => f.document_classification === 'policy' || f.file_name?.toLowerCase().includes('policy') || f.file_name?.toLowerCase().includes('declaration'));
     const hasProofOfLoss = files.some(f => f.file_name?.toLowerCase().includes('proof of loss') || f.file_name?.toLowerCase().includes('pol'));
     const hasContractorInvoice = files.some(f => f.document_classification === 'invoice' || f.file_name?.toLowerCase().includes('invoice'));
     
@@ -286,8 +311,9 @@ serve(async (req) => {
 
 CLAIM OVERVIEW:
 - Claim #: ${claim.claim_number}
-- Policyholder: ${claim.clients?.name || 'Unknown'}
-- Property: ${claim.property_address || 'Not specified'}, ${claim.property_city || ''}, ${stateCode}
+- Policyholder: ${claim.policyholder_name || claim.clients?.name || 'Unknown'}
+- Property Address: ${propertyAddress}
+- State: ${stateCode}
 - Status: ${claim.status}
 - Loss Type: ${claim.loss_type || 'Not specified'}
 - Loss Date: ${claim.loss_date || 'Not specified'}
@@ -485,9 +511,13 @@ Look for IF/THEN coverage opportunities. For each one found:
 Common triggers to check:
 - Wind/hail + roof damage + code deficiencies → Ordinance & Law coverage
 - Structural damage requiring temporary relocation → ALE coverage
-- Multiple trades affected + matching clause → Full replacement
+- Multiple trades affected + Uniform Appearance doctrine → Full replacement (focus on REPAIRABILITY and pre-loss condition restoration, NOT aesthetic matching)
 - Carrier delay + missed deadlines → Prompt pay penalties
 - Lowball estimate vs code requirements → Supplement opportunity
+- Failed/poor condition photos → Evidence of damage severity
+- Code upgrade requirements → Additional coverage under O&L
+
+IMPORTANT: Do NOT reference "matching" as an argument. Focus on Repairability, Uniform Appearance, Pre-loss Condition, and Indemnification principles.
 
 Return as JSON:
 {
