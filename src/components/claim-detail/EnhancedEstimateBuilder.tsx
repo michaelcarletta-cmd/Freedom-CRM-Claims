@@ -20,8 +20,10 @@ import {
   FileText,
   Copy,
   Image,
-  FileCheck
+  FileCheck,
+  Camera
 } from "lucide-react";
+import { PhotoToXactimateAnalysis } from "./PhotoToXactimateAnalysis";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -39,6 +41,7 @@ interface LineItem {
   unitPrice: number;
   total: number;
   xactimateCode?: string;
+  justification?: string;
 }
 
 interface RepairScope {
@@ -376,11 +379,27 @@ REMEMBER: Output ONLY the JSON array. No explanations.`,
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <TabsList className="grid grid-cols-3">
+          <TabsList className="grid grid-cols-4">
+            <TabsTrigger value="photos" className="gap-1">
+              <Camera className="h-3 w-3" />
+              Photos
+            </TabsTrigger>
             <TabsTrigger value="scope">Repair Scope</TabsTrigger>
             <TabsTrigger value="estimate">Line Items</TabsTrigger>
             <TabsTrigger value="summary">Summary</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="photos" className="flex-1 overflow-hidden">
+            <ScrollArea className="h-[500px] pr-4">
+              <PhotoToXactimateAnalysis 
+                claimId={claimId} 
+                onLineItemsGenerated={(items) => {
+                  setLineItems(prev => [...prev, ...items]);
+                  setActiveTab("estimate");
+                }}
+              />
+            </ScrollArea>
+          </TabsContent>
 
           <TabsContent value="scope" className="flex-1 overflow-hidden">
             <ScrollArea className="h-[500px] pr-4">
