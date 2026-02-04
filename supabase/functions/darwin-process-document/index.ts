@@ -252,6 +252,44 @@ function classifyByFilename(filename: string): DocumentClassification {
   return 'correspondence';
 }
 
+// Date validation helper - rejects unreasonable dates
+function validateExtractedDate(dateStr: string | null): {
+  isValid: boolean;
+  correctedDate: string | null;
+  warning: string | null;
+} {
+  if (!dateStr || dateStr === 'null') return { isValid: true, correctedDate: null, warning: null };
+  
+  const extracted = new Date(dateStr);
+  if (isNaN(extracted.getTime())) {
+    return { isValid: false, correctedDate: null, warning: `Invalid date format: ${dateStr}` };
+  }
+  
+  const now = new Date();
+  const tenYearsAgo = new Date();
+  tenYearsAgo.setFullYear(now.getFullYear() - 10);
+  
+  // Reject dates more than 10 years old
+  if (extracted < tenYearsAgo) {
+    return {
+      isValid: false,
+      correctedDate: null,
+      warning: `Extracted date ${dateStr} appears too old, likely a misread`
+    };
+  }
+  
+  // Reject future dates
+  if (extracted > now) {
+    return {
+      isValid: false,
+      correctedDate: null,
+      warning: `Extracted date ${dateStr} is in the future`
+    };
+  }
+  
+  return { isValid: true, correctedDate: dateStr, warning: null };
+}
+
 async function classifyDocument(textContent: string, filename: string): Promise<ClassificationResult> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
@@ -273,14 +311,38 @@ async function classifyDocument(textContent: string, filename: string): Promise<
     };
   }
 
-  const systemPrompt = `You are a document classifier for insurance claims. Analyze the document and classify it.
+  // Inject current date context for accurate date extraction
+  const now = new Date();
+  const currentDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  const currentYear = now.getFullYear();
+
+  const systemPrompt = `You are a document classifier for insurance claims.
+
+IMPORTANT DATE CONTEXT:
+- TODAY'S DATE: ${currentDate}
+- CURRENT YEAR: ${currentYear}
+
+Analyze the document and classify it.
+
+DATE EXTRACTION RULES (CRITICAL):
+1. Extract the DOCUMENT DATE - the date the letter/document was written or issued
+2. This is typically found in the letterhead, header, or near the signature
+3. Do NOT confuse this with loss dates, claim dates, or policy dates mentioned in the body
+4. For 2-digit years: interpret based on current year (${currentYear}):
+   - Years 00-29 are 2000-2029 (e.g., "26" = 2026)
+   - Years 30-99 are 1930-1999 (e.g., "95" = 1995)
+5. If no clear document date is found, return null - do NOT guess
+6. Most insurance documents you receive will be from the past 2-3 years, rarely older
 
 Return ONLY valid JSON with this structure:
 {
   "classification": "estimate|denial|approval|rfi|engineering_report|policy|correspondence|invoice|photo|other",
   "confidence": 0.0-1.0,
   "metadata": {
-    "date_mentioned": "YYYY-MM-DD or null",
+    "document_date": "YYYY-MM-DD or null - the date this document was ISSUED/WRITTEN",
+    "date_confidence": 0.0-1.0,
+    "date_mentioned": "YYYY-MM-DD or null - DEPRECATED, same as document_date for backwards compatibility",
+    "dates_found": [{"type": "letter_date|loss_date|claim_date|policy_date|deadline", "date": "YYYY-MM-DD", "context": "brief context"}],
     "deadline_mentioned": "YYYY-MM-DD or null",
     "amounts": [{"description": "...", "amount": 0.00}],
     "key_phrases": ["up to 5 key phrases"],
@@ -334,6 +396,25 @@ For APPROVALS, also include:
     }
 
     const result = JSON.parse(jsonMatch[0]) as ClassificationResult;
+    
+    // Post-extraction date validation
+    const metadata = result.metadata as any;
+    const documentDate = metadata.document_date || metadata.date_mentioned;
+    const dateValidation = validateExtractedDate(documentDate);
+    
+    if (!dateValidation.isValid) {
+      console.log(`Date validation failed: ${dateValidation.warning}`);
+      // Clear invalid dates and lower confidence
+      metadata.document_date = null;
+      metadata.date_mentioned = null;
+      metadata.date_confidence = 0;
+      metadata.date_validation_warning = dateValidation.warning;
+    } else if (documentDate) {
+      // Ensure both fields are set for backwards compatibility
+      metadata.document_date = dateValidation.correctedDate;
+      metadata.date_mentioned = dateValidation.correctedDate;
+    }
+    
     return result;
   } catch (error) {
     console.error('AI classification error:', error);
