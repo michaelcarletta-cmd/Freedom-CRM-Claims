@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Scale, 
   AlertTriangle, 
@@ -25,10 +26,12 @@ import {
   Flame,
   Snowflake,
   CloudLightning,
-  TreeDeciduous
+  TreeDeciduous,
+  Shield
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { CausationBlameCounterSection } from "./CausationBlameCounterSection";
 
 interface DarwinButForCausationProps {
   claimId: string;
@@ -60,14 +63,20 @@ interface CausationFormData {
   weatherEvidence: string;
   competingCauses: string[];
   observationsNotes: string;
+  // New fields for blame counter-arguments
+  carrierBlameTactics: string[];
+  blameEvidenceChecked: Record<string, string[]>;
 }
 
 interface CausationResult {
   decision: 'supported' | 'not_supported' | 'indeterminate';
   decisionStatement: string;
+  butForStatement: string;
+  technicalBasis: string[];
   reasoning: string[];
   alternativesConsidered: { cause: string; likelihood: string; reasoning: string }[];
   evidenceGaps: string[];
+  counterArgumentsSummary?: string;
   totalScore: number;
   scoreBreakdown: Record<string, { label: string; weight: number; applied: boolean }[]>;
 }
@@ -132,6 +141,8 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
     weatherEvidence: '',
     competingCauses: [],
     observationsNotes: '',
+    carrierBlameTactics: [],
+    blameEvidenceChecked: {},
   });
 
   // Fetch rubric weights
@@ -283,18 +294,47 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
     // Determine decision
     let decision: 'supported' | 'not_supported' | 'indeterminate';
     let decisionStatement: string;
+    let butForStatement: string;
+    const technicalBasis: string[] = [];
     
     const perilLabel = PERILS.find(p => p.value === formData.perilTested)?.label || formData.perilTested;
+    const roofAgeNum = parseInt(formData.roofAge) || 0;
+    
+    // Build technical basis citations
+    if (formData.directionalIndicators.length > 0) {
+      technicalBasis.push(`Directional damage pattern consistent with ${perilLabel.toLowerCase()} per HAAG Engineering standards`);
+    }
+    if (formData.collateralDamage.length > 0) {
+      technicalBasis.push('Collateral damage to adjacent structures/components corroborates event occurrence');
+    }
+    if (roofAgeNum > 10) {
+      technicalBasis.push(`Per ARMA Technical Bulletin 201, seal strip degradation on ${roofAgeNum}-year-old shingles reduces wind resistance below factory ratings`);
+    }
+    if (formData.perilTested === 'wind') {
+      technicalBasis.push('ASTM D3161/D7158 wind ratings apply to NEW materials only; aged shingles have diminished resistance');
+    }
+    if (formData.patternDispersion === 'slope_specific') {
+      technicalBasis.push('Damage concentrated on specific exposures is characteristic of directional wind forces, not random wear');
+    }
+    
+    // Generate counter-arguments summary if carrier blame tactics selected
+    let counterArgumentsSummary: string | undefined;
+    if (formData.carrierBlameTactics.length > 0) {
+      counterArgumentsSummary = `Carrier blame-shifting tactics identified: ${formData.carrierBlameTactics.length} defensive arguments prepared with evidence checklists.`;
+    }
     
     if (totalScore >= 20) {
       decision = 'supported';
-      decisionStatement = `If not for ${perilLabel.toLowerCase()}, ${formData.damageType.toLowerCase()} would NOT have occurred. The evidence is consistent with ${perilLabel.toLowerCase()}-related damage based on ${formData.directionalIndicators.length + formData.collateralDamage.length} supporting indicators.`;
+      butForStatement = `BUT FOR the ${perilLabel.toLowerCase()} event of ${formData.eventDate ? new Date(formData.eventDate).toLocaleDateString() : 'the reported date'}, the ${formData.damageType.toLowerCase()} would NOT have occurred.`;
+      decisionStatement = `The evidence strongly supports ${perilLabel.toLowerCase()} as the proximate cause. ${formData.directionalIndicators.length + formData.collateralDamage.length} corroborating indicators establish causation. Pre-existing wear or aging, if present, does not exclude coverage—the covered peril was the triggering event that caused the loss.`;
     } else if (totalScore <= -10) {
       decision = 'not_supported';
-      decisionStatement = `If not for ${perilLabel.toLowerCase()}, ${formData.damageType.toLowerCase()} would likely STILL have occurred. The evidence suggests alternative causation factors are more probable.`;
+      butForStatement = `The evidence does NOT support that ${perilLabel.toLowerCase()} was the proximate cause of the ${formData.damageType.toLowerCase()}.`;
+      decisionStatement = `Alternative causation factors appear more probable. However, if the carrier is relying on competing causes (installation, maintenance, manufacturing), specific counter-arguments and evidence requirements should be reviewed.`;
     } else {
       decision = 'indeterminate';
-      decisionStatement = `Insufficient evidence to conclusively determine whether ${formData.damageType.toLowerCase()} would have occurred without ${perilLabel.toLowerCase()}. Additional documentation is recommended.`;
+      butForStatement = `Insufficient evidence exists to conclusively determine whether ${formData.damageType.toLowerCase()} would have occurred without ${perilLabel.toLowerCase()}.`;
+      decisionStatement = `Additional documentation is recommended to strengthen the causation argument. Focus on filling the identified evidence gaps.`;
     }
 
     // Limit reasoning to 8 bullets
@@ -303,9 +343,12 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
     return {
       decision,
       decisionStatement,
+      butForStatement,
+      technicalBasis,
       reasoning: limitedReasoning,
       alternativesConsidered,
       evidenceGaps,
+      counterArgumentsSummary,
       totalScore,
       scoreBreakdown,
     };
@@ -369,17 +412,32 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
     const perilLabel = PERILS.find(p => p.value === formData.perilTested)?.label || formData.perilTested;
     
     let report = `BUT-FOR CAUSATION ANALYSIS\n`;
-    report += `${'='.repeat(50)}\n\n`;
+    report += `${'='.repeat(60)}\n\n`;
+    report += `Claim: ${claim?.claim_number || 'N/A'}\n`;
     report += `Peril Tested: ${perilLabel}\n`;
     report += `Damage Type: ${formData.damageType}\n`;
-    report += `Event Date: ${formData.eventDate || 'Not specified'}\n`;
-    report += `Damage Noticed: ${formData.damageNoticedDate || 'Not specified'}\n\n`;
+    report += `Event Date: ${formData.eventDate ? new Date(formData.eventDate).toLocaleDateString() : 'Not specified'}\n`;
+    report += `Damage Noticed: ${formData.damageNoticedDate ? new Date(formData.damageNoticedDate).toLocaleDateString() : 'Not specified'}\n`;
+    report += `Roof Age: ${formData.roofAge ? `${formData.roofAge} years` : 'Unknown'}\n\n`;
+    
+    report += `${'='.repeat(60)}\n`;
+    report += `BUT-FOR STATEMENT\n`;
+    report += `${'='.repeat(60)}\n`;
+    report += `${result.butForStatement}\n\n`;
     
     report += `DECISION: ${result.decision.toUpperCase().replace('_', ' ')}\n`;
-    report += `-`.repeat(50) + `\n`;
+    report += `-`.repeat(60) + `\n`;
     report += `${result.decisionStatement}\n\n`;
     
-    report += `REASONING:\n`;
+    if (result.technicalBasis.length > 0) {
+      report += `TECHNICAL BASIS & CITATIONS:\n`;
+      result.technicalBasis.forEach((basis, i) => {
+        report += `${i + 1}. ${basis}\n`;
+      });
+      report += `\n`;
+    }
+    
+    report += `SUPPORTING EVIDENCE ANALYSIS:\n`;
     result.reasoning.forEach((r, i) => {
       report += `${i + 1}. ${r}\n`;
     });
@@ -392,17 +450,24 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
     }
     
     if (result.evidenceGaps.length > 0) {
-      report += `\nEVIDENCE GAPS:\n`;
+      report += `\nEVIDENCE GAPS TO ADDRESS:\n`;
       result.evidenceGaps.forEach(gap => {
         report += `• ${gap}\n`;
       });
     }
     
-    report += `\nTotal Score: ${result.totalScore}\n`;
+    if (formData.carrierBlameTactics.length > 0) {
+      report += `\nCARRIER BLAME TACTICS IDENTIFIED:\n`;
+      report += `Counter-arguments and evidence checklists prepared for ${formData.carrierBlameTactics.length} defensive strategies.\n`;
+    }
+    
+    report += `\n${'='.repeat(60)}\n`;
+    report += `Total Score: ${result.totalScore}\n`;
     report += `Analysis Date: ${new Date().toLocaleDateString()}\n`;
+    report += `This analysis is for public adjuster use in claim advocacy.\n`;
     
     navigator.clipboard.writeText(report);
-    toast.success('Report copied to clipboard');
+    toast.success('Causation report copied to clipboard');
   };
 
   const getDecisionColor = (decision: string) => {
@@ -668,6 +733,28 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
                 />
               </div>
 
+              {/* Carrier Blame Counter-Arguments Section */}
+              <CausationBlameCounterSection
+                selectedTactics={formData.carrierBlameTactics}
+                onTacticsChange={(tactics) => setFormData(prev => ({ ...prev, carrierBlameTactics: tactics }))}
+                onEvidenceCheck={(tacticId, evidenceItem, checked) => {
+                  setFormData(prev => {
+                    const current = prev.blameEvidenceChecked[tacticId] || [];
+                    const updated = checked 
+                      ? [...current, evidenceItem]
+                      : current.filter(e => e !== evidenceItem);
+                    return {
+                      ...prev,
+                      blameEvidenceChecked: {
+                        ...prev.blameEvidenceChecked,
+                        [tacticId]: updated
+                      }
+                    };
+                  });
+                }}
+                checkedEvidence={formData.blameEvidenceChecked}
+              />
+
               {/* Run Test Button */}
               <Button onClick={handleRunTest} disabled={saveMutation.isPending} className="w-full">
                 {saveMutation.isPending ? (
@@ -687,6 +774,12 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
             {/* Results Section */}
             {showResults && result && (
               <div className="space-y-4 pt-4 border-t">
+                {/* But-For Statement - Primary Display */}
+                <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                  <p className="text-xs font-medium text-primary mb-2 uppercase tracking-wide">But-For Statement</p>
+                  <p className="text-base font-semibold">{result.butForStatement}</p>
+                </div>
+                
                 {/* Decision Banner */}
                 <div className={cn(
                   "p-4 rounded-lg border flex items-start gap-3",
@@ -695,8 +788,8 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
                   {getDecisionIcon(result.decision)}
                   <div>
                     <p className="font-semibold">
-                      {result.decision === 'supported' && 'But-For Causation Supported'}
-                      {result.decision === 'not_supported' && 'But-For Causation Not Supported'}
+                      {result.decision === 'supported' && 'Causation Supported'}
+                      {result.decision === 'not_supported' && 'Causation Not Supported'}
                       {result.decision === 'indeterminate' && 'Indeterminate — More Evidence Needed'}
                     </p>
                     <p className="text-sm mt-1">{result.decisionStatement}</p>
@@ -704,9 +797,38 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
                   </div>
                 </div>
 
+                {/* Technical Basis */}
+                {result.technicalBasis.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="font-medium text-sm flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Technical Basis & Citations
+                    </p>
+                    <div className="p-3 bg-muted/30 rounded-lg space-y-1">
+                      {result.technicalBasis.map((basis, i) => (
+                        <p key={i} className="text-sm flex items-start gap-2">
+                          <span className="text-primary font-bold">•</span>
+                          {basis}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Counter-Arguments Notice */}
+                {result.counterArgumentsSummary && (
+                  <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-2">
+                    <Shield className="h-4 w-4 text-destructive mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-destructive">Defensive Arguments Prepared</p>
+                      <p className="text-xs text-muted-foreground">{result.counterArgumentsSummary}</p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Reasoning */}
                 <div className="space-y-2">
-                  <p className="font-medium text-sm">Reasoning</p>
+                  <p className="font-medium text-sm">Supporting Evidence Analysis</p>
                   <ul className="space-y-1">
                     {result.reasoning.map((r, i) => (
                       <li key={i} className="text-sm flex items-start gap-2">
