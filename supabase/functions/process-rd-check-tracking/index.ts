@@ -296,14 +296,71 @@ GUIDELINES:
         })
         .eq('id', automation.id);
 
-      // Add activity note
+      // Add detailed activity note
+      const recipientsList = [claim.policyholder_name];
+      if (adjusterEmail) recipientsList.push(claim.adjuster_name || 'Adjuster');
+      
       await supabase
         .from('claim_updates')
         .insert({
           claim_id: claim.id,
-          content: `📬 RD Check Follow-up #${followUpCount} sent to ${claim.policyholder_name} - ${isOverdue ? 'Check is overdue' : 'Checking if check was received'} (${daysSinceRelease} days since release)`,
+          content: `📬 **Darwin RD Check Follow-up #${followUpCount}**\n\n**Sent to:** ${recipientsList.join(', ')}\n**Days since release:** ${daysSinceRelease}\n**Status:** ${isOverdue ? '⚠️ Check is OVERDUE - requested trace/reissue' : 'Checking if check was received'}\n\n_RD check was released on ${releasedAt.toLocaleDateString()}_`,
           update_type: 'rd_check_follow_up',
         });
+
+      // Add claim note for visibility
+      await supabase
+        .from('claim_notes')
+        .insert({
+          claim_id: claim.id,
+          content: `[Darwin Auto] RD Check Follow-up #${followUpCount} sent. ${isOverdue ? 'Check is overdue (' + daysSinceRelease + ' days) - requested trace/reissue from carrier.' : 'Checking with policyholder and carrier on check receipt status.'}`,
+        });
+
+      // Create/update task for tracking check receipt
+      const taskDueDate = new Date();
+      taskDueDate.setDate(taskDueDate.getDate() + rdSettings.rd_check_follow_up_interval_days);
+      
+      // Check for existing RD check tracking task
+      const { data: existingTask } = await supabase
+        .from('tasks')
+        .select('id')
+        .eq('claim_id', claim.id)
+        .ilike('title', '%RD%check%')
+        .eq('status', 'pending')
+        .limit(1)
+        .single();
+
+      const taskTitle = isOverdue 
+        ? `URGENT: Follow up on overdue RD check (${daysSinceRelease} days)`
+        : `Confirm RD check receipt with ${claim.policyholder_name}`;
+      
+      const taskDescription = isOverdue
+        ? `Darwin sent follow-up #${followUpCount} to policyholder and carrier. Check is ${daysSinceRelease} days overdue - trace/reissue requested. Confirm receipt or escalate.`
+        : `Darwin sent follow-up #${followUpCount} to check on RD check delivery. Confirm with policyholder when check is received and update claim status.`;
+
+      if (existingTask) {
+        await supabase
+          .from('tasks')
+          .update({
+            title: taskTitle,
+            description: taskDescription,
+            due_date: taskDueDate.toISOString().split('T')[0],
+            priority: isOverdue ? 'high' : 'medium',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingTask.id);
+      } else {
+        await supabase
+          .from('tasks')
+          .insert({
+            claim_id: claim.id,
+            title: taskTitle,
+            description: taskDescription,
+            due_date: taskDueDate.toISOString().split('T')[0],
+            priority: isOverdue ? 'high' : 'medium',
+            status: 'pending',
+          });
+      }
 
       results.push({
         claimId: claim.id,

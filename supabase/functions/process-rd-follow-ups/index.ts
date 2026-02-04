@@ -254,24 +254,57 @@ GUIDELINES:
         })
         .eq('id', automation.id);
 
-      // Add activity note to claim
+      // Add detailed activity note to claim
       await supabase
         .from('claim_updates')
         .insert({
           claim_id: claim.id,
-          content: `💰 RD Follow-up #${followUpNumber} sent to ${recipientName} (${recipientEmail}) - Requesting confirmation of invoice receipt and RD release status`,
+          content: `💰 **Darwin RD Follow-up #${followUpNumber}**\n\n**Sent to:** ${recipientName} (${recipientEmail})\n**Subject:** ${subject}\n**Purpose:** Requesting confirmation of invoice receipt and RD release status\n\n_Next follow-up scheduled in ${automation.rd_follow_up_interval_days} days if no response._`,
           update_type: 'rd_follow_up',
         });
 
-      // Create a task for tracking if this is the first follow-up
-      if (followUpNumber === 1) {
+      // Also add a note entry for easy visibility
+      await supabase
+        .from('claim_notes')
+        .insert({
+          claim_id: claim.id,
+          content: `[Darwin Auto] RD Follow-up #${followUpNumber} sent to ${recipientName} at ${claim.insurance_company || 'carrier'}. Awaiting response on invoice receipt and RD release timeline.`,
+        });
+
+      // Create/update task for tracking adjuster response
+      const taskDueDate = new Date();
+      taskDueDate.setDate(taskDueDate.getDate() + Math.min(automation.rd_follow_up_interval_days, 3)); // Due before next follow-up
+      
+      // Check for existing RD tracking task
+      const { data: existingTask } = await supabase
+        .from('tasks')
+        .select('id')
+        .eq('claim_id', claim.id)
+        .ilike('title', '%RD%')
+        .ilike('title', '%response%')
+        .eq('status', 'pending')
+        .limit(1)
+        .single();
+
+      if (existingTask) {
+        // Update existing task with new follow-up info
+        await supabase
+          .from('tasks')
+          .update({
+            description: `Darwin sent RD Follow-up #${followUpNumber} to ${recipientName}. Check for carrier response and update claim status when RD is released.`,
+            due_date: taskDueDate.toISOString().split('T')[0],
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingTask.id);
+      } else {
+        // Create new task
         await supabase
           .from('tasks')
           .insert({
             claim_id: claim.id,
-            title: 'Track Recoverable Depreciation Release',
-            description: `Automated RD follow-up tracking initiated. Darwin is following up with ${claim.insurance_company || 'the carrier'} to confirm invoice receipt and RD release.`,
-            due_date: nextFollowUpAt.toISOString().split('T')[0],
+            title: `Check for RD response from ${claim.insurance_company || 'carrier'}`,
+            description: `Darwin sent RD Follow-up #${followUpNumber} to ${recipientName}. Monitor for carrier response and update claim status when RD is released.`,
+            due_date: taskDueDate.toISOString().split('T')[0],
             priority: 'high',
             status: 'pending',
           });
