@@ -173,9 +173,37 @@ serve(async (req) => {
       'Address not specified';
     
     // Parse state from address for regulations lookup
+    // Multiple regex patterns to handle different address formats:
+    // "123 Main St, City, NJ 08050" or "123 Main St, City NJ, 08050" or "City NJ 08050"
+    const parseStateFromAddress = (address: string): string | null => {
+      if (!address) return null;
+      const upperAddr = address.toUpperCase();
+      
+      // Pattern 1: ", NJ 08050" or ", NJ, 08050" (state before zip)
+      const pattern1 = upperAddr.match(/[,\s]([A-Z]{2})[,\s]+\d{5}/);
+      if (pattern1) return pattern1[1];
+      
+      // Pattern 2: "City NJ," (state after city, before comma)
+      const pattern2 = upperAddr.match(/\s([A-Z]{2}),/);
+      if (pattern2) return pattern2[1];
+      
+      // Pattern 3: Check for common state codes anywhere in address
+      const stateMatch = upperAddr.match(/\b(NJ|PA|TX|FL|NY|CA|GA|NC|SC|VA|MD|DE|CT|MA|OH|IL|MI|WI|MN|CO|AZ|NV|WA|OR)\b/);
+      if (stateMatch) return stateMatch[1];
+      
+      return null;
+    };
+    
+    // Also check city field for embedded state (e.g., "Manahawkin NJ")
+    const stateFromCity = claim.clients?.city ? parseStateFromAddress(claim.clients.city) : null;
+    
     stateCode = claim.clients?.state || 
-      claim.policyholder_address?.match(/,\s*([A-Z]{2})\s*[\d,]/i)?.[1] || 
+      stateFromCity ||
+      parseStateFromAddress(claim.policyholder_address || '') || 
       'PA';
+    
+    console.log(`State detection: client_state="${claim.clients?.state}", stateFromCity="${stateFromCity}", parsed from address="${parseStateFromAddress(claim.policyholder_address || '')}", final="${stateCode}"`);
+    
     const stateInfo = getStateInfo(stateCode);
 
     // Analyze evidence inventory with document dates
@@ -267,16 +295,65 @@ serve(async (req) => {
 
     // Build document timeline with ACTUAL document dates (not upload dates)
     // This is critical for accurate timeline analysis when documents were uploaded late
+    
+    // Validate document date - reject obviously wrong dates
+    const validateDocumentDateForTimeline = (dateStr: string | null, lossDate: string | null, uploadDate: string | null): { isValid: boolean; reason?: string } => {
+      if (!dateStr || dateStr === 'null') return { isValid: false, reason: 'no date' };
+      
+      const docDate = new Date(dateStr);
+      const now = new Date();
+      
+      // Reject dates more than 2 years in the past (likely misread/hallucination)
+      const twoYearsAgo = new Date();
+      twoYearsAgo.setFullYear(now.getFullYear() - 2);
+      if (docDate < twoYearsAgo) {
+        return { isValid: false, reason: `date ${dateStr} is suspiciously old` };
+      }
+      
+      // Reject dates in the future
+      if (docDate > now) {
+        return { isValid: false, reason: `date ${dateStr} is in the future` };
+      }
+      
+      // For denial letters, estimates, etc - they must be AFTER loss date
+      // If a document date is before loss date, use upload date instead
+      if (lossDate) {
+        const loss = new Date(lossDate);
+        if (docDate < loss) {
+          return { isValid: false, reason: `document date ${dateStr} is before loss date ${lossDate}` };
+        }
+      }
+      
+      return { isValid: true };
+    };
+    
     const keyDocuments = files
       .filter(f => f.document_classification && f.document_classification !== 'photo' && f.document_classification !== 'other')
       .map(f => {
         const dateInfo = getDocumentDate(f);
         const metadata = f.classification_metadata || {};
+        
+        // Validate the document date
+        const dateValidation = validateDocumentDateForTimeline(
+          dateInfo.source === 'document' ? dateInfo.date : null,
+          claim.loss_date,
+          f.uploaded_at
+        );
+        
+        // If document date is invalid, fall back to upload date
+        const effectiveDate = dateValidation.isValid ? dateInfo.date : f.uploaded_at;
+        const effectiveSource = dateValidation.isValid ? dateInfo.source : 'upload';
+        
+        if (!dateValidation.isValid && dateInfo.source === 'document') {
+          console.log(`Document date validation failed for ${f.file_name}: ${dateValidation.reason}. Using upload date instead.`);
+        }
+        
         return {
           type: f.document_classification,
           fileName: f.file_name,
-          documentDate: dateInfo.date,
-          dateSource: dateInfo.source,
+          documentDate: effectiveDate,
+          dateSource: effectiveSource,
+          dateWarning: dateValidation.isValid ? null : dateValidation.reason,
           uploadedAt: f.uploaded_at,
           summary: (metadata as any).summary || null,
           amounts: (metadata as any).amounts || [],
