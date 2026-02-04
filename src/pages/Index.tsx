@@ -30,10 +30,15 @@ const Index = () => {
   const { data: tasks } = useQuery({
     queryKey: ["dashboard-tasks"],
     queryFn: async () => {
+      const fortyEightHoursFromNow = new Date();
+      fortyEightHoursFromNow.setHours(fortyEightHoursFromNow.getHours() + 48);
+      
       const { data, error } = await supabase
         .from("tasks")
         .select("*, claims(claim_number, policyholder_name)")
         .eq("status", "pending")
+        .not("due_date", "is", null)
+        .lte("due_date", fortyEightHoursFromNow.toISOString())
         .order("due_date", { ascending: true });
       
       if (error) throw error;
