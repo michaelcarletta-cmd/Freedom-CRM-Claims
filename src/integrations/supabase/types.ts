@@ -729,6 +729,14 @@ export type Database = {
           id: string
           is_enabled: boolean
           keyword_blockers: string[] | null
+          rd_follow_up_current_count: number
+          rd_follow_up_enabled: boolean
+          rd_follow_up_interval_days: number
+          rd_follow_up_last_sent_at: string | null
+          rd_follow_up_max_count: number
+          rd_follow_up_next_at: string | null
+          rd_follow_up_stop_reason: string | null
+          rd_follow_up_stopped_at: string | null
           settings: Json
           updated_at: string
         }
@@ -752,6 +760,14 @@ export type Database = {
           id?: string
           is_enabled?: boolean
           keyword_blockers?: string[] | null
+          rd_follow_up_current_count?: number
+          rd_follow_up_enabled?: boolean
+          rd_follow_up_interval_days?: number
+          rd_follow_up_last_sent_at?: string | null
+          rd_follow_up_max_count?: number
+          rd_follow_up_next_at?: string | null
+          rd_follow_up_stop_reason?: string | null
+          rd_follow_up_stopped_at?: string | null
           settings?: Json
           updated_at?: string
         }
@@ -775,6 +791,14 @@ export type Database = {
           id?: string
           is_enabled?: boolean
           keyword_blockers?: string[] | null
+          rd_follow_up_current_count?: number
+          rd_follow_up_enabled?: boolean
+          rd_follow_up_interval_days?: number
+          rd_follow_up_last_sent_at?: string | null
+          rd_follow_up_max_count?: number
+          rd_follow_up_next_at?: string | null
+          rd_follow_up_stop_reason?: string | null
+          rd_follow_up_stopped_at?: string | null
           settings?: Json
           updated_at?: string
         }
