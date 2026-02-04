@@ -130,18 +130,40 @@ serve(async (req) => {
     const estimateAmount = settlement?.estimate_amount || claim.claim_amount || 0;
     const totalSettlement = settlement?.total_settlement || 0;
 
-    // Helper function to get actual document date (prefer extracted date from document, fallback to upload date)
-    const getDocumentDate = (file: any): { date: string | null; source: 'document' | 'upload' } => {
-      // Check classification_metadata for date_mentioned (extracted from document content)
+    // Helper function to get actual document date with validation
+    // Prefers extracted date from document content, falls back to upload date
+    const getDocumentDate = (file: any): { date: string | null; source: 'document' | 'upload'; confidence: number } => {
       const metadata = file.classification_metadata;
       if (metadata && typeof metadata === 'object') {
+        // Prefer new document_date field over deprecated date_mentioned
+        const documentDate = (metadata as any).document_date;
         const dateMentioned = (metadata as any).date_mentioned;
-        if (dateMentioned && typeof dateMentioned === 'string' && dateMentioned !== 'null') {
-          return { date: dateMentioned, source: 'document' };
+        const dateConfidence = (metadata as any).date_confidence ?? 0.5;
+        
+        const dateStr = documentDate || dateMentioned;
+        
+        if (dateStr && typeof dateStr === 'string' && dateStr !== 'null') {
+          // Validate the date is within reasonable range
+          const dateObj = new Date(dateStr);
+          if (!isNaN(dateObj.getTime())) {
+            const now = new Date();
+            const fiveYearsAgo = new Date();
+            fiveYearsAgo.setFullYear(now.getFullYear() - 5);
+            
+            // Only use document date if:
+            // 1. It's within reasonable range (last 5 years, not future)
+            // 2. Has decent confidence (>= 0.6) OR confidence wasn't provided (legacy docs)
+            const isReasonableDate = dateObj >= fiveYearsAgo && dateObj <= now;
+            const hasGoodConfidence = dateConfidence >= 0.6 || (metadata as any).date_confidence === undefined;
+            
+            if (isReasonableDate && hasGoodConfidence) {
+              return { date: dateStr, source: 'document', confidence: dateConfidence };
+            }
+          }
         }
       }
-      // Fallback to upload date
-      return { date: file.uploaded_at, source: 'upload' };
+      // Fallback to upload date with high confidence (it's always accurate)
+      return { date: file.uploaded_at, source: 'upload', confidence: 1.0 };
     };
 
     // Analyze evidence inventory with document dates
