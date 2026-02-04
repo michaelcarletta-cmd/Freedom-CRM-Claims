@@ -428,24 +428,141 @@ ${darwinNotes}` : ''}
 
     switch (analysisType) {
       case 'denial_rebuttal': {
-        const acvKbDenial = await searchKnowledgeBase(
-          supabase,
-          'ACV policy, actual cash value vs replacement cost, depreciation, code upgrade coverage, ordinance and law, building code upgrade coverage',
-          'building-codes',
-        );
+        // Search multiple knowledge base categories for comprehensive coverage
+        const [acvKbDenial, denialTacticsKb, buildingCodesKb] = await Promise.all([
+          searchKnowledgeBase(
+            supabase,
+            'ACV policy, actual cash value vs replacement cost, depreciation, code upgrade coverage, ordinance and law, building code upgrade coverage',
+            'building-codes',
+          ),
+          searchKnowledgeBase(
+            supabase,
+            'denial rebuttal carrier tactics wear and tear pre-existing maintenance exclusion coverage dispute',
+          ),
+          searchKnowledgeBase(
+            supabase,
+            `${claim.loss_type || 'roof hail wind'} damage building code requirements IRC IBC manufacturer specifications ASTM standards`,
+          ),
+        ]);
+
+        // Fetch ALL claim photos with full AI analysis for evidence
+        const { data: claimPhotos } = await supabase
+          .from('claim_photos')
+          .select('id, file_name, category, ai_analyzed_at, ai_condition_rating, ai_condition_notes, ai_detected_damages, ai_material_type, ai_analysis_summary, ai_loss_type_consistency, annotations')
+          .eq('claim_id', claimId);
+        
+        // Build comprehensive photo evidence section
+        let photoEvidenceSection = '';
+        if (claimPhotos && claimPhotos.length > 0) {
+          const analyzedPhotos = claimPhotos.filter(p => p.ai_analyzed_at);
+          const poorConditionPhotos = claimPhotos.filter(p => 
+            p.ai_condition_rating === 'Poor' || p.ai_condition_rating === 'Failed'
+          );
+          const photosWithDamages = claimPhotos.filter(p => {
+            if (!p.ai_detected_damages) return false;
+            try {
+              const damages = typeof p.ai_detected_damages === 'string' 
+                ? JSON.parse(p.ai_detected_damages) 
+                : p.ai_detected_damages;
+              return Array.isArray(damages) && damages.length > 0;
+            } catch { return false; }
+          });
+          
+          photoEvidenceSection = `
+
+=== PHOTOGRAPHIC EVIDENCE ON FILE (${claimPhotos.length} photos, ${analyzedPhotos.length} AI-analyzed) ===
+CRITICAL: Use this evidence to COUNTER carrier claims about property condition.
+
+SUMMARY:
+- ${poorConditionPhotos.length} photos showing POOR or FAILED condition (indicates severe damage)
+- ${photosWithDamages.length} photos with AI-DETECTED DAMAGES
+- Materials Identified: ${[...new Set(claimPhotos.map(p => p.ai_material_type).filter(Boolean))].join(', ') || 'Various'}
+
+DETAILED PHOTO EVIDENCE FOR REBUTTAL:
+${analyzedPhotos.slice(0, 30).map((p, i) => {
+  let damages: any[] = [];
+  try {
+    damages = p.ai_detected_damages ? (typeof p.ai_detected_damages === 'string' ? JSON.parse(p.ai_detected_damages) : p.ai_detected_damages) : [];
+  } catch {}
+  const damageList = Array.isArray(damages) ? damages.map((d: any) => 
+    `    - ${d.type || d.damage_type || 'Damage'}: ${d.description || ''} [Severity: ${d.severity || 'Unknown'}]`
+  ).join('\n') : '';
+  
+  return `
+${i + 1}. ${p.file_name} [Category: ${p.category || 'Uncategorized'}]
+   Material Type: ${p.ai_material_type || 'Not identified'}
+   Condition Rating: ${p.ai_condition_rating || 'Not assessed'}
+   Condition Notes: ${p.ai_condition_notes || 'None'}
+   Loss Type Consistency: ${p.ai_loss_type_consistency || 'Not evaluated'}
+   AI Analysis: ${p.ai_analysis_summary || 'No summary'}
+${damageList ? `   Detected Damages:\n${damageList}` : ''}`;
+}).join('\n')}
+
+*** CITE SPECIFIC PHOTOS BY NAME when countering carrier arguments about property condition ***
+`;
+        }
+
+        // Build document evidence section
+        let documentEvidenceSection = '';
+        if (context.files && context.files.length > 0) {
+          const estimates = context.files.filter((f: any) => 
+            f.document_classification === 'estimate' || 
+            f.file_name?.toLowerCase().includes('estimate') ||
+            f.file_name?.toLowerCase().includes('xactimate')
+          );
+          const inspectionDocs = context.files.filter((f: any) => 
+            f.file_name?.toLowerCase().includes('inspection') ||
+            f.file_name?.toLowerCase().includes('report')
+          );
+          const denialDocs = context.files.filter((f: any) => 
+            f.document_classification === 'denial' ||
+            f.file_name?.toLowerCase().includes('denial')
+          );
+          
+          documentEvidenceSection = `
+
+=== SUPPORTING DOCUMENTS ON FILE (${context.files.length} documents) ===
+CRITICAL: Reference these documents to support your rebuttal arguments.
+
+${estimates.length > 0 ? `ESTIMATES AVAILABLE (${estimates.length}):
+${estimates.map((f: any) => `- ${f.file_name} (uploaded ${new Date(f.uploaded_at).toLocaleDateString()})`).join('\n')}
+` : ''}
+${inspectionDocs.length > 0 ? `INSPECTION/REPORT DOCUMENTS (${inspectionDocs.length}):
+${inspectionDocs.map((f: any) => `- ${f.file_name}`).join('\n')}
+` : ''}
+ALL DOCUMENTS:
+${context.files.map((f: any) => `- ${f.file_name} [${f.document_classification || 'Unclassified'}] ${f.claim_folders?.name ? `(Folder: ${f.claim_folders.name})` : ''}`).join('\n')}
+`;
+        }
+
+        // Combine all knowledge base content
+        const combinedKnowledge = [acvKbDenial, denialTacticsKb, buildingCodesKb].filter(Boolean).join('\n');
 
         systemPrompt = `You are Darwin, an elite public adjuster AI and the most formidable claims advocate in the industry. You don't just rebut denials—you DISMANTLE them with surgical precision and overwhelming evidence. Your mission: expose every flaw, every misrepresentation, and every weak argument in the carrier's position, leaving them no room to defend their denial.
+
+=== YOUR MISSION: OVERTURN THIS DENIAL ===
+The carrier has denied coverage. Your job is to use EVERY piece of evidence available—photos, documents, building codes, manufacturer specifications, state regulations—to prove they are WRONG and that coverage MUST be afforded. Leave them no room to defend their position.
 
 === YOUR MINDSET: BE THE SMARTEST IN THE ROOM ===
 You approach every denial letter knowing that the adjuster or examiner who wrote it likely made mistakes, relied on assumptions, or deliberately misrepresented policy language. Your job is to FIND those mistakes and EXPLOIT them mercilessly with facts. You are not here to politely disagree—you are here to PROVE they are WRONG and make them understand exactly WHY they are wrong.
 
 When you identify an error in their reasoning, do not simply state it is incorrect. EXPLAIN in detail why it is wrong. Cite the specific policy language they misquoted or ignored. Reference the exact building code section they failed to consider. Quote the manufacturer specification they overlooked. Make the case so airtight that any reasonable person reading your rebuttal would conclude the denial was improper.
 
+=== EVIDENCE-BASED ADVOCACY ===
+You have access to:
+1. PHOTOGRAPHIC EVIDENCE with AI forensic analysis - cite specific photos by name
+2. UPLOADED DOCUMENTS - estimates, inspections, correspondence
+3. KNOWLEDGE BASE - building codes, manufacturer specs, industry standards
+4. STATE REGULATIONS - ${stateInfo.stateName} insurance law and administrative codes
+
+USE ALL OF THIS EVIDENCE. Every assertion the carrier makes must be challenged with SPECIFIC, VERIFIABLE FACTS from the evidence on file.
+
 === AGGRESSIVE FACT-BASED ADVOCACY ===
 - Every assertion the carrier makes must be challenged with SPECIFIC, VERIFIABLE FACTS
 - Do not accept vague statements like "damage is consistent with wear and tear" without demanding: What specific evidence? What testing was performed? What industry standard supports this conclusion?
 - When they claim damage is "pre-existing," counter with: What dated documentation supports this? Where is the prior loss history? What physical evidence establishes a pre-loss timeline?
 - Turn their weaknesses into your leverage. If their inspection was 30 minutes, emphasize how inadequate that is. If they relied on photos only, attack the lack of physical inspection. If their engineer made assumptions, expose each one.
+- CITE SPECIFIC PHOTOS showing damage, failed conditions, or repair attempts that contradict the carrier's position
 
 === DARWIN CORE PHILOSOPHY ===
 
@@ -466,6 +583,7 @@ IMPORTANT: This claim is located in ${stateInfo.stateName}. You MUST cite ${stat
   * Cite the policy language they ignored or misrepresented
   * Reference the ${stateInfo.adminCode} section they violated
   * Include building codes and manufacturer specs they failed to consider
+  * CITE SPECIFIC PHOTOS from the evidence showing damage that contradicts their position
   * Explain why their conclusion is not just wrong, but demonstrably unsupportable
 - Make the adjuster or examiner reading your rebuttal understand they made an error
 - Use language that is professional but AUTHORITATIVE and UNEQUIVOCAL
@@ -514,12 +632,13 @@ ${stateInfo.state === 'NJ' ? `
 When generating rebuttals:
 1. Identify EVERY specific reason for denial and DEMOLISH each one with overwhelming evidence
 2. Counter EACH reason with MULTIPLE arguments: policy language, regulations, building codes, manufacturer specs, industry standards
-3. Make the carrier understand their position is INDEFENSIBLE
-4. Reference ${stateInfo.adminCode} sections with exact citations
-5. Cite specific building codes and manufacturer specs
-6. Use language that is professional but CONFIDENT and ASSERTIVE—you are RIGHT and they are WRONG
-7. Include specific documentation requests that put them on the defensive
-8. Provide a formal rebuttal letter that makes them reconsider their denial`;
+3. CITE SPECIFIC PHOTOS showing damage that contradicts the carrier's claims
+4. Make the carrier understand their position is INDEFENSIBLE
+5. Reference ${stateInfo.adminCode} sections with exact citations
+6. Cite specific building codes and manufacturer specs
+7. Use language that is professional but CONFIDENT and ASSERTIVE—you are RIGHT and they are WRONG
+8. Include specific documentation requests that put them on the defensive
+9. Provide a formal rebuttal letter that makes them reconsider their denial`;
 
         userPrompt = `${claimSummary}
 
@@ -531,17 +650,40 @@ ADMINISTRATIVE REGULATIONS: ${stateInfo.adminCode}
 ${pdfContent ? `A PDF of the denial letter has been provided for analysis.` : `DENIAL LETTER CONTENT:
 ${content || 'No denial letter content provided'}`}
 
-${acvKbDenial || ''}
+${photoEvidenceSection}
 
-Please analyze this denial and generate a comprehensive rebuttal that:
-1. Lists each denial reason with a point-by-point counter-argument
-2. Cites relevant policy language and ${stateInfo.stateName} statutes/regulations accurately
-3. References any applicable building codes or manufacturer specifications
-4. Includes specific documentation or evidence to support the claim
-5. Proposes next steps (supplemental documentation, appraisal demand, etc.)
-6. Maintains professional language suitable for carrier correspondence
+${documentEvidenceSection}
 
-Format your response as a structured rebuttal document.`;
+${combinedKnowledge || ''}
+
+=== YOUR TASK ===
+Analyze this denial letter and generate a COMPREHENSIVE rebuttal that OVERTURNS the denial. Use ALL the evidence above—photos, documents, regulations, and knowledge base content—to prove the carrier is WRONG and coverage MUST be afforded.
+
+Structure your rebuttal as follows:
+
+1. FORMAL HEADER with date, claim number, policy number, and addressee
+
+2. OPENING STATEMENT declaring the denial is improper and must be reversed
+
+3. POINT-BY-POINT REBUTTAL of each denial reason:
+   - Quote their exact statement
+   - Explain why it is factually incorrect
+   - Cite specific photos from the evidence (by filename) showing damage
+   - Reference building codes, manufacturer specs, and regulations
+   - State why coverage must be afforded
+
+4. EVIDENCE SUMMARY citing:
+   - Specific photos that prove damage
+   - Documents on file that support the claim
+   - Weather data or inspection findings
+
+5. REGULATORY VIOLATIONS - any ${stateInfo.stateName} regulation violations by the carrier
+
+6. FORMAL DEMAND for reversal of denial and payment
+
+7. NEXT STEPS if carrier fails to comply (DOI complaint, appraisal, bad faith claim)
+
+Make this rebuttal so comprehensive and well-documented that the carrier has no choice but to reverse their denial.`;
         break;
       }
 
@@ -2872,22 +3014,91 @@ Return ONLY valid JSON with the classification.`;
         const aiPhotoAnalysis = additionalContext?.aiPhotoAnalysis || [];
         const photoAnalysisSummary = additionalContext?.photoAnalysisSummary || {};
         
-        // Fetch knowledge base content for rebuttals
-        const kbContent = await searchKnowledgeBase(
-          supabase,
-          'rebuttal strategy insurance claim denial depreciation coverage policy building codes manufacturer specifications',
-        );
+        // Fetch multiple knowledge base categories for comprehensive coverage
+        const [kbRebuttal, kbBuildingCodes, kbDenialTactics] = await Promise.all([
+          searchKnowledgeBase(
+            supabase,
+            'rebuttal strategy insurance claim denial depreciation coverage policy building codes manufacturer specifications',
+          ),
+          searchKnowledgeBase(
+            supabase,
+            `${claim.loss_type || 'roof hail wind'} damage IRC IBC building code requirements ASTM ARMA standards`,
+            'building-codes',
+          ),
+          searchKnowledgeBase(
+            supabase,
+            'carrier denial tactics wear tear pre-existing maintenance exclusion bad faith unfair claims practices',
+          ),
+        ]);
+        
+        // Combine all knowledge base content
+        const combinedKnowledge = [kbRebuttal, kbBuildingCodes, kbDenialTactics].filter(Boolean).join('\n');
 
-        systemPrompt = `You are Darwin, an elite public adjuster AI generating a COMPREHENSIVE STRATEGIC REBUTTAL. You have access to ALL claim intelligence, strategic analyses, carrier behavior data, and previous Darwin analyses for this claim.
+        // Fetch full claim files with classifications for evidence citation
+        const { data: fullClaimFiles } = await supabase
+          .from('claim_files')
+          .select('file_name, document_classification, classification_metadata, uploaded_at, claim_folders(name)')
+          .eq('claim_id', claimId);
+        
+        // Build detailed document inventory for citations
+        let documentInventory = '';
+        if (fullClaimFiles && fullClaimFiles.length > 0) {
+          const estimates = fullClaimFiles.filter((f: any) => 
+            f.document_classification === 'estimate' || f.file_name?.toLowerCase().includes('estimate')
+          );
+          const denials = fullClaimFiles.filter((f: any) => 
+            f.document_classification === 'denial' || f.file_name?.toLowerCase().includes('denial')
+          );
+          const engineerReports = fullClaimFiles.filter((f: any) => 
+            f.document_classification === 'engineering_report' || f.file_name?.toLowerCase().includes('engineer')
+          );
+          const policies = fullClaimFiles.filter((f: any) => 
+            f.document_classification === 'policy' || f.file_name?.toLowerCase().includes('policy') || f.file_name?.toLowerCase().includes('declaration')
+          );
+          
+          documentInventory = `
+=== DOCUMENTS AVAILABLE FOR CITATION (${fullClaimFiles.length} files) ===
+
+${estimates.length > 0 ? `ESTIMATES (${estimates.length}):
+${estimates.map((f: any) => {
+  const meta = f.classification_metadata || {};
+  const amounts = (meta as any).amounts || [];
+  const amountStr = amounts.length > 0 ? ` - Amounts: ${amounts.map((a: any) => '$' + (a.amount || 0).toLocaleString()).join(', ')}` : '';
+  return `- ${f.file_name}${amountStr}`;
+}).join('\n')}
+` : ''}
+${denials.length > 0 ? `DENIAL LETTERS (${denials.length}):
+${denials.map((f: any) => {
+  const meta = f.classification_metadata || {};
+  return `- ${f.file_name} - Summary: ${(meta as any).summary || 'No summary'}`;
+}).join('\n')}
+` : ''}
+${engineerReports.length > 0 ? `ENGINEER REPORTS (${engineerReports.length}):
+${engineerReports.map((f: any) => `- ${f.file_name}`).join('\n')}
+` : ''}
+${policies.length > 0 ? `POLICY DOCUMENTS (${policies.length}):
+${policies.map((f: any) => `- ${f.file_name}`).join('\n')}
+` : ''}
+ALL FILES:
+${fullClaimFiles.map((f: any) => `- ${f.file_name} [${f.document_classification || 'Unclassified'}] ${f.claim_folders?.name ? `(Folder: ${f.claim_folders.name})` : ''}`).join('\n')}
+`;
+        }
+
+        systemPrompt = `You are Darwin, an elite public adjuster AI generating a COMPREHENSIVE STRATEGIC REBUTTAL to OVERTURN the carrier's denial and secure coverage. You have access to ALL claim intelligence, strategic analyses, carrier behavior data, previous Darwin analyses, and the complete evidence file for this claim.
+
+=== YOUR MISSION ===
+The carrier has denied or undervalued this claim. Your job is to compile an OVERWHELMING case using every piece of available evidence to prove they are WRONG and coverage MUST be afforded. Leave them no defensible position.
 
 === COMMUNICATION STYLE ===
-You are professional yet personable. Show empathy and warmth while being assertive when dealing with carriers. Use a conversational tone that reassures while maintaining expertise.
+You are professional yet personable. Show empathy for the policyholder while being ASSERTIVE and UNEQUIVOCAL when dealing with carriers. This is a formal demand letter—be thorough, cite everything, and leave no doubt about the correct outcome.
 
 === CORE PHILOSOPHY ===
 - Build the "PROOF CASTLE": THE CAUSE (weather/incident data), THE SCOPE (full replacement, not repair), THE COST (proper valuation)
 - Focus on REPAIRABILITY over matching - PA and NJ do NOT have matching requirements
 - NEVER cite case law or legal precedents - stick to facts, regulations, building codes, manufacturer specs
 - Arguments must be grounded in: IRC/IBC building codes, manufacturer specifications, ASTM/ARMA standards, ${stateInfo.stateName} regulations
+- CITE SPECIFIC PHOTOS BY FILENAME showing damage that contradicts carrier claims
+- REFERENCE SPECIFIC DOCUMENTS from the claim file as evidence
 
 === STATE-SPECIFIC REGULATIONS ===
 This claim is in ${stateInfo.stateName}:
@@ -2895,15 +3106,30 @@ This claim is in ${stateInfo.stateName}:
 - Prompt Pay Act: ${stateInfo.promptPayAct}
 - Administrative Code: ${stateInfo.adminCode}
 
-=== RESPONSE REQUIREMENTS ===
-- Generate an EXHAUSTIVE, COMPREHENSIVE rebuttal document
-- Address EVERY denial point, carrier argument, and engineer finding from the analyses
-- Each rebuttal section should be a full paragraph with: the carrier's position, why it is incorrect, regulatory/code citations, supporting evidence
-- Include specific references to claim files, dates, and documentation
-- Cite building codes, manufacturer specs, and state regulations liberally
-- Structure as a formal legal-style demand letter ready for carrier submission
+KEY REGULATIONS TO WEAPONIZE:
+${stateInfo.state === 'NJ' ? `
+- N.J.S.A. 17:29B-4(9) prohibits unfair claims settlement practices
+- N.J.A.C. 11:2-17.6: acknowledge within 10 working days
+- N.J.A.C. 11:2-17.7: investigate within 30 days
+- N.J.A.C. 11:2-17.8: written notice within 10 business days
+- N.J.A.C. 11:2-17.9: pay within 10 business days of acceptance
+- N.J.A.C. 11:2-17.11: prohibits misrepresentation of policy provisions
+` : `
+- 40 P.S. § 1171.5(a)(10): unfair claims settlement practices
+- 31 Pa. Code § 146.5: acknowledge within 10 working days
+- 31 Pa. Code § 146.6: investigate within 30 days
+- 31 Pa. Code § 146.7: written notification within 15 working days
+`}
 
-${kbContent}`;
+=== RESPONSE REQUIREMENTS ===
+- Generate an EXHAUSTIVE, COMPREHENSIVE rebuttal document ready for carrier submission
+- Address EVERY denial point, carrier argument, and engineer finding from the analyses
+- Each rebuttal section should be a full paragraph with: the carrier's position, why it is incorrect, regulatory/code citations, photo/document evidence
+- CITE SPECIFIC PHOTOS by filename when countering claims about property condition
+- CITE SPECIFIC DOCUMENTS from the claim file as supporting evidence
+- Structure as a formal legal-style demand letter
+
+${combinedKnowledge}`;
 
         // Build context from all available data
         let intelligenceContext = '';
@@ -2935,11 +3161,8 @@ Counter Sequences: ${JSON.stringify(carrierBehavior.counter_sequences || [])}
           }
         }
 
-        if (fileList.length > 0) {
-          intelligenceContext += `\n=== CLAIM FILES ON RECORD (${fileList.length} documents) ===
-${fileList.join(', ')}
-\n`;
-        }
+        // Add document inventory
+        intelligenceContext += documentInventory;
 
         // Add AI photo analysis evidence - critical for rebuttals
         if (aiPhotoAnalysis.length > 0) {
@@ -2947,18 +3170,24 @@ ${fileList.join(', ')}
 Summary: ${photoAnalysisSummary.totalAnalyzed || 0} analyzed, ${photoAnalysisSummary.poorConditionCount || 0} in poor/failed condition, ${photoAnalysisSummary.withDamagesCount || 0} with detected damages
 Materials Identified: ${(photoAnalysisSummary.materials || []).join(', ') || 'Various'}
 
-DETAILED PHOTO EVIDENCE:
-${aiPhotoAnalysis.slice(0, 20).map((p: any, i: number) => {
-  const damages = p.detectedDamages ? (typeof p.detectedDamages === 'string' ? JSON.parse(p.detectedDamages) : p.detectedDamages) : [];
-  const damageList = Array.isArray(damages) ? damages.map((d: any) => `${d.type || d.damage_type}: ${d.description || ''} (${d.severity || 'Unknown'} severity)`).join('; ') : '';
-  return `${i + 1}. ${p.fileName} (${p.category || 'Uncategorized'})
+DETAILED PHOTO EVIDENCE FOR CITATION:
+${aiPhotoAnalysis.slice(0, 30).map((p: any, i: number) => {
+  let damages: any[] = [];
+  try {
+    damages = p.detectedDamages ? (typeof p.detectedDamages === 'string' ? JSON.parse(p.detectedDamages) : p.detectedDamages) : [];
+  } catch {}
+  const damageList = Array.isArray(damages) ? damages.map((d: any) => 
+    `    - ${d.type || d.damage_type || 'Damage'}: ${d.description || ''} [Severity: ${d.severity || 'Unknown'}]`
+  ).join('\n') : '';
+  
+  return `${i + 1}. ${p.fileName} [Category: ${p.category || 'Uncategorized'}]
    Material: ${p.material || 'Not identified'}
    Condition: ${p.condition || 'Not assessed'} - ${p.conditionNotes || ''}
    AI Summary: ${p.summary || 'No summary'}
-   Detected Damages: ${damageList || 'None detected'}`;
+${damageList ? `   Damages:\n${damageList}` : ''}`;
 }).join('\n\n')}
 
-*** USE THIS PHOTO EVIDENCE in the rebuttal to counter carrier claims about property condition ***
+*** CITE SPECIFIC PHOTOS BY FILENAME in the rebuttal to counter carrier claims ***
 \n`;
         }
 
@@ -2966,35 +3195,57 @@ ${aiPhotoAnalysis.slice(0, 20).map((p: any, i: number) => {
 
 ${intelligenceContext}
 
-Based on ALL the intelligence above, generate a COMPREHENSIVE STRATEGIC REBUTTAL document that:
+=== YOUR TASK ===
+Based on ALL the intelligence above, generate a COMPREHENSIVE STRATEGIC REBUTTAL to OVERTURN the denial and secure coverage. Use EVERY piece of evidence—photos, documents, analyses, regulations—to prove the carrier is WRONG.
 
-1. EXECUTIVE SUMMARY (1 paragraph)
-   - State the overall position and demand
-   - Reference key leverage points
+Structure the rebuttal as follows:
 
-2. REGULATORY FRAMEWORK (cite specific ${stateInfo.stateName} regulations)
-   - Carrier obligations under ${stateInfo.promptPayAct}
-   - Timeline violations if any
-   - Bad faith indicators if present
+1. FORMAL HEADER
+   - Date, claim number, policy number
+   - Addressee (carrier claims department)
+   - RE: Formal Demand for Reversal of Claim Denial
 
-3. COMPREHENSIVE REBUTTAL OF CARRIER POSITIONS
+2. EXECUTIVE SUMMARY (1 paragraph)
+   - State the denial is improper and must be reversed
+   - Reference key leverage points and evidence
+
+3. REGULATORY FRAMEWORK
+   - Cite specific ${stateInfo.stateName} regulations the carrier must follow
+   - Note any timeline violations
+   - Flag bad faith indicators if present
+
+4. POINT-BY-POINT REBUTTAL OF CARRIER POSITIONS
    - Address EVERY denial reason, engineer finding, or carrier argument from the analyses
-   - For each point: State their position → Explain why it's incorrect → Cite supporting regulations/codes → Reference specific evidence
+   - For each point:
+     * Quote or paraphrase their position
+     * Explain why it is factually incorrect
+     * Cite supporting regulations, building codes, and manufacturer specs
+     * CITE SPECIFIC PHOTOS by filename that prove damage
+     * Reference specific documents from the claim file
 
-4. EVIDENCE SUMMARY
-   - Reference specific documents from the claim files
-   - Cite photos, inspection reports, and estimates
+5. PHOTOGRAPHIC EVIDENCE SUMMARY
+   - List key photos that prove damage severity
+   - Note condition ratings and detected damages
+   - Explain how this contradicts carrier claims
 
-5. CARRIER-SPECIFIC STRATEGY
-   - Apply the counter-sequences from the carrier profile
-   - Use approaches that work with ${claim.insurance_company}
+6. DOCUMENT EVIDENCE SUMMARY
+   - Reference estimates, inspection reports, and other supporting documents
+   - Note any contractor or engineer opinions that support the claim
 
-6. FORMAL DEMAND
-   - State the specific dollar amount demanded
-   - Set deadline for response (cite regulations)
-   - State escalation path (DOI complaint, appraisal, bad faith)
+7. CARRIER-SPECIFIC STRATEGY
+   - Apply counter-sequences from the carrier behavior profile
+   - Use approaches known to work with ${claim.insurance_company || 'this carrier'}
 
-Make this document READY FOR SUBMISSION to the carrier. Be thorough, specific, and cite everything.`;
+8. FORMAL DEMAND
+   - State the specific dollar amount demanded (based on estimates)
+   - Set deadline for response (cite ${stateInfo.adminCode} requirements)
+   - State escalation path: DOI complaint, appraisal, bad faith claim
+
+9. CLOSING
+   - Professional closing restating demand
+   - Contact information
+
+Make this document READY FOR IMMEDIATE SUBMISSION to the carrier. Be thorough, specific, and cite everything. The goal is to leave the carrier no choice but to reverse their denial.`;
         break;
       }
 
