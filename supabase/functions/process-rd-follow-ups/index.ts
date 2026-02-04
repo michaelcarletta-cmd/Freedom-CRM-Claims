@@ -6,12 +6,20 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
-// Status values that trigger RD follow-ups
-const RD_STATUSES = [
+// Status values that trigger RD follow-ups (requesting RD release from carrier)
+const RD_REQUEST_STATUSES = [
   'Recoverable Depreciation Requested',
   'RD Requested',
   'Awaiting RD Release',
   'RD Pending',
+];
+
+// Status values that indicate RD was released (check is on the way)
+const RD_RELEASED_STATUSES = [
+  'Waiting on Recoverable Depreciation',
+  'Waiting on RD Check',
+  'RD Check Pending',
+  'Awaiting RD Check',
 ];
 
 serve(async (req) => {
@@ -67,11 +75,54 @@ serve(async (req) => {
       throw fetchError;
     }
 
-    // Filter to only claims in RD-related statuses
-    const rdClaims = (dueFollowUps || []).filter((automation: any) => {
-      const claimStatus = automation.claims?.status?.toLowerCase() || '';
-      return RD_STATUSES.some(s => claimStatus.includes(s.toLowerCase()) || s.toLowerCase().includes(claimStatus));
-    });
+    // Filter to only claims in RD-related statuses and check for status changes
+    const rdClaims: any[] = [];
+    
+    for (const automation of (dueFollowUps || [])) {
+      const claim = (automation as any).claims;
+      const claimStatus = claim?.status?.toLowerCase() || '';
+      
+      // Check if claim has moved to "Waiting on RD" status (RD was released)
+      const rdWasReleased = RD_RELEASED_STATUSES.some(s => 
+        claimStatus.includes(s.toLowerCase()) || s.toLowerCase().includes(claimStatus)
+      );
+      
+      if (rdWasReleased) {
+        console.log(`Claim ${claim.claim_number}: Status changed to waiting on RD check - stopping RD request follow-ups`);
+        
+        // Stop RD request follow-ups since RD has been released
+        await supabase
+          .from('claim_automations')
+          .update({
+            rd_follow_up_stopped_at: new Date().toISOString(),
+            rd_follow_up_stop_reason: 'rd_released',
+            // Auto-enable RD check tracking if not already
+            rd_check_tracking_enabled: true,
+            rd_check_released_at: automation.rd_check_released_at || new Date().toISOString(),
+          })
+          .eq('id', automation.id);
+        
+        // Add activity note
+        await supabase
+          .from('claim_updates')
+          .insert({
+            claim_id: claim.id,
+            content: `✅ RD Request Follow-ups stopped - Status changed to "${claim.status}". RD check tracking activated.`,
+            update_type: 'automation_status',
+          });
+        
+        continue;
+      }
+      
+      // Check if claim is still in RD request status
+      const isInRdRequestStatus = RD_REQUEST_STATUSES.some(s => 
+        claimStatus.includes(s.toLowerCase()) || s.toLowerCase().includes(claimStatus)
+      );
+      
+      if (isInRdRequestStatus) {
+        rdClaims.push(automation);
+      }
+    }
 
     console.log(`Found ${rdClaims.length} RD follow-ups due (from ${dueFollowUps?.length || 0} total enabled)`);
 
@@ -80,21 +131,6 @@ serve(async (req) => {
     for (const automation of rdClaims) {
       const claim = (automation as any).claims;
       
-      // Check if we've exceeded max follow-ups
-      if (automation.rd_follow_up_current_count >= automation.rd_follow_up_max_count) {
-        console.log(`Claim ${claim.claim_number}: Max RD follow-ups reached, stopping`);
-        
-        await supabase
-          .from('claim_automations')
-          .update({
-            rd_follow_up_stopped_at: new Date().toISOString(),
-            rd_follow_up_stop_reason: 'max_count_reached',
-          })
-          .eq('id', automation.id);
-        
-        continue;
-      }
-
       // RD follow-ups always go to the adjuster
       const recipientEmail = claim.adjuster_email;
       const recipientName = claim.adjuster_name || 'Claims Department';
@@ -122,7 +158,7 @@ CLAIM CONTEXT:
 - Loss Type: ${claim.loss_type || 'N/A'}
 - Current Status: ${claim.status || 'Recoverable Depreciation Requested'}
 
-This is RD follow-up #${followUpNumber} of ${automation.rd_follow_up_max_count}.
+This is RD follow-up #${followUpNumber}.
 
 PURPOSE:
 This email is specifically about Recoverable Depreciation (RD) release. The policyholder has completed work and submitted invoices. We need confirmation that:
