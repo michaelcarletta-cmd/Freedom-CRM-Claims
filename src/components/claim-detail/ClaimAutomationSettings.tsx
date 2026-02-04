@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Bot, Mail, MessageSquare, FileText, Sparkles, Send, Clock, RefreshCw, CheckCircle, XCircle } from "lucide-react";
+import { Loader2, Bot, Mail, MessageSquare, FileText, Sparkles, Send, Clock, RefreshCw, CheckCircle, XCircle, DollarSign } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -41,6 +41,15 @@ interface ClaimAutomation {
   follow_up_next_at: string | null;
   follow_up_stopped_at: string | null;
   follow_up_stop_reason: string | null;
+  // RD Follow-up fields
+  rd_follow_up_enabled: boolean;
+  rd_follow_up_interval_days: number;
+  rd_follow_up_max_count: number;
+  rd_follow_up_current_count: number;
+  rd_follow_up_last_sent_at: string | null;
+  rd_follow_up_next_at: string | null;
+  rd_follow_up_stopped_at: string | null;
+  rd_follow_up_stop_reason: string | null;
 }
 
 export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProps) => {
@@ -212,6 +221,72 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
     if (automation) {
       updateMutation.mutate({
         [field]: value,
+      });
+    }
+  };
+
+  // RD Follow-up handlers
+  const handleEnableRDFollowUp = () => {
+    if (automation) {
+      const nextAt = new Date();
+      nextAt.setDate(nextAt.getDate() + (automation.rd_follow_up_interval_days || 3));
+      
+      updateMutation.mutate({
+        rd_follow_up_enabled: true,
+        rd_follow_up_current_count: 0,
+        rd_follow_up_next_at: nextAt.toISOString(),
+        rd_follow_up_stopped_at: null,
+        rd_follow_up_stop_reason: null,
+      });
+      
+      toast({
+        title: "RD Follow-ups Enabled",
+        description: `Darwin will follow up every ${automation.rd_follow_up_interval_days || 3} days to track recoverable depreciation release.`,
+      });
+    }
+  };
+
+  const handleDisableRDFollowUp = () => {
+    if (automation) {
+      updateMutation.mutate({
+        rd_follow_up_enabled: false,
+        rd_follow_up_stopped_at: new Date().toISOString(),
+        rd_follow_up_stop_reason: 'manual',
+      });
+    }
+  };
+
+  const handleResetRDFollowUp = () => {
+    if (automation) {
+      const nextAt = new Date();
+      nextAt.setDate(nextAt.getDate() + (automation.rd_follow_up_interval_days || 3));
+      
+      updateMutation.mutate({
+        rd_follow_up_enabled: true,
+        rd_follow_up_current_count: 0,
+        rd_follow_up_next_at: nextAt.toISOString(),
+        rd_follow_up_stopped_at: null,
+        rd_follow_up_stop_reason: null,
+      });
+      
+      toast({
+        title: "RD Follow-ups Reset",
+        description: "RD follow-up counter has been reset and re-enabled.",
+      });
+    }
+  };
+
+  const handleMarkRDReleased = () => {
+    if (automation) {
+      updateMutation.mutate({
+        rd_follow_up_enabled: false,
+        rd_follow_up_stopped_at: new Date().toISOString(),
+        rd_follow_up_stop_reason: 'rd_released',
+      });
+      
+      toast({
+        title: "RD Released",
+        description: "Recoverable Depreciation marked as released. Follow-ups stopped.",
       });
     }
   };
@@ -471,6 +546,144 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
                             Next follow-up: {new Date(automation.follow_up_next_at).toLocaleDateString()} at {new Date(automation.follow_up_next_at).toLocaleTimeString()}
                           </p>
                         )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Recoverable Depreciation Follow-ups Section */}
+                <div className="pt-4 border-t border-border">
+                  <h4 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" />
+                    Recoverable Depreciation Follow-ups
+                  </h4>
+                  
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <DollarSign className="h-5 w-5 text-amber-500" />
+                        <div>
+                          <Label className="text-sm font-medium">RD Release Tracking</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Automatically follow up on invoice receipt and RD release
+                          </p>
+                        </div>
+                      </div>
+                      {!automation.rd_follow_up_enabled ? (
+                        <Button
+                          size="sm"
+                          onClick={handleEnableRDFollowUp}
+                          disabled={updateMutation.isPending}
+                          className="bg-amber-500 hover:bg-amber-600 text-white"
+                        >
+                          Enable
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleDisableRDFollowUp}
+                          disabled={updateMutation.isPending}
+                        >
+                          Disable
+                        </Button>
+                      )}
+                    </div>
+
+                    {automation.rd_follow_up_enabled && (
+                      <div className="space-y-3 pt-3 border-t border-amber-500/20">
+                        {/* RD Follow-up Status */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {automation.rd_follow_up_stopped_at ? (
+                            <Badge variant="secondary" className="flex items-center gap-1">
+                              <XCircle className="h-3 w-3" />
+                              {automation.rd_follow_up_stop_reason === 'rd_released' 
+                                ? 'RD Released ✓' 
+                                : automation.rd_follow_up_stop_reason === 'max_count_reached'
+                                ? 'Max Reached'
+                                : 'Manually Stopped'}
+                            </Badge>
+                          ) : (
+                            <Badge className="flex items-center gap-1 bg-amber-500/20 text-amber-600 hover:bg-amber-500/30">
+                              <CheckCircle className="h-3 w-3" />
+                              Active - {automation.rd_follow_up_current_count}/{automation.rd_follow_up_max_count} sent
+                            </Badge>
+                          )}
+                          {!automation.rd_follow_up_stopped_at && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={handleMarkRDReleased}
+                              disabled={updateMutation.isPending}
+                              className="text-xs h-6 border-green-500 text-green-600 hover:bg-green-500/10"
+                            >
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Mark RD Released
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* RD Settings */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Follow up every</Label>
+                            <Select 
+                              value={automation.rd_follow_up_interval_days?.toString() || "3"}
+                              onValueChange={(v) => handleUpdateFollowUpSettings('rd_follow_up_interval_days', parseInt(v))}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1">1 day</SelectItem>
+                                <SelectItem value="2">2 days</SelectItem>
+                                <SelectItem value="3">3 days</SelectItem>
+                                <SelectItem value="5">5 days</SelectItem>
+                                <SelectItem value="7">1 week</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Max follow-ups</Label>
+                            <Select 
+                              value={automation.rd_follow_up_max_count?.toString() || "10"}
+                              onValueChange={(v) => handleUpdateFollowUpSettings('rd_follow_up_max_count', parseInt(v))}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="3">3</SelectItem>
+                                <SelectItem value="5">5</SelectItem>
+                                <SelectItem value="10">10</SelectItem>
+                                <SelectItem value="15">15</SelectItem>
+                                <SelectItem value="20">20</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        {/* Next RD follow-up or reset button */}
+                        {automation.rd_follow_up_stopped_at ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full"
+                            onClick={handleResetRDFollowUp}
+                            disabled={updateMutation.isPending}
+                          >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Reset & Re-enable RD Follow-ups
+                          </Button>
+                        ) : automation.rd_follow_up_next_at && (
+                          <p className="text-xs text-muted-foreground">
+                            Next RD follow-up: {new Date(automation.rd_follow_up_next_at).toLocaleDateString()} at {new Date(automation.rd_follow_up_next_at).toLocaleTimeString()}
+                          </p>
+                        )}
+
+                        <p className="text-xs text-amber-600/80 bg-amber-500/5 p-2 rounded">
+                          💡 Darwin will contact the adjuster to confirm invoices were received and track when recoverable depreciation will be released.
+                        </p>
                       </div>
                     )}
                   </div>
