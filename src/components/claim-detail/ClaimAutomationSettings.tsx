@@ -44,7 +44,6 @@ interface ClaimAutomation {
   // RD Follow-up fields
   rd_follow_up_enabled: boolean;
   rd_follow_up_interval_days: number;
-  rd_follow_up_max_count: number;
   rd_follow_up_current_count: number;
   rd_follow_up_last_sent_at: string | null;
   rd_follow_up_next_at: string | null;
@@ -219,9 +218,23 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
 
   const handleUpdateFollowUpSettings = (field: string, value: number) => {
     if (automation) {
-      updateMutation.mutate({
-        [field]: value,
-      });
+      const updates: Record<string, any> = { [field]: value };
+      
+      // Recalculate next follow-up date if interval changed
+      if (field === 'follow_up_interval_days' && automation.follow_up_enabled && !automation.follow_up_stopped_at) {
+        const nextAt = new Date();
+        nextAt.setDate(nextAt.getDate() + value);
+        updates.follow_up_next_at = nextAt.toISOString();
+      }
+      
+      // Recalculate next RD follow-up date if interval changed
+      if (field === 'rd_follow_up_interval_days' && automation.rd_follow_up_enabled && !automation.rd_follow_up_stopped_at) {
+        const nextAt = new Date();
+        nextAt.setDate(nextAt.getDate() + value);
+        updates.rd_follow_up_next_at = nextAt.toISOString();
+      }
+      
+      updateMutation.mutate(updates);
     }
   };
 
@@ -606,7 +619,7 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
                           ) : (
                             <Badge className="flex items-center gap-1 bg-amber-500/20 text-amber-600 hover:bg-amber-500/30">
                               <CheckCircle className="h-3 w-3" />
-                              Active - {automation.rd_follow_up_current_count}/{automation.rd_follow_up_max_count} sent
+                              Active - {automation.rd_follow_up_current_count} sent
                             </Badge>
                           )}
                           {!automation.rd_follow_up_stopped_at && (
@@ -624,43 +637,26 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
                         </div>
 
                         {/* RD Settings */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Follow up every</Label>
-                            <Select 
-                              value={automation.rd_follow_up_interval_days?.toString() || "3"}
-                              onValueChange={(v) => handleUpdateFollowUpSettings('rd_follow_up_interval_days', parseInt(v))}
-                            >
-                              <SelectTrigger className="h-8 text-sm">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="1">1 day</SelectItem>
-                                <SelectItem value="2">2 days</SelectItem>
-                                <SelectItem value="3">3 days</SelectItem>
-                                <SelectItem value="5">5 days</SelectItem>
-                                <SelectItem value="7">1 week</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Max follow-ups</Label>
-                            <Select 
-                              value={automation.rd_follow_up_max_count?.toString() || "10"}
-                              onValueChange={(v) => handleUpdateFollowUpSettings('rd_follow_up_max_count', parseInt(v))}
-                            >
-                              <SelectTrigger className="h-8 text-sm">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="3">3</SelectItem>
-                                <SelectItem value="5">5</SelectItem>
-                                <SelectItem value="10">10</SelectItem>
-                                <SelectItem value="15">15</SelectItem>
-                                <SelectItem value="20">20</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Follow up every</Label>
+                          <Select 
+                            value={automation.rd_follow_up_interval_days?.toString() || "3"}
+                            onValueChange={(v) => handleUpdateFollowUpSettings('rd_follow_up_interval_days', parseInt(v))}
+                          >
+                            <SelectTrigger className="h-8 text-sm w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1">1 day</SelectItem>
+                              <SelectItem value="2">2 days</SelectItem>
+                              <SelectItem value="3">3 days</SelectItem>
+                              <SelectItem value="5">5 days</SelectItem>
+                              <SelectItem value="7">1 week</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Continues until status changes to "Waiting on RD"
+                          </p>
                         </div>
 
                         {/* Next RD follow-up or reset button */}
