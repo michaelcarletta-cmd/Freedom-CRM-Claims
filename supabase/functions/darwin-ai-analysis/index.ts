@@ -223,7 +223,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -3071,6 +3071,142 @@ VIII. RECOMMENDED ACTIONS
         break;
       }
 
+      case 'photo_to_xactimate': {
+        // AI-powered photo analysis for Xactimate line item recommendations
+        const photoUrls = additionalContext?.photoUrls || [];
+        const photoDescriptions = additionalContext?.photoDescriptions || [];
+        const existingAnalysis = additionalContext?.existingAnalysis || [];
+        const measurementData = additionalContext?.measurementData || null;
+        
+        const kbContent = await searchKnowledgeBase(
+          supabase,
+          'Xactimate line items codes roofing siding interior water damage mitigation repair replacement',
+          undefined
+        );
+
+        systemPrompt = `You are Darwin, an elite public adjuster AI and Xactimate estimating expert. Your role is to analyze property damage photos and generate accurate Xactimate line items for insurance claim estimates.
+
+=== YOUR EXPERTISE ===
+You have encyclopedic knowledge of:
+- Xactimate pricing data and line item codes for all trades (roofing, siding, drywall, flooring, water mitigation, etc.)
+- Material identification from photos (shingle types, siding materials, drywall textures, flooring types)
+- Damage assessment and repair scope determination
+- Industry-standard repair methods and when full replacement vs repair is warranted
+- Mitigation line items for water, fire, and mold damage
+
+=== ANALYSIS APPROACH ===
+For each photo, you will:
+1. IDENTIFY visible materials (specific products, not generic terms)
+2. ASSESS damage type, severity, and extent
+3. DETERMINE repair/replacement scope using insurance-industry standards
+4. RECOMMEND specific Xactimate line items with quantities and justifications
+
+=== XACTIMATE EXPERTISE ===
+Common line item categories you'll use:
+- ROOFING: Tear-off (RFCMTRF), Install shingles (RFSNRTB, RFSNRBW), Ice & water shield (RFIWS), Drip edge (RFDRPE), Felt (RFFLT15, RFFLT30), Ridge cap (RFSNRCAP), Starter strip (RFSSHED), Flashing (various), Vents
+- SIDING: Remove/Install vinyl (SDSIRE, SDSIIN), Lap siding, Trim, Soffit, Fascia
+- INTERIOR: Drywall (DW12, DW58), Texture, Paint (PT series), Baseboard, Crown molding
+- FLOORING: Remove/Install carpet (FLCPLT, FLCPRM), Hardwood, LVP, Tile
+- WATER MITIGATION: Extract water (WTREXT), Dehumidifier (WTRDEH), Air mover (WTRMOV), Antimicrobial (WTRANTM), Demo wet materials
+- WINDOWS/DOORS: Remove/replace, re-glaze, hardware
+
+=== QUANTITY ESTIMATION RULES ===
+- For roofing: Use "squares" (100 SF = 1 SQ). Estimate visible area and note if full roof measurement is needed
+- For linear items (drip edge, starter, gutters): Estimate linear feet from visible evidence
+- For drywall: Estimate by square feet of visible damage, include affected surfaces
+- For flooring: Square feet or yards as appropriate
+- For mitigation: Base on affected room size or equipment hours needed
+
+=== OUTPUT FORMAT ===
+Return ONLY a valid JSON object with this structure:
+{
+  "summary": "Brief overview of damage observed and recommended repairs",
+  "total_estimated_rcv": 0,
+  "line_items": [
+    {
+      "category": "Roofing/Siding/Interior/Flooring/Mitigation/etc.",
+      "xactimate_code": "RFSNRTB",
+      "description": "Remove & replace 3-tab shingles - 25yr",
+      "unit": "SQ",
+      "quantity": 25,
+      "unit_price": 285.00,
+      "total": 7125.00,
+      "justification": "Photo evidence shows widespread granule loss and lifted tabs across main roof plane. Full replacement required per manufacturer specs - cannot intermix new shingles with weathered existing."
+    }
+  ],
+  "measurement_notes": "Notes about measurements that need verification or additional measurement report",
+  "additional_items_to_verify": ["Items that may need on-site verification"]
+}
+
+=== CRITICAL RULES ===
+1. EVERY line item MUST have a specific justification citing photo evidence
+2. Use CURRENT Xactimate pricing (2024-2025 typical rates)
+3. Include tear-off/removal line items for replacements
+4. Include overhead & profit (O&P) at 10% each when applicable
+5. Include disposal/haul-off for debris
+6. For water damage: Include full mitigation scope (extraction, drying equipment, antimicrobial)
+7. ADVOCATE for full replacement when damage patterns warrant it - don't minimize
+
+${stateInfo.stateName} CONTEXT:
+- State: ${stateInfo.stateName}
+- Insurance Regulations: ${stateInfo.adminCode}
+
+${kbContent}`;
+
+        // Build photo context from existing AI analysis and descriptions
+        let photoContext = '';
+        if (existingAnalysis.length > 0) {
+          photoContext = '\n\nEXISTING DARWIN PHOTO ANALYSIS:\n';
+          existingAnalysis.forEach((analysis: any, idx: number) => {
+            photoContext += `\nPhoto ${idx + 1}: ${analysis.file_name || 'Photo'}\n`;
+            photoContext += `- Material: ${analysis.ai_material_type || 'Unknown'}\n`;
+            photoContext += `- Condition: ${analysis.ai_condition_rating || 'Not rated'}\n`;
+            if (analysis.ai_detected_damages?.length > 0) {
+              photoContext += '- Damages:\n';
+              analysis.ai_detected_damages.forEach((d: any) => {
+                photoContext += `  * ${d.type}: ${d.severity} - ${d.notes || d.location}\n`;
+              });
+            }
+            if (analysis.ai_analysis_summary) {
+              photoContext += `- Summary: ${analysis.ai_analysis_summary}\n`;
+            }
+          });
+        }
+
+        if (photoDescriptions.length > 0) {
+          photoContext += '\n\nPHOTO DESCRIPTIONS PROVIDED:\n';
+          photoDescriptions.forEach((desc: string, idx: number) => {
+            if (desc) photoContext += `Photo ${idx + 1}: ${desc}\n`;
+          });
+        }
+
+        userPrompt = `${claimSummary}
+
+=== PHOTOS FOR ANALYSIS ===
+${photoUrls.length} photos have been provided for analysis.
+${photoContext}
+
+${measurementData ? `=== MEASUREMENT DATA ===
+Roof Area: ${measurementData.roofArea || 'Not provided'} squares
+Pitch: ${measurementData.pitch || 'Not provided'}
+Stories: ${measurementData.stories || 'Not provided'}
+Additional measurements: ${JSON.stringify(measurementData.additional || {})}` : '=== MEASUREMENT DATA ===\nNo measurement report provided. Estimate quantities from visible damage and note areas requiring field verification.'}
+
+=== YOUR TASK ===
+Analyze the provided photos and generate a comprehensive list of Xactimate line items needed to repair/restore the property to pre-loss condition.
+
+For each line item:
+1. Specify the exact Xactimate code
+2. Provide a quantity with appropriate unit
+3. Use current market pricing
+4. Include a detailed justification citing specific photo evidence
+
+Remember: You work for the POLICYHOLDER. Advocate for full and fair coverage. Include all legitimate items - don't leave money on the table.
+
+Return ONLY the JSON object as specified. No additional text.`;
+        break;
+      }
+
       default:
         throw new Error(`Unknown analysis type: ${analysisType}`);
 
@@ -3147,6 +3283,33 @@ VIII. RECOMMENDED ACTIONS
       ];
       
       console.log(`Supplement analysis with ${additionalContext?.ourEstimatePdf ? 1 : 0} our estimate + ${(additionalContext?.insuranceEstimatePdf || pdfContent) ? 1 : 0} insurance estimate`);
+    } else if (analysisType === 'photo_to_xactimate' && additionalContext?.photoUrls?.length > 0) {
+      // Photo-to-Xactimate analysis with multiple photo URLs
+      const contentParts: any[] = [];
+      
+      // Add each photo URL (limit to 10 to avoid payload issues)
+      const photoUrls = additionalContext.photoUrls.slice(0, 10);
+      for (let i = 0; i < photoUrls.length; i++) {
+        contentParts.push({
+          type: 'image_url',
+          image_url: {
+            url: photoUrls[i]
+          }
+        });
+      }
+      
+      // Add the text prompt last
+      contentParts.push({
+        type: 'text',
+        text: userPrompt
+      });
+      
+      messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: contentParts }
+      ];
+      
+      console.log(`Photo-to-Xactimate analysis with ${photoUrls.length} photos`);
     } else if (pdfContent && !additionalContext?._useTextOnly && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'document_compilation' || analysisType === 'estimate_work_summary' || analysisType === 'document_comparison' || analysisType === 'smart_extraction' || analysisType === 'estimate_gap_analysis')) {
       // Use multimodal format for PDF analysis with Gemini-compatible inline_data format
       messages = [
