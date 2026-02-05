@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
@@ -128,8 +128,8 @@ serve(async (req) => {
     const uint8Array = new Uint8Array(arrayBuffer);
 
     // Use docxtemplater to fill the template
-    const PizZip = (await import("https://esm.sh/pizzip@3.1.4")).default;
-    const Docxtemplater = (await import("https://esm.sh/docxtemplater@3.42.0")).default;
+    const PizZip = (await import("pizzip")).default;
+    const Docxtemplater = (await import("docxtemplater")).default;
 
     const zip = new PizZip(uint8Array);
     const doc = new Docxtemplater(zip, {
