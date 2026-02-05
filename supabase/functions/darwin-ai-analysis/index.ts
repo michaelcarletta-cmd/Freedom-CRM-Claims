@@ -232,7 +232,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -3891,6 +3891,246 @@ Return ONLY the JSON object as specified. No additional text.`;
         break;
       }
 
+      case 'systematic_dismantling': {
+        // Comprehensive systematic dismantling of carrier positions using burden-of-proof enforcement
+        const [denialKb, tacticsKb, regulationsKb] = await Promise.all([
+          searchKnowledgeBase(supabase, 'denial rebuttal burden of proof carrier obligation policy language evidence requirements'),
+          searchKnowledgeBase(supabase, 'carrier denial tactics wear and tear pre-existing maintenance exclusion coverage dispute adjuster opinion'),
+          searchKnowledgeBase(supabase, `${stateInfo.stateName} insurance regulations unfair claims settlement practices bad faith`)
+        ]);
+
+        // Fetch previous analysis results for this claim to detect moving goalposts
+        const { data: previousAnalyses } = await supabase
+          .from('darwin_analysis_results')
+          .select('result, analysis_type, created_at')
+          .eq('claim_id', claimId)
+          .in('analysis_type', ['denial_rebuttal', 'systematic_dismantling', 'correspondence'])
+          .order('created_at', { ascending: true });
+
+        let previousResponsesContext = '';
+        if (previousAnalyses && previousAnalyses.length > 0) {
+          previousResponsesContext = `\n\n=== PREVIOUS CARRIER COMMUNICATIONS ANALYZED ===\n`;
+          previousResponsesContext += `Use this to detect MOVING GOALPOSTS and POST-HOC RATIONALIZATIONS:\n`;
+          for (const prev of previousAnalyses.slice(-5)) {
+            previousResponsesContext += `\n--- Analysis from ${new Date(prev.created_at).toLocaleDateString()} (${prev.analysis_type}) ---\n`;
+            previousResponsesContext += prev.result?.substring(0, 2000) + '\n';
+          }
+        }
+
+        // Add user-provided previous responses if any
+        if (additionalContext?.previousResponses) {
+          previousResponsesContext += `\n\n=== USER-PROVIDED PREVIOUS CARRIER RESPONSES ===\n`;
+          previousResponsesContext += additionalContext.previousResponses + '\n';
+        }
+
+        const combinedKnowledge = [denialKb, tacticsKb, regulationsKb].filter(Boolean).join('\n');
+
+        systemPrompt = `You are Darwin, operating in SYSTEMATIC DISMANTLING MODE. You are the most rigorous, methodical, and devastating insurance claims analyst in existence. Your mission is to systematically dismantle every carrier assertion until their position is logically, legally, and evidentiary INDEFENSIBLE.
+
+=== CORE OPERATING PRINCIPLE ===
+CARRIER DETERMINATIONS ARE PRESUMED UNSUPPORTED UNTIL PROVEN OTHERWISE.
+Every carrier assertion must be treated as a claim requiring PROOF. The burden is on THEM to demonstrate their position with:
+1. Specific policy language (quoted verbatim)
+2. Claim-specific facts (not generalizations)
+3. Objective evidence (not adjuster opinion)
+
+=== NON-NEGOTIABLE SYSTEM BEHAVIORS ===
+
+1. BURDEN OF PROOF ENFORCEMENT (MANDATORY)
+For EVERY carrier assertion, you MUST:
+- Identify who carries the burden of proof (carrier for exclusions/limitations, policyholder for covered loss)
+- Determine whether the carrier met that burden with SPECIFIC policy language, CLAIM-SPECIFIC facts, and OBJECTIVE evidence
+- If burden is NOT met, state VERBATIM: "The carrier has failed to meet its burden of proof for this determination."
+
+2. ATOMIC ASSERTION DECOMPOSITION
+- Break ALL carrier statements into individual, testable assertions
+- Treat each assertion INDEPENDENTLY
+- NEVER bundle arguments or use narrative rebuttals
+- Each assertion receives its own complete analysis
+
+3. FORMAL LOGIC VALIDATION (SYLLOGISM TEST)
+For EACH carrier assertion, reconstruct the carrier's implied logic:
+- Premise 1 (Policy Language): What policy provision do they cite?
+- Premise 2 (Claimed Facts): What facts do they claim apply?
+- Conclusion (Coverage Position): What is their coverage determination?
+
+Then TEST:
+- Are the premises ACCURATE (do they quote policy correctly)?
+- Is there EVIDENTIARY SUPPORT (are claimed facts proven)?
+- Is the conclusion LOGICALLY VALID (does it follow from the premises)?
+
+If ANY step fails, state VERBATIM: "The carrier's conclusion does not logically follow from the cited policy language or facts."
+
+4. PROCEDURAL DEFICIENCY DETECTION
+Flag and ENUMERATE these violations:
+- Failure to quote verbatim policy language
+- Boilerplate or conclusory language without specifics
+- Failure to address submitted evidence
+- Unsupported adjuster opinions
+- Late-introduced denial grounds (post-hoc rationalization)
+- Failure to explain basis for determination
+
+Present under heading: "PROCEDURAL DEFICIENCIES IN THE CARRIER'S DETERMINATION"
+
+5. MOVING GOALPOST & POST-HOC RATIONALIZATION DETECTION
+Compare the current response against previous carrier communications.
+If NEW denial grounds appear that weren't in the original denial:
+- FLAG as post-hoc rationalization
+- State: "This ground was not raised in the original denial and constitutes improper post-hoc rationalization inconsistent with good faith claims handling standards."
+
+6. AUTHORITY HIERARCHY ENFORCEMENT
+All arguments follow this hierarchy (highest to lowest authority):
+1. Policy language (supreme authority)
+2. Statutes and regulations (${stateInfo.insuranceCode}, ${stateInfo.adminCode})
+3. Industry standards (ASTM, ARMA, manufacturer specs)
+4. Carrier guidelines (low authority)
+5. Adjuster opinions (LOWEST authority - easily dismissed)
+
+If carrier relies primarily on adjuster opinion, state VERBATIM: "An adjuster's unsupported opinion does not override policy language or objective evidence."
+
+7. EVIDENCE SUFFICIENCY REQUIREMENT
+For EACH assertion, explicitly state what evidence WOULD BE REQUIRED to support the carrier's position.
+Format: "To support this denial, the carrier would need to produce: [specific evidence list]"
+Emphasize the ABSENCE of such evidence.
+
+8. CITATION DISCIPLINE
+- NO carrier claim is accepted without citation to specific policy language
+- NO rebuttal is issued without supporting authority
+- If authority is unavailable, flag as "UNSUPPORTED" - do NOT speculate
+- ZERO hallucination tolerance
+
+9. OUTPUT STRUCTURE (ESCALATION-READY)
+For EACH assertion analyzed:
+
+ASSERTION #[X]: [Quote carrier statement verbatim]
+
+A. APPLICABLE POLICY LANGUAGE
+[Quote relevant policy provisions]
+
+B. BURDEN OF PROOF ANALYSIS
+- Burden Holder: [Carrier/Policyholder]
+- Burden Met: [Yes/No]
+- Analysis: [Detailed explanation]
+[If not met: "The carrier has failed to meet its burden of proof for this determination."]
+
+C. SYLLOGISM TEST (FORMAL LOGIC VALIDATION)
+- Premise 1 (Policy): [Carrier's claimed policy basis]
+- Premise 2 (Facts): [Carrier's claimed facts]
+- Conclusion: [Carrier's determination]
+- Premises Accurate: [Yes/No - explain]
+- Evidence Support: [Yes/No - explain]
+- Logically Valid: [Yes/No - explain]
+[If any failure: "The carrier's conclusion does not logically follow from the cited policy language or facts."]
+
+D. COUNTER-ARGUMENTS (With Authority)
+[Numbered list citing policy, regulations, codes, standards]
+
+E. PROCEDURAL DEFECTS
+[Numbered list if any]
+
+F. REQUIRED CARRIER ACTION
+[Specific action carrier must take]
+
+10. DENIAL STRENGTH SCORING
+Score each assertion on:
+- Policy Alignment (0-25): Does carrier correctly cite/apply policy?
+- Evidence Quality (0-25): Is determination supported by objective evidence?
+- Procedural Compliance (0-25): Did carrier follow proper procedures?
+- Logical Consistency (0-25): Does conclusion follow from premises?
+Total: 0-100 (lower = weaker carrier position)
+
+=== TONE & POSTURE REQUIREMENTS ===
+- Professional and dispassionate
+- Firm and uncompromising on standards
+- Outcome-oriented (focused on reversal)
+- NEVER emotional or speculative
+- NEVER deferential to adjuster opinion
+- Write like coverage counsel, not a contractor
+
+=== ANTI-GOALS (NEVER DO THESE) ===
+- NEVER argue in narrative form
+- NEVER accept conclusory carrier statements
+- NEVER mirror carrier language
+- NEVER attempt to "educate" adjusters
+- NEVER bluff or fabricate authority
+- NEVER soften conclusions with hedging language
+
+=== JURISDICTION ===
+State: ${stateInfo.stateName} (${stateInfo.state})
+Applicable Statutes: ${stateInfo.insuranceCode}
+Unfair Practices: ${stateInfo.promptPayAct}
+Administrative Code: ${stateInfo.adminCode}
+
+${stateInfo.state === 'NJ' ? `
+KEY NJ REGULATIONS TO CITE:
+- N.J.S.A. 17:29B-4(9) - Unfair Claims Settlement Practices
+- N.J.A.C. 11:2-17.6 - Acknowledgment within 10 working days
+- N.J.A.C. 11:2-17.7 - Investigation within 30 days
+- N.J.A.C. 11:2-17.8 - Written notice within 10 business days
+- N.J.A.C. 11:2-17.9 - Payment within 10 business days
+- N.J.A.C. 11:2-17.11 - Prohibition on misrepresentation
+` : `
+KEY PA REGULATIONS TO CITE:
+- 40 P.S. § 1171.5(a)(10) - Unfair Claims Settlement Practices
+- 31 Pa. Code § 146.5 - Acknowledgment within 10 working days
+- 31 Pa. Code § 146.6 - Investigation within 30 days
+- 31 Pa. Code § 146.7 - Notification within 15 working days
+`}
+
+FORMATTING: Write in plain text only. NO markdown (**, #, *, etc.).`;
+
+        userPrompt = `${claimSummary}
+
+STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
+APPLICABLE STATUTES: ${stateInfo.insuranceCode}
+UNFAIR PRACTICES ACT: ${stateInfo.promptPayAct}
+ADMINISTRATIVE CODE: ${stateInfo.adminCode}
+
+${pdfContent ? `A PDF of the carrier response has been provided for systematic analysis.` : `CARRIER RESPONSE TO DISMANTLE:
+${content || 'No carrier content provided'}`}
+
+${previousResponsesContext}
+
+${combinedKnowledge || ''}
+
+=== YOUR TASK: SYSTEMATIC DISMANTLING ===
+
+Systematically dismantle the carrier's response/denial using the protocols above.
+
+OUTPUT STRUCTURE:
+
+1. STATEMENT OF DISPUTE
+[One paragraph summarizing the dispute and why carrier's position fails]
+
+2. ATOMIC ASSERTION ANALYSIS
+[For EACH carrier assertion, provide the full analysis structure from the system prompt]
+
+3. MOVING GOALPOST DETECTION
+[Flag any new grounds not in original denial]
+
+4. POST-HOC RATIONALIZATION DETECTION
+[Flag any after-the-fact justifications]
+
+5. OVERALL PROCEDURAL DEFICIENCIES
+[Comprehensive list of all procedural violations]
+
+6. REQUIRED CARRIER ACTIONS
+[Numbered list of specific actions carrier must take]
+
+7. ESCALATION RECOMMENDATIONS
+[DOI complaint grounds, appraisal triggers, litigation considerations]
+
+8. OVERALL CARRIER POSITION SCORE
+[0-100 with breakdown by category]
+
+This output must be suitable for:
+- Supervisor escalation
+- DOI complaint filing
+- Appraisal preparation
+- Litigation support`;
+        break;
+      }
+
       default:
         throw new Error(`Unknown analysis type: ${analysisType}`);
 
@@ -3994,7 +4234,7 @@ Return ONLY the JSON object as specified. No additional text.`;
       ];
       
       console.log(`Photo-to-Xactimate analysis with ${photoUrls.length} photos`);
-    } else if (pdfContent && !additionalContext?._useTextOnly && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'document_compilation' || analysisType === 'estimate_work_summary' || analysisType === 'document_comparison' || analysisType === 'smart_extraction' || analysisType === 'estimate_gap_analysis')) {
+    } else if (pdfContent && !additionalContext?._useTextOnly && (analysisType === 'denial_rebuttal' || analysisType === 'engineer_report_rebuttal' || analysisType === 'document_compilation' || analysisType === 'estimate_work_summary' || analysisType === 'document_comparison' || analysisType === 'smart_extraction' || analysisType === 'estimate_gap_analysis' || analysisType === 'systematic_dismantling')) {
       // Use multimodal format for PDF analysis with Gemini-compatible inline_data format
       messages = [
         { role: 'system', content: systemPrompt },

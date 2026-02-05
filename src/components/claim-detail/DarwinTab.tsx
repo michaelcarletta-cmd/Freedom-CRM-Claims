@@ -36,6 +36,7 @@ const DarwinCarrierEmailDrafter = lazy(() => import("@/components/claim-detail/D
 const DarwinWeatherHistory = lazy(() => import("@/components/claim-detail/DarwinWeatherHistory").then(m => ({ default: m.DarwinWeatherHistory })));
 const DarwinOneClickPackage = lazy(() => import("@/components/claim-detail/DarwinOneClickPackage").then(m => ({ default: m.DarwinOneClickPackage })));
 const DarwinAutoDraftRebuttal = lazy(() => import("@/components/claim-detail/DarwinAutoDraftRebuttal").then(m => ({ default: m.DarwinAutoDraftRebuttal })));
+const DarwinSystematicDismantler = lazy(() => import("@/components/claim-detail/DarwinSystematicDismantler").then(m => ({ default: m.DarwinSystematicDismantler })));
 const DarwinAutoSummary = lazy(() => import("@/components/claim-detail/DarwinAutoSummary").then(m => ({ default: m.DarwinAutoSummary })));
 const DarwinSmartDocumentSort = lazy(() => import("@/components/claim-detail/DarwinSmartDocumentSort").then(m => ({ default: m.DarwinSmartDocumentSort })));
 const DarwinEstimateGapAnalysis = lazy(() => import("@/components/claim-detail/DarwinEstimateGapAnalysis").then(m => ({ default: m.DarwinEstimateGapAnalysis })));
@@ -115,6 +116,7 @@ const analysisTypeLabels: Record<string, { label: string; section: string }> = {
   denial_rebuttal: { label: 'Denial Rebuttal', section: 'rebuttals' },
   engineer_report_rebuttal: { label: 'Engineer Report Rebuttal', section: 'rebuttals' },
   estimate_gap_analysis: { label: 'Estimate Gap Analysis', section: 'document-analysis' },
+  systematic_dismantling: { label: 'Systematic Dismantling', section: 'rebuttals' },
 };
 
 export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
@@ -339,6 +341,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
               description="Counter carrier denials and engineer reports"
               icon={<Shield className="h-4 w-4" />}
             >
+            <DarwinSystematicDismantler claimId={claimId} claim={claim} />
             <DarwinAutoDraftRebuttal claimId={claimId} claim={claim} />
             <div className="grid gap-4 lg:grid-cols-2">
               <DarwinDenialAnalyzer claimId={claimId} claim={claim} />
