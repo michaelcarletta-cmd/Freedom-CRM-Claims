@@ -73,15 +73,25 @@ const ClaimDetail = () => {
       console.log("Fetching claim with id:", id, "userRole:", userRole);
       const { data, error } = await supabase
         .from("claims")
-        .select("*")
+        .select(`
+          *,
+          insurance_companies:insurance_company_id(id, name, phone, email),
+          loss_types:loss_type_id(id, name)
+        `)
         .eq("id", id)
         .maybeSingle();
       if (error) {
         console.error("Error fetching claim:", error);
         throw error;
       }
-      console.log("Claim fetched successfully:", data?.status);
-      return data;
+      // Flatten joined data for easier access
+      const flattenedData = data ? {
+        ...data,
+        insurance_company: data.insurance_companies?.name || null,
+        loss_type: data.loss_types?.name || null,
+      } : null;
+      console.log("Claim fetched successfully:", flattenedData?.status);
+      return flattenedData;
     },
     enabled: !!id,
     staleTime: 5000, // Reduced cache time for more responsive updates
