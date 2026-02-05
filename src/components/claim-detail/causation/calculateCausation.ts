@@ -150,15 +150,15 @@
    
    switch (decision) {
      case 'supported':
-       butForStatement = `If not for the ${perilLabel.toLowerCase()} event, the ${formData.damageType.toLowerCase()} would LIKELY NOT have occurred. The documented evidence is consistent with ${perilLabel.toLowerCase()}-induced damage.`;
+       butForStatement = `If not for the ${perilLabel.toLowerCase()} event, the ${formData.damageTypes.join(', ').toLowerCase()} would LIKELY NOT have occurred. The documented evidence is consistent with ${perilLabel.toLowerCase()}-induced damage.`;
        decisionStatement = `The available evidence suggests ${perilLabel.toLowerCase()} as the proximate cause. ${topSupportingIndicators.length} key indicators support this conclusion. Pre-existing conditions, if present, do not exclude coverage—the covered peril appears to be the triggering event.`;
        break;
      case 'not_supported':
-       butForStatement = `The evidence is INSUFFICIENT to conclude that ${perilLabel.toLowerCase()} was the proximate cause of the ${formData.damageType.toLowerCase()}.`;
+       butForStatement = `The evidence is INSUFFICIENT to conclude that ${perilLabel.toLowerCase()} was the proximate cause of the ${formData.damageTypes.join(', ').toLowerCase()}.`;
        decisionStatement = `Available evidence suggests alternative causation factors. However, if the carrier is relying on competing causes (installation, maintenance, manufacturing), specific counter-arguments and evidence requirements should be reviewed.`;
        break;
      default:
-       butForStatement = `Insufficient evidence exists to conclusively determine whether the ${formData.damageType.toLowerCase()} would have occurred without the ${perilLabel.toLowerCase()} event.`;
+       butForStatement = `Insufficient evidence exists to conclusively determine whether the ${formData.damageTypes.join(', ').toLowerCase()} would have occurred without the ${perilLabel.toLowerCase()} event.`;
        decisionStatement = minimumEvidenceMet 
          ? `Additional documentation is recommended to strengthen the causation argument. Focus on filling the identified evidence gaps.`
          : `Minimum evidence requirements are not met. At least one core indicator must be documented before causation can be supported.`;

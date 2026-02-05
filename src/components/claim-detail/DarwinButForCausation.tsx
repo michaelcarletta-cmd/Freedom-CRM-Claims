@@ -48,7 +48,7 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
   
   const [formData, setFormData] = useState<CausationFormData>({
     perilTested: '',
-    damageType: '',
+    damageTypes: [],
     eventDate: claim?.date_of_loss || '',
     damageNoticedDate: '',
      indicators: {},
@@ -106,7 +106,7 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
        .insert([{
           claim_id: claimId,
           peril_tested: formData.perilTested,
-          damage_type: formData.damageType,
+          damage_type: formData.damageTypes.join(', '),
           event_date: formData.eventDate || null,
           damage_noticed_date: formData.damageNoticedDate || null,
            directional_indicators: Object.keys(formData.indicators).filter(k => formData.indicators[k]?.state === 'present'),
@@ -148,8 +148,8 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
   });
 
   const handleRunTest = () => {
-    if (!formData.perilTested || !formData.damageType) {
-      toast.error('Please select a peril and damage type');
+    if (!formData.perilTested || formData.damageTypes.length === 0) {
+      toast.error('Please select a peril and at least one damage type');
       return;
     }
     
@@ -240,17 +240,37 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
                 </div>
                 
                 <div className="space-y-2">
-                  <Label>Damage Type *</Label>
-                  <Select value={formData.damageType} onValueChange={v => setFormData(prev => ({ ...prev, damageType: v }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select damage type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DAMAGE_TYPES.map(type => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Damage Type(s) *</Label>
+                  <div className="flex flex-wrap gap-2 p-3 border rounded-md bg-background min-h-[42px]">
+                    {DAMAGE_TYPES.map(type => {
+                      const isSelected = formData.damageTypes.includes(type);
+                      return (
+                        <Badge
+                          key={type}
+                          variant={isSelected ? "default" : "outline"}
+                          className={cn(
+                            "cursor-pointer transition-colors",
+                            isSelected ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                          )}
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              damageTypes: isSelected
+                                ? prev.damageTypes.filter(t => t !== type)
+                                : [...prev.damageTypes, type]
+                            }));
+                          }}
+                        >
+                          {type}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                  {formData.damageTypes.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Selected: {formData.damageTypes.join(', ')}
+                    </p>
+                  )}
                 </div>
               </div>
 
