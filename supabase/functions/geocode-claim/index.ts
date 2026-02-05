@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
     // Fetch the claim to get the address
     const { data: claim, error: claimError } = await supabase
       .from("claims")
-      .select("id, policyholder_address, policyholder_city, policyholder_state, policyholder_zip, latitude, longitude")
+      .select("id, policyholder_address, latitude, longitude")
       .eq("id", claimId)
       .single();
 
@@ -58,15 +58,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Build the address string for geocoding
-    const addressParts = [
-      claim.policyholder_address,
-      claim.policyholder_city,
-      claim.policyholder_state,
-      claim.policyholder_zip,
-    ].filter(Boolean);
+    // Use the full address field directly
+    const fullAddress = claim.policyholder_address;
 
-    if (addressParts.length === 0) {
+    if (!fullAddress) {
       return new Response(
         JSON.stringify({ success: false, message: "No address available for geocoding" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
