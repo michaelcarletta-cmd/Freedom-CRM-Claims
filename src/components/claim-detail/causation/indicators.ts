@@ -166,6 +166,7 @@
    'Flashing damage',
    'Gutter damage',
    'Siding damage',
+  'Bruising/soft spots',
    'Water intrusion',
    'Structural damage',
    'Other',
