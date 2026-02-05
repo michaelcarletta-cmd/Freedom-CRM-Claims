@@ -91,7 +91,7 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
     mutationFn: async (result: CausationResult) => {
       const { error } = await supabase
         .from('claim_causation_tests')
-        .insert({
+       .insert([{
           claim_id: claimId,
           peril_tested: formData.perilTested,
           damage_type: formData.damageType,
@@ -117,12 +117,12 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
            })),
           evidence_gaps: result.evidenceGaps,
            total_score: result.scoring.netScore,
-           score_breakdown: { 
+           score_breakdown: JSON.parse(JSON.stringify({ 
              windEvidence: result.scoring.windEvidenceScore, 
              alternativeCause: result.scoring.alternativeCauseScore,
              indicatorBreakdown: result.indicatorBreakdown
-           },
-        });
+           })),
+       }]);
       
       if (error) throw error;
     },
