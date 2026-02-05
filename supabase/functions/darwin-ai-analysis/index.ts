@@ -3079,6 +3079,7 @@ Return ONLY valid JSON with the classification.`;
         const fileList = additionalContext?.claimFiles || [];
         const aiPhotoAnalysis = additionalContext?.aiPhotoAnalysis || [];
         const photoAnalysisSummary = additionalContext?.photoAnalysisSummary || {};
+        const proximityPrecedents = additionalContext?.proximityPrecedents || [];
         
         // Fetch multiple knowledge base categories for comprehensive coverage
         const [kbRebuttal, kbBuildingCodes, kbDenialTactics] = await Promise.all([
@@ -3363,6 +3364,28 @@ ${damageList ? `   Damages:\n${damageList}` : ''}`;
 }).join('\n\n')}
 
 *** CITE SPECIFIC PHOTOS BY FILENAME in the rebuttal to counter carrier claims ***
+\n`;
+        }
+
+        // Add proximity precedents for inconsistent carrier handling evidence
+        if (proximityPrecedents.length > 0) {
+          intelligenceContext += `\n=== PROXIMITY PRECEDENTS: INCONSISTENT CARRIER HANDLING ===
+*** CRITICAL EVIDENCE: The same carrier approved similar claims nearby but denied this one ***
+
+${proximityPrecedents.map((p: any, i: number) => 
+  `${i + 1}. ${p.policyholderName || 'Claim'} at ${p.address || 'Address unavailable'}
+   - Distance: ${p.distanceMiles} miles from current claim
+   - Loss Type: ${p.lossType || 'Same/Similar'}
+   - Loss Date: ${p.lossDate || 'N/A'}
+   - Status: ${p.status} ${p.claimAmount ? `- Settled for $${p.claimAmount.toLocaleString()}` : ''}
+`).join('\n')}
+
+USE THIS EVIDENCE TO ARGUE:
+- The carrier is treating similarly-situated policyholders differently
+- Claims within the same geographic area (affected by the same storm event) received coverage
+- This demonstrates arbitrary and inconsistent claims handling
+- Reference specific nearby addresses and settlement amounts as proof of pattern
+- If same carrier approved a claim 0.5-2 miles away for the same loss type, the denial of this claim is unreasonable
 \n`;
         }
 
