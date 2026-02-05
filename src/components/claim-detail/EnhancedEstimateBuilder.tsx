@@ -182,23 +182,36 @@ export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuil
       const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
         body: {
           claimId: claimId,
-          question: `Generate a detailed repair scope for this insurance claim. You MUST respond with ONLY a JSON array.
+          question: `Generate a detailed repair scope for this insurance claim covering ALL damaged areas of the property. You MUST respond with ONLY a JSON array.
 
 USE THIS EVIDENCE TO IDENTIFY DAMAGED AREAS:
 ${analysisContext || "(No previous Darwin analyses available - generate a reasonable scope based on typical storm damage)"}
 ${photoContext}
 
-Based on the evidence above, generate repair scopes for each damaged area.
+Based on the evidence above, generate repair scopes for EACH damaged area including:
+- ROOFING: All slopes, ridges, hips, valleys, vents, flashing, gutters, downspouts
+- SIDING: All elevations (North, South, East, West), trim, fascia, soffit
+- GUTTERS: Seamless gutters, downspouts, splash blocks, gutter guards
+- WINDOWS & DOORS: Frames, glass, screens, weatherstripping, thresholds
+- INTERIOR: Drywall, paint, flooring, ceilings, insulation, trim
+- STRUCTURAL: Framing, sheathing, decking, joists, trusses
+- ELECTRICAL: Fixtures, outlets, wiring (if damaged)
+- PLUMBING: Pipes, fixtures (if damaged)
+- HVAC: Units, ductwork, vents (if damaged)
+- LANDSCAPING: Trees, shrubs, fencing, hardscaping (if applicable)
 
 CRITICAL RULES:
-1. Standard repair = FULL REPLACEMENT of each damaged slope/section, not partial repairs
-2. Include realistic labor hours and materials
-3. Be specific about areas (e.g., "North Slope", "East Elevation")
+1. Standard repair = FULL REPLACEMENT of each damaged section, not partial repairs
+2. Include realistic labor hours and materials for each trade
+3. Be specific about areas (e.g., "North Slope", "East Elevation", "Master Bedroom", "Living Room Ceiling")
+4. Include ALL damaged areas visible in photos or mentioned in analyses
 
 RESPOND WITH ONLY THIS JSON FORMAT (no other text):
 [
-  {"area": "Main Roof - North Slope", "damages": ["hail impacts", "granule loss"], "repairMethod": "Full tear-off and replacement per manufacturer specs", "materials": ["3-tab shingles", "felt underlayment", "ice & water shield", "drip edge"], "laborHours": 16, "notes": "Evidence from photo analysis"},
-  {"area": "Main Roof - South Slope", "damages": ["wind damage", "lifted shingles"], "repairMethod": "Full tear-off and replacement", "materials": ["3-tab shingles", "felt underlayment"], "laborHours": 12, "notes": "Based on damage assessment"}
+  {"area": "Main Roof - North Slope", "damages": ["hail impacts", "granule loss"], "repairMethod": "Full tear-off and replacement per manufacturer specs", "materials": ["architectural shingles", "felt underlayment", "ice & water shield", "drip edge"], "laborHours": 16, "notes": "Roofing trade"},
+  {"area": "Vinyl Siding - East Elevation", "damages": ["hail dents", "cracked panels"], "repairMethod": "Remove and replace damaged siding panels", "materials": ["vinyl siding panels", "J-channel", "starter strip", "corner posts"], "laborHours": 8, "notes": "Siding trade"},
+  {"area": "Gutters - Front Elevation", "damages": ["dents", "separated seams"], "repairMethod": "Replace seamless aluminum gutters", "materials": ["5\" seamless aluminum gutters", "downspouts", "hangers", "end caps"], "laborHours": 4, "notes": "Gutter trade"},
+  {"area": "Living Room Ceiling", "damages": ["water stains", "drywall damage"], "repairMethod": "Remove and replace damaged drywall, texture, paint", "materials": ["1/2\" drywall", "joint compound", "texture", "primer", "paint"], "laborHours": 6, "notes": "Interior trade"}
 ]
 
 OUTPUT ONLY THE JSON ARRAY. NO EXPLANATIONS.`,
@@ -255,17 +268,33 @@ OUTPUT ONLY THE JSON ARRAY. NO EXPLANATIONS.`,
           claimId: claimId,
           question: `CRITICAL: You MUST respond with ONLY a JSON array. No explanation, no text before or after. Just the JSON array.
 
-Generate Xactimate-style line items for this repair scope:
+Generate Xactimate-style line items for this COMPLETE repair scope covering all trades:
 
 ${scopeSummary}
 
 RESPOND WITH ONLY THIS JSON FORMAT (no other text):
 [
-  {"category": "Roofing", "description": "Remove composition shingles - 3 tab", "xactimateCode": "RFCMTRF", "unit": "SQ", "quantity": 25, "unitPrice": 45.00, "total": 1125.00},
-  {"category": "Roofing", "description": "Composition shingles - 3 tab - 25yr - Install", "xactimateCode": "RFSNRTB", "unit": "SQ", "quantity": 25, "unitPrice": 285.00, "total": 7125.00}
+  {"category": "Roofing", "description": "Remove composition shingles - architectural", "xactimateCode": "RFCMTRF", "unit": "SQ", "quantity": 25, "unitPrice": 55.00, "total": 1375.00},
+  {"category": "Roofing", "description": "Architectural shingles - 30yr - Install", "xactimateCode": "RFSNRAR", "unit": "SQ", "quantity": 25, "unitPrice": 325.00, "total": 8125.00},
+  {"category": "Siding", "description": "R&R Vinyl siding", "xactimateCode": "SDVNLRR", "unit": "SF", "quantity": 200, "unitPrice": 8.50, "total": 1700.00},
+  {"category": "Gutters", "description": "Aluminum seamless gutter - 5\"", "xactimateCode": "GTALMSL5", "unit": "LF", "quantity": 120, "unitPrice": 12.00, "total": 1440.00},
+  {"category": "Interior - Drywall", "description": "Drywall - 1/2\" - hung, taped, floated", "xactimateCode": "DRYWL12", "unit": "SF", "quantity": 100, "unitPrice": 4.25, "total": 425.00},
+  {"category": "Interior - Paint", "description": "Paint ceiling - two coats", "xactimateCode": "PNTCLG2", "unit": "SF", "quantity": 100, "unitPrice": 2.15, "total": 215.00}
 ]
 
-Include ALL line items: tear-off, materials, labor, disposal, ice & water shield, drip edge, flashing, vents, and 10% overhead & profit. Use realistic current pricing.
+INCLUDE ALL LINE ITEMS FOR EACH TRADE:
+- ROOFING: tear-off, disposal, felt/underlayment, ice & water, drip edge, shingles, ridge cap, flashing, vents, pipe boots
+- SIDING: removal, housewrap, siding panels, J-channel, corners, trim
+- GUTTERS: removal, gutters, downspouts, hangers, end caps, splash blocks
+- WINDOWS: removal, window unit, flashing, trim, caulk
+- INTERIOR: demo, drywall, tape/mud, texture, primer, paint, trim, flooring
+- STRUCTURAL: framing, sheathing, hardware
+
+Always include:
+- Detach & Reset (D&R) items where applicable
+- Overhead & Profit (10% O&P) for claims with 3+ trades
+- Proper disposal/haul-off for each trade
+- Use realistic 2024/2025 pricing
 
 REMEMBER: Output ONLY the JSON array. No explanations.`,
           messages: [],
