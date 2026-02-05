@@ -1,70 +1,56 @@
 
-# Multi-File Selection for Systematic Carrier Dismantler
 
-## Overview
-Upgrade the Systematic Carrier Dismantler to support selecting **multiple claim files** simultaneously, enabling Darwin to cross-reference carrier documents, detect contradictions, identify moving goalposts, and build a more comprehensive dismantling analysis.
+# Fix Document Template Generation Bundling Timeout
 
----
+## Problem Summary
+The `generate-document` edge function is failing to deploy with a "Bundle generation timed out" error. This prevents users from generating documents from templates.
 
-## What Changes
+## Root Cause Analysis
+After comparing with working edge functions (`generate-pol-docx`, `generate-photo-report-docx`), the issue is:
 
-### 1. Replace Single File Selector with Multi-File Selector
-- Swap `ClaimFileSelector` for the existing `MultiClaimFileSelector` component
-- Add checkboxes for selecting multiple carrier documents
-- Include "Select All" and "Clear" actions for convenience
+| Function | Supabase Client Import | Status |
+|----------|----------------------|--------|
+| `generate-pol-docx` | `@supabase/supabase-js@2.39.3` (pinned) | Works |
+| `generate-photo-report-docx` | `@supabase/supabase-js@2.39.3` (pinned) | Works |
+| `generate-document` | `@supabase/supabase-js@2` (floating) | Fails |
 
-### 2. Update Analysis Logic
-- Modify the component to track a `Set<string>` of selected file IDs instead of a single ID
-- Download and concatenate all selected PDFs before sending to Darwin
-- Pass combined content with clear document separation markers
+The floating `@2` version resolves to the latest 2.x release, which may include heavier dependencies that cause the bundler to exceed its time limit.
 
-### 3. Enhanced Edge Function Processing
-- Update the `systematic_dismantling` prompt to expect multiple documents
-- Instruct Darwin to cross-reference documents for:
-  - Contradictions between carrier positions
-  - Moving goalposts (new grounds introduced later)
-  - Inconsistencies between engineer reports and adjuster determinations
-  - Timeline violations
+## Solution
 
-### 4. UI Improvements
-- Show count of selected files
-- Display selected file names in a summary before analysis
-- Add guidance text suggesting which document types to combine
+### Step 1: Pin the Supabase Client Version
+Update the import in `generate-document/index.ts`:
 
----
+```text
+Before:
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-## User Experience
+After:
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+```
 
-**Before:** Select one denial letter → Get analysis
-
-**After:** 
-1. Check multiple boxes: Denial Letter + Engineer Report + Adjuster Notes + Carrier Estimate
-2. Click "Dismantle Carrier Position"
-3. Darwin cross-references all documents to find contradictions, moving goalposts, and logical failures across the carrier's entire communication history
-
----
-
-## Recommended File Combinations
-
-| Scenario | Files to Select |
-|----------|-----------------|
-| **Initial Denial Rebuttal** | Denial letter + Policy dec page |
-| **Engineer Report Challenge** | Engineer report + Original denial + Your contractor estimate |
-| **Escalation Prep** | All carrier correspondence in chronological order |
-| **Supplement Dispute** | Carrier estimate + Your supplement + Denial of supplement |
-
----
+### Step 2: Update CORS Headers (Already Done)
+The CORS headers have already been updated to include the required Supabase client platform headers. This fix is preserved.
 
 ## Technical Details
 
-### Files to Modify
-1. **`src/components/claim-detail/DarwinSystematicDismantler.tsx`**
-   - Replace `ClaimFileSelector` with `MultiClaimFileSelector`
-   - Update state from `selectedClaimFileId: string | null` to `selectedClaimFileIds: Set<string>`
-   - Modify `handleAnalyze` to download and combine multiple PDFs
-   - Add file count display and summary
+### Why Pinning Works
+- esm.sh caches pinned versions, making bundling faster
+- Avoids pulling in unexpected transitive dependencies from newer releases
+- Matches the pattern used by other working document generation functions
 
-2. **`supabase/functions/darwin-ai-analysis/index.ts`**
-   - Update `systematic_dismantling` case to handle multiple documents
-   - Enhance prompt with cross-referencing instructions
-   - Add document separation markers for clarity
+### Files to Modify
+- `supabase/functions/generate-document/index.ts` (line 2)
+
+### Expected Outcome
+After this change:
+1. The bundler will resolve the same cached dependency graph as the working functions
+2. Deployment should complete within the timeout
+3. Template document generation will resume working
+
+## Verification Steps
+1. Deploy the updated function
+2. Navigate to a claim and open the Templates tab
+3. Select a template and generate a document
+4. Confirm the document downloads successfully
+
