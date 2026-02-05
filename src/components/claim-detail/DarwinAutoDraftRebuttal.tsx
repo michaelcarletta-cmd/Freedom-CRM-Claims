@@ -100,6 +100,28 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
     },
   });
 
+  // Fetch proximity precedents for evidence of inconsistent carrier handling
+  const { data: proximityPrecedents } = useQuery({
+    queryKey: ["proximity-precedents-rebuttal", claimId, claim?.latitude, claim?.longitude],
+    queryFn: async () => {
+      if (!claim?.latitude || !claim?.longitude) return null;
+
+      const { data, error } = await supabase.rpc("search_claims_by_proximity", {
+        target_lat: claim.latitude,
+        target_lng: claim.longitude,
+        radius_miles: 5,
+        exclude_claim_id: claimId,
+        target_insurance_company: claim.insurance_company || undefined,
+      });
+
+      if (error) throw error;
+      // Filter to settled/closed claims
+      return data?.filter((p: any) => 
+        p.is_closed || p.status === "Settled" || p.status === "Closed" || p.status === "Claim Settled" || p.claim_amount > 0
+      ) || [];
+    },
+  });
+
   // Process AI photo data for display
   const poorConditionPhotos = aiPhotos?.filter(p => 
     p.ai_condition_rating === 'Poor' || p.ai_condition_rating === 'Failed'
@@ -175,6 +197,13 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
         ? `${poorConditionPhotos.length} poor/failed, ${photosWithDamages.length} with damages`
         : undefined
     },
+    { 
+      label: "Proximity Precedents", 
+      available: (proximityPrecedents?.length || 0) > 0,
+      count: proximityPrecedents?.length,
+      icon: Target,
+      description: proximityPrecedents?.length ? `${proximityPrecedents.length} settled claim(s) within 5 miles` : undefined
+    },
   ];
 
   const handleGenerate = async () => {
@@ -208,7 +237,18 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
               poorConditionCount: poorConditionPhotos.length,
               withDamagesCount: photosWithDamages.length,
               materials: [...new Set(aiPhotos?.map(p => p.ai_material_type).filter(Boolean) || [])],
-            }
+            },
+            // Include proximity precedents for inconsistent carrier handling evidence
+            proximityPrecedents: proximityPrecedents?.map(p => ({
+              claimNumber: p.claim_number,
+              policyholderName: p.policyholder_name,
+              address: p.policyholder_address,
+              distanceMiles: p.distance_miles?.toFixed(2),
+              lossType: p.loss_type,
+              lossDate: p.loss_date,
+              status: p.status,
+              claimAmount: p.claim_amount,
+            })),
           },
           claim,
         },
@@ -352,6 +392,10 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
             <li className="flex items-center gap-2">
               <CheckCircle2 className="h-3 w-3 text-primary" />
               Building codes & regulatory references (no case law)
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle2 className="h-3 w-3 text-primary" />
+              Proximity precedents (nearby settled claims as inconsistency evidence)
             </li>
           </ul>
         </div>
