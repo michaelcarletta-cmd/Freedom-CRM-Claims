@@ -68,8 +68,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    const fullAddress = addressParts.join(", ");
-
     // Use OpenStreetMap Nominatim for geocoding (free, no API key required)
     const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}&limit=1`;
 
