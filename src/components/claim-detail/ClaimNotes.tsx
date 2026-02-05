@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { TeamMemberSelect } from "./TeamMemberSelect";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -81,6 +82,7 @@ export const ClaimNotes = ({ claimId, isPortalUser = false }: { claimId: string;
   const [notifyClient, setNotifyClient] = useState(false);
   const [notifyReferrer, setNotifyReferrer] = useState(false);
   const [notifyContractors, setNotifyContractors] = useState(false);
+  const [notifyTeamMembers, setNotifyTeamMembers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingUpdate, setEditingUpdate] = useState<Update | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -359,6 +361,13 @@ ${timeline}`;
         claim.claim_contractors.forEach((cc) => recipients.push(cc.contractor_id));
       }
     }
+    
+    // Add internal team members to recipients
+    notifyTeamMembers.forEach((memberId) => {
+      if (!recipients.includes(memberId)) {
+        recipients.push(memberId);
+      }
+    });
 
     let createdAt: string | undefined;
     if (useCustomTimestamp && customDate && customTime) {
@@ -402,6 +411,7 @@ ${timeline}`;
     setNotifyClient(false);
     setNotifyReferrer(false);
     setNotifyContractors(false);
+    setNotifyTeamMembers([]);
     setLoading(false);
     toast.success("Update added successfully");
     fetchUpdates();
@@ -674,6 +684,12 @@ ${timeline}`;
                     </div>
                   )}
                 </div>
+                
+                <TeamMemberSelect
+                  selectedMembers={notifyTeamMembers}
+                  onSelectionChange={setNotifyTeamMembers}
+                  disabled={loading}
+                />
               </div>
             )}
           </div>
