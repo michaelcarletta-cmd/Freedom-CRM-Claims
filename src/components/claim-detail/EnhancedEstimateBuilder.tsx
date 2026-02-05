@@ -147,18 +147,21 @@ export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuil
     
     let context = "\n\nPREVIOUS DARWIN AI ANALYSES:\n";
     
-    // Get most relevant analyses (damage, document compilation, etc.)
-    const relevantTypes = ["damage_assessment", "document_compilation", "denial_analysis", "supplement_generation"];
+    // Get ALL relevant analyses - don't filter by roof-specific keywords
+    const relevantTypes = ["damage_assessment", "document_compilation", "denial_analysis", "supplement_generation", "photo_analysis"];
     const relevantAnalyses = darwinAnalyses.filter(a => 
       relevantTypes.some(t => a.analysis_type.includes(t)) || 
       a.result.toLowerCase().includes("damage") ||
-      a.result.toLowerCase().includes("slope") ||
-      a.result.toLowerCase().includes("roof")
-    ).slice(0, 3);
+      a.result.toLowerCase().includes("interior") ||
+      a.result.toLowerCase().includes("siding") ||
+      a.result.toLowerCase().includes("drywall") ||
+      a.result.toLowerCase().includes("ceiling") ||
+      a.result.toLowerCase().includes("water")
+    ).slice(0, 5); // Include more analyses for comprehensive scope
     
     if (relevantAnalyses.length === 0 && darwinAnalyses.length > 0) {
       // Fall back to most recent analyses
-      relevantAnalyses.push(...darwinAnalyses.slice(0, 2));
+      relevantAnalyses.push(...darwinAnalyses.slice(0, 3));
     }
     
     relevantAnalyses.forEach(analysis => {
@@ -182,36 +185,51 @@ export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuil
       const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
         body: {
           claimId: claimId,
-          question: `Generate a detailed repair scope for this insurance claim covering ALL damaged areas of the property. You MUST respond with ONLY a JSON array.
+          question: `Generate a COMPREHENSIVE repair scope for this insurance claim covering ALL damaged areas of the property. You MUST respond with ONLY a JSON array.
 
-USE THIS EVIDENCE TO IDENTIFY DAMAGED AREAS:
-${analysisContext || "(No previous Darwin analyses available - generate a reasonable scope based on typical storm damage)"}
-${photoContext}
+CLAIM INFORMATION:
+- Loss Type: ${claim?.cause_of_loss || "Storm damage"}
+- Description: ${claim?.description || "Property damage claim"}
 
-Based on the evidence above, generate repair scopes for EACH damaged area including:
-- ROOFING: All slopes, ridges, hips, valleys, vents, flashing, gutters, downspouts
-- SIDING: All elevations (North, South, East, West), trim, fascia, soffit
-- GUTTERS: Seamless gutters, downspouts, splash blocks, gutter guards
-- WINDOWS & DOORS: Frames, glass, screens, weatherstripping, thresholds
-- INTERIOR: Drywall, paint, flooring, ceilings, insulation, trim
-- STRUCTURAL: Framing, sheathing, decking, joists, trusses
-- ELECTRICAL: Fixtures, outlets, wiring (if damaged)
-- PLUMBING: Pipes, fixtures (if damaged)
-- HVAC: Units, ductwork, vents (if damaged)
-- LANDSCAPING: Trees, shrubs, fencing, hardscaping (if applicable)
+AVAILABLE EVIDENCE:
+${analysisContext || "(No Darwin analyses available)"}
+${photoContext || "(No photo descriptions available)"}
+
+IMPORTANT: Even without a measurement report, you MUST generate scopes for ALL potentially damaged areas based on the claim type. For ${claim?.cause_of_loss || "storm damage"} claims, typical damage includes:
+
+EXTERIOR DAMAGES TO INCLUDE:
+- ROOFING: All roof slopes, ridge, hips, valleys, vents, pipe boots, flashing, chimney flashing
+- SIDING: All four elevations (North, South, East, West), corners, trim, fascia, soffit
+- GUTTERS: Seamless gutters on all elevations, downspouts, splash blocks, gutter guards
+- WINDOWS & DOORS: All windows, entry doors, garage doors, storms/screens
+
+INTERIOR DAMAGES TO INCLUDE (if water intrusion or impact damage):
+- CEILINGS: All rooms with water stains, cracks, or damage
+- WALLS: Drywall damage, water stains, paint damage in affected rooms
+- FLOORING: Carpet, hardwood, tile, or laminate damage from water
+- INSULATION: Attic insulation, wall insulation if wet
+- TRIM/MILLWORK: Baseboards, crown molding, door casings, window sills
+
+STRUCTURAL (if applicable):
+- Roof decking, sheathing, framing, trusses
 
 CRITICAL RULES:
-1. Standard repair = FULL REPLACEMENT of each damaged section, not partial repairs
-2. Include realistic labor hours and materials for each trade
-3. Be specific about areas (e.g., "North Slope", "East Elevation", "Master Bedroom", "Living Room Ceiling")
-4. Include ALL damaged areas visible in photos or mentioned in analyses
+1. Generate at MINIMUM 5-10 repair scope areas for a typical claim
+2. Include INTERIOR damage areas even without explicit photos - water intrusion is common
+3. Be specific: "Master Bedroom Ceiling" not just "ceiling"
+4. Standard repair = FULL REPLACEMENT of each damaged section
+5. If no photos available, generate reasonable scopes based on claim type
 
-RESPOND WITH ONLY THIS JSON FORMAT (no other text):
+RESPOND WITH ONLY THIS JSON FORMAT:
 [
-  {"area": "Main Roof - North Slope", "damages": ["hail impacts", "granule loss"], "repairMethod": "Full tear-off and replacement per manufacturer specs", "materials": ["architectural shingles", "felt underlayment", "ice & water shield", "drip edge"], "laborHours": 16, "notes": "Roofing trade"},
-  {"area": "Vinyl Siding - East Elevation", "damages": ["hail dents", "cracked panels"], "repairMethod": "Remove and replace damaged siding panels", "materials": ["vinyl siding panels", "J-channel", "starter strip", "corner posts"], "laborHours": 8, "notes": "Siding trade"},
-  {"area": "Gutters - Front Elevation", "damages": ["dents", "separated seams"], "repairMethod": "Replace seamless aluminum gutters", "materials": ["5\" seamless aluminum gutters", "downspouts", "hangers", "end caps"], "laborHours": 4, "notes": "Gutter trade"},
-  {"area": "Living Room Ceiling", "damages": ["water stains", "drywall damage"], "repairMethod": "Remove and replace damaged drywall, texture, paint", "materials": ["1/2\" drywall", "joint compound", "texture", "primer", "paint"], "laborHours": 6, "notes": "Interior trade"}
+  {"area": "Main Roof - All Slopes", "damages": ["hail impacts", "granule loss", "bruising"], "repairMethod": "Full tear-off and replacement per manufacturer specs", "materials": ["architectural shingles", "synthetic underlayment", "ice & water shield", "drip edge", "starter strip", "ridge cap"], "laborHours": 24, "notes": "Roofing trade"},
+  {"area": "Vinyl Siding - East Elevation", "damages": ["hail impacts", "cracked panels"], "repairMethod": "Remove and replace damaged siding panels", "materials": ["vinyl siding panels", "J-channel", "starter strip", "corner posts", "housewrap"], "laborHours": 8, "notes": "Siding trade"},
+  {"area": "Vinyl Siding - South Elevation", "damages": ["hail impacts", "dents"], "repairMethod": "Remove and replace damaged siding panels", "materials": ["vinyl siding panels", "J-channel", "utility trim"], "laborHours": 6, "notes": "Siding trade"},
+  {"area": "Gutters - All Elevations", "damages": ["dents", "separated seams"], "repairMethod": "Replace seamless aluminum gutters", "materials": ["5\" seamless aluminum gutters", "downspouts", "hangers", "end caps", "splash blocks"], "laborHours": 6, "notes": "Gutter trade"},
+  {"area": "Master Bedroom Ceiling", "damages": ["water stains", "drywall damage"], "repairMethod": "Remove and replace damaged drywall, texture, paint", "materials": ["1/2\" drywall", "joint compound", "texture", "primer", "ceiling paint"], "laborHours": 6, "notes": "Interior - Drywall/Paint trade"},
+  {"area": "Hallway Ceiling", "damages": ["water damage", "bubbling paint"], "repairMethod": "Drywall repair, texture match, repaint", "materials": ["drywall patch", "mud", "texture", "paint"], "laborHours": 3, "notes": "Interior - Drywall/Paint trade"},
+  {"area": "Living Room - North Wall", "damages": ["water intrusion", "drywall staining"], "repairMethod": "Cut out and replace damaged drywall section", "materials": ["1/2\" drywall", "tape", "mud", "primer", "paint"], "laborHours": 4, "notes": "Interior - Drywall/Paint trade"},
+  {"area": "Attic Insulation", "damages": ["water saturation", "compression"], "repairMethod": "Remove and replace wet insulation", "materials": ["R-38 blown insulation", "baffles"], "laborHours": 4, "notes": "Insulation trade"}
 ]
 
 OUTPUT ONLY THE JSON ARRAY. NO EXPLANATIONS.`,
