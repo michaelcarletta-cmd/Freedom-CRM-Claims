@@ -396,8 +396,8 @@
           {selectedPhotos.length > 0 && (
             <div className="space-y-3 pt-2 border-t">
               <p className="text-xs font-medium">Darwin's Photo Findings</p>
-              <ScrollArea className="max-h-60">
-                <div className="space-y-3 pr-2">
+              <ScrollArea className="h-60">
+                <div className="space-y-3 pr-4">
                   {photos
                     .filter(p => selectedPhotos.includes(p.id))
                     .map(photo => (
