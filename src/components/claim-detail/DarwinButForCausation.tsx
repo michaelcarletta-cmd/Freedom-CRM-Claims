@@ -33,6 +33,7 @@
  import { calculateCausation } from "./causation/calculateCausation";
  import { IndicatorInput } from "./causation/IndicatorInput";
  import { CausationResults } from "./causation/CausationResults";
+import { CausationPhotoAnalysis } from "./causation/CausationPhotoAnalysis";
 
 interface DarwinButForCausationProps {
   claimId: string;
@@ -85,6 +86,17 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
          [id]: value,
        },
      }));
+  };
+
+  // Handle bulk indicator updates from photo analysis
+  const handlePhotoIndicatorsDetected = (indicators: Record<string, IndicatorValue>) => {
+    setFormData(prev => ({
+      ...prev,
+      indicators: {
+        ...prev.indicators,
+        ...indicators,
+      },
+    }));
   };
 
   const saveMutation = useMutation({
@@ -195,6 +207,16 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
                   ))}
                 </div>
               </div>
+            )}
+
+            {/* AI Photo Analysis Section */}
+            {formData.perilTested && (
+              <CausationPhotoAnalysis
+                claimId={claimId}
+                perilTested={formData.perilTested}
+                onIndicatorsDetected={handlePhotoIndicatorsDetected}
+                currentIndicators={formData.indicators}
+              />
             )}
 
             {/* Form Section */}
