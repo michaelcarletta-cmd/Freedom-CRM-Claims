@@ -77,7 +77,7 @@ export const DarwinProximityPrecedents = ({ claimId, claim }: DarwinProximityPre
 
   const hasCoordinates = !!claim?.latitude && !!claim?.longitude;
   const settledPrecedents = precedents?.filter(
-    (p: any) => p.is_closed && (p.status === "Settled" || p.status === "Closed" || p.claim_amount > 0)
+    (p: any) => p.is_closed || p.status === "Settled" || p.status === "Closed" || p.status === "Claim Settled" || p.claim_amount > 0
   ) || [];
 
   return (
