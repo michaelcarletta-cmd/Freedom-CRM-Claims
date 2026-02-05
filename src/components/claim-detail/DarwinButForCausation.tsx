@@ -209,15 +209,13 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
               </div>
             )}
 
-            {/* AI Photo Analysis Section */}
-            {formData.perilTested && (
-              <CausationPhotoAnalysis
-                claimId={claimId}
-                perilTested={formData.perilTested}
-                onIndicatorsDetected={handlePhotoIndicatorsDetected}
-                currentIndicators={formData.indicators}
-              />
-            )}
+            {/* AI Photo Analysis Section - Always visible */}
+            <CausationPhotoAnalysis
+              claimId={claimId}
+              perilTested={formData.perilTested || 'wind'}
+              onIndicatorsDetected={handlePhotoIndicatorsDetected}
+              currentIndicators={formData.indicators}
+            />
 
             {/* Form Section */}
             <div className="grid gap-6">
