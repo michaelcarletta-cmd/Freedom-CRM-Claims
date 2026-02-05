@@ -59,6 +59,12 @@ interface ClaimPhoto {
   file_path: string;
   category: string | null;
   description: string | null;
+  // Photo analysis fields (ai_ prefixed in DB)
+  ai_material_type?: string | null;
+  ai_detected_damages?: any;
+  ai_condition_rating?: string | null;
+  ai_analysis_summary?: string | null;
+  ai_loss_type_consistency?: string | null;
 }
 
 interface DarwinAnalysis {
@@ -67,6 +73,28 @@ interface DarwinAnalysis {
   result: string;
   created_at: string;
 }
+
+// Helper to determine loss type category for smarter prompting
+const getLossTypeCategory = (lossType: string, description: string): string => {
+  const combined = `${lossType} ${description}`.toLowerCase();
+  
+  if (combined.includes("car") || combined.includes("vehicle") || combined.includes("drove") || combined.includes("crash") || combined.includes("impact")) {
+    return "vehicle_impact";
+  }
+  if (combined.includes("fire") || combined.includes("smoke") || combined.includes("burn")) {
+    return "fire";
+  }
+  if (combined.includes("water") || combined.includes("flood") || combined.includes("pipe") || combined.includes("leak")) {
+    return "water";
+  }
+  if (combined.includes("wind") || combined.includes("storm") || combined.includes("hail") || combined.includes("hurricane") || combined.includes("tornado")) {
+    return "storm";
+  }
+  if (combined.includes("vandal") || combined.includes("theft") || combined.includes("break")) {
+    return "vandalism";
+  }
+  return "general";
+};
 
 export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuilderProps) => {
   const [open, setOpen] = useState(false);
@@ -95,10 +123,10 @@ export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuil
   const fetchClaimContext = async () => {
     setLoadingContext(true);
     try {
-      // Fetch photos
+      // Fetch photos WITH their AI analysis data
       const { data: photosData } = await supabase
         .from("claim_photos")
-        .select("id, file_name, file_path, category, description")
+        .select("id, file_name, file_path, category, description, ai_material_type, ai_detected_damages, ai_condition_rating, ai_analysis_summary, ai_loss_type_consistency")
         .eq("claim_id", claimId);
       
       if (photosData) setPhotos(photosData);
@@ -119,25 +147,92 @@ export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuil
   };
 
   const buildPhotoContext = () => {
-    // Only include photos that have descriptions - these are the useful ones for scope generation
-    const describedPhotos = photos.filter(p => p.description && p.description.trim().length > 0);
-    if (describedPhotos.length === 0) return "";
+    // Prioritize photos with AI analysis data
+    const analyzedPhotos = photos.filter(p => 
+      p.ai_analysis_summary || p.ai_detected_damages || p.ai_material_type || p.ai_condition_rating
+    );
     
-    let context = "\n\nDOCUMENTED PHOTO EVIDENCE:\n";
-    const categorizedPhotos: Record<string, ClaimPhoto[]> = {};
+    // Also include photos with descriptions as fallback
+    const describedPhotos = photos.filter(p => 
+      p.description && p.description.trim().length > 0 && 
+      !analyzedPhotos.some(ap => ap.id === p.id)
+    );
     
-    describedPhotos.forEach(photo => {
-      const cat = photo.category || "Uncategorized";
-      if (!categorizedPhotos[cat]) categorizedPhotos[cat] = [];
-      categorizedPhotos[cat].push(photo);
+    if (analyzedPhotos.length === 0 && describedPhotos.length === 0) return "";
+    
+    let context = "\n\n=== FORENSIC PHOTO ANALYSIS EVIDENCE ===\n";
+    
+    // Group analyzed photos by condition severity (prioritize severe/critical damage)
+    const severeDamage: ClaimPhoto[] = [];
+    const moderateDamage: ClaimPhoto[] = [];
+    const otherAnalyzed: ClaimPhoto[] = [];
+    
+    analyzedPhotos.forEach(photo => {
+      const condition = (photo.ai_condition_rating || "").toLowerCase();
+      if (condition.includes("severe") || condition.includes("critical") || condition.includes("failed") || condition.includes("poor")) {
+        severeDamage.push(photo);
+      } else if (condition.includes("moderate") || condition.includes("fair")) {
+        moderateDamage.push(photo);
+      } else {
+        otherAnalyzed.push(photo);
+      }
     });
     
-    Object.entries(categorizedPhotos).forEach(([category, catPhotos]) => {
-      context += `\n${category}:\n`;
-      catPhotos.forEach((photo, i) => {
-        context += `  - ${photo.description}\n`;
+    // Build context with severe damage first
+    const buildPhotoEntry = (photo: ClaimPhoto): string => {
+      let entry = `\n📷 ${photo.file_name}`;
+      if (photo.category) entry += ` [${photo.category}]`;
+      entry += "\n";
+      
+      if (photo.ai_material_type) entry += `   Material: ${photo.ai_material_type}\n`;
+      if (photo.ai_condition_rating) entry += `   Condition: ${photo.ai_condition_rating}\n`;
+      if (photo.ai_loss_type_consistency) entry += `   Loss Consistency: ${photo.ai_loss_type_consistency}\n`;
+      
+      if (photo.ai_detected_damages && Array.isArray(photo.ai_detected_damages)) {
+        entry += `   Damages Detected:\n`;
+        photo.ai_detected_damages.slice(0, 5).forEach((d: any) => {
+          if (typeof d === 'object') {
+            entry += `     - ${d.type || d.damage_type || 'damage'}: ${d.notes || d.description || ''} (${d.severity || 'unknown severity'})\n`;
+          } else {
+            entry += `     - ${d}\n`;
+          }
+        });
+      }
+      
+      if (photo.ai_analysis_summary) {
+        const summary = photo.ai_analysis_summary.length > 300 
+          ? photo.ai_analysis_summary.substring(0, 300) + "..." 
+          : photo.ai_analysis_summary;
+        entry += `   Summary: ${summary}\n`;
+      }
+      
+      return entry;
+    };
+    
+    if (severeDamage.length > 0) {
+      context += "\n🔴 SEVERE/CRITICAL DAMAGE DOCUMENTED:\n";
+      severeDamage.slice(0, 15).forEach(p => { context += buildPhotoEntry(p); });
+    }
+    
+    if (moderateDamage.length > 0) {
+      context += "\n🟡 MODERATE DAMAGE DOCUMENTED:\n";
+      moderateDamage.slice(0, 10).forEach(p => { context += buildPhotoEntry(p); });
+    }
+    
+    if (otherAnalyzed.length > 0) {
+      context += "\n🔵 OTHER ANALYZED AREAS:\n";
+      otherAnalyzed.slice(0, 10).forEach(p => { context += buildPhotoEntry(p); });
+    }
+    
+    // Add described photos without AI analysis
+    if (describedPhotos.length > 0) {
+      context += "\n📝 ADDITIONAL PHOTO DESCRIPTIONS:\n";
+      describedPhotos.slice(0, 10).forEach(photo => {
+        context += `  - ${photo.category || 'General'}: ${photo.description}\n`;
       });
-    });
+    }
+    
+    context += `\n[Total: ${analyzedPhotos.length} AI-analyzed photos, ${describedPhotos.length} described photos]\n`;
     
     return context;
   };
@@ -181,55 +276,148 @@ export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuil
     try {
       const photoContext = buildPhotoContext();
       const analysisContext = buildAnalysisContext();
+      const lossCategory = getLossTypeCategory(claim?.loss_type || "", claim?.loss_description || "");
+      
+      // Build loss-type specific guidance
+      const getLossTypeGuidance = (): string => {
+        switch (lossCategory) {
+          case "vehicle_impact":
+            return `
+VEHICLE IMPACT DAMAGE - EXPECTED SCOPE AREAS:
+STRUCTURAL DAMAGES (PRIMARY FOCUS):
+- Foundation/structural walls at impact point
+- Load-bearing walls and columns
+- Floor joists/framing near impact
+- Support beams and headers
+
+MASONRY/STONE WORK:
+- Stone/brick walls - full rebuild or repoint
+- Foundation walls - cracks, displacement, spalling
+- Mortar joints - deterioration, missing sections
+- Retaining walls - structural integrity
+
+INTERIOR DAMAGES (CRITICAL):
+- Drywall/plaster on all impacted walls
+- Ceiling damage from structural movement
+- Floor damage - cracks, lifting, displacement
+- Electrical - damaged wiring, outlets, panels
+- Plumbing - broken pipes, displaced fixtures
+- HVAC - damaged ductwork, equipment
+
+EXTERIOR DAMAGES:
+- Siding/facade at impact area
+- Windows and doors - frames, glass
+- Landscaping, driveways, walkways
+- Fencing, gates
+
+SPECIALTY ITEMS:
+- Debris removal/demolition
+- Temporary shoring/structural stabilization
+- Engineering assessment
+- Permits and code compliance`;
+
+          case "water":
+            return `
+WATER DAMAGE - EXPECTED SCOPE AREAS:
+WATER MITIGATION:
+- Emergency water extraction
+- Dehumidification
+- Mold prevention treatment
+
+INTERIOR DAMAGES (PRIMARY FOCUS):
+- Drywall - all affected areas (floor to 4ft+)
+- Insulation - wall cavities, attic
+- Flooring - carpet, pad, hardwood, laminate, tile
+- Baseboards and trim throughout
+- Cabinets - base cabinets, vanities
+- Interior doors - swelling, warping
+
+STRUCTURAL:
+- Subfloor replacement
+- Floor joists if saturated
+- Wall framing if prolonged exposure
+
+FINISHES:
+- Paint - all affected rooms
+- Texture matching
+- Ceiling repairs`;
+
+          case "fire":
+            return `
+FIRE/SMOKE DAMAGE - EXPECTED SCOPE AREAS:
+STRUCTURAL:
+- Framing - charred/weakened members
+- Roof structure if involved
+- Load-bearing elements
+
+INTERIOR:
+- Drywall - all smoke-affected areas
+- Insulation replacement
+- Flooring throughout
+- Cabinets and millwork
+- Doors and trim
+
+MECHANICAL:
+- Electrical rewiring
+- HVAC - cleaning or replacement
+- Plumbing fixtures
+
+CLEANING/REMEDIATION:
+- Smoke and soot cleaning
+- Odor removal/sealing
+- Content cleaning
+- Debris removal`;
+
+          default: // storm damage
+            return `
+STORM/GENERAL DAMAGE - EXPECTED SCOPE AREAS:
+EXTERIOR:
+- Roofing - all slopes, ridge, valleys, vents, flashing
+- Siding - all elevations
+- Gutters and downspouts
+- Windows, doors, garage doors
+- Fascia, soffit, trim
+
+INTERIOR (if water intrusion):
+- Ceilings - water stains, damage
+- Walls - drywall damage
+- Flooring - water damage
+- Insulation - wet/compressed`;
+        }
+      };
       
       const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
         body: {
           claimId: claimId,
-          question: `Generate a COMPREHENSIVE repair scope for this insurance claim covering ALL damaged areas of the property. You MUST respond with ONLY a JSON array.
+          question: `Generate a COMPREHENSIVE repair scope for this insurance claim. You MUST respond with ONLY a JSON array.
 
-CLAIM INFORMATION:
-- Loss Type: ${claim?.cause_of_loss || "Storm damage"}
-- Description: ${claim?.description || "Property damage claim"}
+=== CLAIM DETAILS ===
+Loss Type: ${claim?.loss_type || "All Perils"}
+Loss Description: ${claim?.loss_description || "Property damage"}
+Category: ${lossCategory.toUpperCase().replace("_", " ")}
 
-AVAILABLE EVIDENCE:
-${analysisContext || "(No Darwin analyses available)"}
-${photoContext || "(No photo descriptions available)"}
+=== PHOTO EVIDENCE (CRITICAL - USE THIS DATA) ===
+${photoContext || "(No photo analyses available - infer from loss description)"}
 
-IMPORTANT: Even without a measurement report, you MUST generate scopes for ALL potentially damaged areas based on the claim type. For ${claim?.cause_of_loss || "storm damage"} claims, typical damage includes:
+=== DARWIN AI ANALYSES ===
+${analysisContext || "(No prior analyses)"}
 
-EXTERIOR DAMAGES TO INCLUDE:
-- ROOFING: All roof slopes, ridge, hips, valleys, vents, pipe boots, flashing, chimney flashing
-- SIDING: All four elevations (North, South, East, West), corners, trim, fascia, soffit
-- GUTTERS: Seamless gutters on all elevations, downspouts, splash blocks, gutter guards
-- WINDOWS & DOORS: All windows, entry doors, garage doors, storms/screens
+${getLossTypeGuidance()}
 
-INTERIOR DAMAGES TO INCLUDE (if water intrusion or impact damage):
-- CEILINGS: All rooms with water stains, cracks, or damage
-- WALLS: Drywall damage, water stains, paint damage in affected rooms
-- FLOORING: Carpet, hardwood, tile, or laminate damage from water
-- INSULATION: Attic insulation, wall insulation if wet
-- TRIM/MILLWORK: Baseboards, crown molding, door casings, window sills
-
-STRUCTURAL (if applicable):
-- Roof decking, sheathing, framing, trusses
-
-CRITICAL RULES:
-1. Generate at MINIMUM 5-10 repair scope areas for a typical claim
-2. Include INTERIOR damage areas even without explicit photos - water intrusion is common
-3. Be specific: "Master Bedroom Ceiling" not just "ceiling"
-4. Standard repair = FULL REPLACEMENT of each damaged section
-5. If no photos available, generate reasonable scopes based on claim type
+CRITICAL INSTRUCTIONS:
+1. **PRIORITIZE PHOTO EVIDENCE** - If photos show stone walls, masonry, interior damage, foundation issues, etc. - INCLUDE THOSE AREAS
+2. Generate AT MINIMUM 10-15 repair scope areas for a comprehensive claim
+3. For "${claim?.loss_description || "property damage"}" specifically include ALL visible damage from photos
+4. Be SPECIFIC: "Stone Foundation Wall - East Side" not just "wall"
+5. Include ALL trades: Masonry, Structural, Interior, Drywall, Paint, Electrical, Plumbing, etc.
+6. Each damaged area from photos MUST have a corresponding repair scope
 
 RESPOND WITH ONLY THIS JSON FORMAT:
 [
-  {"area": "Main Roof - All Slopes", "damages": ["hail impacts", "granule loss", "bruising"], "repairMethod": "Full tear-off and replacement per manufacturer specs", "materials": ["architectural shingles", "synthetic underlayment", "ice & water shield", "drip edge", "starter strip", "ridge cap"], "laborHours": 24, "notes": "Roofing trade"},
-  {"area": "Vinyl Siding - East Elevation", "damages": ["hail impacts", "cracked panels"], "repairMethod": "Remove and replace damaged siding panels", "materials": ["vinyl siding panels", "J-channel", "starter strip", "corner posts", "housewrap"], "laborHours": 8, "notes": "Siding trade"},
-  {"area": "Vinyl Siding - South Elevation", "damages": ["hail impacts", "dents"], "repairMethod": "Remove and replace damaged siding panels", "materials": ["vinyl siding panels", "J-channel", "utility trim"], "laborHours": 6, "notes": "Siding trade"},
-  {"area": "Gutters - All Elevations", "damages": ["dents", "separated seams"], "repairMethod": "Replace seamless aluminum gutters", "materials": ["5\" seamless aluminum gutters", "downspouts", "hangers", "end caps", "splash blocks"], "laborHours": 6, "notes": "Gutter trade"},
-  {"area": "Master Bedroom Ceiling", "damages": ["water stains", "drywall damage"], "repairMethod": "Remove and replace damaged drywall, texture, paint", "materials": ["1/2\" drywall", "joint compound", "texture", "primer", "ceiling paint"], "laborHours": 6, "notes": "Interior - Drywall/Paint trade"},
-  {"area": "Hallway Ceiling", "damages": ["water damage", "bubbling paint"], "repairMethod": "Drywall repair, texture match, repaint", "materials": ["drywall patch", "mud", "texture", "paint"], "laborHours": 3, "notes": "Interior - Drywall/Paint trade"},
-  {"area": "Living Room - North Wall", "damages": ["water intrusion", "drywall staining"], "repairMethod": "Cut out and replace damaged drywall section", "materials": ["1/2\" drywall", "tape", "mud", "primer", "paint"], "laborHours": 4, "notes": "Interior - Drywall/Paint trade"},
-  {"area": "Attic Insulation", "damages": ["water saturation", "compression"], "repairMethod": "Remove and replace wet insulation", "materials": ["R-38 blown insulation", "baffles"], "laborHours": 4, "notes": "Insulation trade"}
+  {"area": "Stone Foundation Wall - East Elevation", "damages": ["impact damage", "cracked mortar", "displaced stones", "spalling"], "repairMethod": "Rebuild stone wall section with matching fieldstone, repoint mortar joints", "materials": ["fieldstone", "Type S mortar", "reinforcing wire", "vapor barrier", "drainage mat"], "laborHours": 40, "notes": "Masonry trade - structural"},
+  {"area": "Interior Wall - First Floor East", "damages": ["drywall damage", "structural cracks", "insulation exposure"], "repairMethod": "Demo and replace drywall, repair framing as needed", "materials": ["1/2\" drywall", "2x4 framing", "insulation", "tape/mud", "primer", "paint"], "laborHours": 16, "notes": "Drywall/Framing trade"},
+  {"area": "Floor System - Impact Zone", "damages": ["joist damage", "subfloor cracking", "finish floor damage"], "repairMethod": "Sister/replace damaged joists, replace subfloor and finish", "materials": ["2x10 lumber", "3/4\" plywood", "flooring material", "joist hangers"], "laborHours": 24, "notes": "Structural/Flooring trade"},
+  {"area": "Electrical - Affected Area", "damages": ["damaged wiring", "displaced outlets"], "repairMethod": "Rewire affected circuits, replace devices", "materials": ["Romex wire", "outlets", "switches", "boxes", "permits"], "laborHours": 8, "notes": "Electrical trade"}
 ]
 
 OUTPUT ONLY THE JSON ARRAY. NO EXPLANATIONS.`,
