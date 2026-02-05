@@ -392,51 +392,147 @@
            )}
          </Button>
  
-         {/* Detected Indicators */}
-         {detectedIndicators.length > 0 && (
-           <div className="space-y-3 pt-2 border-t">
-             <div className="flex items-center justify-between">
-               <p className="text-xs font-medium text-green-700">
-                 ✓ Detected {detectedIndicators.length} Indicator(s)
-               </p>
-               <Button size="sm" onClick={applyIndicators} className="h-7 text-xs">
-                 Apply to Test
-               </Button>
-             </div>
-             
-             <div className="space-y-2">
-               {detectedIndicators.map((indicator, idx) => (
-                 <div 
-                   key={`${indicator.id}-${idx}`}
-                   className="p-2 rounded-md bg-green-500/5 border border-green-500/20"
-                 >
-                   <div className="flex items-center gap-2">
-                     {perilTested === 'wind' && <Wind className="h-3 w-3 text-primary" />}
-                     {perilTested === 'hail' && <CloudRain className="h-3 w-3 text-primary" />}
-                     <span className="text-xs font-medium">{indicator.label}</span>
-                     <Badge 
-                       variant="outline" 
-                       className={cn(
-                         "text-xs",
-                         indicator.confidence === 'high' && "bg-green-500/10 text-green-700",
-                         indicator.confidence === 'medium' && "bg-yellow-500/10 text-yellow-700",
-                         indicator.confidence === 'low' && "bg-muted text-muted-foreground"
-                       )}
-                     >
-                       {indicator.confidence} confidence
-                     </Badge>
-                   </div>
-                   <p className="text-xs text-muted-foreground mt-1">
-                     {indicator.reasoning}
-                   </p>
-                   <p className="text-xs text-muted-foreground italic">
-                     Source: {indicator.source}
-                   </p>
-                 </div>
-               ))}
-             </div>
-           </div>
-         )}
+          {/* Photo Analysis Details - Show what Darwin found */}
+          {selectedPhotos.length > 0 && (
+            <div className="space-y-3 pt-2 border-t">
+              <p className="text-xs font-medium">Darwin's Photo Findings</p>
+              <ScrollArea className="max-h-60">
+                <div className="space-y-3 pr-2">
+                  {photos
+                    .filter(p => selectedPhotos.includes(p.id))
+                    .map(photo => (
+                      <div key={photo.id} className="p-3 rounded-md border bg-muted/30">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-medium truncate max-w-[200px]">{photo.file_name}</p>
+                          <div className="flex items-center gap-2">
+                            {getConditionBadge(photo.ai_condition_rating)}
+                            {getConsistencyIcon(photo.ai_loss_type_consistency)}
+                          </div>
+                        </div>
+                        
+                        {photo.ai_analyzed_at ? (
+                          <div className="space-y-2">
+                            {/* Material Type */}
+                            {photo.ai_material_type && (
+                              <p className="text-xs">
+                                <span className="text-muted-foreground">Material:</span>{' '}
+                                <span className="font-medium">{photo.ai_material_type}</span>
+                              </p>
+                            )}
+                            
+                            {/* Analysis Summary */}
+                            {photo.ai_analysis_summary && (
+                              <p className="text-xs text-muted-foreground">
+                                {photo.ai_analysis_summary}
+                              </p>
+                            )}
+                            
+                            {/* Detected Damages */}
+                            {photo.ai_detected_damages && photo.ai_detected_damages.length > 0 && (
+                              <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground font-medium">Detected Damages:</p>
+                                {photo.ai_detected_damages.map((damage, idx) => (
+                                  <div key={idx} className="flex items-start gap-2 text-xs pl-2">
+                                    <span className={cn(
+                                      "inline-block w-2 h-2 rounded-full mt-1 flex-shrink-0",
+                                      damage.severity === 'severe' && "bg-red-500",
+                                      damage.severity === 'moderate' && "bg-orange-500",
+                                      damage.severity === 'minor' && "bg-yellow-500"
+                                    )} />
+                                    <div>
+                                      <span className="font-medium">{damage.type}</span>
+                                      {damage.severity && <span className="text-muted-foreground"> ({damage.severity})</span>}
+                                      {damage.location && <span className="text-muted-foreground"> - {damage.location}</span>}
+                                      {damage.notes && <p className="text-muted-foreground">{damage.notes}</p>}
+                                      {damage.consistent_with_loss_type && (
+                                        <Badge variant="outline" className="text-xs mt-1 bg-green-500/10 text-green-700">
+                                          Consistent with loss type
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            
+                            {/* Loss Type Consistency */}
+                            {photo.ai_loss_type_consistency && (
+                              <div className="flex items-center gap-1 mt-2">
+                                {photo.ai_loss_type_consistency === 'consistent' ? (
+                                  <Badge variant="outline" className="text-xs bg-green-500/10 text-green-700">
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                    Damage consistent with reported peril
+                                  </Badge>
+                                ) : photo.ai_loss_type_consistency === 'inconsistent' ? (
+                                  <Badge variant="outline" className="text-xs bg-red-500/10 text-red-700">
+                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                    Damage may not match reported peril
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-xs bg-muted text-muted-foreground">
+                                    Causation inconclusive
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic">
+                            Not yet analyzed - click "Analyze" to process
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </ScrollArea>
+            </div>
+          )}
+
+          {/* Detected Indicators */}
+          {detectedIndicators.length > 0 && (
+            <div className="space-y-3 pt-2 border-t">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-green-700">
+                  ✓ Detected {detectedIndicators.length} Causation Indicator(s)
+                </p>
+                <Button size="sm" onClick={applyIndicators} className="h-7 text-xs">
+                  Apply to Test
+                </Button>
+              </div>
+              
+              <div className="space-y-2">
+                {detectedIndicators.map((indicator, idx) => (
+                  <div 
+                    key={`${indicator.id}-${idx}`}
+                    className="p-2 rounded-md bg-green-500/5 border border-green-500/20"
+                  >
+                    <div className="flex items-center gap-2">
+                      {perilTested === 'wind' && <Wind className="h-3 w-3 text-primary" />}
+                      {perilTested === 'hail' && <CloudRain className="h-3 w-3 text-primary" />}
+                      <span className="text-xs font-medium">{indicator.label}</span>
+                      <Badge 
+                        variant="outline" 
+                        className={cn(
+                          "text-xs",
+                          indicator.confidence === 'high' && "bg-green-500/10 text-green-700",
+                          indicator.confidence === 'medium' && "bg-yellow-500/10 text-yellow-700",
+                          indicator.confidence === 'low' && "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {indicator.confidence} confidence
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {indicator.reasoning}
+                    </p>
+                    <p className="text-xs text-muted-foreground italic">
+                      Source: {indicator.source}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
        </CardContent>
      </Card>
    );
