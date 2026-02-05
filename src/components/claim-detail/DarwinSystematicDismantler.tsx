@@ -10,10 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Gavel, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, 
   FolderOpen, AlertTriangle, Scale, Target, Shield, CheckCircle2, XCircle,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Files
 } from "lucide-react";
 import { useClaimFiles } from "@/hooks/useClaimFiles";
-import { ClaimFileSelector } from "./ClaimFileSelector";
+import { MultiClaimFileSelector } from "./MultiClaimFileSelector";
 import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -65,7 +65,7 @@ interface DismantlingResult {
 export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicDismantlerProps) => {
   const [carrierContent, setCarrierContent] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [selectedClaimFileId, setSelectedClaimFileId] = useState<string | null>(null);
+  const [selectedClaimFileIds, setSelectedClaimFileIds] = useState<Set<string>>(new Set());
   const [previousResponses, setPreviousResponses] = useState("");
   const [result, setResult] = useState<DismantlingResult | null>(null);
   const [rawAnalysis, setRawAnalysis] = useState<string | null>(null);
@@ -77,6 +77,30 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
   const { toast } = useToast();
   
   const { files: claimFiles, loading: loadingFiles, downloadFileAsBase64 } = useClaimFiles(claimId);
+
+  const toggleFileSelection = (fileId: string) => {
+    const newSet = new Set(selectedClaimFileIds);
+    if (newSet.has(fileId)) {
+      newSet.delete(fileId);
+    } else {
+      newSet.add(fileId);
+    }
+    setSelectedClaimFileIds(newSet);
+    setPdfFile(null);
+    setCarrierContent("");
+  };
+
+  const selectAllFiles = () => {
+    setSelectedClaimFileIds(new Set(claimFiles.map(f => f.id)));
+    setPdfFile(null);
+    setCarrierContent("");
+  };
+
+  const clearAllFiles = () => {
+    setSelectedClaimFileIds(new Set());
+  };
+
+  const selectedFiles = claimFiles.filter(f => selectedClaimFileIds.has(f.id));
 
   // Load previous analysis on mount
   useEffect(() => {
@@ -125,7 +149,7 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
         return;
       }
       setPdfFile(file);
-      setSelectedClaimFileId(null);
+      setSelectedClaimFileIds(new Set());
     }
   };
 
@@ -147,12 +171,10 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
   };
 
   const handleAnalyze = async () => {
-    const selectedFile = claimFiles.find(f => f.id === selectedClaimFileId);
-    
-    if (!carrierContent.trim() && !pdfFile && !selectedFile) {
+    if (!carrierContent.trim() && !pdfFile && selectedFiles.length === 0) {
       toast({
         title: "Content required",
-        description: "Please select a file, upload a PDF, or paste content",
+        description: "Please select files, upload a PDF, or paste content",
         variant: "destructive"
       });
       return;
@@ -160,20 +182,31 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
 
     setLoading(true);
     try {
-      let pdfBase64: string | null = null;
+      let pdfContents: Array<{ name: string; content: string; folder?: string }> = [];
+      let singlePdfBase64: string | null = null;
       let fileName: string | undefined;
 
-      if (selectedFile) {
-        pdfBase64 = await downloadFileAsBase64(selectedFile.file_path);
-        fileName = selectedFile.file_name;
+      // Handle multiple claim files
+      if (selectedFiles.length > 0) {
+        for (const file of selectedFiles) {
+          const base64 = await downloadFileAsBase64(file.file_path);
+          if (base64) {
+            pdfContents.push({
+              name: file.file_name,
+              content: base64,
+              folder: file.folder_name
+            });
+          }
+        }
       } else if (pdfFile) {
+        // Handle single uploaded PDF
         const arrayBuffer = await pdfFile.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);
         let binary = '';
         for (let i = 0; i < bytes.length; i++) {
           binary += String.fromCharCode(bytes[i]);
         }
-        pdfBase64 = btoa(binary);
+        singlePdfBase64 = btoa(binary);
         fileName = pdfFile.name;
       }
 
@@ -182,8 +215,9 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
           claimId,
           analysisType: 'systematic_dismantling',
           content: carrierContent || undefined,
-          pdfContent: pdfBase64 || undefined,
+          pdfContent: singlePdfBase64 || undefined,
           pdfFileName: fileName,
+          pdfContents: pdfContents.length > 0 ? pdfContents : undefined,
           additionalContext: { previousResponses }
         }
       });
@@ -204,12 +238,15 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
 
       // Save the analysis result
       const { data: userData } = await supabase.auth.getUser();
+      const filesSummary = selectedFiles.length > 0 
+        ? selectedFiles.map(f => f.file_name).join(', ')
+        : (fileName || carrierContent.substring(0, 200));
       await supabase.from('darwin_analysis_results').insert({
         claim_id: claimId,
         analysis_type: 'systematic_dismantling',
-        input_summary: data.structured ? JSON.stringify(data.structured) : (fileName || carrierContent.substring(0, 200)),
+        input_summary: data.structured ? JSON.stringify(data.structured) : filesSummary,
         result: data.result,
-        pdf_file_name: fileName || null,
+        pdf_file_name: selectedFiles.length > 0 ? `${selectedFiles.length} files` : (fileName || null),
         created_by: userData.user?.id
       });
 
@@ -248,8 +285,7 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
     }
   };
 
-  const selectedFile = claimFiles.find(f => f.id === selectedClaimFileId);
-  const hasInput = carrierContent.trim() || pdfFile || selectedFile;
+  const hasInput = carrierContent.trim() || pdfFile || selectedFiles.length > 0;
 
   const getScoreColor = (score: number) => {
     if (score >= 70) return "text-red-600 bg-red-100";
@@ -316,18 +352,36 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
           </TabsList>
 
           <TabsContent value="claim-files" className="space-y-2 mt-4">
-            <label className="text-sm font-medium">Select Carrier Response/Denial</label>
-            <ClaimFileSelector
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Select Carrier Documents (Multiple)</label>
+              <p className="text-xs text-muted-foreground">
+                Select multiple documents for cross-referencing: denial letters, engineer reports, adjuster notes, carrier estimates. Darwin will detect contradictions, moving goalposts, and inconsistencies.
+              </p>
+            </div>
+            <MultiClaimFileSelector
               files={claimFiles}
               loading={loadingFiles}
-              selectedFileId={selectedClaimFileId}
-              onSelectFile={(file) => {
-                setSelectedClaimFileId(file.id);
-                setPdfFile(null);
-                setCarrierContent("");
-              }}
+              selectedFileIds={selectedClaimFileIds}
+              onToggleFile={toggleFileSelection}
+              onSelectAll={selectAllFiles}
+              onClearAll={clearAllFiles}
               height="200px"
             />
+            {selectedFiles.length > 0 && (
+              <div className="p-3 bg-primary/10 rounded-md border border-primary/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Files className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">{selectedFiles.length} documents selected for cross-reference analysis</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {selectedFiles.map(file => (
+                    <Badge key={file.id} variant="secondary" className="text-xs">
+                      {file.file_name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="upload" className="space-y-2 mt-4">
@@ -365,7 +419,7 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
               value={carrierContent}
               onChange={(e) => {
                 setCarrierContent(e.target.value);
-                setSelectedClaimFileId(null);
+                setSelectedClaimFileIds(new Set());
                 setPdfFile(null);
               }}
               placeholder="Paste the carrier's denial letter or response here..."

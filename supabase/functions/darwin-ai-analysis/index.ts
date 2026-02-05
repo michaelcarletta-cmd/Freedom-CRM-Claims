@@ -4086,7 +4086,18 @@ APPLICABLE STATUTES: ${stateInfo.insuranceCode}
 UNFAIR PRACTICES ACT: ${stateInfo.promptPayAct}
 ADMINISTRATIVE CODE: ${stateInfo.adminCode}
 
-${pdfContent ? `A PDF of the carrier response has been provided for systematic analysis.` : `CARRIER RESPONSE TO DISMANTLE:
+${pdfContents && pdfContents.length > 0 ? `
+=== MULTIPLE CARRIER DOCUMENTS PROVIDED FOR CROSS-REFERENCE ANALYSIS ===
+${pdfContents.length} documents have been provided. For each document, carefully analyze and CROSS-REFERENCE against other documents to identify:
+1. CONTRADICTIONS between carrier positions across documents
+2. MOVING GOALPOSTS (new denial grounds introduced in later documents)
+3. INCONSISTENCIES between engineer reports, adjuster determinations, and carrier estimates
+4. TIMELINE VIOLATIONS (late responses, missed deadlines)
+5. POST-HOC RATIONALIZATIONS (justifications that appear after initial denial)
+
+Document list:
+${pdfContents.map((p, i) => `${i + 1}. ${p.name}${p.folder ? ` (${p.folder})` : ''}`).join('\n')}
+` : pdfContent ? `A PDF of the carrier response has been provided for systematic analysis.` : `CARRIER RESPONSE TO DISMANTLE:
 ${content || 'No carrier content provided'}`}
 
 ${previousResponsesContext}
@@ -4096,7 +4107,13 @@ ${combinedKnowledge || ''}
 === YOUR TASK: SYSTEMATIC DISMANTLING ===
 
 Systematically dismantle the carrier's response/denial using the protocols above.
-
+${pdfContents && pdfContents.length > 1 ? `
+CRITICAL CROSS-REFERENCE REQUIREMENTS:
+- Compare assertions across ALL provided documents
+- Cite specific document names when identifying contradictions
+- Flag any position changes between earlier and later documents
+- Build a comprehensive timeline of carrier positions and how they've shifted
+` : ''}
 OUTPUT STRUCTURE:
 
 1. STATEMENT OF DISPUTE
@@ -4139,18 +4156,24 @@ This output must be suitable for:
     // Build messages array - handle PDF content with multimodal format
     let messages: any[];
     
-    // Handle multiple PDFs for demand_package
-    if (pdfContents && pdfContents.length > 0 && analysisType === 'demand_package') {
+    // Handle multiple PDFs for demand_package or systematic_dismantling
+    if (pdfContents && pdfContents.length > 0 && (analysisType === 'demand_package' || analysisType === 'systematic_dismantling')) {
       const contentParts: any[] = [];
       
       // Add each PDF as an image_url (Gemini will process PDFs this way)
-      // Limit to 3 PDFs to reduce payload size and avoid timeouts during gateway issues
-      for (const pdf of pdfContents.slice(0, 3)) {
+      // Limit to 5 PDFs for systematic_dismantling to allow more cross-referencing
+      const maxPdfs = analysisType === 'systematic_dismantling' ? 5 : 3;
+      for (const pdf of pdfContents.slice(0, maxPdfs)) {
         contentParts.push({
           type: 'image_url',
           image_url: {
             url: `data:application/pdf;base64,${pdf.content}`
           }
+        });
+        // Add document separator for cross-referencing
+        contentParts.push({
+          type: 'text',
+          text: `[Above is document: ${pdf.name}${pdf.folder ? ` (from folder: ${pdf.folder})` : ''}]`
         });
       }
       
@@ -4165,7 +4188,7 @@ This output must be suitable for:
         { role: 'user', content: contentParts }
       ];
       
-      console.log(`Demand package with ${pdfContents.length} PDFs (processing ${Math.min(pdfContents.length, 3)})`);
+      console.log(`${analysisType} with ${pdfContents.length} PDFs (processing ${Math.min(pdfContents.length, maxPdfs)})`);
     } else if (analysisType === 'supplement' && (additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf || pdfContent)) {
       // Supplement comparison with potentially two PDFs
       const contentParts: any[] = [];
@@ -4264,7 +4287,7 @@ This output must be suitable for:
 
     // Call Lovable AI with model fallback chain for reliability
     const hasPdfContent = pdfContent || (pdfContents && pdfContents.length > 0) || additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf;
-    const needsPdfProcessing = hasPdfContent && !additionalContext?._useTextOnly && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package', 'document_comparison', 'smart_extraction', 'estimate_gap_analysis'].includes(analysisType);
+    const needsPdfProcessing = hasPdfContent && !additionalContext?._useTextOnly && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package', 'document_comparison', 'smart_extraction', 'estimate_gap_analysis', 'systematic_dismantling'].includes(analysisType);
     
     // Model fallback chain - use only Gemini models for PDF processing (OpenAI doesn't support PDF multimodal)
     // For text-only analysis, we can use OpenAI as fallback
