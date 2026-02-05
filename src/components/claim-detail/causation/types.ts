@@ -15,10 +15,10 @@
    isPositive: boolean; // true = evidence for peril, false = evidence against
  }
  
- export interface CausationFormData {
-   perilTested: string;
-   damageType: string;
-   eventDate: string;
+export interface CausationFormData {
+  perilTested: string;
+  damageTypes: string[]; // Changed to array for multi-select
+  eventDate: string;
    damageNoticedDate: string;
    // Three-state indicator values
    indicators: Record<string, IndicatorValue>;

@@ -55,7 +55,7 @@
      report += `${'='.repeat(60)}\n\n`;
      report += `Claim: ${claimNumber || 'N/A'}\n`;
      report += `Peril Tested: ${perilLabel}\n`;
-     report += `Damage Type: ${formData.damageType}\n`;
+     report += `Damage Type(s): ${formData.damageTypes.join(', ')}\n`;
      report += `Event Date: ${formData.eventDate ? new Date(formData.eventDate).toLocaleDateString() : 'Not specified'}\n\n`;
      
      report += `${'='.repeat(60)}\n`;
