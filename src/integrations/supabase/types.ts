@@ -2779,6 +2779,7 @@ export type Database = {
           id: string
           name: string
           phone: string | null
+          policy_number: string | null
           state: string | null
           street: string | null
           stripe_account_id: string | null
@@ -2793,6 +2794,7 @@ export type Database = {
           id?: string
           name: string
           phone?: string | null
+          policy_number?: string | null
           state?: string | null
           street?: string | null
           stripe_account_id?: string | null
@@ -2807,6 +2809,7 @@ export type Database = {
           id?: string
           name?: string
           phone?: string | null
+          policy_number?: string | null
           state?: string | null
           street?: string | null
           stripe_account_id?: string | null
