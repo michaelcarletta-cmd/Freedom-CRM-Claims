@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "@supabase/supabase-js";
+import PizZip from "pizzip";
+import Docxtemplater from "docxtemplater";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -127,10 +129,7 @@ serve(async (req) => {
     const arrayBuffer = await fileData.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
 
-    // Use docxtemplater to fill the template - dynamic imports for Deno
-    const { default: PizZip } = await import("https://esm.sh/pizzip@3.1.4");
-    const { default: Docxtemplater } = await import("https://esm.sh/docxtemplater@3.42.0");
-
+    // Use pre-imported PizZip and Docxtemplater
     const zip = new PizZip(uint8Array);
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
