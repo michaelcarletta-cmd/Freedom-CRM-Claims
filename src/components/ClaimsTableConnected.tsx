@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search } from "lucide-react";
+import { Search, Bell } from "lucide-react";
 import { ClaimStatusSelect } from "./ClaimStatusSelect";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BulkClaimActions } from "./BulkClaimActions";
+import { Badge } from "@/components/ui/badge";
 
 
 interface Claim {
@@ -49,6 +50,74 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Fetch unread notifications with claim IDs
+  const { data: claimNotifications = [], refetch: refetchNotifications } = useQuery({
+    queryKey: ["claim-notifications", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("id, claim_id")
+        .eq("user_id", user.id)
+        .eq("is_read", false);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+    staleTime: 5000,
+  });
+
+  // Create a set of claim IDs with notifications for quick lookup
+  const claimsWithNotifications = useMemo(() => {
+    return new Set(claimNotifications.map(n => n.claim_id));
+  }, [claimNotifications]);
+
+  // Real-time subscription for notification updates
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel('claims-table-notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          refetchNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, refetchNotifications]);
+
+  // Mark notifications as read when navigating to a claim
+  const handleClaimClick = async (claimId: string) => {
+    // Check if this claim has notifications
+    const notificationsForClaim = claimNotifications.filter(n => n.claim_id === claimId);
+    
+    if (notificationsForClaim.length > 0) {
+      // Mark all notifications for this claim as read
+      const notificationIds = notificationsForClaim.map(n => n.id);
+      await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .in("id", notificationIds);
+      
+      // Invalidate both queries to update the sidebar badge and table
+      queryClient.invalidateQueries({ queryKey: ["claim-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["unread-claim-notifications"] });
+    }
+    
+    navigate(`/claims/${claimId}`);
+  };
 
   // Fetch claims with React Query for caching
   const { data: claims = [], isLoading } = useQuery({
@@ -195,8 +264,12 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       filtered = filtered.filter((claim) => claim.loss_type === lossTypeFilter);
     }
 
-    return filtered;
-  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed]);
+    // Pin claims with notifications to the top
+    const claimsWithNotifs = filtered.filter(claim => claimsWithNotifications.has(claim.id));
+    const claimsWithoutNotifs = filtered.filter(claim => !claimsWithNotifications.has(claim.id));
+    
+    return [...claimsWithNotifs, ...claimsWithoutNotifs];
+  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed, claimsWithNotifications]);
 
   const toggleClaimSelection = (claimId: string) => {
     const newSelected = new Set(selectedClaims);
@@ -393,39 +466,49 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredClaims.map((claim) => (
-                  <TableRow 
-                    key={claim.id} 
-                    className="hover:bg-muted/50 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/claims/${claim.id}`)}
-                  >
-                    <TableCell onClick={(e) => e.stopPropagation()} className="sticky left-0 bg-background z-10">
-                      <Checkbox
-                        checked={selectedClaims.has(claim.id)}
-                        onCheckedChange={() => toggleClaimSelection(claim.id)}
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      <span className="font-mono text-sm">{claim.claim_number || "—"}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-sm">{claim.policyholder_name || "—"}</span>
-                    </TableCell>
-                    <TableCell className="max-w-[250px] min-w-[150px]">
-                      <span className="font-mono text-sm block truncate" title={claim.policyholder_address || "N/A"}>{claim.policyholder_address || "N/A"}</span>
-                    </TableCell>
-                    <TableCell className="min-w-[100px] whitespace-nowrap">{claim.loss_type || "N/A"}</TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <ClaimStatusSelect 
-                        claimId={claim.id} 
-                        currentStatus={claim.status}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {format(new Date(claim.created_at), "MMM dd, yyyy")}
-                    </TableCell>
-                  </TableRow>
-                ))
+                filteredClaims.map((claim) => {
+                  const hasNotification = claimsWithNotifications.has(claim.id);
+                  return (
+                    <TableRow 
+                      key={claim.id} 
+                      className={`hover:bg-muted/50 transition-colors cursor-pointer ${hasNotification ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
+                      onClick={() => handleClaimClick(claim.id)}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()} className={`sticky left-0 z-10 ${hasNotification ? 'bg-primary/5' : 'bg-background'}`}>
+                        <Checkbox
+                          checked={selectedClaims.has(claim.id)}
+                          onCheckedChange={() => toggleClaimSelection(claim.id)}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {hasNotification && (
+                            <Badge variant="destructive" className="h-5 w-5 p-0 flex items-center justify-center shrink-0">
+                              <Bell className="h-3 w-3" />
+                            </Badge>
+                          )}
+                          <span className="font-mono text-sm">{claim.claim_number || "—"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-mono text-sm">{claim.policyholder_name || "—"}</span>
+                      </TableCell>
+                      <TableCell className="max-w-[250px] min-w-[150px]">
+                        <span className="font-mono text-sm block truncate" title={claim.policyholder_address || "N/A"}>{claim.policyholder_address || "N/A"}</span>
+                      </TableCell>
+                      <TableCell className="min-w-[100px] whitespace-nowrap">{claim.loss_type || "N/A"}</TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <ClaimStatusSelect 
+                          claimId={claim.id} 
+                          currentStatus={claim.status}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {format(new Date(claim.created_at), "MMM dd, yyyy")}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

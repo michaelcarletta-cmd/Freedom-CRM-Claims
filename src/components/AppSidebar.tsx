@@ -3,7 +3,11 @@ import { NavLink } from "@/components/NavLink";
 import logo from "@/assets/freedom-adjustment-logo.png";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { queryClient } from "@/App";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect } from "react";
 
 import {
   Sidebar,
@@ -37,6 +41,48 @@ export function AppSidebar() {
   const { open } = useSidebar();
   const { signOut, user } = useAuth();
 
+  // Fetch unread notification count for claims
+  const { data: unreadClaimNotifications = 0, refetch: refetchNotifications } = useQuery({
+    queryKey: ["unread-claim-notifications", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+      const { count, error } = await supabase
+        .from("notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("is_read", false);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!user?.id,
+    staleTime: 10000,
+  });
+
+  // Real-time subscription for notification updates
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel('sidebar-notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          refetchNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, refetchNotifications]);
+
   const handleSignOut = async () => {
     await signOut();
     queryClient.clear();
@@ -61,11 +107,19 @@ export function AppSidebar() {
                     <NavLink 
                       to={item.url} 
                       end={item.url === "/"}
-                      className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                      className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors relative"
                       activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
                     >
                       <item.icon className="h-5 w-5" />
                       <span>{item.title}</span>
+                      {item.title === "Claims" && unreadClaimNotifications > 0 && (
+                        <Badge 
+                          variant="destructive" 
+                          className="absolute -top-1 -right-1 h-5 min-w-5 flex items-center justify-center p-0 text-xs"
+                        >
+                          {unreadClaimNotifications > 99 ? "99+" : unreadClaimNotifications}
+                        </Badge>
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
