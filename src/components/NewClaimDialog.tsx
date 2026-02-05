@@ -38,6 +38,7 @@ interface Client {
   city: string | null;
   state: string | null;
   zip_code: string | null;
+  policy_number: string | null;
 }
 
 interface MortgageCompany {
@@ -102,7 +103,7 @@ export function NewClaimDialog() {
       const [insuranceRes, lossTypesRes, clientsRes, mortgageRes] = await Promise.all([
         supabase.from("insurance_companies").select("id, name, phone, email").eq("is_active", true).order("name"),
         supabase.from("loss_types").select("id, name").eq("is_active", true).order("name"),
-        supabase.from("clients").select("id, name, email, phone, street, city, state, zip_code").order("name"),
+        supabase.from("clients").select("id, name, email, phone, street, city, state, zip_code, policy_number").order("name"),
         supabase.from("mortgage_companies").select("id, name").eq("is_active", true).order("name"),
       ]);
 
@@ -248,6 +249,7 @@ export function NewClaimDialog() {
           policyholderCity: selectedClient.city || "",
           policyholderState: selectedClient.state || "",
           policyholderZip: selectedClient.zip_code || "",
+          policyNumber: selectedClient.policy_number || "",
         });
       }
     }
