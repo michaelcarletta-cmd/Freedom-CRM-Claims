@@ -3,13 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { 
   MapPin, Loader2, Search, AlertTriangle, 
-  CheckCircle2, Building2, Calendar, DollarSign
+  CheckCircle2, Building2, Calendar, DollarSign, Zap
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
 
 interface DarwinProximityPrecedentsProps {
   claimId: string;
@@ -18,9 +19,13 @@ interface DarwinProximityPrecedentsProps {
 
 export const DarwinProximityPrecedents = ({ claimId, claim }: DarwinProximityPrecedentsProps) => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isSearching, setIsSearching] = useState(false);
+  const [isBatchGeocoding, setIsBatchGeocoding] = useState(false);
+  const [geocodeProgress, setGeocodeProgress] = useState({ current: 0, total: 0 });
 
   // Fetch proximity precedents when we have coordinates
+  // Search ALL carriers - not just the current claim's carrier - to find any precedents
   const { data: precedents, refetch, isLoading } = useQuery({
     queryKey: ["proximity-precedents", claimId, claim?.latitude, claim?.longitude],
     queryFn: async () => {
@@ -31,13 +36,30 @@ export const DarwinProximityPrecedents = ({ claimId, claim }: DarwinProximityPre
         target_lng: claim.longitude,
         radius_miles: 5,
         exclude_claim_id: claimId,
-        target_insurance_company: claim.insurance_company || undefined,
+        // Don't filter by carrier - we want ALL nearby settled claims as precedents
+        target_insurance_company: null,
       });
 
       if (error) throw error;
       return data;
     },
     enabled: !!claim?.latitude && !!claim?.longitude,
+  });
+
+  // Check how many claims in the area need geocoding
+  const { data: geocodeStats } = useQuery({
+    queryKey: ["geocode-stats"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claims")
+        .select("id, policyholder_address", { count: "exact" })
+        .is("latitude", null)
+        .neq("id", claimId)
+        .limit(100);
+
+      if (error) throw error;
+      return { ungeocoded: data?.length || 0, total: data?.length || 0 };
+    },
   });
 
   const handleGeocode = async () => {
@@ -72,6 +94,65 @@ export const DarwinProximityPrecedents = ({ claimId, claim }: DarwinProximityPre
       });
     } finally {
       setIsSearching(false);
+    }
+  };
+
+  // Batch geocode nearby claims to populate proximity data
+  const handleBatchGeocode = async () => {
+    setIsBatchGeocoding(true);
+    try {
+      // Get claims that haven't been geocoded yet
+      const { data: ungeocoded, error } = await supabase
+        .from("claims")
+        .select("id, policyholder_address")
+        .is("latitude", null)
+        .neq("id", claimId)
+        .limit(50); // Process 50 at a time
+
+      if (error) throw error;
+      if (!ungeocoded || ungeocoded.length === 0) {
+        toast({ title: "All claims are geocoded!" });
+        return;
+      }
+
+      setGeocodeProgress({ current: 0, total: ungeocoded.length });
+
+      let successCount = 0;
+      for (let i = 0; i < ungeocoded.length; i++) {
+        const claim = ungeocoded[i];
+        setGeocodeProgress({ current: i + 1, total: ungeocoded.length });
+
+        try {
+          const { data } = await supabase.functions.invoke("geocode-claim", {
+            body: { claimId: claim.id },
+          });
+          if (data?.success) successCount++;
+          // Small delay to avoid rate limiting
+          await new Promise(r => setTimeout(r, 200));
+        } catch (e) {
+          console.warn("Failed to geocode:", claim.id);
+        }
+      }
+
+      toast({
+        title: "Batch geocoding complete",
+        description: `Successfully geocoded ${successCount} of ${ungeocoded.length} claims`,
+      });
+
+      // Refetch everything
+      queryClient.invalidateQueries({ queryKey: ["proximity-precedents"] });
+      queryClient.invalidateQueries({ queryKey: ["geocode-stats"] });
+      refetch();
+    } catch (error: any) {
+      console.error("Batch geocode error:", error);
+      toast({
+        title: "Batch geocoding failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsBatchGeocoding(false);
+      setGeocodeProgress({ current: 0, total: 0 });
     }
   };
 
@@ -118,15 +199,36 @@ export const DarwinProximityPrecedents = ({ claimId, claim }: DarwinProximityPre
             <span className="text-sm text-muted-foreground">Searching nearby claims...</span>
           </div>
         ) : settledPrecedents.length === 0 ? (
-          <div className="text-center py-6">
-            <AlertTriangle className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground">
-              No settled claims found within 5 miles for {claim.insurance_company || "this carrier"}
-            </p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
-              <Search className="h-4 w-4 mr-2" />
-              Search Again
-            </Button>
+          <div className="text-center py-6 space-y-4">
+            <AlertTriangle className="h-10 w-10 mx-auto text-warning mb-3" />
+            <div>
+              <p className="text-sm font-medium text-foreground mb-1">
+                No geocoded claims found within 5 miles
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {geocodeStats?.ungeocoded ? `${geocodeStats.ungeocoded}+ claims need geocoding to enable proximity search` : "Claims need to be geocoded first"}
+              </p>
+            </div>
+            
+            {isBatchGeocoding ? (
+              <div className="space-y-2 max-w-xs mx-auto">
+                <Progress value={(geocodeProgress.current / geocodeProgress.total) * 100} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  Geocoding {geocodeProgress.current} of {geocodeProgress.total} claims...
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 items-center">
+                <Button onClick={handleBatchGeocode} size="sm">
+                  <Zap className="h-4 w-4 mr-2" />
+                  Geocode Claims to Find Precedents
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => refetch()}>
+                  <Search className="h-4 w-4 mr-2" />
+                  Search Again
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
