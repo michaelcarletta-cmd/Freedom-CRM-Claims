@@ -131,3 +131,6 @@ verify_jwt = true
 
 [functions.darwin-process-document]
 verify_jwt = true
+
+[functions.geocode-claim]
+verify_jwt = false
