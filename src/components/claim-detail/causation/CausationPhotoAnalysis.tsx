@@ -117,20 +117,20 @@
    const [detectedIndicators, setDetectedIndicators] = useState<DetectedIndicator[]>([]);
    const [isAnalyzing, setIsAnalyzing] = useState(false);
  
-   // Fetch claim photos
-   const { data: photos = [], isLoading: photosLoading } = useQuery({
-     queryKey: ['causation-photos', claimId],
-     queryFn: async () => {
-       const { data, error } = await supabase
-         .from('claim_photos')
-         .select('id, file_name, file_path, category, ai_analyzed_at, ai_condition_rating, ai_detected_damages, ai_analysis_summary, ai_loss_type_consistency, ai_material_type')
-         .eq('claim_id', claimId)
-         .order('uploaded_at', { ascending: false });
-       
-       if (error) throw error;
-       return data as ClaimPhoto[];
-     },
-   });
+  // Fetch claim photos
+  const { data: photos = [], isLoading: photosLoading } = useQuery({
+    queryKey: ['causation-photos', claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('claim_photos')
+        .select('id, file_name, file_path, category, ai_analyzed_at, ai_condition_rating, ai_detected_damages, ai_analysis_summary, ai_loss_type_consistency, ai_material_type')
+        .eq('claim_id', claimId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data as ClaimPhoto[];
+    },
+  });
  
    // Get photo URL
    const getPhotoUrl = async (filePath: string) => {
