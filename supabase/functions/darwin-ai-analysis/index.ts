@@ -3244,11 +3244,27 @@ The carrier has denied or undervalued this claim. Your job is to compile an OVER
 === COMMUNICATION STYLE ===
 You are professional yet personable. Show empathy for the policyholder while being ASSERTIVE and UNEQUIVOCAL when dealing with carriers. This is a formal demand letter—be thorough, cite everything, and leave no doubt about the correct outcome.
 
-=== CORE PHILOSOPHY ===
-- Build the "PROOF CASTLE": THE CAUSE (weather/incident data), THE SCOPE (full replacement, not repair), THE COST (proper valuation)
-- Focus on REPAIRABILITY over matching - PA and NJ do NOT have matching requirements
-- NEVER cite case law or legal precedents - stick to facts, regulations, building codes, manufacturer specs
-- Arguments must be grounded in: IRC/IBC building codes, manufacturer specifications, ASTM/ARMA standards, ${stateInfo.stateName} regulations
+=== CRITICAL REBUTTAL PHILOSOPHY ===
+STEP 1 - COVERAGE FIRST (PRIMARY FOCUS FOR DENIALS):
+When the carrier has DENIED coverage, your PRIMARY focus must be:
+1. POLICY LANGUAGE: Prove the loss is covered under the policy terms
+2. OBSERVED DAMAGE: Document that covered damage EXISTS and was caused by a covered peril
+3. CAUSATION: Connect the damage to the reported loss event (weather data, timeline, damage patterns)
+
+DO NOT discuss building codes, manufacturer specifications, or repairability in a denial rebuttal unless coverage has already been partially afforded. These are SCOPE arguments, not COVERAGE arguments.
+
+STEP 2 - SCOPE & REPAIRABILITY (ONLY AFTER COVERAGE IS ESTABLISHED):
+Only discuss building codes, manufacturer specs, ASTM/ARMA standards, and repairability IF:
+- Coverage has been partially afforded (e.g., carrier approved some but not all)
+- You are arguing for full replacement vs. repair
+- You are challenging the SCOPE or AMOUNT, not the coverage itself
+
+THE PROOF CASTLE FRAMEWORK:
+1. THE CAUSE (coverage trigger) - Prove a covered peril occurred and caused the damage
+2. THE SCOPE (only after coverage afforded) - Full replacement vs. repair based on industry standards
+3. THE COST (only after coverage afforded) - Proper valuation and payment
+
+- NEVER cite case law or legal precedents - stick to facts and regulations
 - CITE SPECIFIC PHOTOS BY FILENAME showing damage that contradicts carrier claims
 - REFERENCE SPECIFIC DOCUMENTS from the claim file as evidence
 
@@ -3275,8 +3291,10 @@ ${stateInfo.state === 'NJ' ? `
 
 === RESPONSE REQUIREMENTS ===
 - Generate an EXHAUSTIVE, COMPREHENSIVE rebuttal document ready for carrier submission
+- For DENIALS: Focus on policy coverage and observed damage FIRST
+- For UNDERPAYMENTS: Include scope/repairability arguments with building codes and manufacturer specs
 - Address EVERY denial point, carrier argument, and engineer finding from the analyses
-- Each rebuttal section should be a full paragraph with: the carrier's position, why it is incorrect, regulatory/code citations, photo/document evidence
+- Each rebuttal section should be a full paragraph with: the carrier's position, why it is incorrect, evidence
 - CITE SPECIFIC PHOTOS by filename when countering claims about property condition
 - CITE SPECIFIC DOCUMENTS from the claim file as supporting evidence
 - Structure as a formal legal-style demand letter
@@ -3355,6 +3373,10 @@ ${intelligenceContext}
 === YOUR TASK ===
 Based on ALL the intelligence above, generate a COMPREHENSIVE STRATEGIC REBUTTAL to OVERTURN the denial and secure coverage. Use EVERY piece of evidence—photos, documents, analyses, regulations—to prove the carrier is WRONG.
 
+IMPORTANT: Determine whether this is a DENIAL (coverage not afforded) or an UNDERPAYMENT (coverage afforded but amount disputed):
+- For DENIALS: Focus on POLICY COVERAGE + OBSERVED DAMAGE. Do NOT discuss building codes, manufacturer specs, or repairability.
+- For UNDERPAYMENTS: Include scope/repairability arguments with building codes and manufacturer specifications.
+
 Structure the rebuttal as follows:
 
 1. FORMAL HEADER
@@ -3366,30 +3388,43 @@ Structure the rebuttal as follows:
    - State the denial is improper and must be reversed
    - Reference key leverage points and evidence
 
-3. REGULATORY FRAMEWORK
+3. POLICY COVERAGE ANALYSIS (PRIMARY FOR DENIALS)
+   - Quote relevant policy language that covers this type of loss
+   - Demonstrate the reported peril is a covered cause of loss
+   - Show the carrier has misinterpreted or ignored policy provisions
+   - Reference any proximity precedents showing same carrier approved similar claims nearby
+
+4. CAUSATION & OBSERVED DAMAGE
+   - Connect the damage to the covered loss event with timeline evidence
+   - Cite storm reports, weather data, and loss date proximity
+   - CITE SPECIFIC PHOTOS by filename showing covered damage
+   - Reference inspection findings that document damage patterns
+
+5. REGULATORY FRAMEWORK
    - Cite specific ${stateInfo.stateName} regulations the carrier must follow
    - Note any timeline violations
    - Flag bad faith indicators if present
 
-4. POINT-BY-POINT REBUTTAL OF CARRIER POSITIONS
+6. POINT-BY-POINT REBUTTAL OF CARRIER POSITIONS
    - Address EVERY denial reason, engineer finding, or carrier argument from the analyses
    - For each point:
      * Quote or paraphrase their position
      * Explain why it is factually incorrect
-     * Cite supporting regulations, building codes, and manufacturer specs
+     * For DENIALS: Focus on policy language and observed damage
+     * For UNDERPAYMENTS: Include building codes and manufacturer specs
      * CITE SPECIFIC PHOTOS by filename that prove damage
      * Reference specific documents from the claim file
 
-5. PHOTOGRAPHIC EVIDENCE SUMMARY
+7. PHOTOGRAPHIC EVIDENCE SUMMARY
    - List key photos that prove damage severity
    - Note condition ratings and detected damages
    - Explain how this contradicts carrier claims
 
-6. DOCUMENT EVIDENCE SUMMARY
+8. DOCUMENT EVIDENCE SUMMARY
    - Reference estimates, inspection reports, and other supporting documents
    - Note any contractor or engineer opinions that support the claim
 
-7. CARRIER-SPECIFIC STRATEGY
+9. CARRIER-SPECIFIC STRATEGY
    - Apply counter-sequences from the carrier behavior profile
    - Use approaches known to work with ${claim.insurance_company || 'this carrier'}
 
