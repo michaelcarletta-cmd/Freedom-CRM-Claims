@@ -127,9 +127,9 @@ serve(async (req) => {
     const arrayBuffer = await fileData.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
 
-    // Use docxtemplater to fill the template
-    const PizZip = (await import("pizzip")).default;
-    const Docxtemplater = (await import("docxtemplater")).default;
+    // Use docxtemplater to fill the template - dynamic imports for Deno
+    const { default: PizZip } = await import("https://esm.sh/pizzip@3.1.4");
+    const { default: Docxtemplater } = await import("https://esm.sh/docxtemplater@3.42.0");
 
     const zip = new PizZip(uint8Array);
     const doc = new Docxtemplater(zip, {
