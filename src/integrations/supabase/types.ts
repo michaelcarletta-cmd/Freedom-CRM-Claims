@@ -2489,6 +2489,7 @@ export type Database = {
           fraud_flag_reason: string | null
           fraud_flagged_at: string | null
           fraud_flagged_by: string | null
+          geocoded_at: string | null
           id: string
           insurance_company: string | null
           insurance_company_id: string | null
@@ -2496,7 +2497,9 @@ export type Database = {
           insurance_phone: string | null
           is_closed: boolean
           jobnimbus_job_id: string | null
+          latitude: number | null
           loan_number: string | null
+          longitude: number | null
           loss_date: string | null
           loss_description: string | null
           loss_type: string | null
@@ -2549,6 +2552,7 @@ export type Database = {
           fraud_flag_reason?: string | null
           fraud_flagged_at?: string | null
           fraud_flagged_by?: string | null
+          geocoded_at?: string | null
           id?: string
           insurance_company?: string | null
           insurance_company_id?: string | null
@@ -2556,7 +2560,9 @@ export type Database = {
           insurance_phone?: string | null
           is_closed?: boolean
           jobnimbus_job_id?: string | null
+          latitude?: number | null
           loan_number?: string | null
+          longitude?: number | null
           loss_date?: string | null
           loss_description?: string | null
           loss_type?: string | null
@@ -2609,6 +2615,7 @@ export type Database = {
           fraud_flag_reason?: string | null
           fraud_flagged_at?: string | null
           fraud_flagged_by?: string | null
+          geocoded_at?: string | null
           id?: string
           insurance_company?: string | null
           insurance_company_id?: string | null
@@ -2616,7 +2623,9 @@ export type Database = {
           insurance_phone?: string | null
           is_closed?: boolean
           jobnimbus_job_id?: string | null
+          latitude?: number | null
           loan_number?: string | null
+          longitude?: number | null
           loss_date?: string | null
           loss_description?: string | null
           loss_type?: string | null
@@ -5155,6 +5164,7 @@ export type Database = {
           fraud_flag_reason: string | null
           fraud_flagged_at: string | null
           fraud_flagged_by: string | null
+          geocoded_at: string | null
           id: string
           insurance_company: string | null
           insurance_company_id: string | null
@@ -5162,7 +5172,9 @@ export type Database = {
           insurance_phone: string | null
           is_closed: boolean
           jobnimbus_job_id: string | null
+          latitude: number | null
           loan_number: string | null
+          longitude: number | null
           loss_date: string | null
           loss_description: string | null
           loss_type: string | null
@@ -5276,6 +5288,29 @@ export type Database = {
           p_session_token: string
         }
         Returns: string
+      }
+      search_claims_by_proximity: {
+        Args: {
+          exclude_claim_id?: string
+          radius_miles?: number
+          target_insurance_company?: string
+          target_lat: number
+          target_lng: number
+        }
+        Returns: {
+          claim_amount: number
+          claim_id: string
+          claim_number: string
+          distance_miles: number
+          insurance_company: string
+          is_closed: boolean
+          loss_date: string
+          loss_type: string
+          policyholder_address: string
+          policyholder_name: string
+          settlement_notes: string
+          status: string
+        }[]
       }
       user_org_id: { Args: { _user_id: string }; Returns: string }
       validate_session: {
