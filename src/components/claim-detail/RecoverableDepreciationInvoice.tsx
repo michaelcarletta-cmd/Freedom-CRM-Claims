@@ -437,21 +437,17 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
         });
       }
 
-      // Calculate breakdown values
-      const rcv = Number(settlement.replacement_cost_value) || 0;
-      const deductible = Number(settlement.deductible) || 0;
-      const nonRecoverableDepreciation = Number(settlement.non_recoverable_depreciation) || 0;
-      const acv = rcv - totalRD - nonRecoverableDepreciation; // ACV = RCV - Total Depreciation
+      // Calculate breakdown values (reuse already-calculated values from above)
+      const deductible = deductibleForCalc;
+      const nonRecoverableDepreciation = nonRecoverableForCalc;
       const paymentsReceived = paymentSummary.totalReceived;
-      const paymentsOutstanding = acv - deductible - paymentsReceived; // What's still owed before depreciation
+      const acv = acvForCalc;
 
       // Get RCV values for each category
-      // replacement_cost_value IS the dwelling RCV (not the total of all categories)
-      const dwellingRCV = rcv; // This is the dwelling RCV directly
-      const otherStructuresRCV = Number(settlement.other_structures_rcv) || 0;
-      const pwiRCV = Number(settlement.pwi_rcv) || 0;
-      const personalPropertyRCV = Number(settlement.personal_property_rcv) || 0;
-      // Total RCV is dwelling + other categories
+      const dwellingRCV = rcvForCalc;
+      const otherStructuresRCV = otherStructuresRCVForCalc;
+      const pwiRCV = pwiRCVForCalc;
+      const personalPropertyRCV = personalPropertyRCVForCalc;
       const totalRCV = dwellingRCV + otherStructuresRCV + pwiRCV + personalPropertyRCV;
 
       const { data: invoiceResult, error: invoiceError } = await supabase.functions.invoke("generate-invoice", {
@@ -485,7 +481,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
             acv,
             deductible,
             paymentsReceived,
-            paymentsOutstanding: paymentsOutstanding > 0 ? paymentsOutstanding : 0,
+            paymentsOutstanding: outstandingACV,
             recoverableDepreciation: totalRD,
             // RCV by category
             dwellingRCV,
