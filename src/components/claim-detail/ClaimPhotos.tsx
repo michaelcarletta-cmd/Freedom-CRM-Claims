@@ -522,18 +522,43 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
     setAnnotateDialogOpen(true);
   };
 
+  // Full-res URLs for the lightbox (separate from thumbnail cache)
+  const [fullResUrls, setFullResUrls] = useState<Record<string, string>>({});
+
   const openPreviewDialog = async (photo: ClaimPhoto) => {
     setSelectedPhoto(photo);
     setPreviewDialogOpen(true);
     
-    // Ensure we have the signed URL for this photo
-    if (!photoUrls[photo.id]) {
+    // Fetch full-resolution signed URL (not thumbnail)
+    if (!fullResUrls[photo.id]) {
       const path = photo.annotated_file_path || photo.file_path;
       const { data } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(path, 3600);
       if (data?.signedUrl) {
-        setPhotoUrls(prev => ({ ...prev, [photo.id]: data.signedUrl }));
+        setFullResUrls(prev => ({ ...prev, [photo.id]: data.signedUrl }));
+      }
+    }
+  };
+
+  // Navigate to next/previous photo in the lightbox
+  const navigatePhoto = async (direction: "prev" | "next") => {
+    if (!selectedPhoto) return;
+    const currentIndex = filteredPhotos.findIndex(p => p.id === selectedPhoto.id);
+    if (currentIndex === -1) return;
+    const newIndex = direction === "next" 
+      ? (currentIndex + 1) % filteredPhotos.length 
+      : (currentIndex - 1 + filteredPhotos.length) % filteredPhotos.length;
+    const newPhoto = filteredPhotos[newIndex];
+    setSelectedPhoto(newPhoto);
+    
+    if (!fullResUrls[newPhoto.id]) {
+      const path = newPhoto.annotated_file_path || newPhoto.file_path;
+      const { data } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(path, 3600);
+      if (data?.signedUrl) {
+        setFullResUrls(prev => ({ ...prev, [newPhoto.id]: data.signedUrl }));
       }
     }
   };
@@ -919,118 +944,158 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
         />
       )}
 
-      {/* Preview Dialog */}
+      {/* Lightbox Preview Dialog */}
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{selectedPhoto?.file_name}</DialogTitle>
+        <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] p-0 overflow-hidden flex flex-col">
+          <DialogHeader className="p-4 pb-2 shrink-0">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="truncate pr-4">{selectedPhoto?.file_name}</DialogTitle>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">
+                {selectedPhoto ? filteredPhotos.findIndex(p => p.id === selectedPhoto.id) + 1 : 0} / {filteredPhotos.length}
+              </span>
+            </div>
           </DialogHeader>
           {selectedPhoto && (
-            <div className="space-y-4">
-              <PhotoPreview photo={selectedPhoto} imageUrl={photoUrls[selectedPhoto.id] || ""} />
-              <div className="flex justify-between items-start">
-                <div>
-                  <Badge>{selectedPhoto.category}</Badge>
-                  {selectedPhoto.description && (
-                    <p className="text-sm text-muted-foreground mt-2">{selectedPhoto.description}</p>
-                  )}
-                </div>
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              {/* Image area with navigation */}
+              <div className="flex-1 relative flex items-center justify-center bg-black/5 dark:bg-black/20 min-h-0 px-12">
+                {filteredPhotos.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute left-2 z-10 h-10 w-10 rounded-full bg-background/80 hover:bg-background shadow"
+                    onClick={(e) => { e.stopPropagation(); navigatePhoto("prev"); }}
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </Button>
+                )}
+                
+                {fullResUrls[selectedPhoto.id] ? (
+                  <img
+                    src={fullResUrls[selectedPhoto.id]}
+                    alt={selectedPhoto.file_name}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+
+                {filteredPhotos.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 z-10 h-10 w-10 rounded-full bg-background/80 hover:bg-background shadow"
+                    onClick={(e) => { e.stopPropagation(); navigatePhoto("next"); }}
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </Button>
+                )}
               </div>
 
-              {/* AI Analysis Section */}
-              {selectedPhoto.ai_analyzed_at ? (
-                <div className="border rounded-lg p-4 bg-card space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Brain className="h-4 w-4 text-primary" />
-                      <span>Darwin AI Analysis</span>
-                      <Badge variant="outline" className="text-xs">
-                        {new Date(selectedPhoto.ai_analyzed_at).toLocaleDateString()}
-                      </Badge>
+              {/* Details panel */}
+              <div className="shrink-0 max-h-[30vh] overflow-y-auto p-4 border-t space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <Badge>{selectedPhoto.category}</Badge>
+                    {selectedPhoto.description && (
+                      <p className="text-sm text-muted-foreground mt-2">{selectedPhoto.description}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* AI Analysis Section */}
+                {selectedPhoto.ai_analyzed_at ? (
+                  <div className="border rounded-lg p-4 bg-card space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Brain className="h-4 w-4 text-primary" />
+                        <span>Darwin AI Analysis</span>
+                        <Badge variant="outline" className="text-xs">
+                          {new Date(selectedPhoto.ai_analyzed_at).toLocaleDateString()}
+                        </Badge>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          analyzePhoto(selectedPhoto.id);
+                          toast({ title: "Re-analyzing photo with Darwin..." });
+                        }}
+                      >
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        Re-analyze
+                      </Button>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {selectedPhoto.ai_material_type && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Material</p>
+                          <p className="text-sm font-medium capitalize">{selectedPhoto.ai_material_type}</p>
+                        </div>
+                      )}
+                      {selectedPhoto.ai_condition_rating && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Condition</p>
+                          <ConditionBadge rating={selectedPhoto.ai_condition_rating} />
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedPhoto.ai_condition_notes && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Condition Notes</p>
+                        <p className="text-sm">{selectedPhoto.ai_condition_notes}</p>
+                      </div>
+                    )}
+
+                    {selectedPhoto.ai_detected_damages && Array.isArray(selectedPhoto.ai_detected_damages) && selectedPhoto.ai_detected_damages.length > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-2">Detected Damages</p>
+                        <div className="space-y-2">
+                          {selectedPhoto.ai_detected_damages.map((damage: any, idx: number) => (
+                            <div key={idx} className="flex items-start gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-sm">
+                              <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                              <div>
+                                <span className="font-medium">{damage.type}</span>
+                                <span className="text-muted-foreground"> ({damage.severity})</span>
+                                {damage.location && <span className="text-muted-foreground"> - {damage.location}</span>}
+                                {damage.notes && <p className="text-xs text-muted-foreground mt-1">{damage.notes}</p>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedPhoto.ai_analysis_summary && (
+                      <div className="p-2 bg-muted rounded text-sm">
+                        <p className="text-xs text-muted-foreground mb-1">Summary</p>
+                        {selectedPhoto.ai_analysis_summary}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="border rounded-lg p-4 bg-muted/50 text-center">
+                    <Brain className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">AI analysis not yet available</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-2"
                       onClick={() => {
                         analyzePhoto(selectedPhoto.id);
-                        toast({ title: "Re-analyzing photo with Darwin..." });
+                        toast({ title: "Darwin is analyzing this photo..." });
                       }}
                     >
                       <Sparkles className="h-3 w-3 mr-1" />
-                      Re-analyze
+                      Analyze Now
                     </Button>
                   </div>
-
-                  {/* Material & Condition */}
-                  <div className="grid grid-cols-2 gap-4">
-                    {selectedPhoto.ai_material_type && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Material</p>
-                        <p className="text-sm font-medium capitalize">{selectedPhoto.ai_material_type}</p>
-                      </div>
-                    )}
-                    {selectedPhoto.ai_condition_rating && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Condition</p>
-                        <ConditionBadge rating={selectedPhoto.ai_condition_rating} />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Condition Notes */}
-                  {selectedPhoto.ai_condition_notes && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Condition Notes</p>
-                      <p className="text-sm">{selectedPhoto.ai_condition_notes}</p>
-                    </div>
-                  )}
-
-                  {/* Detected Damages */}
-                  {selectedPhoto.ai_detected_damages && Array.isArray(selectedPhoto.ai_detected_damages) && selectedPhoto.ai_detected_damages.length > 0 && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-2">Detected Damages</p>
-                      <div className="space-y-2">
-                        {selectedPhoto.ai_detected_damages.map((damage: any, idx: number) => (
-                          <div key={idx} className="flex items-start gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-sm">
-                            <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
-                            <div>
-                              <span className="font-medium">{damage.type}</span>
-                              <span className="text-muted-foreground"> ({damage.severity})</span>
-                              {damage.location && <span className="text-muted-foreground"> - {damage.location}</span>}
-                              {damage.notes && <p className="text-xs text-muted-foreground mt-1">{damage.notes}</p>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Summary */}
-                  {selectedPhoto.ai_analysis_summary && (
-                    <div className="p-2 bg-muted rounded text-sm">
-                      <p className="text-xs text-muted-foreground mb-1">Summary</p>
-                      {selectedPhoto.ai_analysis_summary}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="border rounded-lg p-4 bg-muted/50 text-center">
-                  <Brain className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">AI analysis not yet available</p>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="mt-2"
-                    onClick={() => {
-                      analyzePhoto(selectedPhoto.id);
-                      toast({ title: "Darwin is analyzing this photo..." });
-                    }}
-                  >
-                    <Sparkles className="h-3 w-3 mr-1" />
-                    Analyze Now
-                  </Button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
