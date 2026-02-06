@@ -247,7 +247,7 @@ export const ClaimContextPipeline = ({ claimId, claim }: Props) => {
           Context Pipeline
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Workflow className="h-5 w-5 text-primary" />
@@ -277,7 +277,7 @@ export const ClaimContextPipeline = ({ claimId, claim }: Props) => {
           ))}
         </div>
 
-        <ScrollArea className="flex-1 max-h-[65vh]">
+        <ScrollArea className="flex-1 min-h-0">
           <div className="space-y-4 p-1">
             {/* ── STAGE 1: INGEST ── */}
             {stage === "ingest" && (
