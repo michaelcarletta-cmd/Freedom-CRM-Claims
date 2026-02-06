@@ -2,18 +2,27 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bot, Send, Loader2, ArrowLeft, Sparkles, FileText, CheckSquare, Users, Search, ClipboardList } from "lucide-react";
+import { Bot, Send, Loader2, ArrowLeft, Sparkles, Search, CheckSquare, ClipboardList, Users, Paperclip, X, FileText as FileIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 interface AiMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  attachmentName?: string;
+}
+
+interface UploadedFile {
+  file: File;
+  name: string;
+  extractedText?: string;
+  uploading?: boolean;
 }
 
 const quickActions = [
@@ -23,39 +32,147 @@ const quickActions = [
   { icon: Users, label: "Inactive claims", prompt: "Which claims have been inactive for over 2 weeks?" },
 ];
 
+async function extractTextFromFile(file: File): Promise<string> {
+  // For text-based files, read directly
+  const textTypes = [
+    "text/plain", "text/csv", "text/html", "text/xml",
+    "application/json", "application/xml",
+  ];
+  const textExtensions = [".txt", ".csv", ".json", ".xml", ".html", ".md", ".log"];
+  const ext = file.name.toLowerCase().substring(file.name.lastIndexOf("."));
+
+  if (textTypes.includes(file.type) || textExtensions.includes(ext)) {
+    return await file.text();
+  }
+
+  // For PDF/DOCX/images, we can't extract client-side easily, return empty
+  return "";
+}
+
 export default function Chat() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<UploadedFile | null>(null);
+  const [processingFile, setProcessingFile] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, loading]);
 
-  // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 20MB limit
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("File must be under 20MB");
+      return;
+    }
+
+    setProcessingFile(true);
+    try {
+      const extractedText = await extractTextFromFile(file);
+      setAttachedFile({ file, name: file.name, extractedText });
+    } catch {
+      toast.error("Failed to process file");
+    } finally {
+      setProcessingFile(false);
+      // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeAttachment = () => {
+    setAttachedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const uploadFileToStorage = async (file: File): Promise<{ path: string; extractedText: string } | null> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = `chat-uploads/${user.id}/${timestamp}_${safeName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("claim-files")
+        .upload(filePath, file, {
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Try to get extracted text from OCR if it's a PDF/image
+      let extractedText = "";
+      
+      // For PDFs, try to read as text (some PDFs are text-based)
+      if (file.type === "application/pdf") {
+        // We'll pass the file path reference for the AI to know about
+        extractedText = `[PDF Document: ${file.name} - uploaded to storage at ${filePath}]`;
+      } else if (file.type.startsWith("image/")) {
+        extractedText = `[Image: ${file.name} - uploaded to storage at ${filePath}]`;
+      }
+
+      return { path: filePath, extractedText };
+    } catch (err) {
+      console.error("Upload error:", err);
+      return null;
+    }
+  };
+
   const handleSend = async (customMessage?: string) => {
     const messageText = customMessage || message;
-    if (!messageText.trim()) return;
+    if (!messageText.trim() && !attachedFile) return;
+
+    let documentContent = "";
+    let attachmentName = attachedFile?.name;
+
+    // Process attached file
+    if (attachedFile) {
+      if (attachedFile.extractedText) {
+        // Text file - send content directly
+        documentContent = attachedFile.extractedText;
+      } else {
+        // Binary file - upload to storage and get a reference
+        const uploaded = await uploadFileToStorage(attachedFile.file);
+        if (uploaded) {
+          documentContent = uploaded.extractedText;
+        } else {
+          toast.error("Failed to upload file");
+          return;
+        }
+      }
+    }
+
+    const displayContent = attachmentName
+      ? `📎 ${attachmentName}\n\n${messageText}`
+      : messageText;
 
     const userMessage: AiMessage = {
       role: "user",
-      content: messageText,
+      content: displayContent,
       timestamp: new Date(),
+      attachmentName,
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setMessage("");
+    setAttachedFile(null);
     setLoading(true);
 
     try {
@@ -66,21 +183,21 @@ export default function Chat() {
 
       const { data, error } = await supabase.functions.invoke("claims-ai-assistant", {
         body: {
-          question: userMessage.content,
+          question: messageText || `Analyze this document: ${attachmentName}`,
           messages: conversationHistory,
           mode: "general",
+          documentContent: documentContent || undefined,
+          documentName: attachmentName || undefined,
         },
       });
 
       if (error) throw error;
 
-      // Show toast for created tasks
       if (data.tasksCreated && data.tasksCreated.length > 0) {
         const taskCount = data.tasksCreated.length;
-        toast.success(`${taskCount} task${taskCount > 1 ? 's' : ''} created`);
+        toast.success(`${taskCount} task${taskCount > 1 ? "s" : ""} created`);
       }
 
-      // Check if bulk operations were performed
       const hasBulkOperation = data.answer && (
         data.answer.includes("Bulk Status Update:") ||
         data.answer.includes("Claims Closed:") ||
@@ -111,11 +228,9 @@ export default function Chat() {
 
   const handleQuickAction = (prompt: string) => {
     if (prompt.endsWith(" ")) {
-      // This is a prompt that needs user input
       setMessage(prompt);
       inputRef.current?.focus();
     } else {
-      // This is a complete prompt
       handleSend(prompt);
     }
   };
@@ -137,7 +252,7 @@ export default function Chat() {
           </div>
           <div className="min-w-0">
             <h1 className="font-semibold text-base truncate">Claims Assistant</h1>
-            <p className="text-xs text-muted-foreground">Ask anything about your claims</p>
+            <p className="text-xs text-muted-foreground">Ask anything · Upload estimates & letters for analysis</p>
           </div>
         </div>
         {messages.length > 0 && (
@@ -157,7 +272,7 @@ export default function Chat() {
               </div>
               <h2 className="text-lg font-semibold mb-2">How can I help?</h2>
               <p className="text-sm text-muted-foreground text-center mb-6 max-w-xs">
-                I can look up claims, create tasks, draft emails, update statuses, and more.
+                Upload an estimate or denial letter and ask if the claim is underpaid, has missing items, or if we can overturn a denial.
               </p>
               
               {/* Quick Actions */}
@@ -231,6 +346,22 @@ export default function Chat() {
         </div>
       </ScrollArea>
 
+      {/* Attachment Preview */}
+      {attachedFile && (
+        <div className="px-3 pt-2">
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-muted border text-sm">
+            <FileIcon className="h-4 w-4 text-primary shrink-0" />
+            <span className="truncate flex-1">{attachedFile.name}</span>
+            <Badge variant="secondary" className="text-[10px] shrink-0">
+              {(attachedFile.file.size / 1024).toFixed(0)}KB
+            </Badge>
+            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={removeAttachment}>
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Input Area */}
       <div className="border-t bg-background p-3 pb-safe">
         <form
@@ -238,13 +369,34 @@ export default function Chat() {
             e.preventDefault();
             handleSend();
           }}
-          className="flex gap-2"
+          className="flex gap-2 items-center"
         >
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.jpg,.jpeg,.png,.webp"
+            onChange={handleFileSelect}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11 shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading || processingFile}
+          >
+            {processingFile ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Paperclip className="h-5 w-5" />
+            )}
+          </Button>
           <Input
             ref={inputRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Message..."
+            placeholder={attachedFile ? "Ask about this document..." : "Message..."}
             className="flex-1 rounded-full bg-muted border-0 px-4 h-11"
             disabled={loading}
           />
@@ -252,7 +404,7 @@ export default function Chat() {
             type="submit"
             size="icon"
             className="h-11 w-11 rounded-full shrink-0"
-            disabled={loading || !message.trim()}
+            disabled={loading || (!message.trim() && !attachedFile)}
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin" />

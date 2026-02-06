@@ -2316,7 +2316,7 @@ serve(async (req) => {
   }
 
   try {
-    const { claimId, question, messages, mode, reportType } = await req.json();
+    const { claimId, question, messages, mode, reportType, documentContent, documentName } = await req.json();
     
     if (!question && !reportType) {
       return new Response(
@@ -2461,6 +2461,13 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
       `.trim();
     } else {
       contextContent = `You are helping a public adjuster manage their claims workload.${claimsOverview}`;
+    }
+
+    // Inject uploaded document content from chat
+    let uploadedDocContext = "";
+    if (documentContent && documentContent.trim()) {
+      uploadedDocContext = `\n\n=== UPLOADED DOCUMENT FOR ANALYSIS ===\nDocument Name: ${documentName || 'Unknown'}\n\nIMPORTANT: The user has uploaded this document for you to analyze. Review it carefully for:\n1. UNDERPAYMENT - Are there line items that appear undervalued, missing overhead & profit, or using incorrect pricing?\n2. MISSING ITEMS - Are there damage areas, trades, or line items that should be included but are absent?\n3. DENIAL OVERTURN POTENTIAL - If this is a denial letter, identify weaknesses in the carrier's reasoning and strategies to overturn it.\n4. GENERAL ASSESSMENT - Provide your expert opinion on the document's adequacy.\n\nDocument Content:\n${documentContent}\n=== END UPLOADED DOCUMENT ===\n`;
+      contextContent += uploadedDocContext;
     }
 
     // Handle report generation
