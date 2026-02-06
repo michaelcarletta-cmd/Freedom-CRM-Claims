@@ -134,3 +134,6 @@ verify_jwt = true
 
 [functions.geocode-claim]
 verify_jwt = false
+
+[functions.claim-context-pipeline]
+verify_jwt = true
