@@ -27,7 +27,7 @@ const Sign = lazy(() => import("./pages/Sign"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Workspaces = lazy(() => import("./pages/Workspaces"));
 const WorkspaceDetailPage = lazy(() => import("./pages/WorkspaceDetailPage"));
-const Chat = lazy(() => import("./pages/Chat"));
+
 const DarwinOperations = lazy(() => import("./pages/DarwinOperations"));
 
 export const queryClient = new QueryClient();
@@ -125,7 +125,7 @@ function AppRoutes() {
       <Route path="/workspaces" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Workspaces /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="/workspaces/:workspaceId" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><WorkspaceDetailPage /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Settings /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/chat" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><Suspense fallback={<PageLoader />}><Chat /></Suspense></ProtectedRoute>} />
+      
       <Route path="/darwin-operations" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><DarwinOperations /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
     </Routes>

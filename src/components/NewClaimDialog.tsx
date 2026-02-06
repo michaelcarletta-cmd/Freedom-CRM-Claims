@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,9 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus } from "lucide-react";
+import { Plus, Upload, Loader2, FileText, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { formatPhoneNumber } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 interface InsuranceCompany {
   id: string;
@@ -67,6 +68,9 @@ export function NewClaimDialog() {
   const [newInsuranceName, setNewInsuranceName] = useState("");
   const [newMortgageName, setNewMortgageName] = useState("");
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractedFileName, setExtractedFileName] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -255,6 +259,127 @@ export function NewClaimDialog() {
     }
   };
 
+  const parseAddress = (address: string) => {
+    // Try to parse "123 Main St, City, ST 12345" or similar patterns
+    const parts = address.split(",").map(p => p.trim());
+    if (parts.length >= 3) {
+      const street = parts[0];
+      const city = parts[1];
+      const stateZip = parts[parts.length - 1].trim();
+      const stateZipMatch = stateZip.match(/^([A-Z]{2})\s*(\d{5}(-\d{4})?)?$/);
+      if (stateZipMatch) {
+        return { street, city, state: stateZipMatch[1], zip: stateZipMatch[2] || "" };
+      }
+      // Try state without zip
+      const stateOnly = stateZip.match(/^([A-Z]{2})$/);
+      if (stateOnly) {
+        return { street, city, state: stateOnly[1], zip: "" };
+      }
+      return { street, city, state: stateZip, zip: "" };
+    }
+    if (parts.length === 2) {
+      return { street: parts[0], city: parts[1], state: "", zip: "" };
+    }
+    return { street: address, city: "", state: "", zip: "" };
+  };
+
+  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 20 * 1024 * 1024) {
+      toast({ title: "Error", description: "File must be under 20MB", variant: "destructive" });
+      return;
+    }
+
+    setExtracting(true);
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append("file", file);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-claim-info`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: formDataUpload,
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Extraction failed");
+      }
+
+      const result = await response.json();
+      const ext = result.extracted || {};
+
+      // Auto-populate form fields from extracted data
+      const updates: any = { ...formData };
+      
+      if (ext.policyholder_name) updates.policyholderName = ext.policyholder_name;
+      if (ext.claim_number) updates.claimNumber = ext.claim_number;
+      if (ext.policy_number) updates.policyNumber = ext.policy_number;
+      if (ext.loss_date) updates.lossDate = ext.loss_date;
+      if (ext.loss_description) updates.lossDescription = ext.loss_description;
+
+      if (ext.property_address) {
+        const parsed = parseAddress(ext.property_address);
+        updates.policyholderStreet = parsed.street;
+        updates.policyholderCity = parsed.city;
+        updates.policyholderState = parsed.state;
+        updates.policyholderZip = parsed.zip;
+      }
+
+      // Try to match insurance company
+      if (ext.insurance_company) {
+        const match = insuranceCompanies.find(
+          c => c.name.toLowerCase() === ext.insurance_company.toLowerCase()
+        );
+        if (match) {
+          updates.insuranceCompanyId = match.id;
+          updates.insurancePhone = match.phone || "";
+          updates.insuranceEmail = match.email || "";
+        }
+      }
+
+      // Try to match loss type
+      if (ext.loss_type) {
+        const lossTypeNorm = ext.loss_type.toLowerCase();
+        const match = lossTypes.find(
+          lt => lt.name.toLowerCase().includes(lossTypeNorm) || lossTypeNorm.includes(lt.name.toLowerCase())
+        );
+        if (match) {
+          updates.lossTypeId = match.id;
+        }
+      }
+
+      setFormData(updates);
+      setExtractedFileName(file.name);
+      setSelectedClientId("new");
+
+      const fieldsFound = Object.keys(ext).length;
+      toast({
+        title: "Document Analyzed",
+        description: `Extracted ${fieldsFound} field${fieldsFound !== 1 ? 's' : ''} from ${file.name}`,
+      });
+    } catch (error: any) {
+      console.error("Extraction error:", error);
+      toast({
+        title: "Extraction Failed",
+        description: error.message || "Could not extract claim info from document",
+        variant: "destructive",
+      });
+    } finally {
+      setExtracting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -426,6 +551,48 @@ export function NewClaimDialog() {
         <DialogHeader>
           <DialogTitle className="text-2xl">Create New Claim</DialogTitle>
         </DialogHeader>
+
+        {/* Document Upload for Auto-Extract */}
+        <div className="border-2 border-dashed border-primary/30 rounded-lg p-4 bg-primary/5 hover:border-primary/50 transition-colors">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx"
+            onChange={handleDocumentUpload}
+          />
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              {extracting ? (
+                <Loader2 className="h-5 w-5 text-primary animate-spin" />
+              ) : (
+                <Sparkles className="h-5 w-5 text-primary" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">
+                {extracting ? "Analyzing document..." : "Upload estimate or carrier letter"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {extractedFileName 
+                  ? <>Extracted from: <Badge variant="secondary" className="text-xs ml-1"><FileText className="h-3 w-3 mr-1" />{extractedFileName}</Badge></>
+                  : "Darwin will auto-extract client info, claim number, loss type & more"
+                }
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={extracting}
+            >
+              <Upload className="h-4 w-4 mr-1" />
+              {extractedFileName ? "Re-upload" : "Upload"}
+            </Button>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Client Information Section */}
           <div className="space-y-4">
