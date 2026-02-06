@@ -354,7 +354,19 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
     setLoading(true);
     try {
       const supplementAmount = Number(invoiceData.supplementAmount) || 0;
-      const totalAmount = totalRD + supplementAmount;
+
+      // Calculate outstanding ACV funds
+      const rcvForCalc = Number(settlement.replacement_cost_value) || 0;
+      const otherStructuresRCVForCalc = Number(settlement.other_structures_rcv) || 0;
+      const pwiRCVForCalc = Number(settlement.pwi_rcv) || 0;
+      const personalPropertyRCVForCalc = Number(settlement.personal_property_rcv) || 0;
+      const totalRCVForCalc = rcvForCalc + otherStructuresRCVForCalc + pwiRCVForCalc + personalPropertyRCVForCalc;
+      const nonRecoverableForCalc = Number(settlement.non_recoverable_depreciation) || 0;
+      const deductibleForCalc = Number(settlement.deductible) || 0;
+      const acvForCalc = totalRCVForCalc - totalRD - nonRecoverableForCalc;
+      const outstandingACV = Math.max(0, acvForCalc - deductibleForCalc - paymentSummary.totalReceived);
+
+      const totalAmount = totalRD + supplementAmount + outstandingACV;
 
       // Get individual depreciation amounts
       const dwellingRD = Number(settlement.recoverable_depreciation) || 0;
@@ -413,6 +425,15 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           description: 'Supplement Amount',
           quantity: 1,
           unitPrice: supplementAmount,
+        });
+      }
+
+      // Add outstanding ACV funds if present
+      if (outstandingACV > 0) {
+        lineItems.push({
+          description: `Outstanding ACV Funds - Claim #${claim.claim_number || 'N/A'}`,
+          quantity: 1,
+          unitPrice: outstandingACV,
         });
       }
 
