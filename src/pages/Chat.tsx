@@ -99,7 +99,7 @@ export default function Chat() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const uploadFileToStorage = async (file: File): Promise<{ path: string; extractedText: string } | null> => {
+  const uploadFileToStorage = async (file: File): Promise<{ path: string } | null> => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
@@ -117,18 +117,8 @@ export default function Chat() {
 
       if (uploadError) throw uploadError;
 
-      // Try to get extracted text from OCR if it's a PDF/image
-      let extractedText = "";
-      
-      // For PDFs, try to read as text (some PDFs are text-based)
-      if (file.type === "application/pdf") {
-        // We'll pass the file path reference for the AI to know about
-        extractedText = `[PDF Document: ${file.name} - uploaded to storage at ${filePath}]`;
-      } else if (file.type.startsWith("image/")) {
-        extractedText = `[Image: ${file.name} - uploaded to storage at ${filePath}]`;
-      }
-
-      return { path: filePath, extractedText };
+      // Don't set extractedText — let the edge function handle PDF/image/Office extraction server-side
+      return { path: filePath };
     } catch (err) {
       console.error("Upload error:", err);
       return null;
@@ -145,14 +135,16 @@ export default function Chat() {
 
     // Process attached file
     if (attachedFile) {
-      if (attachedFile.extractedText) {
+      if (attachedFile.extractedText && attachedFile.extractedText.trim().length > 0) {
         // Text file - send content directly
         documentContent = attachedFile.extractedText;
       } else {
-        // Binary file - upload to storage, edge function will extract text
+        // Binary file (PDF, images, Office docs) - upload to storage
+        // Edge function will download and extract text server-side
         const uploaded = await uploadFileToStorage(attachedFile.file);
         if (uploaded) {
           documentFilePath = uploaded.path;
+          // Do NOT set documentContent — let edge function extract it
         } else {
           toast.error("Failed to upload file");
           return;
