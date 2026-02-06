@@ -5,15 +5,23 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Simple PDF text extraction without external dependencies
-async function extractTextFromPDF(fileData: Blob): Promise<string> {
-  const arrayBuffer = await fileData.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunks: string[] = [];
+  const chunkSize = 32768;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    chunks.push(String.fromCharCode(...chunk));
+  }
+  return btoa(chunks.join(''));
+}
+
+// Try simple text extraction for text-based files and as PDF fallback
+function extractPlainText(bytes: Uint8Array): string {
   const rawText = new TextDecoder("latin1").decode(bytes);
-  
   const textParts: string[] = [];
   
-  // Extract text between BT/ET blocks (PDF text objects)
+  // PDF BT/ET text extraction
   const btEtRegex = /BT\s([\s\S]*?)ET/g;
   let match;
   while ((match = btEtRegex.exec(rawText)) !== null) {
@@ -26,22 +34,8 @@ async function extractTextFromPDF(fileData: Blob): Promise<string> {
         .replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\\/g, '\\');
       if (decoded.trim()) textParts.push(decoded);
     }
-    const hexRegex = /<([0-9A-Fa-f\s]+)>/g;
-    let hexMatch;
-    while ((hexMatch = hexRegex.exec(block)) !== null) {
-      const hex = hexMatch[1].replace(/\s/g, '');
-      if (hex.length >= 4) {
-        let decoded = '';
-        for (let i = 0; i < hex.length; i += 2) {
-          const charCode = parseInt(hex.substring(i, i + 2), 16);
-          if (charCode >= 32 && charCode < 127) decoded += String.fromCharCode(charCode);
-        }
-        if (decoded.trim()) textParts.push(decoded);
-      }
-    }
   }
   
-  // Fallback: grab readable ASCII sequences
   if (textParts.length < 5) {
     const asciiRegex = /[A-Za-z0-9][A-Za-z0-9 ,.\-\/#:@$%&()]{4,}/g;
     let asciiMatch;
@@ -69,49 +63,92 @@ serve(async (req) => {
       });
     }
 
-    // Extract text from the file
-    let extractedText = "";
-    const lowerName = file.name.toLowerCase();
-
-    if (lowerName.endsWith(".pdf")) {
-      const blob = new Blob([await file.arrayBuffer()], { type: file.type });
-      extractedText = await extractTextFromPDF(blob);
-    } else if (lowerName.endsWith(".txt") || lowerName.endsWith(".csv")) {
-      extractedText = await file.text();
-    } else if (lowerName.endsWith(".doc") || lowerName.endsWith(".docx")) {
-      const arrayBuffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
-      const textDecoder = new TextDecoder("utf-8", { fatal: false });
-      const rawText = textDecoder.decode(bytes);
-      const xmlTextMatches = rawText.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
-      if (xmlTextMatches) {
-        extractedText = xmlTextMatches.map(m => m.replace(/<[^>]+>/g, "")).join(" ");
-      } else {
-        extractedText = rawText.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s{3,}/g, " ").trim();
-      }
-    } else {
-      extractedText = await file.text();
-    }
-
-    if (!extractedText || extractedText.trim().length < 20) {
-      return new Response(JSON.stringify({ 
-        error: "Could not extract text from document. It may be scanned or image-based.",
-        extracted: {} 
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Truncate to avoid token limits
-    extractedText = extractedText.substring(0, 30000);
-
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Use tool calling to extract structured data
+    const lowerName = file.name.toLowerCase();
+    const arrayBuffer = await file.arrayBuffer();
+    const isPdf = lowerName.endsWith(".pdf");
+    const isImage = /\.(png|jpg|jpeg|webp|gif|bmp|tiff?)$/i.test(lowerName);
+
+    // Build the AI message content
+    let messages: any[];
+
+    if (isPdf || isImage) {
+      // Use vision/multimodal: send the file as base64 for the AI to read directly
+      const base64 = arrayBufferToBase64(arrayBuffer);
+      const mimeType = isPdf ? "application/pdf" : file.type || "image/jpeg";
+      
+      // Also try text extraction as supplementary context
+      let supplementaryText = "";
+      if (isPdf) {
+        supplementaryText = extractPlainText(new Uint8Array(arrayBuffer));
+        if (supplementaryText.length > 15000) supplementaryText = supplementaryText.substring(0, 15000);
+      }
+
+      messages = [
+        {
+          role: "system",
+          content: `You are a document data extractor for insurance claims. Extract key claim information from the provided document. Be precise and extract only what is explicitly stated. Do not guess or make up values. If a field is not found, do not include it.`
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: { url: `data:${mimeType};base64,${base64}` }
+            },
+            {
+              type: "text",
+              text: `Extract all claim information from this document.${supplementaryText ? `\n\nAdditional extracted text for reference:\n${supplementaryText}` : ''}`
+            }
+          ]
+        }
+      ];
+    } else {
+      // Text-based files (doc, docx, txt, csv)
+      let extractedText = "";
+      const bytes = new Uint8Array(arrayBuffer);
+      
+      if (lowerName.endsWith(".doc") || lowerName.endsWith(".docx")) {
+        const textDecoder = new TextDecoder("utf-8", { fatal: false });
+        const rawText = textDecoder.decode(bytes);
+        const xmlTextMatches = rawText.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+        if (xmlTextMatches) {
+          extractedText = xmlTextMatches.map(m => m.replace(/<[^>]+>/g, "")).join(" ");
+        } else {
+          extractedText = rawText.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s{3,}/g, " ").trim();
+        }
+      } else {
+        extractedText = new TextDecoder().decode(bytes);
+      }
+
+      if (!extractedText || extractedText.trim().length < 20) {
+        return new Response(JSON.stringify({ 
+          error: "Could not extract text from document. It may be scanned or image-based.",
+          extracted: {} 
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      extractedText = extractedText.substring(0, 30000);
+
+      messages = [
+        {
+          role: "system",
+          content: `You are a document data extractor for insurance claims. Extract key claim information from the provided document text. Be precise and extract only what is explicitly stated. Do not guess or make up values. If a field is not found, do not include it.`
+        },
+        {
+          role: "user",
+          content: `Extract claim information from this document:\n\n${extractedText}`
+        }
+      ];
+    }
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -119,17 +156,8 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: `You are a document data extractor for insurance claims. Extract key claim information from the provided document text. Be precise and extract only what is explicitly stated in the document. Do not guess or infer values that aren't clearly present.`
-          },
-          {
-            role: "user",
-            content: `Extract claim information from this document:\n\n${extractedText}`
-          }
-        ],
+        model: "google/gemini-2.5-flash",
+        messages,
         tools: [
           {
             type: "function",
@@ -141,35 +169,35 @@ serve(async (req) => {
                 properties: {
                   policyholder_name: {
                     type: "string",
-                    description: "Full name of the policyholder/insured/claimant. Look for labels like 'Insured:', 'Policyholder:', 'Name:', 'Claimant:'"
+                    description: "Full name of the policyholder/insured/claimant"
                   },
                   property_address: {
                     type: "string",
-                    description: "Full property/loss address including street, city, state, zip. Look for 'Property Address:', 'Loss Location:', 'Risk Address:'"
+                    description: "Full property/loss address including street, city, state, zip"
                   },
                   claim_number: {
                     type: "string",
-                    description: "The insurance claim number. Look for 'Claim #:', 'Claim Number:', 'File Number:'"
+                    description: "The insurance claim number"
                   },
                   policy_number: {
                     type: "string",
-                    description: "The insurance policy number. Look for 'Policy #:', 'Policy Number:'"
+                    description: "The insurance policy number"
                   },
                   loss_type: {
                     type: "string",
-                    description: "Type of loss/peril (e.g., wind, hail, water, fire, theft, vehicle impact, hurricane, tornado, plumbing, smoke, lightning). Look for 'Type of Loss:', 'Cause of Loss:', 'Peril:'"
+                    description: "Type of loss/peril (e.g., wind, hail, water, fire, theft, vehicle impact)"
                   },
                   loss_date: {
                     type: "string",
-                    description: "Date of loss in YYYY-MM-DD format. Look for 'Date of Loss:', 'Loss Date:', 'Date of Occurrence:'"
+                    description: "Date of loss in YYYY-MM-DD format"
                   },
                   insurance_company: {
                     type: "string",
-                    description: "Name of the insurance company/carrier. Look for company name in header, 'Carrier:', 'Insurance Company:'"
+                    description: "Name of the insurance company/carrier"
                   },
                   loss_description: {
                     type: "string",
-                    description: "Brief description of the loss or damage. Keep under 200 characters."
+                    description: "Brief description of the loss or damage under 200 characters"
                   }
                 },
                 required: [],
@@ -184,14 +212,8 @@ serve(async (req) => {
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again." }), {
           status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }), {
-          status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -212,9 +234,12 @@ serve(async (req) => {
       }
     }
 
-    // Clean up empty strings
+    // Clean up empty/placeholder strings
     for (const key of Object.keys(extracted)) {
-      if (!extracted[key] || extracted[key].trim() === "") {
+      const val = extracted[key];
+      if (!val || typeof val !== 'string' || val.trim() === "" || 
+          val.toLowerCase().includes("not found") || val.toLowerCase().includes("not available") ||
+          val.toLowerCase().includes("n/a") || val.toLowerCase() === "unknown") {
         delete extracted[key];
       }
     }
