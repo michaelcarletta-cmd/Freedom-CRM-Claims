@@ -450,19 +450,37 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
       const personalPropertyRCV = personalPropertyRCVForCalc;
       const totalRCV = dwellingRCV + otherStructuresRCV + pwiRCV + personalPropertyRCV;
 
+      // Generate signed URLs for selected photos to embed in invoice
+      const photoUrls: { url: string; name: string; description: string }[] = [];
+      if (selectedPhotos.size > 0) {
+        for (const photoId of selectedPhotos) {
+          const photo = photos.find(p => p.id === photoId);
+          if (photo) {
+            const { data: signedData } = await supabase.storage
+              .from('claim-photos')
+              .createSignedUrl(photo.file_path, 7 * 24 * 60 * 60);
+            if (signedData?.signedUrl) {
+              photoUrls.push({
+                url: signedData.signedUrl,
+                name: photo.file_name,
+                description: photo.description || photo.category || '',
+              });
+            }
+          }
+        }
+      }
+
       const { data: invoiceResult, error: invoiceError } = await supabase.functions.invoke("generate-invoice", {
         body: {
           invoiceNumber: invoiceData.invoiceNumber,
           invoiceDate: invoiceData.invoiceDate,
           dueDate: invoiceData.dueDate,
-          // Contractor is the sender (from)
           sender: contractor ? {
             name: contractor.full_name || 'Contractor',
             email: contractor.email || '',
             phone: contractor.phone || '',
             logoUrl: contractor.logo_url || '',
           } : null,
-          // Insurance company is the recipient (to)
           recipient: {
             name: claim.insurance_company || 'Insurance Company',
             email: claim.insurance_email || '',
@@ -475,20 +493,18 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           policyholderName: claim.policyholder_name,
           workDescription: workDescription || undefined,
           supplementAmount: supplementAmount > 0 ? supplementAmount : undefined,
-          // Settlement breakdown with detailed depreciation categories and RCVs
+          photos: photoUrls.length > 0 ? photoUrls : undefined,
           settlementBreakdown: {
-            rcv: totalRCV, // Total RCV across all categories
+            rcv: totalRCV,
             acv,
             deductible,
             paymentsReceived,
             paymentsOutstanding: outstandingACV,
             recoverableDepreciation: totalRD,
-            // RCV by category
             dwellingRCV,
             otherStructuresRCV,
             pwiRCV,
             personalPropertyRCV,
-            // RD by category
             dwellingRD,
             otherStructuresRD,
             pwiRD,

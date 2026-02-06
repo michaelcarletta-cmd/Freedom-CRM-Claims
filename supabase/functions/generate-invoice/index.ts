@@ -12,7 +12,7 @@ const logStep = (step: string, details?: any) => {
 };
 
 function generateInvoiceHtml(data: any): string {
-  const { invoiceNumber, invoiceDate, dueDate, sender, recipient, lineItems, subtotal, notes, claimNumber, policyholderName, workDescription, settlementBreakdown, supplementAmount } = data;
+  const { invoiceNumber, invoiceDate, dueDate, sender, recipient, lineItems, subtotal, notes, claimNumber, policyholderName, workDescription, settlementBreakdown, supplementAmount, photos } = data;
 
   const itemsHtml = lineItems.map((item: any) => `
     <tr>
@@ -264,6 +264,29 @@ function generateInvoiceHtml(data: any): string {
   <div class="notes avoid-break">
     <h4>Notes</h4>
     <p>${notes}</p>
+  </div>
+  ` : ''}
+
+  ${photos && photos.length > 0 ? `
+  <div class="page-break"></div>
+  <div style="margin-top: 20px;">
+    <h2 style="font-size: 20px; color: #1f2937; margin-bottom: 15px; border-bottom: 2px solid #1f2937; padding-bottom: 8px;">
+      Photo Documentation (${photos.length} ${photos.length === 1 ? 'Photo' : 'Photos'})
+    </h2>
+    <p style="color: #6b7280; font-size: 12px; margin-bottom: 20px;">
+      The following photos document the completed repairs and condition of the property for Claim #${claimNumber || 'N/A'}.
+    </p>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+      ${photos.map((photo: any, index: number) => `
+        <div class="avoid-break" style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+          <img src="${photo.url}" alt="${photo.name}" style="width: 100%; height: 250px; object-fit: cover;" />
+          <div style="padding: 8px 10px; background: #f9fafb;">
+            <p style="margin: 0; font-size: 11px; font-weight: 600; color: #374151;">${photo.name}</p>
+            ${photo.description ? `<p style="margin: 2px 0 0; font-size: 10px; color: #6b7280;">${photo.description}</p>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>
   </div>
   ` : ''}
 
