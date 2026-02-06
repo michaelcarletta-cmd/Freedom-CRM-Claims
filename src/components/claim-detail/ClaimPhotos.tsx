@@ -1258,7 +1258,7 @@ const PhotoCard = memo(function PhotoCard({
     <TooltipProvider>
       <Card 
         className={`overflow-hidden cursor-pointer transition-all ${selected ? "ring-2 ring-primary" : ""}`}
-        onClick={onSelect}
+        onClick={onPreview}
       >
         <div className="relative aspect-square">
           {imageUrl ? (
@@ -1314,8 +1314,8 @@ const PhotoCard = memo(function PhotoCard({
               <p className="text-xs text-muted-foreground truncate">{photo.description}</p>
             ) : null}
             <div className="flex gap-1 mt-2" onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onPreview}>
-                <Eye className="h-3 w-3" />
+              <Button variant={selected ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={onSelect}>
+                <CheckCircle2 className={`h-3 w-3 ${selected ? "text-primary" : ""}`} />
               </Button>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onAnnotate}>
                 <Pencil className="h-3 w-3" />
