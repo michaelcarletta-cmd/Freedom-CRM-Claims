@@ -327,7 +327,13 @@ export function NewClaimDialog() {
       if (ext.loss_date) updates.lossDate = ext.loss_date;
       if (ext.loss_description) updates.lossDescription = ext.loss_description;
 
-      if (ext.property_address) {
+      if (ext.street_address) updates.policyholderStreet = ext.street_address;
+      if (ext.city) updates.policyholderCity = ext.city;
+      if (ext.state) updates.policyholderState = ext.state;
+      if (ext.zip_code) updates.policyholderZip = ext.zip_code;
+
+      // Fallback: if old-style property_address is returned, parse it
+      if (ext.property_address && !ext.street_address) {
         const parsed = parseAddress(ext.property_address);
         updates.policyholderStreet = parsed.street;
         updates.policyholderCity = parsed.city;

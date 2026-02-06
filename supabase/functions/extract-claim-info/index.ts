@@ -171,9 +171,21 @@ serve(async (req) => {
                     type: "string",
                     description: "Full name of the policyholder/insured/claimant"
                   },
-                  property_address: {
+                  street_address: {
                     type: "string",
-                    description: "Full property/loss address including street, city, state, zip"
+                    description: "Street address only (e.g., '123 Main St' or '456 Oak Ave Apt 2'). Do NOT include city, state, or zip."
+                  },
+                  city: {
+                    type: "string",
+                    description: "City name only (e.g., 'Houston', 'Manahawkin')"
+                  },
+                  state: {
+                    type: "string",
+                    description: "Two-letter state abbreviation (e.g., 'TX', 'NJ', 'FL')"
+                  },
+                  zip_code: {
+                    type: "string",
+                    description: "ZIP code (5-digit or ZIP+4 format, e.g., '08050' or '77001-1234')"
                   },
                   claim_number: {
                     type: "string",
