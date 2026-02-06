@@ -341,15 +341,20 @@ export function NewClaimDialog() {
         updates.policyholderZip = parsed.zip;
       }
 
-      // Try to match insurance company
+      // Try to match insurance company (fuzzy)
       if (ext.insurance_company) {
-        const match = insuranceCompanies.find(
-          c => c.name.toLowerCase() === ext.insurance_company.toLowerCase()
-        );
+        const extName = ext.insurance_company.toLowerCase();
+        const match = insuranceCompanies.find(c => {
+          const dbName = c.name.toLowerCase();
+          return dbName === extName || dbName.includes(extName) || extName.includes(dbName);
+        });
         if (match) {
           updates.insuranceCompanyId = match.id;
           updates.insurancePhone = match.phone || "";
           updates.insuranceEmail = match.email || "";
+        } else {
+          // No match found - notify user
+          console.log(`Insurance company "${ext.insurance_company}" not found in database`);
         }
       }
 

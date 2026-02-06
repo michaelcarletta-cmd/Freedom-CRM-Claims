@@ -205,7 +205,7 @@ serve(async (req) => {
                   },
                   insurance_company: {
                     type: "string",
-                    description: "Name of the insurance company/carrier"
+                    description: "Name of the insurance company or carrier. Look for logos, letterheads, 'Insured By:', company names like State Farm, Allstate, USAA, Liberty Mutual, Travelers, etc. This is the company providing coverage, NOT the agent or producer."
                   },
                   loss_description: {
                     type: "string",
