@@ -5,29 +5,52 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Use dynamic import for pdf.js
-let pdfjsLib: any = null;
-async function getPdfJs() {
-  if (!pdfjsLib) {
-    pdfjsLib = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.mjs");
-  }
-  return pdfjsLib;
-}
-
+// Simple PDF text extraction without external dependencies
 async function extractTextFromPDF(fileData: Blob): Promise<string> {
-  const pdfjs = await getPdfJs();
   const arrayBuffer = await fileData.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
-  const loadingTask = pdfjs.getDocument({ data: bytes.buffer });
-  const pdf = await loadingTask.promise;
+  const rawText = new TextDecoder("latin1").decode(bytes);
+  
   const textParts: string[] = [];
-  for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items.map((item: any) => item.str).join(' ');
-    if (pageText.trim()) textParts.push(pageText);
+  
+  // Extract text between BT/ET blocks (PDF text objects)
+  const btEtRegex = /BT\s([\s\S]*?)ET/g;
+  let match;
+  while ((match = btEtRegex.exec(rawText)) !== null) {
+    const block = match[1];
+    const strRegex = /\(([^)]*)\)/g;
+    let strMatch;
+    while ((strMatch = strRegex.exec(block)) !== null) {
+      const decoded = strMatch[1]
+        .replace(/\\n/g, '\n').replace(/\\r/g, '\r')
+        .replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\\/g, '\\');
+      if (decoded.trim()) textParts.push(decoded);
+    }
+    const hexRegex = /<([0-9A-Fa-f\s]+)>/g;
+    let hexMatch;
+    while ((hexMatch = hexRegex.exec(block)) !== null) {
+      const hex = hexMatch[1].replace(/\s/g, '');
+      if (hex.length >= 4) {
+        let decoded = '';
+        for (let i = 0; i < hex.length; i += 2) {
+          const charCode = parseInt(hex.substring(i, i + 2), 16);
+          if (charCode >= 32 && charCode < 127) decoded += String.fromCharCode(charCode);
+        }
+        if (decoded.trim()) textParts.push(decoded);
+      }
+    }
   }
-  return textParts.join('\n\n');
+  
+  // Fallback: grab readable ASCII sequences
+  if (textParts.length < 5) {
+    const asciiRegex = /[A-Za-z0-9][A-Za-z0-9 ,.\-\/#:@$%&()]{4,}/g;
+    let asciiMatch;
+    while ((asciiMatch = asciiRegex.exec(rawText)) !== null) {
+      textParts.push(asciiMatch[0].trim());
+    }
+  }
+  
+  return textParts.join(' ');
 }
 
 serve(async (req) => {
