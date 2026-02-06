@@ -2466,7 +2466,9 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
     // Inject uploaded document content from chat
     let uploadedDocContext = "";
     if (documentContent && documentContent.trim()) {
-      uploadedDocContext = `\n\n=== UPLOADED DOCUMENT FOR ANALYSIS ===\nDocument Name: ${documentName || 'Unknown'}\n\nIMPORTANT: The user has uploaded this document for you to analyze. Review it carefully for:\n1. UNDERPAYMENT - Are there line items that appear undervalued, missing overhead & profit, or using incorrect pricing?\n2. MISSING ITEMS - Are there damage areas, trades, or line items that should be included but are absent?\n3. DENIAL OVERTURN POTENTIAL - If this is a denial letter, identify weaknesses in the carrier's reasoning and strategies to overturn it.\n4. GENERAL ASSESSMENT - Provide your expert opinion on the document's adequacy.\n\nDocument Content:\n${documentContent}\n=== END UPLOADED DOCUMENT ===\n`;
+      const lossType = claim?.loss_type || "unknown";
+      const lossDescription = claim?.loss_description || "";
+      uploadedDocContext = `\n\n=== UPLOADED DOCUMENT FOR ANALYSIS ===\nDocument Name: ${documentName || 'Unknown'}\n\nCRITICAL: Base your ENTIRE analysis on the ACTUAL loss type and description provided. DO NOT default to roofing or hail damage assumptions. Every claim is different — water damage, fire, wind, theft, vehicle impact, plumbing failure, etc. Your analysis must match the specific peril and damages described.\n\nClaim Loss Type: ${lossType}\nLoss Description: ${lossDescription}\n\nAnalyze this document in the context of the above loss type:\n1. UNDERPAYMENT - Are there line items that appear undervalued, missing overhead & profit, or using incorrect pricing for THIS type of loss?\n2. MISSING ITEMS - Based on the reported loss type ("${lossType}") and description, are there damage areas, trades, or line items that SHOULD be included but are absent? Think about what damages are typical for this specific peril.\n3. DENIAL OVERTURN POTENTIAL - If this is a denial letter, identify weaknesses in the carrier's reasoning specific to the reported cause of loss.\n4. GENERAL ASSESSMENT - Provide your expert opinion on the document's adequacy for this specific claim type.\n\nDocument Content:\n${documentContent}\n=== END UPLOADED DOCUMENT ===\n`;
       contextContent += uploadedDocContext;
     }
 
@@ -2744,6 +2746,11 @@ When you see "=== CRITICAL: KNOWLEDGE BASE CONTENT ===" in the context, you MUST
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
+
+
+CRITICAL - LOSS TYPE AWARENESS:
+NEVER default to roofing, hail, or wind damage assumptions. Every claim has a specific loss type (water damage, fire, theft, vandalism, vehicle impact, plumbing failure, hurricane, tornado, etc.). ALWAYS read the claim's actual loss type and description FIRST, and tailor ALL analysis, recommendations, missing items, and strategies to THAT specific peril. If no loss type is specified, ASK the user what type of loss it is before analyzing.
+
 You have access to the user's active claims and pending tasks. Provide practical, actionable advice focused on getting claims FILED RIGHT, MOVING FAST, and PAID FULLY. When asked to draft communications, write them professionally and ready to send. Be thorough and strategic.`
       : `You are Darwin, an elite public adjuster AI consultant specializing in property damage claims. You think and operate like the best public adjusters in the industry, with a relentless focus on getting claims FILED RIGHT, MOVING FAST, and PAID FULLY.
 
@@ -2811,6 +2818,10 @@ Always provide:
 - Warning about carrier tactics and how to counter them
 - Strategic recommendations for maximizing settlement
 - Follow-up actions to keep momentum
+
+
+CRITICAL - LOSS TYPE AWARENESS:
+NEVER default to roofing, hail, or wind damage assumptions. Every claim has a specific loss type (water damage, fire, theft, vandalism, vehicle impact, plumbing failure, hurricane, tornado, etc.). ALWAYS read the claim's actual loss type and description FIRST, and tailor ALL analysis, recommendations, missing items, and strategies to THAT specific peril. If no loss type is specified, ASK the user what type of loss it is before analyzing.
 
 Be professional, ethical, and relentlessly focused on getting the policyholder a fair, full, and fast settlement. Never suggest fraud.`;
 
