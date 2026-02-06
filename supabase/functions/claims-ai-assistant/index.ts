@@ -2558,9 +2558,34 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
     }
 
     if (resolvedDocContent && resolvedDocContent.trim()) {
-      const lossType = claim?.loss_type || "unknown";
+      const lossType = claim?.loss_type || "";
       const lossDescription = claim?.loss_description || "";
-      uploadedDocContext = `\n\n=== UPLOADED DOCUMENT FOR ANALYSIS ===\nDocument Name: ${documentName || 'Unknown'}\n\nCRITICAL: Base your ENTIRE analysis on the ACTUAL loss type and description provided. DO NOT default to roofing or hail damage assumptions. Every claim is different — water damage, fire, wind, theft, vehicle impact, plumbing failure, etc. Your analysis must match the specific peril and damages described.\n\nClaim Loss Type: ${lossType}\nLoss Description: ${lossDescription}\n\nAnalyze this document in the context of the above loss type:\n1. UNDERPAYMENT - Are there line items that appear undervalued, missing overhead & profit, or using incorrect pricing for THIS type of loss?\n2. MISSING ITEMS - Based on the reported loss type ("${lossType}") and description, are there damage areas, trades, or line items that SHOULD be included but are absent? Think about what damages are typical for this specific peril.\n3. DENIAL OVERTURN POTENTIAL - If this is a denial letter, identify weaknesses in the carrier's reasoning specific to the reported cause of loss.\n4. GENERAL ASSESSMENT - Provide your expert opinion on the document's adequacy for this specific claim type.\n\nDocument Content:\n${resolvedDocContent}\n=== END UPLOADED DOCUMENT ===\n`;
+      const hasClaimContext = lossType && lossType !== "unknown" && lossType.trim() !== "";
+      
+      let docAnalysisInstructions = "";
+      if (hasClaimContext) {
+        docAnalysisInstructions = `CRITICAL: Base your ENTIRE analysis on the ACTUAL loss type: "${lossType}". Loss Description: "${lossDescription}". DO NOT default to roofing or hail damage assumptions. Your analysis must match the specific peril and damages described.
+
+Analyze this document in the context of the above loss type:
+1. UNDERPAYMENT - Are there line items that appear undervalued, missing overhead & profit, or using incorrect pricing for THIS type of loss?
+2. MISSING ITEMS - Based on the reported loss type ("${lossType}") and description, are there damage areas, trades, or line items that SHOULD be included but are absent?
+3. DENIAL OVERTURN POTENTIAL - If this is a denial letter, identify weaknesses in the carrier's reasoning specific to the reported cause of loss.
+4. GENERAL ASSESSMENT - Provide your expert opinion on the document's adequacy for this specific claim type.`;
+      } else {
+        docAnalysisInstructions = `CRITICAL: No specific claim is linked to this conversation. You MUST analyze the document based ONLY on what the document itself says. DO NOT assume any specific peril or damage type (especially NOT roofing/hail/wind by default). Read the document carefully to determine what type of loss, damage, or claim it pertains to.
+
+Analyze this document:
+1. DOCUMENT TYPE - What kind of document is this? (estimate, denial letter, policy excerpt, inspection report, etc.)
+2. LOSS TYPE IDENTIFICATION - Based on the document content, what type of loss or damage does it describe? State this clearly.
+3. UNDERPAYMENT - Are there line items that appear undervalued, missing overhead & profit, or using incorrect pricing?
+4. MISSING ITEMS - Based on what the document describes, are there damage areas, trades, or line items that SHOULD be included but are absent?
+5. DENIAL OVERTURN POTENTIAL - If this is a denial letter, identify weaknesses in the carrier's reasoning.
+6. GENERAL ASSESSMENT & NEXT STEPS - Provide your expert opinion and recommend next steps.
+
+If the document is ambiguous about the type of loss, ask the user to clarify rather than assuming.`;
+      }
+      
+      uploadedDocContext = `\n\n=== UPLOADED DOCUMENT FOR ANALYSIS ===\nDocument Name: ${documentName || 'Unknown'}\n\n${docAnalysisInstructions}\n\nDocument Content:\n${resolvedDocContent}\n=== END UPLOADED DOCUMENT ===\n`;
       contextContent += uploadedDocContext;
     }
 
