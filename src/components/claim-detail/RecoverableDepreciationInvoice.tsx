@@ -457,7 +457,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
           const photo = photos.find(p => p.id === photoId);
           if (photo) {
             const { data: signedData } = await supabase.storage
-              .from('claim-photos')
+              .from('claim-files')
               .createSignedUrl(photo.file_path, 7 * 24 * 60 * 60);
             if (signedData?.signedUrl) {
               photoUrls.push({
@@ -575,7 +575,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
       const photo = photos.find(p => p.id === photoId);
       if (photo) {
         const { data } = await supabase.storage
-          .from('claim-photos')
+          .from('claim-files')
           .createSignedUrl(photo.file_path, 3600);
         if (data?.signedUrl) {
           window.open(data.signedUrl, '_blank');
