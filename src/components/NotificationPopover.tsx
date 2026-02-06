@@ -1,26 +1,14 @@
 import { useState, useEffect } from "react";
-import { Bell, MessageSquare, CheckSquare } from "lucide-react";
+import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { format, isToday, isTomorrow, isPast } from "date-fns";
+import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-
-interface Task {
-  id: string;
-  title: string;
-  due_date: string | null;
-  priority: string | null;
-  status: string;
-  claim_id: string;
-  claims: {
-    claim_number: string;
-  };
-}
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Notification {
   id: string;
@@ -40,33 +28,16 @@ interface Notification {
 }
 
 export function NotificationPopover() {
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadTaskCount, setUnreadTaskCount] = useState(0);
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!user) return;
     
-    fetchTasks();
     fetchNotifications();
-
-    const tasksChannel = supabase
-      .channel('tasks-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tasks'
-        },
-        () => {
-          fetchTasks();
-        }
-      )
-      .subscribe();
 
     const notificationsChannel = supabase
       .channel('notifications-changes')
@@ -85,39 +56,9 @@ export function NotificationPopover() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(tasksChannel);
       supabase.removeChannel(notificationsChannel);
     };
   }, [user]);
-
-  const fetchTasks = async () => {
-    const { data } = await supabase
-      .from("tasks")
-      .select(`
-        id,
-        title,
-        due_date,
-        priority,
-        status,
-        claim_id,
-        claims (
-          claim_number
-        )
-      `)
-      .neq("status", "completed")
-      .order("due_date", { ascending: true });
-
-    if (data) {
-      const relevantTasks = data.filter((task) => {
-        if (!task.due_date) return false;
-        const dueDate = new Date(task.due_date);
-        return isPast(dueDate) || isToday(dueDate) || isTomorrow(dueDate);
-      });
-      
-      setTasks(relevantTasks);
-      setUnreadTaskCount(relevantTasks.length);
-    }
-  };
 
   const fetchNotifications = async () => {
     if (!user) return;
@@ -146,7 +87,7 @@ export function NotificationPopover() {
 
     if (data) {
       setNotifications(data as any);
-      setUnreadNotificationCount(data.length);
+      setUnreadCount(data.length);
     }
   };
 
@@ -156,161 +97,96 @@ export function NotificationPopover() {
       .update({ is_read: true })
       .eq("id", notificationId);
     
+    // Invalidate sidebar and claims table notification queries
+    queryClient.invalidateQueries({ queryKey: ["claim-notifications"] });
+    queryClient.invalidateQueries({ queryKey: ["unread-claim-notifications"] });
+    
     navigate(`/claims/${claimId}`);
     fetchNotifications();
   };
 
-  const getTaskBadgeVariant = (task: Task) => {
-    if (!task.due_date) return "secondary";
-    const dueDate = new Date(task.due_date);
-    if (isPast(dueDate) && !isToday(dueDate)) return "destructive";
-    if (isToday(dueDate)) return "default";
-    return "secondary";
+  const markAllAsRead = async () => {
+    if (!user || notifications.length === 0) return;
+    
+    await supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("user_id", user.id)
+      .eq("is_read", false);
+    
+    queryClient.invalidateQueries({ queryKey: ["claim-notifications"] });
+    queryClient.invalidateQueries({ queryKey: ["unread-claim-notifications"] });
+    fetchNotifications();
   };
-
-  const getTaskBadgeText = (task: Task) => {
-    if (!task.due_date) return "";
-    const dueDate = new Date(task.due_date);
-    if (isPast(dueDate) && !isToday(dueDate)) return "Overdue";
-    if (isToday(dueDate)) return "Due Today";
-    if (isTomorrow(dueDate)) return "Due Tomorrow";
-    return "";
-  };
-
-  const totalUnread = unreadTaskCount + unreadNotificationCount;
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
-          {totalUnread > 0 && (
+          {unreadCount > 0 && (
             <Badge 
               variant="destructive" 
               className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
             >
-              {totalUnread}
+              {unreadCount > 99 ? "99+" : unreadCount}
             </Badge>
           )}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-96 p-0" align="end">
-        <div className="p-4 border-b">
-          <h3 className="font-semibold">Notifications</h3>
-          <p className="text-sm text-muted-foreground">
-            {totalUnread} unread notification{totalUnread !== 1 ? "s" : ""}
-          </p>
+        <div className="p-4 border-b flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold">Notifications</h3>
+            <p className="text-sm text-muted-foreground">
+              {unreadCount} unread mention{unreadCount !== 1 ? "s" : ""}
+            </p>
+          </div>
+          {unreadCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={markAllAsRead} className="text-xs">
+              Mark all read
+            </Button>
+          )}
         </div>
-        <Tabs defaultValue="updates" className="w-full">
-          <TabsList className="w-full flex flex-row rounded-none border-b h-auto p-0">
-            <TabsTrigger value="updates" className="flex-1 inline-flex items-center justify-center gap-2 py-3">
-              <MessageSquare className="h-4 w-4" />
-              Updates
-              {unreadNotificationCount > 0 && (
-                <Badge 
-                  variant="destructive" 
-                  className="ml-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                >
-                  {unreadNotificationCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="tasks" className="flex-1 inline-flex items-center justify-center gap-2 py-3">
-              <CheckSquare className="h-4 w-4" />
-              Tasks
-              {unreadTaskCount > 0 && (
-                <Badge 
-                  variant="destructive" 
-                  className="ml-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                >
-                  {unreadTaskCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="updates" className="m-0">
-            <ScrollArea className="h-[400px]">
-              {notifications.length === 0 ? (
-                <div className="p-4 text-center text-sm text-muted-foreground">
-                  No unread updates
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {notifications.map((notification) => {
-                    const authorName = notification.claim_updates.profiles?.full_name 
-                      || notification.claim_updates.profiles?.email 
-                      || "Someone";
-                    
-                    return (
-                      <div
-                        key={notification.id}
-                        className="p-4 hover:bg-muted/50 cursor-pointer transition-colors"
-                        onClick={() => markNotificationAsRead(notification.id, notification.claim_id)}
-                      >
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <h4 className="font-medium text-sm">New update from {authorName}</h4>
-                          <Badge variant="default" className="text-xs shrink-0">
-                            New
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-foreground line-clamp-2 mb-2">
-                          {notification.claim_updates.content}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Claim: {notification.claims?.claim_number}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {format(new Date(notification.created_at), "MMM d, yyyy h:mm a")}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </ScrollArea>
-          </TabsContent>
-
-          <TabsContent value="tasks" className="m-0">
-            <ScrollArea className="h-[400px]">
-              {tasks.length === 0 ? (
-                <div className="p-4 text-center text-sm text-muted-foreground">
-                  No pending tasks
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="p-4 hover:bg-muted/50 cursor-pointer transition-colors"
-                      onClick={() => navigate(`/claims/${task.claim_id}?tab=tasks`)}
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <h4 className="font-medium text-sm">{task.title}</h4>
-                        <Badge variant={getTaskBadgeVariant(task)} className="text-xs shrink-0">
-                          {getTaskBadgeText(task)}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Claim: {task.claims?.claim_number}
-                      </p>
-                      {task.due_date && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Due: {format(new Date(task.due_date), "MMM d, yyyy")}
-                        </p>
-                      )}
-                      {task.priority && (
-                        <Badge variant="outline" className="mt-2 text-xs">
-                          {task.priority}
-                        </Badge>
-                      )}
+        <ScrollArea className="h-[400px]">
+          {notifications.length === 0 ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              No unread notifications
+            </div>
+          ) : (
+            <div className="divide-y">
+              {notifications.map((notification) => {
+                const authorName = notification.claim_updates.profiles?.full_name 
+                  || notification.claim_updates.profiles?.email 
+                  || "Someone";
+                
+                return (
+                  <div
+                    key={notification.id}
+                    className="p-4 hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => markNotificationAsRead(notification.id, notification.claim_id)}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h4 className="font-medium text-sm">{authorName} mentioned you</h4>
+                      <Badge variant="default" className="text-xs shrink-0">
+                        New
+                      </Badge>
                     </div>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-          </TabsContent>
-        </Tabs>
+                    <p className="text-sm text-foreground line-clamp-2 mb-2">
+                      {notification.claim_updates.content}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Claim: {notification.claims?.claim_number}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {format(new Date(notification.created_at), "MMM d, yyyy h:mm a")}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </ScrollArea>
       </PopoverContent>
     </Popover>
   );
