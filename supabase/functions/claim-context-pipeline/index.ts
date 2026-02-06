@@ -154,6 +154,14 @@ IMPORTANT:
     // ── STAGE 3: Scope classify & route ──
     if (action === "classify_scope") {
       const ctx = claimContext;
+      
+      // Pre-check: if description explicitly says interior, bias accordingly
+      const descLower = (ctx.description || "").toLowerCase();
+      const photoScopes = (ctx.photo_findings || []).map((f: any) => f.scope);
+      const hasRoofPhotos = photoScopes.includes("roof");
+      const hasInteriorPhotos = photoScopes.includes("interior");
+      const hasMeasuredRoof = ctx.measurement_report?.sections?.roof?.total_squares > 0;
+      
       const systemPrompt = `You are a scope classifier for insurance claims. Analyze the claim context and determine which repair scopes apply.
 
 Return ONLY this JSON:
@@ -169,20 +177,50 @@ Rules:
 - If nothing >= 0.5, set primary_scopes to ["general"]
 - missing_info lists what data would improve the estimate
 - Analyze description, photo_findings, and measurement_report.sections
-- Do NOT add roof if only interior damage is described
-- Do NOT add interior if only exterior damage is described`;
+
+CRITICAL CLASSIFICATION RULES:
+- Do NOT assign roof confidence >= 0.5 unless there is EXPLICIT evidence of roof damage (roof photos showing damage, description mentioning roof damage, or hail/wind damage to roof)
+- Having a roof measurement report alone does NOT mean roof is damaged — measurement reports are often included by default
+- Interior water damage (ceiling stains, pipe bursts, appliance leaks) does NOT imply roof damage unless explicitly stated
+- If description says "interior", "water damage inside", "pipe burst", "appliance leak", etc., roof confidence should be < 0.2
+- If photo_findings only contain interior scope items, roof confidence should be < 0.2
+- Be CONSERVATIVE: only include a scope if there is direct evidence of damage in that scope`;
 
       const userPrompt = `Claim context:
 Description: ${ctx.description || "none"}
 Loss cause: ${ctx.loss_cause || "unknown"}
 Photo findings (${ctx.photo_findings?.length || 0}): ${JSON.stringify(ctx.photo_findings || [])}
+Photo scopes found: ${JSON.stringify([...new Set(photoScopes)])}
+Has roof photos with damage: ${hasRoofPhotos}
+Has interior photos with damage: ${hasInteriorPhotos}
+Has measured roof data: ${hasMeasuredRoof}
 Measurement sections available: ${JSON.stringify(Object.keys(ctx.measurement_report?.sections || {}).filter((k: string) => {
   const s = ctx.measurement_report?.sections?.[k];
   return s && typeof s === "object" && Object.keys(s).length > 0 && k !== "notes";
 }))}`;
 
       const raw = await callAI(apiKey, systemPrompt, userPrompt);
-      const classification = parseJSON(raw);
+      let classification = parseJSON(raw);
+      
+      // POST-PROCESSING GUARDRAIL: Force-correct scope confidence based on hard evidence
+      if (classification.confidence) {
+        // If no roof photos and no roof-related description, cap roof confidence
+        const roofKeywords = ["roof", "shingle", "hail", "wind damage to roof", "missing shingles", "ridge", "flashing"];
+        const descMentionsRoof = roofKeywords.some(kw => descLower.includes(kw));
+        
+        if (!hasRoofPhotos && !descMentionsRoof) {
+          classification.confidence.roof = Math.min(classification.confidence.roof || 0, 0.2);
+        }
+        
+        // Recalculate primary_scopes from corrected confidence
+        classification.primary_scopes = Object.entries(classification.confidence)
+          .filter(([_, conf]) => (conf as number) >= 0.5)
+          .map(([scope]) => scope);
+        
+        if (classification.primary_scopes.length === 0) {
+          classification.primary_scopes = ["general"];
+        }
+      }
 
       return new Response(JSON.stringify({ success: true, scope_classification: classification }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -212,19 +250,28 @@ Measurement sections available: ${JSON.stringify(Object.keys(ctx.measurement_rep
       const scopeConfidence = ctx.scope_classification?.confidence || {};
       const overrides = ctx.user_overrides || { quality_grade: "standard", include_op: true, tax_rate: 0, price_list: null };
 
+      // Build excluded scopes list for absolute clarity
+      const allScopes = ["interior", "roof", "siding", "gutters", "structural", "exterior"];
+      const excludedScopes = allScopes.filter(s => !primaryScopes.includes(s));
+
       const systemPrompt = `You are an expert Xactimate estimate generator for insurance claims. Generate line items per scope.
 
-CRITICAL RULES:
-1. ONLY generate items for these scopes: ${JSON.stringify(primaryScopes)}
-2. If scope confidence for "roof" is < 0.5 (currently ${scopeConfidence.roof ?? 0}), do NOT include roof line items
-3. If scope confidence for "interior" is < 0.5 (currently ${scopeConfidence.interior ?? 0}), do NOT include interior line items
-4. For each line item:
+ABSOLUTE RULES — VIOLATION OF THESE IS A CRITICAL ERROR:
+1. You may ONLY generate line items for these scopes: ${JSON.stringify(primaryScopes)}
+2. You MUST NOT generate ANY line items for these scopes: ${JSON.stringify(excludedScopes)}
+3. Specifically: ${!primaryScopes.includes("roof") ? "DO NOT INCLUDE ANY ROOF LINE ITEMS. NO SHINGLES, NO UNDERLAYMENT, NO RIDGE CAPS, NO ROOF-RELATED ITEMS AT ALL." : "Roof items are allowed."}
+4. ${!primaryScopes.includes("interior") ? "DO NOT INCLUDE ANY INTERIOR LINE ITEMS." : "Interior items are allowed."}
+5. ${!primaryScopes.includes("siding") ? "DO NOT INCLUDE ANY SIDING LINE ITEMS." : "Siding items are allowed."}
+6. ${!primaryScopes.includes("gutters") ? "DO NOT INCLUDE ANY GUTTER LINE ITEMS." : "Gutter items are allowed."}
+
+QUANTITY RULES:
+7. For each line item:
    - If measurements exist for that scope → qty_basis = "measured", use actual measurements
    - If measurements missing → qty_basis = "allowance", estimate reasonable minimums from photo findings
    - Always include assumptions for allowance items
-5. Quality grade: ${overrides.quality_grade}
-6. Include O&P: ${overrides.include_op} (if true and 3+ trades, add 10% overhead + 10% profit line)
-7. Tax rate: ${overrides.tax_rate}%
+8. Quality grade: ${overrides.quality_grade}
+9. Include O&P: ${overrides.include_op} (if true and 3+ trades, add 10% overhead + 10% profit line)
+10. Tax rate: ${overrides.tax_rate}%
 
 Return ONLY this JSON:
 {
@@ -234,7 +281,7 @@ Return ONLY this JSON:
       "items": [
         {
           "line_code": "DRYWL12" or null,
-          "description": "Drywall 1/2\" - hung, taped, floated",
+          "description": "Drywall 1/2\\" - hung, taped, floated",
           "unit": "SF",
           "qty": 64,
           "qty_basis": "allowance",
@@ -247,17 +294,22 @@ Return ONLY this JSON:
   "questions_for_user": ["How many rooms were affected by water damage?"]
 }`;
 
-      const userPrompt = `FULL CLAIM CONTEXT:
+      const userPrompt = `FULL CLAIM CONTEXT (ONLY generate for scopes: ${JSON.stringify(primaryScopes)}):
 ${JSON.stringify(ctx, null, 2)}`;
 
       const raw = await callAI(apiKey, systemPrompt, userPrompt, "google/gemini-2.5-pro");
       const estimateResult = parseJSON(raw);
 
-      // Guardrail: strip scopes not in primary_scopes
+      // HARD GUARDRAIL: strip any scopes not in primary_scopes (LLM may hallucinate)
       if (estimateResult.estimate && Array.isArray(estimateResult.estimate)) {
         estimateResult.estimate = estimateResult.estimate.filter((s: any) =>
-          primaryScopes.includes(s.scope) || primaryScopes.includes("general")
+          primaryScopes.includes(s.scope)
         );
+        
+        if (estimateResult.estimate.length === 0 && !primaryScopes.includes("general")) {
+          estimateResult.missing_info_to_finalize = estimateResult.missing_info_to_finalize || [];
+          estimateResult.missing_info_to_finalize.push("No line items matched the identified scopes. More detail needed.");
+        }
       }
 
       // Save to DB if pipelineId provided
