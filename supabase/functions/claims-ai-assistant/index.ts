@@ -1,6 +1,41 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
+// Use dynamic import for pdf.js to avoid bundling issues
+let pdfjsLib: any = null;
+async function getPdfJs() {
+  if (!pdfjsLib) {
+    pdfjsLib = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.mjs");
+  }
+  return pdfjsLib;
+}
+
+// Extract text from PDF using pdf.js (proper extraction)
+async function extractTextFromPDFNative(fileData: Blob): Promise<string> {
+  const pdfjs = await getPdfJs();
+  const arrayBuffer = await fileData.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  
+  const loadingTask = pdfjs.getDocument({ data: bytes.buffer });
+  const pdf = await loadingTask.promise;
+  
+  const textParts: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items
+      .map((item: any) => item.str)
+      .join(' ');
+    if (pageText.trim()) {
+      textParts.push(pageText);
+    }
+  }
+  
+  const extractedText = textParts.join('\n\n');
+  console.log(`PDF.js extraction: ${extractedText.length} chars from ${pdf.numPages} pages`);
+  return extractedText;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
@@ -2482,44 +2517,17 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
           const lowerName = fileName.toLowerCase();
 
           if (lowerName.endsWith(".pdf")) {
-            // For PDFs: extract raw text from the binary
-            const arrayBuffer = await fileData.arrayBuffer();
-            const bytes = new Uint8Array(arrayBuffer);
-            // Simple PDF text extraction - look for text streams
-            const textDecoder = new TextDecoder("utf-8", { fatal: false });
-            const rawText = textDecoder.decode(bytes);
-            
-            // Extract readable text segments from PDF
-            const textSegments: string[] = [];
-            // Match text between BT and ET operators, and parenthesized strings
-            const parenMatches = rawText.match(/\(([^)]{2,})\)/g);
-            if (parenMatches) {
-              for (const match of parenMatches) {
-                const inner = match.slice(1, -1)
-                  .replace(/\\n/g, "\n")
-                  .replace(/\\r/g, "")
-                  .replace(/\\\(/g, "(")
-                  .replace(/\\\)/g, ")")
-                  .replace(/\\\\/g, "\\");
-                // Filter out binary garbage
-                if (inner.length > 1 && /[a-zA-Z0-9]{2,}/.test(inner)) {
-                  textSegments.push(inner);
-                }
-              }
-            }
-            
-            if (textSegments.length > 0) {
-              resolvedDocContent = textSegments.join(" ").substring(0, 50000);
-              console.log(`Extracted ${textSegments.length} text segments from PDF (${resolvedDocContent.length} chars)`);
-            } else {
-              // Fallback: try to find any readable ASCII text
-              const asciiText = rawText.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s{3,}/g, " ").trim();
-              if (asciiText.length > 100) {
-                resolvedDocContent = asciiText.substring(0, 50000);
-                console.log(`Extracted ASCII fallback text from PDF (${resolvedDocContent.length} chars)`);
+            try {
+              resolvedDocContent = await extractTextFromPDFNative(fileData);
+              if (!resolvedDocContent || resolvedDocContent.trim().length < 50) {
+                resolvedDocContent = `[PDF document "${fileName}" appears to be scanned/image-based. Please describe the key details.]`;
               } else {
-                resolvedDocContent = `[PDF document "${fileName}" was uploaded but text could not be extracted. It may be a scanned/image-based PDF. Please ask the user to describe the key details from the document.]`;
+                resolvedDocContent = resolvedDocContent.substring(0, 50000);
+                console.log(`Extracted ${resolvedDocContent.length} chars from PDF via pdf.js`);
               }
+            } catch (pdfErr) {
+              console.error("PDF.js extraction failed:", pdfErr);
+              resolvedDocContent = `[PDF "${fileName}" could not be read. Please describe the key details.]`;
             }
           } else if (lowerName.endsWith(".txt") || lowerName.endsWith(".csv") || lowerName.endsWith(".json") || lowerName.endsWith(".xml") || lowerName.endsWith(".md")) {
             resolvedDocContent = await fileData.text();
