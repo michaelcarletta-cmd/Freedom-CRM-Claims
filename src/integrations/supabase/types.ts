@@ -1136,6 +1136,50 @@ export type Database = {
           },
         ]
       }
+      claim_context_pipelines: {
+        Row: {
+          claim_context: Json
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          estimate_result: Json | null
+          id: string
+          stage: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          claim_context?: Json
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          estimate_result?: Json | null
+          id?: string
+          stage?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          claim_context?: Json
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          estimate_result?: Json | null
+          id?: string
+          stage?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_context_pipelines_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_contractors: {
         Row: {
           assigned_at: string | null
