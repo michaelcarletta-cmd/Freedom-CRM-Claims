@@ -2563,24 +2563,58 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
       const hasClaimContext = lossType && lossType !== "unknown" && lossType.trim() !== "";
       
       let docAnalysisInstructions = "";
+      
+      // Shared deep analysis framework used by Darwin in both claim-specific and general chat
+      const deepAnalysisFramework = `
+ESTIMATE ANALYSIS (if this is a carrier or contractor estimate):
+- ESTIMATE SUMMARY: Identify the estimating software (Xactimate, Symbility, etc.), total RCV, total ACV, depreciation amounts, deductible
+- LINE ITEM REVIEW: Check each line item for correct quantities, unit pricing, and trade categorization
+- MISSING LINE ITEMS: Identify commonly missed items for the identified loss type (e.g., detach/reset for roofing, content manipulation for water, demo/haul for fire, temporary repairs, etc.)
+- OVERHEAD & PROFIT: Is O&P included? If multiple trades are involved, O&P is standard and should be applied (typically 10% each for overhead and profit)
+- CODE UPGRADES: Are ordinance and law / code upgrade costs included? Check for items like arc-fault breakers, GFCI outlets, permits, engineering
+- QUANTITY CONCERNS: Flag any quantities that seem low relative to the described scope
+- SUPPLEMENT OPPORTUNITIES: List specific items that should be supplemented with justification
+- AMBIGUOUS LANGUAGE: Flag limiting or ambiguous language the carrier uses to minimize scope (e.g., "repair as needed", "patch", "spot treat")
+- DEPRECIATION REVIEW: Is depreciation applied correctly? Check for excessive depreciation percentages or depreciation applied to non-depreciable items (labor, removal, etc.)
+
+DENIAL LETTER ANALYSIS (if this is a denial or partial denial):
+- CARRIER ASSERTION: Quote the carrier's specific denial reason(s) verbatim
+- POLICY LANGUAGE: Identify what policy provisions the carrier cites and whether they're applying them correctly
+- BURDEN OF PROOF: Has the carrier met their burden of proof for the denial? What evidence did they provide vs. what they should have provided?
+- LOGICAL FAILURES: Identify contradictions, unsupported conclusions, or circular reasoning in the carrier's position
+- PROCEDURAL DEFECTS: Did the carrier follow required timelines, provide proper notice, conduct adequate investigation?
+- WEAKNESSES TO EXPLOIT: Specific points where the carrier's reasoning can be challenged
+- REBUTTAL STRATEGY: Outline the approach to overturn — what evidence to gather, what arguments to make, what deadlines to enforce
+- BAD FAITH INDICATORS: Flag any carrier actions that suggest bad faith handling (delays, inadequate investigation, ignoring evidence)
+
+ENGINEER/INSPECTION REPORT ANALYSIS (if this is an engineering or inspection report):
+- METHODOLOGY: Was the inspection methodology appropriate for the reported damage?
+- CONCLUSIONS vs EVIDENCE: Do the conclusions logically follow from the observations?
+- OMISSIONS: What areas, components, or damage indicators were NOT inspected or mentioned?
+- BIAS INDICATORS: Look for language that reveals predetermined conclusions or carrier-favorable bias
+- COUNTER-ARGUMENTS: Technical arguments to challenge unfavorable findings
+- STANDARDS CITED: Are building codes, ASTM standards, or manufacturer specs cited correctly?
+
+GENERAL DOCUMENT ANALYSIS:
+- Provide a clear, structured assessment organized by the document type
+- Recommend specific next steps with actionable items
+- Identify the strongest arguments available to the policyholder
+- Flag any time-sensitive deadlines or requirements`;
+
       if (hasClaimContext) {
         docAnalysisInstructions = `CRITICAL: Base your ENTIRE analysis on the ACTUAL loss type: "${lossType}". Loss Description: "${lossDescription}". DO NOT default to roofing or hail damage assumptions. Your analysis must match the specific peril and damages described.
 
-Analyze this document in the context of the above loss type:
-1. UNDERPAYMENT - Are there line items that appear undervalued, missing overhead & profit, or using incorrect pricing for THIS type of loss?
-2. MISSING ITEMS - Based on the reported loss type ("${lossType}") and description, are there damage areas, trades, or line items that SHOULD be included but are absent?
-3. DENIAL OVERTURN POTENTIAL - If this is a denial letter, identify weaknesses in the carrier's reasoning specific to the reported cause of loss.
-4. GENERAL ASSESSMENT - Provide your expert opinion on the document's adequacy for this specific claim type.`;
+Determine what type of document this is and apply the appropriate deep analysis:
+${deepAnalysisFramework}
+
+Tailor ALL missing items, supplement opportunities, and strategies specifically to the "${lossType}" peril.`;
       } else {
         docAnalysisInstructions = `CRITICAL: No specific claim is linked to this conversation. You MUST analyze the document based ONLY on what the document itself says. DO NOT assume any specific peril or damage type (especially NOT roofing/hail/wind by default). Read the document carefully to determine what type of loss, damage, or claim it pertains to.
 
-Analyze this document:
-1. DOCUMENT TYPE - What kind of document is this? (estimate, denial letter, policy excerpt, inspection report, etc.)
-2. LOSS TYPE IDENTIFICATION - Based on the document content, what type of loss or damage does it describe? State this clearly.
-3. UNDERPAYMENT - Are there line items that appear undervalued, missing overhead & profit, or using incorrect pricing?
-4. MISSING ITEMS - Based on what the document describes, are there damage areas, trades, or line items that SHOULD be included but are absent?
-5. DENIAL OVERTURN POTENTIAL - If this is a denial letter, identify weaknesses in the carrier's reasoning.
-6. GENERAL ASSESSMENT & NEXT STEPS - Provide your expert opinion and recommend next steps.
+Step 1: IDENTIFY the document type (estimate, denial letter, engineer report, policy excerpt, inspection report, contractor bid, etc.)
+Step 2: IDENTIFY the loss type from the document content itself. State this clearly before proceeding.
+Step 3: Apply the appropriate deep analysis based on document type:
+${deepAnalysisFramework}
 
 If the document is ambiguous about the type of loss, ask the user to clarify rather than assuming.`;
       }
