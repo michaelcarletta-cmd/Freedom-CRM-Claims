@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Camera, Upload, Pencil, Trash2, Link2, FileText, Grid, Columns, X, Download, Eye, Sparkles, ChevronLeft, ChevronRight, Brain, Loader2, AlertTriangle, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
+import { Camera, Upload, Pencil, Trash2, Link2, FileText, Grid, Columns, X, Download, Eye, Sparkles, ChevronLeft, ChevronRight, Brain, Loader2, AlertTriangle, CheckCircle2, XCircle, HelpCircle, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -957,42 +957,16 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
           </DialogHeader>
           {selectedPhoto && (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {/* Image area with navigation */}
-              <div className="flex-1 relative flex items-center justify-center bg-black/5 dark:bg-black/20 min-h-0 px-12">
-                {filteredPhotos.length > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute left-2 z-10 h-10 w-10 rounded-full bg-background/80 hover:bg-background shadow"
-                    onClick={(e) => { e.stopPropagation(); navigatePhoto("prev"); }}
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </Button>
-                )}
-                
-                {fullResUrls[selectedPhoto.id] ? (
-                  <img
-                    src={fullResUrls[selectedPhoto.id]}
-                    alt={selectedPhoto.file_name}
-                    className="max-h-full max-w-full object-contain"
-                  />
-                ) : (
-                  <div className="flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                  </div>
-                )}
-
-                {filteredPhotos.length > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-2 z-10 h-10 w-10 rounded-full bg-background/80 hover:bg-background shadow"
-                    onClick={(e) => { e.stopPropagation(); navigatePhoto("next"); }}
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </Button>
-                )}
-              </div>
+              {/* Image area with navigation and zoom */}
+              <LightboxImage
+                src={fullResUrls[selectedPhoto.id] || ""}
+                alt={selectedPhoto.file_name}
+                loading={!fullResUrls[selectedPhoto.id]}
+                showNav={filteredPhotos.length > 1}
+                onPrev={() => navigatePhoto("prev")}
+                onNext={() => navigatePhoto("next")}
+                photoId={selectedPhoto.id}
+              />
 
               {/* Details panel */}
               <div className="shrink-0 max-h-[30vh] overflow-y-auto p-4 border-t space-y-3">
@@ -1153,6 +1127,111 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
     </div>
   );
 }
+// Lightbox image with zoom + pan
+function LightboxImage({ src, alt, loading, showNav, onPrev, onNext, photoId }: {
+  src: string; alt: string; loading: boolean; showNav: boolean;
+  onPrev: () => void; onNext: () => void; photoId: string;
+}) {
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Reset zoom/pan when photo changes
+  useEffect(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, [photoId]);
+
+  const handleZoom = useCallback((delta: number) => {
+    setZoom(prev => {
+      const next = Math.min(5, Math.max(1, prev + delta));
+      if (next === 1) setPan({ x: 0, y: 0 });
+      return next;
+    });
+  }, []);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    handleZoom(e.deltaY > 0 ? -0.3 : 0.3);
+  }, [handleZoom]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (zoom <= 1) return;
+    setIsDragging(true);
+    dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [zoom, pan]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isDragging) return;
+    setPan({
+      x: dragStart.current.panX + (e.clientX - dragStart.current.x),
+      y: dragStart.current.panY + (e.clientY - dragStart.current.y),
+    });
+  }, [isDragging]);
+
+  const handlePointerUp = useCallback(() => { setIsDragging(false); }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex-1 relative flex items-center justify-center bg-black/5 dark:bg-black/20 min-h-0 px-12 overflow-hidden select-none"
+      onWheel={handleWheel}
+    >
+      {showNav && (
+        <Button variant="ghost" size="icon"
+          className="absolute left-2 z-10 h-10 w-10 rounded-full bg-background/80 hover:bg-background shadow"
+          onClick={(e) => { e.stopPropagation(); onPrev(); }}>
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <img
+          src={src} alt={alt}
+          className="max-h-full max-w-full object-contain transition-transform duration-150"
+          style={{
+            transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+            cursor: zoom > 1 ? (isDragging ? "grabbing" : "grab") : "zoom-in",
+          }}
+          draggable={false}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onClick={() => { if (zoom === 1) handleZoom(1); }}
+        />
+      )}
+
+      {showNav && (
+        <Button variant="ghost" size="icon"
+          className="absolute right-2 z-10 h-10 w-10 rounded-full bg-background/80 hover:bg-background shadow"
+          onClick={(e) => { e.stopPropagation(); onNext(); }}>
+          <ChevronRight className="h-5 w-5" />
+        </Button>
+      )}
+
+      {/* Zoom controls */}
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-background/80 backdrop-blur-sm rounded-full px-2 py-1 shadow">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleZoom(-0.5)} disabled={zoom <= 1}>
+          <ZoomOut className="h-4 w-4" />
+        </Button>
+        <span className="text-xs font-medium w-12 text-center">{Math.round(zoom * 100)}%</span>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleZoom(0.5)} disabled={zoom >= 5}>
+          <ZoomIn className="h-4 w-4" />
+        </Button>
+        {zoom > 1 && (
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 const PhotoCard = memo(function PhotoCard({ 
   photo, 
