@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Home, Plus, DollarSign, Receipt, Upload, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { ReceiptUploadDialog } from "./ReceiptUploadDialog";
 
 interface LossOfUseExpense {
   id: string;
@@ -173,12 +174,14 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
               Track Additional Living Expenses for PA/NJ claims
             </CardDescription>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" /> Add Expense
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <ReceiptUploadDialog claimId={claimId} onExpensesAdded={fetchExpenses} />
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-1" /> Add Expense
+                </Button>
+              </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add ALE Expense</DialogTitle>
@@ -251,7 +254,8 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
                 </Button>
               </div>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
