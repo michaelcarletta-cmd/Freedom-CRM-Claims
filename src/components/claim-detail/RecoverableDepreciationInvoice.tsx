@@ -664,12 +664,29 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
                 </div>
               </div>
 
-              {/* Deductible */}
+              {/* Deductible & Outstanding ACV */}
               <div className="pt-2 border-t">
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                   <div>
                     <p className="text-muted-foreground">Deductible</p>
                     <p className="font-semibold">{formatCurrency(settlement.deductible)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Payments Received</p>
+                    <p className="font-semibold">{formatCurrency(paymentSummary.totalReceived)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Outstanding ACV Funds</p>
+                    <p className="font-semibold text-destructive">{formatCurrency((() => {
+                      const rcvCalc = (Number(settlement.replacement_cost_value) || 0) +
+                        (Number(settlement.other_structures_rcv) || 0) +
+                        (Number(settlement.pwi_rcv) || 0) +
+                        (Number(settlement.personal_property_rcv) || 0);
+                      const nrd = Number(settlement.non_recoverable_depreciation) || 0;
+                      const ded = Number(settlement.deductible) || 0;
+                      const acvCalc = rcvCalc - getTotalRecoverableDepreciation() - nrd;
+                      return Math.max(0, acvCalc - ded - paymentSummary.totalReceived);
+                    })())}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Estimate Amount</p>
