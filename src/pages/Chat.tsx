@@ -141,6 +141,7 @@ export default function Chat() {
 
     let documentContent = "";
     let attachmentName = attachedFile?.name;
+    let documentFilePath = "";
 
     // Process attached file
     if (attachedFile) {
@@ -148,10 +149,10 @@ export default function Chat() {
         // Text file - send content directly
         documentContent = attachedFile.extractedText;
       } else {
-        // Binary file - upload to storage and get a reference
+        // Binary file - upload to storage, edge function will extract text
         const uploaded = await uploadFileToStorage(attachedFile.file);
         if (uploaded) {
-          documentContent = uploaded.extractedText;
+          documentFilePath = uploaded.path;
         } else {
           toast.error("Failed to upload file");
           return;
@@ -188,6 +189,7 @@ export default function Chat() {
           mode: "general",
           documentContent: documentContent || undefined,
           documentName: attachmentName || undefined,
+          documentFilePath: documentFilePath || undefined,
         },
       });
 
