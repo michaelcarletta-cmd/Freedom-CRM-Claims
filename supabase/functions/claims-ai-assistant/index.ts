@@ -2316,7 +2316,7 @@ serve(async (req) => {
   }
 
   try {
-    const { claimId, question, messages, mode, reportType, documentContent, documentName } = await req.json();
+    const { claimId, question, messages, mode, reportType, documentContent, documentName, documentFilePath } = await req.json();
     
     if (!question && !reportType) {
       return new Response(
@@ -2465,10 +2465,94 @@ Active Tasks: ${claim.tasks.filter((t: any) => t.status === "pending").length} p
 
     // Inject uploaded document content from chat
     let uploadedDocContext = "";
-    if (documentContent && documentContent.trim()) {
+    let resolvedDocContent = documentContent || "";
+
+    // If we have a file path but no text content, download and extract from storage
+    if ((!resolvedDocContent || resolvedDocContent.trim() === "") && documentFilePath) {
+      console.log("Downloading document from storage for extraction:", documentFilePath);
+      try {
+        const { data: fileData, error: downloadError } = await supabase.storage
+          .from("claim-files")
+          .download(documentFilePath);
+
+        if (downloadError) {
+          console.error("Error downloading file:", downloadError);
+        } else if (fileData) {
+          const fileName = documentName || documentFilePath.split("/").pop() || "document";
+          const lowerName = fileName.toLowerCase();
+
+          if (lowerName.endsWith(".pdf")) {
+            // For PDFs: extract raw text from the binary
+            const arrayBuffer = await fileData.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            // Simple PDF text extraction - look for text streams
+            const textDecoder = new TextDecoder("utf-8", { fatal: false });
+            const rawText = textDecoder.decode(bytes);
+            
+            // Extract readable text segments from PDF
+            const textSegments: string[] = [];
+            // Match text between BT and ET operators, and parenthesized strings
+            const parenMatches = rawText.match(/\(([^)]{2,})\)/g);
+            if (parenMatches) {
+              for (const match of parenMatches) {
+                const inner = match.slice(1, -1)
+                  .replace(/\\n/g, "\n")
+                  .replace(/\\r/g, "")
+                  .replace(/\\\(/g, "(")
+                  .replace(/\\\)/g, ")")
+                  .replace(/\\\\/g, "\\");
+                // Filter out binary garbage
+                if (inner.length > 1 && /[a-zA-Z0-9]{2,}/.test(inner)) {
+                  textSegments.push(inner);
+                }
+              }
+            }
+            
+            if (textSegments.length > 0) {
+              resolvedDocContent = textSegments.join(" ").substring(0, 50000);
+              console.log(`Extracted ${textSegments.length} text segments from PDF (${resolvedDocContent.length} chars)`);
+            } else {
+              // Fallback: try to find any readable ASCII text
+              const asciiText = rawText.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s{3,}/g, " ").trim();
+              if (asciiText.length > 100) {
+                resolvedDocContent = asciiText.substring(0, 50000);
+                console.log(`Extracted ASCII fallback text from PDF (${resolvedDocContent.length} chars)`);
+              } else {
+                resolvedDocContent = `[PDF document "${fileName}" was uploaded but text could not be extracted. It may be a scanned/image-based PDF. Please ask the user to describe the key details from the document.]`;
+              }
+            }
+          } else if (lowerName.endsWith(".txt") || lowerName.endsWith(".csv") || lowerName.endsWith(".json") || lowerName.endsWith(".xml") || lowerName.endsWith(".md")) {
+            resolvedDocContent = await fileData.text();
+          } else if (lowerName.endsWith(".doc") || lowerName.endsWith(".docx") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsx")) {
+            // For Office docs, extract what we can
+            const arrayBuffer = await fileData.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            const textDecoder = new TextDecoder("utf-8", { fatal: false });
+            const rawText = textDecoder.decode(bytes);
+            // For docx (which is XML-based zip), try to find XML text content
+            const xmlTextMatches = rawText.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+            if (xmlTextMatches) {
+              resolvedDocContent = xmlTextMatches.map(m => m.replace(/<[^>]+>/g, "")).join(" ").substring(0, 50000);
+            } else {
+              const asciiText = rawText.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s{3,}/g, " ").trim();
+              resolvedDocContent = asciiText.length > 100 ? asciiText.substring(0, 50000) : `[Office document "${fileName}" uploaded but could not extract text. Please describe the key contents.]`;
+            }
+          } else if (lowerName.match(/\.(jpg|jpeg|png|webp|gif)$/)) {
+            resolvedDocContent = `[Image "${fileName}" was uploaded. Unable to read image text server-side. Please describe what the image shows or key details from it.]`;
+          } else {
+            resolvedDocContent = await fileData.text();
+          }
+        }
+      } catch (extractErr) {
+        console.error("Error extracting document content:", extractErr);
+        resolvedDocContent = `[Document "${documentName || 'unknown'}" was uploaded but could not be processed. Please describe the key details.]`;
+      }
+    }
+
+    if (resolvedDocContent && resolvedDocContent.trim()) {
       const lossType = claim?.loss_type || "unknown";
       const lossDescription = claim?.loss_description || "";
-      uploadedDocContext = `\n\n=== UPLOADED DOCUMENT FOR ANALYSIS ===\nDocument Name: ${documentName || 'Unknown'}\n\nCRITICAL: Base your ENTIRE analysis on the ACTUAL loss type and description provided. DO NOT default to roofing or hail damage assumptions. Every claim is different — water damage, fire, wind, theft, vehicle impact, plumbing failure, etc. Your analysis must match the specific peril and damages described.\n\nClaim Loss Type: ${lossType}\nLoss Description: ${lossDescription}\n\nAnalyze this document in the context of the above loss type:\n1. UNDERPAYMENT - Are there line items that appear undervalued, missing overhead & profit, or using incorrect pricing for THIS type of loss?\n2. MISSING ITEMS - Based on the reported loss type ("${lossType}") and description, are there damage areas, trades, or line items that SHOULD be included but are absent? Think about what damages are typical for this specific peril.\n3. DENIAL OVERTURN POTENTIAL - If this is a denial letter, identify weaknesses in the carrier's reasoning specific to the reported cause of loss.\n4. GENERAL ASSESSMENT - Provide your expert opinion on the document's adequacy for this specific claim type.\n\nDocument Content:\n${documentContent}\n=== END UPLOADED DOCUMENT ===\n`;
+      uploadedDocContext = `\n\n=== UPLOADED DOCUMENT FOR ANALYSIS ===\nDocument Name: ${documentName || 'Unknown'}\n\nCRITICAL: Base your ENTIRE analysis on the ACTUAL loss type and description provided. DO NOT default to roofing or hail damage assumptions. Every claim is different — water damage, fire, wind, theft, vehicle impact, plumbing failure, etc. Your analysis must match the specific peril and damages described.\n\nClaim Loss Type: ${lossType}\nLoss Description: ${lossDescription}\n\nAnalyze this document in the context of the above loss type:\n1. UNDERPAYMENT - Are there line items that appear undervalued, missing overhead & profit, or using incorrect pricing for THIS type of loss?\n2. MISSING ITEMS - Based on the reported loss type ("${lossType}") and description, are there damage areas, trades, or line items that SHOULD be included but are absent? Think about what damages are typical for this specific peril.\n3. DENIAL OVERTURN POTENTIAL - If this is a denial letter, identify weaknesses in the carrier's reasoning specific to the reported cause of loss.\n4. GENERAL ASSESSMENT - Provide your expert opinion on the document's adequacy for this specific claim type.\n\nDocument Content:\n${resolvedDocContent}\n=== END UPLOADED DOCUMENT ===\n`;
       contextContent += uploadedDocContext;
     }
 
