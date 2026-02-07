@@ -11,6 +11,8 @@ import {
   Brain, Target, Shield, AlertTriangle, CheckCircle2
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
+import { PositionGateBanner } from "./PositionGateBanner";
 
 interface DarwinAutoDraftRebuttalProps {
   claimId: string;
@@ -22,6 +24,8 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
   const [isGenerating, setIsGenerating] = useState(false);
   const [rebuttal, setRebuttal] = useState<string | null>(null);
   const [editableRebuttal, setEditableRebuttal] = useState<string>("");
+  const [provisionalOverride, setProvisionalOverride] = useState(false);
+  const { position, isLocked, loading: positionLoading } = useDeclaredPosition(claimId);
 
   // Fetch all strategic intelligence data
   const { data: strategicInsights } = useQuery({
@@ -222,7 +226,6 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
             })),
             carrierProfile,
             claimFiles: claimFiles?.map(f => f.file_name),
-            // Include AI photo analysis for evidence in rebuttals
             aiPhotoAnalysis: aiPhotos?.map(p => ({
               fileName: p.file_name,
               category: p.category,
@@ -238,7 +241,6 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
               withDamagesCount: photosWithDamages.length,
               materials: [...new Set(aiPhotos?.map(p => p.ai_material_type).filter(Boolean) || [])],
             },
-            // Include proximity precedents for inconsistent carrier handling evidence
             proximityPrecedents: proximityPrecedents?.map(p => ({
               claimNumber: p.claim_number,
               policyholderName: p.policyholder_name,
@@ -249,6 +251,15 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
               status: p.status,
               claimAmount: p.claim_amount,
             })),
+            ...(isLocked && position ? {
+              declaredPosition: {
+                primary_cause_of_loss: position.primary_cause_of_loss,
+                primary_coverage_theory: position.primary_coverage_theory,
+                primary_carrier_error: position.primary_carrier_error,
+                carrier_dependency_statement: position.carrier_dependency_statement,
+              }
+            } : {}),
+            ...(provisionalOverride ? { provisionalPosition: true } : {}),
           },
           claim,
         },
@@ -317,6 +328,12 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-4">
+        <PositionGateBanner
+          position={position}
+          isLocked={isLocked}
+          loading={positionLoading}
+          onOverride={() => setProvisionalOverride(true)}
+        />
         {/* Data Sources Summary */}
         <div className="space-y-2">
           <h4 className="text-sm font-medium text-foreground flex items-center gap-2">

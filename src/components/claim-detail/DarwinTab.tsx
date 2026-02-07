@@ -51,6 +51,7 @@ const ClaimAutomationSettings = lazy(() => import("@/components/claim-detail/Cla
 const ClaimAutonomySettings = lazy(() => import("@/components/claim-detail/ClaimAutonomySettings").then(m => ({ default: m.ClaimAutonomySettings })));
 const DarwinButForCausation = lazy(() => import("@/components/claim-detail/DarwinButForCausation").then(m => ({ default: m.DarwinButForCausation })));
 const DarwinProximityPrecedents = lazy(() => import("@/components/claim-detail/DarwinProximityPrecedents").then(m => ({ default: m.DarwinProximityPrecedents })));
+const DarwinDeclaredPosition = lazy(() => import("@/components/claim-detail/DarwinDeclaredPosition").then(m => ({ default: m.DarwinDeclaredPosition })));
 
 // New Strategic Components
 const ClaimWarRoom = lazy(() => import("@/components/claim-detail/ClaimWarRoom").then(m => ({ default: m.ClaimWarRoom })));
@@ -344,6 +345,9 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
               description="Counter carrier denials and engineer reports"
               icon={<Shield className="h-4 w-4" />}
             >
+            <Suspense fallback={<LoadingFallback />}>
+              <DarwinDeclaredPosition claimId={claimId} claim={claim} />
+            </Suspense>
             <DarwinProximityPrecedents claimId={claimId} claim={claim} />
             <DarwinSystematicDismantler claimId={claimId} claim={claim} />
             <DarwinAutoDraftRebuttal claimId={claimId} claim={claim} />
