@@ -62,7 +62,7 @@ Category mapping guide:
 
 If you cannot read the receipt clearly, still extract what you can. Always return valid JSON.`;
 
-    const response = await fetch('https://api.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
