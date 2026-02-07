@@ -174,13 +174,18 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
         if (!uploadError) {
           receiptFilePath = fileName;
 
-          // Find or create a "Receipts" folder
+          // Determine month subfolder name from receipt date (e.g., "January 2025")
+          const receiptDate = extracted.date ? new Date(extracted.date) : new Date();
+          const monthLabel = receiptDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+          const subfolderName = `Receipts - ${monthLabel}`;
+
+          // Find or create the month subfolder
           let folderId: string | null = null;
           const { data: existingFolder } = await supabase
             .from('claim_folders')
             .select('id')
             .eq('claim_id', claimId)
-            .eq('name', 'Receipts')
+            .eq('name', subfolderName)
             .maybeSingle();
 
           if (existingFolder) {
@@ -188,7 +193,7 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
           } else {
             const { data: newFolder } = await supabase
               .from('claim_folders')
-              .insert({ claim_id: claimId, name: 'Receipts', created_by: userData.user?.id })
+              .insert({ claim_id: claimId, name: subfolderName, created_by: userData.user?.id })
               .select('id')
               .single();
             folderId = newFolder?.id || null;
