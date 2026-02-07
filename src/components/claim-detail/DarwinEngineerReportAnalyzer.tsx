@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { HardHat, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen } from "lucide-react";
+import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
+import { PositionGateBanner } from "./PositionGateBanner";
 
 interface DarwinEngineerReportAnalyzerProps {
   claimId: string;
@@ -35,8 +37,10 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
   const [selectedClaimFile, setSelectedClaimFile] = useState<ClaimFile | null>(null);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [inputMethod, setInputMethod] = useState<'existing' | 'upload' | 'paste'>('existing');
+  const [provisionalOverride, setProvisionalOverride] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { position, isLocked, loading: positionLoading } = useDeclaredPosition(claimId);
 
   // Load claim files and previous analysis on mount
   useEffect(() => {
@@ -177,7 +181,18 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
           content: reportContent || undefined,
           pdfContent: pdfBase64 || undefined,
           pdfFileName: fileName || undefined,
-          additionalContext: additionalContext || undefined
+          additionalContext: {
+            ...(additionalContext ? { userContext: additionalContext } : {}),
+            ...(isLocked && position ? {
+              declaredPosition: {
+                primary_cause_of_loss: position.primary_cause_of_loss,
+                primary_coverage_theory: position.primary_coverage_theory,
+                primary_carrier_error: position.primary_carrier_error,
+                carrier_dependency_statement: position.carrier_dependency_statement,
+              }
+            } : {}),
+            ...(provisionalOverride ? { provisionalPosition: true } : {}),
+          }
         }
       });
 
@@ -251,6 +266,12 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <PositionGateBanner
+          position={position}
+          isLocked={isLocked}
+          loading={positionLoading}
+          onOverride={() => setProvisionalOverride(true)}
+        />
         {lastAnalyzed && (
           <div className="p-3 bg-muted/50 rounded-md text-sm text-muted-foreground flex items-center gap-2">
             <History className="h-4 w-4" />

@@ -232,7 +232,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling' | 'position_detection';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -4341,6 +4341,85 @@ This output must be suitable for:
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ];
+    }
+
+    // === DECLARED POSITION PROTOCOL: Inject enforcement rules for carrier-facing outputs ===
+    const carrierFacingTypes = ['denial_rebuttal', 'auto_draft_rebuttal', 'systematic_dismantling', 'carrier_email_draft', 'engineer_report_rebuttal'];
+    if (carrierFacingTypes.includes(analysisType)) {
+      const declaredPosition = additionalContext?.declaredPosition;
+      const isProvisional = additionalContext?.provisionalPosition === true;
+
+      let positionInjection = '';
+      
+      if (declaredPosition) {
+        positionInjection = `
+=== DECLARED POSITION (LOCKED) ===
+Primary Cause of Loss: ${declaredPosition.primary_cause_of_loss}
+Primary Coverage Theory: ${declaredPosition.primary_coverage_theory}
+Primary Carrier Error: ${declaredPosition.primary_carrier_error}
+Carrier Dependency: ${declaredPosition.carrier_dependency_statement}
+
+ALL output must align with this declared position. Do not contradict or deviate.
+`;
+      } else if (isProvisional) {
+        positionInjection = `
+=== WARNING: PROVISIONAL MODE ===
+No locked declared position. Outputs may lack strategic consistency.
+Append a "POSITION WARNING" section noting this output was generated without a locked position.
+`;
+      }
+
+      const enforcementRules = `
+
+=== MANDATORY OUTPUT ORDER ===
+1. Cause of Loss
+2. Coverage Grant / Exclusion Analysis
+3. Carrier Error
+4. THEN scope, quantities, pricing, O&P, code upgrades
+If you reference scope or cost before establishing coverage, the output is INVALID.
+
+=== LANGUAGE CONFIDENCE RULES ===
+- For law/rights/bad faith/statute statements: Cautious, qualifying language is acceptable
+- For cause of loss/material behavior/observed damage/weather: Use CONFIDENT, DECLARATIVE language when evidence exists
+- WRONG: "It appears the damage may be consistent with wind"
+- RIGHT: "The damage pattern is consistent with wind uplift based on observed creasing and directional displacement"
+- If confidence is HIGH and evidence supports the conclusion: DO NOT HEDGE. Commit to the position.
+
+=== CARRIER DEPENDENCY ANALYSIS (MANDATORY) ===
+Every rebuttal MUST include a section that states:
+"For the carrier's conclusion to be correct, [carrier dependency statement]"
+Then systematically attack each dependency with evidence.
+If you cannot articulate the carrier's dependency, flag the output as INCOMPLETE.
+
+=== SINGLE THESIS RULE ===
+Your output must have exactly ONE primary thesis stated in one clear sentence.
+All "alternatively" or "even if" arguments must come AFTER the primary argument is fully presented.
+
+=== REASONING COMPLETENESS CHECK ===
+Before finalizing output, verify:
+- Declared Position is referenced (if provided)
+- Carrier Dependency is identified and attacked
+- Primary argument is fully presented
+- At least one anticipated carrier pushback is addressed
+If any are missing, append a "COMPLETENESS WARNING" section listing what's missing.
+`;
+
+      // Inject into system prompt of the first message
+      if (messages[0]?.role === 'system') {
+        messages[0].content = messages[0].content + enforcementRules;
+      }
+
+      // Inject position into user prompt
+      if (positionInjection) {
+        if (typeof messages[1]?.content === 'string') {
+          messages[1].content = positionInjection + '\n' + messages[1].content;
+        } else if (Array.isArray(messages[1]?.content)) {
+          const textPart = messages[1].content.find((p: any) => p.type === 'text');
+          if (textPart) {
+            textPart.text = positionInjection + '\n' + textPart.text;
+          }
+        }
+      }
     }
 
     // Call Lovable AI with model fallback chain for reliability

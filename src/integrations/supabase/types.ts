@@ -3170,6 +3170,65 @@ export type Database = {
           },
         ]
       }
+      darwin_declared_positions: {
+        Row: {
+          carrier_dependency_statement: string | null
+          claim_id: string
+          confidence_level: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          missing_inputs: string[] | null
+          position_locked: boolean
+          primary_carrier_error: string | null
+          primary_cause_of_loss: string | null
+          primary_coverage_theory: string | null
+          reasoning_complete: boolean
+          risk_flags: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          carrier_dependency_statement?: string | null
+          claim_id: string
+          confidence_level?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          missing_inputs?: string[] | null
+          position_locked?: boolean
+          primary_carrier_error?: string | null
+          primary_cause_of_loss?: string | null
+          primary_coverage_theory?: string | null
+          reasoning_complete?: boolean
+          risk_flags?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          carrier_dependency_statement?: string | null
+          claim_id?: string
+          confidence_level?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          missing_inputs?: string[] | null
+          position_locked?: boolean
+          primary_carrier_error?: string | null
+          primary_cause_of_loss?: string | null
+          primary_coverage_theory?: string | null
+          reasoning_complete?: boolean
+          risk_flags?: string[] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "darwin_declared_positions_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_templates: {
         Row: {
           category: string | null

@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Mail, Loader2, Copy, Send, Sparkles } from "lucide-react";
+import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
+import { PositionGateBanner } from "./PositionGateBanner";
 
 interface DarwinCarrierEmailDrafterProps {
   claimId: string;
@@ -32,6 +34,8 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
   const [generatedSubject, setGeneratedSubject] = useState("");
   const [generatedBody, setGeneratedBody] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [provisionalOverride, setProvisionalOverride] = useState(false);
+  const { position, isLocked, loading: positionLoading } = useDeclaredPosition(claimId);
 
   const handleGenerate = async () => {
     if (!emailType) {
@@ -53,6 +57,15 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
             emailType,
             userContext: additionalContext,
             emailTypeLabel: EMAIL_TYPES.find(t => t.value === emailType)?.label,
+            ...(isLocked && position ? {
+              declaredPosition: {
+                primary_cause_of_loss: position.primary_cause_of_loss,
+                primary_coverage_theory: position.primary_coverage_theory,
+                primary_carrier_error: position.primary_carrier_error,
+                carrier_dependency_statement: position.carrier_dependency_statement,
+              }
+            } : {}),
+            ...(provisionalOverride ? { provisionalPosition: true } : {}),
           },
           claim,
         },
@@ -123,6 +136,12 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <PositionGateBanner
+          position={position}
+          isLocked={isLocked}
+          loading={positionLoading}
+          onOverride={() => setProvisionalOverride(true)}
+        />
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label>Email Type</Label>

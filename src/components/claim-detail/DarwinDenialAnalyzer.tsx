@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { FileWarning, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen } from "lucide-react";
 import { useClaimFiles } from "@/hooks/useClaimFiles";
 import { ClaimFileSelector } from "./ClaimFileSelector";
+import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
+import { PositionGateBanner } from "./PositionGateBanner";
 
 interface DarwinDenialAnalyzerProps {
   claimId: string;
@@ -24,10 +26,12 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
   const [lastAnalyzed, setLastAnalyzed] = useState<Date | null>(null);
   const [lastFileName, setLastFileName] = useState<string | null>(null);
   const [inputMethod, setInputMethod] = useState<string>("claim-files");
+  const [provisionalOverride, setProvisionalOverride] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   
   const { files: claimFiles, loading: loadingFiles, downloadFileAsBase64 } = useClaimFiles(claimId);
+  const { position, isLocked, loading: positionLoading } = useDeclaredPosition(claimId);
 
   // Load previous analysis on mount
   useEffect(() => {
@@ -119,7 +123,18 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
           analysisType: 'denial_rebuttal',
           content: denialContent || undefined,
           pdfContent: pdfBase64 || undefined,
-          pdfFileName: fileName
+          pdfFileName: fileName,
+          additionalContext: {
+            ...(isLocked && position ? {
+              declaredPosition: {
+                primary_cause_of_loss: position.primary_cause_of_loss,
+                primary_coverage_theory: position.primary_coverage_theory,
+                primary_carrier_error: position.primary_carrier_error,
+                carrier_dependency_statement: position.carrier_dependency_statement,
+              }
+            } : {}),
+            ...(provisionalOverride ? { provisionalPosition: true } : {}),
+          },
         }
       });
 
@@ -194,6 +209,12 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <PositionGateBanner
+          position={position}
+          isLocked={isLocked}
+          loading={positionLoading}
+          onOverride={() => setProvisionalOverride(true)}
+        />
         {lastAnalyzed && (
           <div className="p-3 bg-muted/50 rounded-md text-sm text-muted-foreground flex items-center gap-2">
             <History className="h-4 w-4" />
