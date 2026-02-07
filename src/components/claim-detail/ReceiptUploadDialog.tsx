@@ -163,7 +163,7 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
       const { data: userData } = await supabase.auth.getUser();
       const expenseDate = extracted.date || format(new Date(), "yyyy-MM-dd");
 
-      // Upload receipt file to storage
+      // Upload receipt file to storage and save to claim file library
       let receiptFilePath: string | null = null;
       if (receiptFile) {
         const fileExt = receiptFile.name.split('.').pop();
@@ -173,6 +173,38 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
           .upload(fileName, receiptFile);
         if (!uploadError) {
           receiptFilePath = fileName;
+
+          // Find or create a "Receipts" folder
+          let folderId: string | null = null;
+          const { data: existingFolder } = await supabase
+            .from('claim_folders')
+            .select('id')
+            .eq('claim_id', claimId)
+            .eq('name', 'Receipts')
+            .maybeSingle();
+
+          if (existingFolder) {
+            folderId = existingFolder.id;
+          } else {
+            const { data: newFolder } = await supabase
+              .from('claim_folders')
+              .insert({ claim_id: claimId, name: 'Receipts', created_by: userData.user?.id })
+              .select('id')
+              .single();
+            folderId = newFolder?.id || null;
+          }
+
+          // Save file record to claim_files
+          await supabase.from('claim_files').insert({
+            claim_id: claimId,
+            file_name: receiptFile.name,
+            file_path: fileName,
+            file_type: receiptFile.type,
+            file_size: receiptFile.size,
+            folder_id: folderId,
+            uploaded_by: userData.user?.id,
+            source: 'receipt_scan',
+          });
         }
       }
 
