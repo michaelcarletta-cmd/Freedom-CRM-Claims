@@ -4206,6 +4206,33 @@ This output must be suitable for:
         break;
       }
 
+      case 'position_detection': {
+        systemPrompt = `You are Darwin, a senior claims strategist for public adjusters. Your task is to analyze a claim's available context and detect the optimal Declared Position.
+
+You must return ONLY valid JSON (no markdown, no code fences) with this exact structure:
+{
+  "primary_cause_of_loss": "string - the specific peril and mechanism (e.g., 'Wind-driven rain intrusion from Hurricane Ian')",
+  "primary_coverage_theory": "string - the policy basis for coverage (e.g., 'Direct physical loss from covered peril per Section I')",
+  "primary_carrier_error": "string - what the carrier got wrong (e.g., 'Carrier misapplied maintenance exclusion to storm damage')",
+  "carrier_dependency_statement": "string - 'For the carrier's conclusion to be correct, [what must be true]'",
+  "confidence_level": "high|medium|low",
+  "missing_inputs": ["array of strings describing what additional info would strengthen the position"],
+  "risk_flags": ["array of strings noting weaknesses or concerns"]
+}
+
+Rules:
+- Base your analysis ONLY on the claim context provided. Do not invent facts.
+- If loss_type or loss_description is missing/vague, set confidence to "low" and add to missing_inputs.
+- If no denial or carrier correspondence exists, note that carrier_error may be speculative.
+- The carrier_dependency_statement must follow the pattern: "For the carrier's conclusion to be correct, the damage would need to result from ___ rather than ___"
+- Be specific and declarative when evidence supports it. Do not hedge on well-supported conclusions.`;
+
+        userPrompt = `${claimSummary}
+
+Analyze the above claim context and detect the optimal Declared Position. Return ONLY valid JSON.`;
+        break;
+      }
+
       default:
         throw new Error(`Unknown analysis type: ${analysisType}`);
 
