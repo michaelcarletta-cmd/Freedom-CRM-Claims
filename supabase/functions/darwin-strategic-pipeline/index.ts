@@ -27,6 +27,17 @@ interface PipelineRequest {
   forceRefresh?: boolean;
 }
 
+// Loss domain definitions
+type LossDomain = 'roof_exterior' | 'interior_water' | 'fire_smoke' | 'theft_vandalism' | 'vehicle_impact' | 'wind_only' | 'hail' | 'mixed' | 'unknown';
+
+interface LossDomainClassification {
+  domain: LossDomain;
+  confidence: 'confirmed' | 'probable' | 'conditional';
+  roofInvolvement: 'confirmed' | 'possible' | 'none' | 'unknown';
+  reasoning: string;
+  unansweredQuestions: string[];
+}
+
 interface ThesisObject {
   primary_cause_of_loss: string;
   primary_coverage_theory: string;
@@ -34,6 +45,7 @@ interface ThesisObject {
   evidence_map: Array<{ type: 'document' | 'photo'; id: string; name: string; relevance: string }>;
   anticipated_pushback: string;
   pushback_counter: string;
+  loss_domain: LossDomainClassification;
 }
 
 // ─── STEP A: Load Memory ───────────────────────────────────────────────
@@ -253,6 +265,160 @@ async function executeWebSearches(queries: string[]): Promise<Array<{ query: str
   return results;
 }
 
+// ─── Loss Domain Classification ───────────────────────────────────────
+
+function classifyLossDomain(claim: any, memorySnapshot: any): LossDomainClassification {
+  const lossType = (claim.loss_type || '').toLowerCase();
+  const description = (claim.loss_description || '').toLowerCase();
+  const combined = `${lossType} ${description}`;
+
+  // Photo-based evidence for roof involvement
+  const roofPhotos = (memorySnapshot.photos || []).filter((p: any) => {
+    const cat = (p.category || '').toLowerCase();
+    const name = (p.file_name || '').toLowerCase();
+    return cat.includes('roof') || name.includes('roof') || name.includes('shingle');
+  });
+  const interiorPhotos = (memorySnapshot.photos || []).filter((p: any) => {
+    const cat = (p.category || '').toLowerCase();
+    const name = (p.file_name || '').toLowerCase();
+    return cat.includes('interior') || name.includes('interior') || name.includes('ceiling') || name.includes('wall') || name.includes('floor');
+  });
+
+  // File-based evidence
+  const fileNames = (memorySnapshot.files || []).map((f: any) => (f.file_name || '').toLowerCase()).join(' ');
+
+  // Classify
+  if (/fire|smoke|burn|char|flame|arson/i.test(combined)) {
+    return {
+      domain: 'fire_smoke',
+      confidence: 'confirmed',
+      roofInvolvement: /roof/i.test(combined) ? 'possible' : 'none',
+      reasoning: `Loss type "${claim.loss_type}" and description indicate fire/smoke damage`,
+      unansweredQuestions: [],
+    };
+  }
+
+  if (/theft|vandal|break.?in|stolen|burglary/i.test(combined)) {
+    return {
+      domain: 'theft_vandalism',
+      confidence: 'confirmed',
+      roofInvolvement: 'none',
+      reasoning: `Loss type "${claim.loss_type}" indicates theft/vandalism`,
+      unansweredQuestions: [],
+    };
+  }
+
+  if (/vehicle|car|truck|auto|collision|impact/i.test(combined)) {
+    return {
+      domain: 'vehicle_impact',
+      confidence: 'confirmed',
+      roofInvolvement: 'none',
+      reasoning: `Loss type "${claim.loss_type}" indicates vehicle impact`,
+      unansweredQuestions: [],
+    };
+  }
+
+  if (/water|flood|pipe|leak|plumb|sewer|overflow|burst|mold|moisture/i.test(combined)) {
+    // Interior water — but check if roof is explicitly mentioned as source
+    const roofMentionedAsSource = /roof.*leak|leak.*roof|roof.*water|water.*roof|roof.*drip/i.test(combined);
+    const hasRoofEvidence = roofPhotos.length > 0 || /roof/i.test(fileNames);
+
+    if (roofMentionedAsSource && hasRoofEvidence) {
+      return {
+        domain: 'interior_water',
+        confidence: 'confirmed',
+        roofInvolvement: 'confirmed',
+        reasoning: 'Water damage with confirmed roof involvement based on description and evidence',
+        unansweredQuestions: [],
+      };
+    }
+    if (roofMentionedAsSource || hasRoofEvidence) {
+      return {
+        domain: 'interior_water',
+        confidence: 'probable',
+        roofInvolvement: 'possible',
+        reasoning: 'Water damage with possible roof involvement — needs confirmation',
+        unansweredQuestions: [
+          'Has a roof inspection confirmed the water entry point?',
+          'Is there visible roof damage directly above the interior water damage?',
+          'Could the water source be plumbing, HVAC condensation, or appliance failure instead?',
+        ],
+      };
+    }
+    return {
+      domain: 'interior_water',
+      confidence: 'confirmed',
+      roofInvolvement: 'none',
+      reasoning: 'Water damage with no evidence of roof involvement',
+      unansweredQuestions: [],
+    };
+  }
+
+  if (/hail/i.test(combined)) {
+    return {
+      domain: 'hail',
+      confidence: 'confirmed',
+      roofInvolvement: 'confirmed',
+      reasoning: 'Hail damage — roof/exterior involvement inherent',
+      unansweredQuestions: [],
+    };
+  }
+
+  if (/wind|hurricane|tornado|cyclone/i.test(combined)) {
+    if (interiorPhotos.length > 0 && roofPhotos.length === 0 && !/roof|shingle/i.test(combined)) {
+      return {
+        domain: 'wind_only',
+        confidence: 'probable',
+        roofInvolvement: 'possible',
+        reasoning: 'Wind damage claimed but only interior evidence found. Roof involvement unconfirmed.',
+        unansweredQuestions: [
+          'Has the roof been inspected for wind damage?',
+          'Is the interior damage from wind-driven rain through a roof breach, or from windows/doors?',
+        ],
+      };
+    }
+    return {
+      domain: 'wind_only',
+      confidence: 'confirmed',
+      roofInvolvement: roofPhotos.length > 0 || /roof|shingle/i.test(combined) ? 'confirmed' : 'possible',
+      reasoning: 'Wind damage — checking for roof/exterior involvement',
+      unansweredQuestions: roofPhotos.length > 0 ? [] : ['Has a roof inspection been performed to confirm wind damage to roof system?'],
+    };
+  }
+
+  if (/roof|shingle|gutter|siding|exterior|fascia|soffit/i.test(combined)) {
+    return {
+      domain: 'roof_exterior',
+      confidence: 'confirmed',
+      roofInvolvement: 'confirmed',
+      reasoning: 'Explicitly roof/exterior claim',
+      unansweredQuestions: [],
+    };
+  }
+
+  // Mixed or unclear
+  if (interiorPhotos.length > 0 && roofPhotos.length > 0) {
+    return {
+      domain: 'mixed',
+      confidence: 'probable',
+      roofInvolvement: 'confirmed',
+      reasoning: 'Both interior and roof/exterior evidence present',
+      unansweredQuestions: [],
+    };
+  }
+
+  return {
+    domain: 'unknown',
+    confidence: 'conditional',
+    roofInvolvement: 'unknown',
+    reasoning: `Loss type "${claim.loss_type || 'not specified'}" does not clearly map to a domain. Manual classification recommended.`,
+    unansweredQuestions: [
+      'What is the primary area of damage (roof/exterior, interior, or both)?',
+      'What peril caused the damage?',
+    ],
+  };
+}
+
 // ─── STEP C: Build/Validate Claim Thesis Object ───────────────────────
 
 async function buildThesisObject(
@@ -267,6 +433,10 @@ async function buildThesisObject(
   forceRefresh: boolean,
 ): Promise<{ thesis: ThesisObject; isNew: boolean; validationErrors: string[] }> {
   console.log(`[Pipeline Step C] Building Claim Thesis Object`);
+
+  // Classify loss domain
+  const lossDomain = classifyLossDomain(claim, memorySnapshot);
+  console.log(`[Pipeline Step C] Loss domain: ${lossDomain.domain} (roof: ${lossDomain.roofInvolvement})`);
 
   // Check for existing locked thesis
   if (!forceRefresh) {
@@ -286,6 +456,7 @@ async function buildThesisObject(
           evidence_map: existingThesis.evidence_map || [],
           anticipated_pushback: existingThesis.anticipated_pushback || '',
           pushback_counter: existingThesis.pushback_counter || '',
+          loss_domain: lossDomain,
         },
         isNew: false,
         validationErrors: [],
@@ -297,7 +468,6 @@ async function buildThesisObject(
   const declaredPosition = memorySnapshot.declaredPosition;
   if (declaredPosition) {
     console.log(`[Pipeline Step C] Building thesis from declared position`);
-    // Map evidence from files and photos
     const evidenceMap = buildEvidenceMap(memorySnapshot.files, memorySnapshot.photos, claim);
     const thesis: ThesisObject = {
       primary_cause_of_loss: declaredPosition.primary_cause_of_loss || claim.loss_type || 'Unknown',
@@ -306,12 +476,10 @@ async function buildThesisObject(
       evidence_map: evidenceMap,
       anticipated_pushback: declaredPosition.carrier_dependency_statement || '',
       pushback_counter: '',
+      loss_domain: lossDomain,
     };
 
-    // Use AI to fill in anticipated pushback counter if missing
     const validationErrors = validateThesis(thesis);
-
-    // Upsert thesis
     await upsertThesis(supabase, claimId, thesis, memorySnapshot, deltas, crossClaimLessons, industryNotes, webSearchResults);
 
     return { thesis, isNew: true, validationErrors };
@@ -319,7 +487,7 @@ async function buildThesisObject(
 
   // No declared position - use AI to generate thesis
   console.log(`[Pipeline Step C] Generating thesis via AI`);
-  const thesis = await generateThesisViaAI(supabase, claimId, claim, memorySnapshot, crossClaimLessons, industryNotes, webSearchResults);
+  const thesis = await generateThesisViaAI(supabase, claimId, claim, memorySnapshot, crossClaimLessons, industryNotes, webSearchResults, lossDomain);
   const validationErrors = validateThesis(thesis);
 
   await upsertThesis(supabase, claimId, thesis, memorySnapshot, deltas, crossClaimLessons, industryNotes, webSearchResults);
@@ -430,6 +598,7 @@ async function generateThesisViaAI(
   crossClaimLessons: any[],
   industryNotes: any[],
   webSearchResults: any[],
+  lossDomain: LossDomainClassification,
 ): Promise<ThesisObject> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) {
@@ -508,6 +677,7 @@ IMPORTANT: evidence_map MUST reference actual document/photo IDs from the lists 
       evidence_map: buildEvidenceMap(memorySnapshot.files, memorySnapshot.photos, claim),
       anticipated_pushback: '',
       pushback_counter: '',
+      loss_domain: lossDomain,
     };
   }
 
@@ -525,6 +695,7 @@ IMPORTANT: evidence_map MUST reference actual document/photo IDs from the lists 
       evidence_map: Array.isArray(parsed.evidence_map) ? parsed.evidence_map : buildEvidenceMap(memorySnapshot.files, memorySnapshot.photos, claim),
       anticipated_pushback: parsed.anticipated_pushback || '',
       pushback_counter: parsed.pushback_counter || '',
+      loss_domain: lossDomain,
     };
   } catch (e) {
     console.error('Failed to parse AI thesis:', e, content.substring(0, 200));
@@ -535,6 +706,7 @@ IMPORTANT: evidence_map MUST reference actual document/photo IDs from the lists 
       evidence_map: buildEvidenceMap(memorySnapshot.files, memorySnapshot.photos, claim),
       anticipated_pushback: '',
       pushback_counter: '',
+      loss_domain: lossDomain,
     };
   }
 }
@@ -552,6 +724,47 @@ function buildPipelineContext(
 ): string {
   let ctx = '\n\n=== STRATEGIC PIPELINE CONTEXT (MANDATORY REVIEW) ===\n';
   ctx += 'You MUST review the following before generating output.\n\n';
+
+  // Loss Domain Fidelity (MUST come first)
+  const ld = thesis.loss_domain;
+  ctx += '══ LOSS DOMAIN FIDELITY (MANDATORY — READ BEFORE ANYTHING ELSE) ══\n';
+  ctx += `Detected Domain: ${ld.domain.toUpperCase()} (Confidence: ${ld.confidence})\n`;
+  ctx += `Roof Involvement: ${ld.roofInvolvement}\n`;
+  ctx += `Reasoning: ${ld.reasoning}\n`;
+  if (ld.unansweredQuestions.length > 0) {
+    ctx += `Open Questions: ${ld.unansweredQuestions.join('; ')}\n`;
+  }
+  ctx += '\n';
+
+  // Domain-specific enforcement rules
+  if (ld.domain === 'interior_water' && ld.roofInvolvement !== 'confirmed') {
+    ctx += `🚫 HARD BLOCK: This is an INTERIOR WATER claim with ${ld.roofInvolvement === 'possible' ? 'UNCONFIRMED' : 'NO'} roof involvement.\n`;
+    ctx += `   - DO NOT use roof-specific arguments, shingle standards, ARMA guidelines, or hail/wind damage terminology.\n`;
+    ctx += `   - DO NOT cite IRC roofing sections, manufacturer shingle specs, or wind speed thresholds.\n`;
+    ctx += `   - Focus on: water intrusion patterns, plumbing codes, moisture damage, mold risk, interior finish materials.\n`;
+    if (ld.roofInvolvement === 'possible') {
+      ctx += `   - If you need to reference roof as a water source, present it as a CONDITIONAL HYPOTHESIS ONLY:\n`;
+      ctx += `     "If the source of water ingress is determined to be the roof system, then [argument]"\n`;
+      ctx += `   - ASK: ${ld.unansweredQuestions.join('; ')}\n`;
+    }
+    ctx += '\n';
+  } else if (ld.domain === 'fire_smoke') {
+    ctx += `🔥 DOMAIN: FIRE/SMOKE. Use fire-specific standards, smoke damage evaluation, structural integrity assessment.\n`;
+    ctx += `   - DO NOT default to roofing arguments unless fire caused roof damage.\n`;
+    ctx += `   - Focus on: NFPA standards, smoke migration, char depth, thermal damage patterns, ALE/Coverage D.\n\n`;
+  } else if (ld.domain === 'theft_vandalism') {
+    ctx += `🔒 DOMAIN: THEFT/VANDALISM. Focus on property crime evidence, police reports, inventory verification.\n`;
+    ctx += `   - DO NOT use weather-based or structural deterioration arguments.\n\n`;
+  } else if (ld.domain === 'vehicle_impact') {
+    ctx += `🚗 DOMAIN: VEHICLE IMPACT. Focus on structural damage, masonry, foundation, impact trajectory.\n`;
+    ctx += `   - DO NOT use weather-based causation or roofing terminology.\n\n`;
+  } else if (ld.domain === 'wind_only') {
+    ctx += `💨 DOMAIN: WIND ONLY. Focus on wind-specific damage patterns (uplift, creasing, displacement).\n`;
+    ctx += `   - Use wind speed data, directional indicators, and wind-specific manufacturer thresholds.\n\n`;
+  } else if (ld.domain === 'roof_exterior' || ld.domain === 'hail') {
+    ctx += `🏠 DOMAIN: ROOF/EXTERIOR. Roof-specific arguments, standards, and citations ARE permitted.\n\n`;
+  }
+  ctx += '══ END LOSS DOMAIN FIDELITY ══\n\n';
 
   // Thesis
   ctx += '── CLAIM THESIS (Locked Position) ──\n';
