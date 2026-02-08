@@ -5,27 +5,17 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
-import { Camera, FileUp, Loader2, Trash2, Receipt } from "lucide-react";
+import { Camera, FileUp, Loader2, Receipt, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-
-interface ExtractedLineItem {
-  description: string;
-  amount: number;
-  category: string;
-  selected: boolean;
-}
 
 interface ExtractedReceipt {
   vendor_name: string | null;
   date: string | null;
-  line_items: ExtractedLineItem[];
-  subtotal: number | null;
-  tax: number | null;
   total: number | null;
+  suggested_category: string;
+  needs_review: boolean;
 }
 
 const EXPENSE_CATEGORIES = [
@@ -50,6 +40,11 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
   const [extracted, setExtracted] = useState<ExtractedReceipt | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  // Editable fields for review
+  const [editVendor, setEditVendor] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editTotal, setEditTotal] = useState("");
+  const [editCategory, setEditCategory] = useState("other");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetState = () => {
@@ -58,12 +53,15 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
     setReceiptFile(null);
     setExtracting(false);
     setSaving(false);
+    setEditVendor("");
+    setEditDate("");
+    setEditTotal("");
+    setEditCategory("other");
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setReceiptFile(file);
     setPreviewUrl(URL.createObjectURL(file));
     await extractReceipt(file);
@@ -73,33 +71,27 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
     setExtracting(true);
     try {
       const base64 = await fileToBase64(file);
-      const { data: { session } } = await supabase.auth.getSession();
 
       const response = await supabase.functions.invoke('extract-receipt', {
         body: { imageBase64: base64, mimeType: file.type },
       });
 
       if (response.error) throw new Error(response.error.message);
-
       const result = response.data;
       if (!result.success) throw new Error(result.error || 'Extraction failed');
 
-      const data = result.data;
-      setExtracted({
-        vendor_name: data.vendor_name || null,
-        date: data.date || null,
-        line_items: (data.line_items || []).map((item: any) => ({
-          description: item.description,
-          amount: Number(item.amount) || 0,
-          category: item.category || "other",
-          selected: true,
-        })),
-        subtotal: data.subtotal || null,
-        tax: data.tax || null,
-        total: data.total || null,
-      });
+      const data = result.data as ExtractedReceipt;
+      setExtracted(data);
+      setEditVendor(data.vendor_name || "");
+      setEditDate(data.date || format(new Date(), "yyyy-MM-dd"));
+      setEditTotal(data.total != null ? data.total.toFixed(2) : "");
+      setEditCategory(data.suggested_category || "other");
 
-      toast.success(`Extracted ${data.line_items?.length || 0} line items`);
+      if (data.needs_review) {
+        toast.warning("Total unclear — please verify before saving");
+      } else {
+        toast.success("Receipt extracted successfully");
+      }
     } catch (err: any) {
       console.error("Receipt extraction error:", err);
       toast.error("Failed to extract receipt: " + (err.message || "Unknown error"));
@@ -113,57 +105,28 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
-        const base64 = result.split(",")[1] || result;
-        resolve(base64);
+        resolve(result.split(",")[1] || result);
       };
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
   };
 
-  const toggleItem = (index: number) => {
-    if (!extracted) return;
-    const updated = { ...extracted };
-    updated.line_items[index].selected = !updated.line_items[index].selected;
-    setExtracted(updated);
-  };
+  const totalValue = parseFloat(editTotal);
+  const canSave = editTotal !== "" && !isNaN(totalValue) && totalValue > 0;
 
-  const updateItemCategory = (index: number, category: string) => {
-    if (!extracted) return;
-    const updated = { ...extracted };
-    updated.line_items[index].category = category;
-    setExtracted(updated);
-  };
-
-  const updateItemAmount = (index: number, amount: string) => {
-    if (!extracted) return;
-    const updated = { ...extracted };
-    updated.line_items[index].amount = parseFloat(amount) || 0;
-    setExtracted(updated);
-  };
-
-  const removeItem = (index: number) => {
-    if (!extracted) return;
-    const updated = { ...extracted };
-    updated.line_items.splice(index, 1);
-    setExtracted(updated);
-  };
-
-  const selectedItems = extracted?.line_items.filter(i => i.selected) || [];
-  const selectedTotal = selectedItems.reduce((sum, i) => sum + i.amount, 0);
-
-  const handleSaveExpenses = async () => {
-    if (!extracted || selectedItems.length === 0) {
-      toast.error("No items selected");
+  const handleSaveExpense = async () => {
+    if (!canSave) {
+      toast.error("Please enter a valid total amount");
       return;
     }
 
     setSaving(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
-      const expenseDate = extracted.date || format(new Date(), "yyyy-MM-dd");
+      const expenseDate = editDate || format(new Date(), "yyyy-MM-dd");
 
-      // Upload receipt file to storage and save to claim file library
+      // Upload receipt file
       let receiptFilePath: string | null = null;
       if (receiptFile) {
         const fileExt = receiptFile.name.split('.').pop();
@@ -174,12 +137,10 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
         if (!uploadError) {
           receiptFilePath = fileName;
 
-          // Determine month subfolder name from receipt date (e.g., "January 2025")
-          const receiptDate = extracted.date ? new Date(extracted.date) : new Date();
+          const receiptDate = editDate ? new Date(editDate) : new Date();
           const monthLabel = receiptDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
           const subfolderName = `Receipts - ${monthLabel}`;
 
-          // Find or create the month subfolder
           let folderId: string | null = null;
           const { data: existingFolder } = await supabase
             .from('claim_folders')
@@ -199,7 +160,6 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
             folderId = newFolder?.id || null;
           }
 
-          // Save file record to claim_files
           await supabase.from('claim_files').insert({
             claim_id: claimId,
             file_name: receiptFile.name,
@@ -213,28 +173,29 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
         }
       }
 
-      const inserts = selectedItems.map(item => ({
+      const catInfo = EXPENSE_CATEGORIES.find(c => c.value === editCategory);
+      const { error } = await supabase.from("claim_loss_of_use_expenses").insert({
         claim_id: claimId,
-        expense_category: item.category,
+        expense_category: editCategory,
         expense_date: expenseDate,
-        vendor_name: extracted.vendor_name || null,
-        description: item.description,
-        amount: item.amount,
+        vendor_name: editVendor || null,
+        description: editVendor
+          ? `${catInfo?.label || editCategory} — ${editVendor}`
+          : catInfo?.label || editCategory,
+        amount: totalValue,
         receipt_file_path: receiptFilePath,
         created_by: userData.user?.id,
-      }));
-
-      const { error } = await supabase.from("claim_loss_of_use_expenses").insert(inserts);
+      });
 
       if (error) throw error;
 
-      toast.success(`Added ${selectedItems.length} expense(s) totaling $${selectedTotal.toFixed(2)}`);
+      toast.success(`Added $${totalValue.toFixed(2)} expense from ${editVendor || 'receipt'}`);
       resetState();
       setOpen(false);
       onExpensesAdded();
     } catch (err: any) {
       console.error("Save error:", err);
-      toast.error("Failed to save expenses");
+      toast.error("Failed to save expense");
     } finally {
       setSaving(false);
     }
@@ -247,11 +208,11 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
           <Camera className="h-4 w-4 mr-1" /> Scan Receipt
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Receipt className="h-5 w-5" />
-            Upload Receipt for Auto-Extraction
+            Scan Receipt
           </DialogTitle>
         </DialogHeader>
 
@@ -280,7 +241,7 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
         {extracting && (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Analyzing receipt with AI...</p>
+            <p className="text-sm text-muted-foreground">Analyzing receipt…</p>
             {previewUrl && (
               <img src={previewUrl} alt="Receipt preview" className="max-h-32 rounded-lg opacity-50 mt-2" />
             )}
@@ -289,114 +250,89 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
 
         {extracted && (
           <div className="space-y-4">
-            {/* Receipt summary */}
-            <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
-              <div>
-                {extracted.vendor_name && (
-                  <p className="font-medium">{extracted.vendor_name}</p>
-                )}
-                {extracted.date && (
-                  <p className="text-sm text-muted-foreground">{extracted.date}</p>
-                )}
+            {/* Needs Review banner */}
+            {extracted.needs_review && (
+              <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 rounded-lg p-3 text-sm">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <span>Total unclear or ambiguous — please verify the amount below before saving.</span>
               </div>
-              {extracted.total != null && (
-                <Badge variant="secondary" className="text-base">
-                  Total: ${extracted.total.toFixed(2)}
-                </Badge>
-              )}
+            )}
+
+            {!extracted.needs_review && extracted.total != null && (
+              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300 rounded-lg p-3 text-sm">
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                <span>Extracted successfully. Review and confirm.</span>
+              </div>
+            )}
+
+            {/* Receipt preview thumbnail */}
+            {previewUrl && (
+              <div className="flex justify-center">
+                <img src={previewUrl} alt="Receipt" className="max-h-40 rounded-lg border" />
+              </div>
+            )}
+
+            {/* Editable fields */}
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>Vendor Name</Label>
+                <Input
+                  value={editVendor}
+                  onChange={(e) => setEditVendor(e.target.value)}
+                  placeholder="Store name"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Date</Label>
+                  <Input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Total Charged *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={editTotal}
+                    onChange={(e) => setEditTotal(e.target.value)}
+                    className={extracted.needs_review && !editTotal ? "border-amber-400" : ""}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Category</Label>
+                <Select value={editCategory} onValueChange={setEditCategory}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXPENSE_CATEGORIES.map(cat => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        {cat.icon} {cat.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {/* Line items table */}
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-8"></TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right w-24">Amount</TableHead>
-                    <TableHead className="w-10"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {extracted.line_items.map((item, idx) => {
-                    const catInfo = EXPENSE_CATEGORIES.find(c => c.value === item.category);
-                    return (
-                      <TableRow key={idx} className={!item.selected ? "opacity-50" : ""}>
-                        <TableCell>
-                          <Checkbox
-                            checked={item.selected}
-                            onCheckedChange={() => toggleItem(idx)}
-                          />
-                        </TableCell>
-                        <TableCell className="text-sm">{item.description}</TableCell>
-                        <TableCell>
-                          <Select
-                            value={item.category}
-                            onValueChange={(v) => updateItemCategory(idx, v)}
-                          >
-                            <SelectTrigger className="h-8 text-xs w-32">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {EXPENSE_CATEGORIES.map(cat => (
-                                <SelectItem key={cat.value} value={cat.value}>
-                                  {cat.icon} {cat.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={item.amount}
-                            onChange={(e) => updateItemAmount(idx, e.target.value)}
-                            className="h-8 w-24 text-right text-sm"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => removeItem(idx)}>
-                            <Trash2 className="h-3 w-3 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  {extracted.tax != null && extracted.tax > 0 && (
-                    <TableRow className="bg-muted/30">
-                      <TableCell />
-                      <TableCell colSpan={2} className="text-sm text-muted-foreground">Tax</TableCell>
-                      <TableCell className="text-right text-sm">${extracted.tax.toFixed(2)}</TableCell>
-                      <TableCell />
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Summary footer */}
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                {selectedItems.length} of {extracted.line_items.length} items selected
-              </p>
-              <p className="font-semibold">
-                Selected Total: ${selectedTotal.toFixed(2)}
-              </p>
-            </div>
-
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => { resetState(); }}>
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" className="flex-1" onClick={resetState}>
                 Upload Different Receipt
               </Button>
               <Button
                 className="flex-1"
-                onClick={handleSaveExpenses}
-                disabled={saving || selectedItems.length === 0}
+                onClick={handleSaveExpense}
+                disabled={saving || !canSave}
               >
                 {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-                Add {selectedItems.length} Expense{selectedItems.length !== 1 ? 's' : ''}
+                Add Expense — ${canSave ? totalValue.toFixed(2) : '0.00'}
               </Button>
             </div>
           </div>
