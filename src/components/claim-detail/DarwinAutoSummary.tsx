@@ -16,8 +16,6 @@ interface DarwinAutoSummaryProps {
 }
 
 interface ClaimSummary {
-  id: string;
-  created_at: string;
   summary: string;
   key_facts: string[];
   next_actions: string[];
@@ -27,6 +25,7 @@ interface ClaimSummary {
     likely: number;
     high: number;
   } | null;
+  db_created_at: string;
 }
 
 export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) => {
@@ -51,7 +50,8 @@ export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) =>
       
       if (data?.result) {
         try {
-          return JSON.parse(data.result) as ClaimSummary;
+          const parsed = JSON.parse(data.result);
+          return { ...parsed, db_created_at: data.created_at } as ClaimSummary;
         } catch {
           return null;
         }
@@ -177,7 +177,7 @@ export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) =>
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4" />
-                Last updated: {format(new Date(existingSummary.created_at), "MMM d, yyyy h:mm a")}
+                Last updated: {format(new Date(existingSummary.db_created_at), "MMM d, yyyy h:mm a")}
               </div>
               <Button
                 variant="ghost"
