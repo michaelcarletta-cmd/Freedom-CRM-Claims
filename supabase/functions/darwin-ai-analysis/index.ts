@@ -4503,6 +4503,19 @@ Before generating ANY output, you MUST:
 3. Reference at least one evidence anchor (doc ID or photo ID) from the thesis evidence map.
 4. Align all arguments with the Claim Thesis primary cause, coverage theory, and carrier error.
 RULE: No rebuttal output unless thesis exists and is backed by claim anchors.
+
+=== LOSS DOMAIN FIDELITY (HARD ENFORCEMENT) ===
+The LOSS DOMAIN FIDELITY section in the pipeline context above is MANDATORY.
+- If the domain is INTERIOR_WATER with roof involvement "none" or "possible":
+  * You MUST NOT use roof-specific arguments, shingle standards, ARMA guidelines, hail/wind terminology, IRC roofing sections, or manufacturer shingle specs.
+  * Focus ONLY on water intrusion patterns, plumbing codes, moisture damage, mold risk, interior finish materials.
+  * If roof is "possible" but unconfirmed, present roof involvement ONLY as a conditional hypothesis: "If the source of water ingress is determined to be the roof system, then..."
+- If the domain is FIRE_SMOKE: Use fire/smoke-specific standards only (NFPA, smoke migration, char depth).
+- If the domain is THEFT_VANDALISM: No weather or structural deterioration arguments.
+- If the domain is VEHICLE_IMPACT: No weather causation or roofing terminology.
+- If the domain is WIND_ONLY without confirmed roof involvement: Do not assume roof damage.
+- ONLY if domain is ROOF_EXTERIOR or HAIL are roof-specific arguments permitted.
+VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
 `;
             }
           }
