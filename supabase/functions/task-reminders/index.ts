@@ -207,41 +207,9 @@ serve(async (req) => {
         return content;
       };
 
-      // Send in-app notification
-      if (preferences.in_app_enabled) {
-        console.log(`Sending in-app notification to user ${userId}`);
-        
-        // Create a notification for each claim with tasks
-        const claimIds = [...new Set(userTasks.map((t) => t.claim_id))];
-        
-        for (const claimId of claimIds) {
-          const claimTasks = userTasks.filter((t) => t.claim_id === claimId);
-          const taskNames = claimTasks.map((t) => t.title).join(", ");
-          
-          // Create claim update
-          const { data: update, error: updateError } = await supabaseAdmin
-            .from("claim_updates")
-            .insert({
-              claim_id: claimId,
-              content: `Task reminder: ${taskNames}`,
-              update_type: "task_reminder",
-              user_id: userId,
-            })
-            .select()
-            .single();
-
-          if (!updateError && update) {
-            // Create notification
-            await supabaseAdmin.from("notifications").insert({
-              claim_id: claimId,
-              update_id: update.id,
-              user_id: userId,
-              is_read: false,
-            });
-            notificationsSent++;
-          }
-        }
-      }
+      // In-app notifications are no longer created for task reminders.
+      // Bell icon notifications are reserved for explicit user-initiated "Notify" actions only.
+      // Task reminders are delivered via email and SMS only.
 
       // Send email notification
       if (preferences.email_enabled && resendApiKey && profile.email) {
