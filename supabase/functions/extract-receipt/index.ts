@@ -18,10 +18,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
     const { imageBase64, mimeType } = await req.json();
 
     if (!imageBase64) {
@@ -33,34 +29,39 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'AI API key not configured' }), { status: 500, headers: corsHeaders });
     }
 
-    const prompt = `You are a receipt/invoice data extraction expert. Analyze this receipt image and extract ALL line items with their amounts.
+    const prompt = `You are a receipt data extraction expert for insurance ALE (Additional Living Expense) claims. Your job is to extract ONLY three things from this receipt image:
 
-Return a JSON object with this exact structure:
+1. **Vendor Name** — the store or business name at the top of the receipt.
+2. **Purchase Date** — the transaction date in YYYY-MM-DD format.
+3. **Final Charged Total** — the amount the customer actually paid.
+
+RULES FOR FINDING THE TOTAL (STRICT):
+- The total MUST appear next to a label like "TOTAL", "TOTAL TENDER", "AMOUNT CHARGED", "BALANCE DUE", "GRAND TOTAL", or "AMOUNT DUE".
+- IGNORE subtotals, tax lines, discount lines, savings lines, and individual item prices.
+- If a payment tender line exists (e.g. "Visa", "Amex", "MC", "Mastercard", "Debit", "Credit Card"), the amount on that line MUST exactly match the total you extracted. If it does not match, set needs_review to true.
+- If more than one possible total exists and it is unclear which is the final charged amount, set needs_review to true and total to null.
+- If the image is rotated or upside down, mentally rotate it upright before reading.
+
+CATEGORY SUGGESTION:
+Based on the vendor name and any visible items, suggest one category:
+- "meals" — grocery stores, restaurants, fast food, convenience stores selling food
+- "lodging" — hotels, motels, Airbnb, short-term rentals
+- "storage" — storage unit facilities
+- "transportation" — gas stations, parking, tolls, rideshare
+- "laundry" — laundromats, dry cleaners
+- "pet_boarding" — kennels, pet care facilities
+- "other" — anything else
+
+Return ONLY this JSON:
 {
-  "vendor_name": "Store/restaurant name",
-  "date": "YYYY-MM-DD format if visible, otherwise null",
-  "line_items": [
-    {
-      "description": "Item description",
-      "amount": 12.99,
-      "category": "meals|lodging|storage|transportation|laundry|pet_boarding|other"
-    }
-  ],
-  "subtotal": 45.99,
-  "tax": 3.50,
-  "total": 49.49
+  "vendor_name": "Store Name" or null,
+  "date": "YYYY-MM-DD" or null,
+  "total": 49.99 or null,
+  "suggested_category": "meals",
+  "needs_review": false
 }
 
-Category mapping guide:
-- Food, drinks, restaurant items → "meals"
-- Hotel, Airbnb, rental → "lodging"
-- Storage unit fees → "storage"
-- Gas, uber, parking, tolls → "transportation"
-- Laundromat, dry cleaning → "laundry"
-- Pet kennel, vet boarding → "pet_boarding"
-- Everything else → "other"
-
-If you cannot read the receipt clearly, still extract what you can. Always return valid JSON.`;
+If you cannot confidently determine the total, set needs_review to true and total to null. Accuracy over completion.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -97,7 +98,6 @@ If you cannot read the receipt clearly, still extract what you can. Always retur
     const aiResult = await response.json();
     const content = aiResult.choices?.[0]?.message?.content || '';
 
-    // Extract JSON from the response
     let extracted;
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
