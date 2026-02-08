@@ -2385,6 +2385,86 @@ export type Database = {
           },
         ]
       }
+      claim_thesis_objects: {
+        Row: {
+          anticipated_pushback: string | null
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          cross_claim_lessons: Json | null
+          evidence_map: Json
+          id: string
+          industry_notes_used: Json | null
+          is_locked: boolean
+          last_deltas_reviewed_at: string | null
+          last_memory_snapshot: Json | null
+          locked_at: string | null
+          locked_by: string | null
+          pipeline_version: string | null
+          primary_carrier_error: string
+          primary_cause_of_loss: string
+          primary_coverage_theory: string
+          pushback_counter: string | null
+          updated_at: string
+          web_search_performed: boolean | null
+          web_search_results: Json | null
+        }
+        Insert: {
+          anticipated_pushback?: string | null
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          cross_claim_lessons?: Json | null
+          evidence_map?: Json
+          id?: string
+          industry_notes_used?: Json | null
+          is_locked?: boolean
+          last_deltas_reviewed_at?: string | null
+          last_memory_snapshot?: Json | null
+          locked_at?: string | null
+          locked_by?: string | null
+          pipeline_version?: string | null
+          primary_carrier_error: string
+          primary_cause_of_loss: string
+          primary_coverage_theory: string
+          pushback_counter?: string | null
+          updated_at?: string
+          web_search_performed?: boolean | null
+          web_search_results?: Json | null
+        }
+        Update: {
+          anticipated_pushback?: string | null
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          cross_claim_lessons?: Json | null
+          evidence_map?: Json
+          id?: string
+          industry_notes_used?: Json | null
+          is_locked?: boolean
+          last_deltas_reviewed_at?: string | null
+          last_memory_snapshot?: Json | null
+          locked_at?: string | null
+          locked_by?: string | null
+          pipeline_version?: string | null
+          primary_carrier_error?: string
+          primary_cause_of_loss?: string
+          primary_coverage_theory?: string
+          pushback_counter?: string | null
+          updated_at?: string
+          web_search_performed?: boolean | null
+          web_search_results?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_thesis_objects_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_updates: {
         Row: {
           claim_id: string
@@ -3591,6 +3671,51 @@ export type Database = {
           item_name?: string
           loss_type?: string
           typical_cost_range?: string | null
+        }
+        Relationships: []
+      }
+      industry_notes_cache: {
+        Row: {
+          cache_key: string
+          content: string
+          created_at: string
+          denial_theme: string | null
+          expires_at: string
+          id: string
+          material: string | null
+          peril: string | null
+          source_type: string
+          source_url: string | null
+          state_code: string | null
+          updated_at: string
+        }
+        Insert: {
+          cache_key: string
+          content: string
+          created_at?: string
+          denial_theme?: string | null
+          expires_at?: string
+          id?: string
+          material?: string | null
+          peril?: string | null
+          source_type?: string
+          source_url?: string | null
+          state_code?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cache_key?: string
+          content?: string
+          created_at?: string
+          denial_theme?: string | null
+          expires_at?: string
+          id?: string
+          material?: string | null
+          peril?: string | null
+          source_type?: string
+          source_url?: string | null
+          state_code?: string | null
+          updated_at?: string
         }
         Relationships: []
       }

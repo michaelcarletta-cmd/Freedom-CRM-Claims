@@ -4449,6 +4449,74 @@ If any are missing, append a "COMPLETENESS WARNING" section listing what's missi
       }
     }
 
+    // ═══ STRATEGIC PIPELINE ENFORCEMENT ═══
+    // For strategic output types, run the 4-step pipeline (Load Memory → Web Search → Build Thesis → Output)
+    const STRATEGIC_PIPELINE_TYPES = [
+      'denial_rebuttal', 'demand_package', 'next_steps', 'auto_draft_rebuttal',
+      'systematic_dismantling', 'correspondence', 'one_click_package',
+      'engineer_report_rebuttal', 'supplement', 'estimate_gap_analysis',
+    ];
+
+    if (STRATEGIC_PIPELINE_TYPES.includes(analysisType)) {
+      console.log(`[Strategic Pipeline] Running 4-step pipeline for ${analysisType}`);
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        
+        const pipelineResponse = await fetch(`${supabaseUrl}/functions/v1/darwin-strategic-pipeline`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseServiceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            claimId,
+            analysisType,
+            forceRefresh: additionalContext?.forceThesisRefresh || false,
+          }),
+        });
+
+        if (pipelineResponse.ok) {
+          const pipelineData = await pipelineResponse.json();
+          
+          if (pipelineData.pipelineRequired && pipelineData.pipelineContext) {
+            console.log(`[Strategic Pipeline] Injecting pipeline context (${pipelineData.pipelineContext.length} chars). Thesis new: ${pipelineData.thesisIsNew}. Search: ${pipelineData.searchPerformed}. Cross-claim: ${pipelineData.crossClaimCount}. Deltas: ${pipelineData.deltaSummary}`);
+            
+            // Inject pipeline context into the user message
+            if (typeof messages[1]?.content === 'string') {
+              messages[1].content = pipelineData.pipelineContext + '\n' + messages[1].content;
+            } else if (Array.isArray(messages[1]?.content)) {
+              const textPart = messages[1].content.find((p: any) => p.type === 'text');
+              if (textPart) {
+                textPart.text = pipelineData.pipelineContext + '\n' + textPart.text;
+              }
+            }
+
+            // Enforce thesis requirement in system prompt
+            if (messages[0]?.role === 'system') {
+              messages[0].content += `
+
+=== STRATEGIC PIPELINE ENFORCEMENT ===
+Before generating ANY output, you MUST:
+1. Confirm you reviewed: claim memory snapshot, new deltas since last run, cross-claim lessons, and industry notes from the STRATEGIC PIPELINE CONTEXT above.
+2. If deltas exist, explicitly incorporate at least one. Otherwise state "No new file activity since last review."
+3. Reference at least one evidence anchor (doc ID or photo ID) from the thesis evidence map.
+4. Align all arguments with the Claim Thesis primary cause, coverage theory, and carrier error.
+RULE: No rebuttal output unless thesis exists and is backed by claim anchors.
+`;
+            }
+          }
+        } else {
+          console.error(`[Strategic Pipeline] Pipeline call failed: ${pipelineResponse.status}`);
+          // Continue without pipeline - don't block the analysis
+        }
+      } catch (pipelineError) {
+        console.error('[Strategic Pipeline] Pipeline error:', pipelineError);
+        // Continue without pipeline - graceful degradation
+      }
+    }
+    // ═══ END STRATEGIC PIPELINE ═══
+
     // Call Lovable AI with model fallback chain for reliability
     const hasPdfContent = pdfContent || (pdfContents && pdfContents.length > 0) || additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf;
     const needsPdfProcessing = hasPdfContent && !additionalContext?._useTextOnly && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package', 'document_comparison', 'smart_extraction', 'estimate_gap_analysis', 'systematic_dismantling'].includes(analysisType);
