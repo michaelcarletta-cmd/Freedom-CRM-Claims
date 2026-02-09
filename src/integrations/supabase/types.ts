@@ -4008,7 +4008,11 @@ export type Database = {
       }
       mortgage_companies: {
         Row: {
-          address: string | null
+          address_line_1: string | null
+          address_line_2: string | null
+          address_line_3: string | null
+          address_line_4: string | null
+          address_line_5: string | null
           contact_name: string | null
           created_at: string
           email: string | null
@@ -4025,7 +4029,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          address?: string | null
+          address_line_1?: string | null
+          address_line_2?: string | null
+          address_line_3?: string | null
+          address_line_4?: string | null
+          address_line_5?: string | null
           contact_name?: string | null
           created_at?: string
           email?: string | null
@@ -4042,7 +4050,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          address?: string | null
+          address_line_1?: string | null
+          address_line_2?: string | null
+          address_line_3?: string | null
+          address_line_4?: string | null
+          address_line_5?: string | null
           contact_name?: string | null
           created_at?: string
           email?: string | null
