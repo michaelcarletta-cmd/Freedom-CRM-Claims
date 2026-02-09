@@ -9,7 +9,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { Home, Mail, Phone, User, Plus, Search, Pencil } from "lucide-react";
 import { formatPhoneNumber } from "@/lib/utils";
-import { MaskedField } from "@/components/ui/masked-field";
 
 interface MortgageCompany {
   id: string;
@@ -18,9 +17,26 @@ interface MortgageCompany {
   phone: string | null;
   phone_extension: string | null;
   email: string | null;
-  address: string | null;
+  address_line_1: string | null;
+  address_line_2: string | null;
+  address_line_3: string | null;
+  address_line_4: string | null;
+  address_line_5: string | null;
   is_active: boolean;
 }
+
+const emptyForm = {
+  name: "",
+  contact_name: "",
+  email: "",
+  phone: "",
+  phone_extension: "",
+  address_line_1: "",
+  address_line_2: "",
+  address_line_3: "",
+  address_line_4: "",
+  address_line_5: "",
+};
 
 export const MortgageCompaniesTab = () => {
   const [companies, setCompanies] = useState<MortgageCompany[]>([]);
@@ -28,14 +44,7 @@ export const MortgageCompaniesTab = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<MortgageCompany | null>(null);
-  const [formData, setFormData] = useState({
-    name: "",
-    contact_name: "",
-    email: "",
-    phone: "",
-    phone_extension: "",
-    address: "",
-  });
+  const [formData, setFormData] = useState({ ...emptyForm });
 
   useEffect(() => {
     fetchCompanies();
@@ -77,18 +86,15 @@ export const MortgageCompaniesTab = () => {
         email: company.email || "",
         phone: company.phone || "",
         phone_extension: company.phone_extension || "",
-        address: company.address || "",
+        address_line_1: company.address_line_1 || "",
+        address_line_2: company.address_line_2 || "",
+        address_line_3: company.address_line_3 || "",
+        address_line_4: company.address_line_4 || "",
+        address_line_5: company.address_line_5 || "",
       });
     } else {
       setEditingCompany(null);
-      setFormData({ 
-        name: "", 
-        contact_name: "", 
-        email: "", 
-        phone: "", 
-        phone_extension: "",
-        address: "",
-      });
+      setFormData({ ...emptyForm });
     }
     setDialogOpen(true);
   };
@@ -105,7 +111,11 @@ export const MortgageCompaniesTab = () => {
       phone: formData.phone || null,
       phone_extension: formData.phone_extension || null,
       email: formData.email || null,
-      address: formData.address || null,
+      address_line_1: formData.address_line_1 || null,
+      address_line_2: formData.address_line_2 || null,
+      address_line_3: formData.address_line_3 || null,
+      address_line_4: formData.address_line_4 || null,
+      address_line_5: formData.address_line_5 || null,
     };
 
     if (editingCompany) {
@@ -133,14 +143,7 @@ export const MortgageCompaniesTab = () => {
 
     setDialogOpen(false);
     setEditingCompany(null);
-    setFormData({ 
-      name: "", 
-      contact_name: "", 
-      phone: "", 
-      phone_extension: "", 
-      email: "",
-      address: "",
-    });
+    setFormData({ ...emptyForm });
     fetchCompanies();
   };
 
@@ -170,11 +173,12 @@ export const MortgageCompaniesTab = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <Table className="min-w-[600px]">
+            <Table className="min-w-[700px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="whitespace-nowrap">Company Name</TableHead>
                   <TableHead className="whitespace-nowrap">Contact Name</TableHead>
+                  <TableHead className="whitespace-nowrap">Email</TableHead>
                   <TableHead className="whitespace-nowrap">Phone</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
@@ -193,6 +197,16 @@ export const MortgageCompaniesTab = () => {
                         <div className="flex items-center gap-2">
                           <User className="h-4 w-4 text-muted-foreground" />
                           {company.contact_name}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {company.email ? (
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          {company.email}
                         </div>
                       ) : (
                         <span className="text-muted-foreground">—</span>
@@ -286,13 +300,47 @@ export const MortgageCompaniesTab = () => {
             {/* Address Section */}
             <div className="space-y-4">
               <h3 className="text-sm font-medium text-muted-foreground border-b pb-2">Address</h3>
-              <div>
-                <Label>Address</Label>
-                <Input
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  placeholder="Enter company address"
-                />
+              <div className="space-y-3">
+                <div>
+                  <Label>Address Line 1</Label>
+                  <Input
+                    value={formData.address_line_1}
+                    onChange={(e) => setFormData({ ...formData, address_line_1: e.target.value })}
+                    placeholder="Street address"
+                  />
+                </div>
+                <div>
+                  <Label>Address Line 2</Label>
+                  <Input
+                    value={formData.address_line_2}
+                    onChange={(e) => setFormData({ ...formData, address_line_2: e.target.value })}
+                    placeholder="Suite, unit, building, etc."
+                  />
+                </div>
+                <div>
+                  <Label>Address Line 3</Label>
+                  <Input
+                    value={formData.address_line_3}
+                    onChange={(e) => setFormData({ ...formData, address_line_3: e.target.value })}
+                    placeholder="City, State, ZIP"
+                  />
+                </div>
+                <div>
+                  <Label>Address Line 4</Label>
+                  <Input
+                    value={formData.address_line_4}
+                    onChange={(e) => setFormData({ ...formData, address_line_4: e.target.value })}
+                    placeholder="Additional address info"
+                  />
+                </div>
+                <div>
+                  <Label>Address Line 5</Label>
+                  <Input
+                    value={formData.address_line_5}
+                    onChange={(e) => setFormData({ ...formData, address_line_5: e.target.value })}
+                    placeholder="Additional address info"
+                  />
+                </div>
               </div>
             </div>
 
