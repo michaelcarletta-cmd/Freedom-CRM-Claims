@@ -199,6 +199,9 @@ export const DarwinDeclaredPosition = ({ claimId, claim }: DarwinDeclaredPositio
                 placeholder="e.g., For the carrier's conclusion to be correct, the damage would need to result from long-term wear rather than the documented storm event"
                 className="min-h-[60px] text-sm"
               />
+              <p className="text-xs text-muted-foreground italic">
+                Format: "For the carrier's conclusion to be correct, the damage would need to result from [Carrier's Argument] rather than [Forensic Reality]."
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Confidence Level</Label>
@@ -238,6 +241,11 @@ export const DarwinDeclaredPosition = ({ claimId, claim }: DarwinDeclaredPositio
                 <div className="p-2 bg-muted/50 rounded">
                   <span className="text-xs font-semibold text-muted-foreground">Carrier Dependency:</span>
                   <p>{position.carrier_dependency_statement || "Not set"}</p>
+                  {!position.carrier_dependency_statement && (
+                    <p className="text-xs text-muted-foreground italic mt-1">
+                      Format: "For the carrier's conclusion to be correct, the damage would need to result from [Carrier's Argument] rather than [Forensic Reality]."
+                    </p>
+                  )}
                 </div>
               </div>
             )}
