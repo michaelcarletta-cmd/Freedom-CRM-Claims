@@ -1,25 +1,29 @@
 
 
-## Add Carrier Dependency Statement Format Template
+## Replace Coverage Triggers Prompt
 
-A small UI enhancement to the Declared Position card that adds a persistent, visible format template below the Carrier Dependency Statement field so you always have the correct structure in front of you.
+Replace the existing coverage triggers prompt in the `darwin-strategic-intelligence` edge function with your new, more rigorous prompt that enforces proper evidential sequencing (covered peril first, then repairability, then O&L only when supported).
 
 ### What Changes
 
-In `src/components/claim-detail/DarwinDeclaredPosition.tsx`:
+**File:** `supabase/functions/darwin-strategic-intelligence/index.ts` (lines 577-611)
 
-- Add a helper text block beneath the Carrier Dependency Statement textarea (in edit mode) showing the template:
+Replace the current `userPrompt` assignment in the `coverage_triggers` branch with the full new prompt you provided. This includes:
 
-  *"For the carrier's conclusion to be correct, the damage would need to result from [Carrier's Argument] rather than [Forensic Reality]."*
+- A structured 4-step analysis sequence (confirm peril, evaluate repairability, then code/O&L, then denial rebuttal)
+- 7 core trigger patterns (A through G) checked in order
+- Hard rules preventing O&L from appearing as a primary trigger
+- Evidence-grounding requirements ("supports," "indicates," "consistent with")
+- Updated JSON return format with the same field names (trigger, coverage_opportunity, reasoning, confidence, action_required, potential_value)
 
-- Also add this same template in the read-only view when the field shows "Not set", so the format is always visible as a reminder.
+### Why This Matters
 
-- The template text will be styled as a subtle, muted hint (small italic text) so it doesn't clutter the form but is always accessible.
+The current prompt jumps too quickly to Ordinance & Law and full replacement without first establishing repairability failure. The new prompt enforces a logical chain: damage confirmed, then repair feasibility evaluated, then replacement justified, and only then code compliance costs considered.
 
-### Technical Detail
+### Technical Details
 
-- Add a `<p>` element with `text-xs text-muted-foreground italic` styling directly after the Carrier Dependency Statement `<Textarea>` in the editing block (~line 158).
-- Optionally add the same hint in the display block (~line 194) when the value is empty.
-
-Single file change, no database or backend modifications needed.
+- Single edit in the edge function, replacing lines 577-611
+- The JSON output schema remains the same field names, so no frontend changes are needed
+- The `responseFormat = 'coverage_triggers'` line stays unchanged
+- The edge function will be redeployed automatically after the change
 
