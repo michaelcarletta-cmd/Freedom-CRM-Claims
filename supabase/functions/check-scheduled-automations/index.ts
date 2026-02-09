@@ -88,11 +88,37 @@ serve(async (req) => {
       console.error('Error executing automations:', executeError);
     }
 
+    // Process Recoverable Depreciation follow-ups
+    console.log('Triggering RD follow-ups...');
+    const { data: rdFollowUpResult, error: rdFollowUpError } = await supabase.functions.invoke('process-rd-follow-ups', {
+      headers: { 'x-cron-secret': cronSecret || '' }
+    });
+    
+    if (rdFollowUpError) {
+      console.error('Error processing RD follow-ups:', rdFollowUpError);
+    } else {
+      console.log('RD follow-ups result:', rdFollowUpResult);
+    }
+
+    // Process RD check tracking
+    console.log('Triggering RD check tracking...');
+    const { data: rdCheckResult, error: rdCheckError } = await supabase.functions.invoke('process-rd-check-tracking', {
+      headers: { 'x-cron-secret': cronSecret || '' }
+    });
+    
+    if (rdCheckError) {
+      console.error('Error processing RD check tracking:', rdCheckError);
+    } else {
+      console.log('RD check tracking result:', rdCheckResult);
+    }
+
     return new Response(
       JSON.stringify({ 
         checked: results.length, 
         results,
-        executed: executeResult 
+        executed: executeResult,
+        rdFollowUps: rdFollowUpResult,
+        rdCheckTracking: rdCheckResult,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
