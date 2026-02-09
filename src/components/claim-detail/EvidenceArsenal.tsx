@@ -49,7 +49,7 @@ export const EvidenceArsenal = ({ claimId, insights }: EvidenceArsenalProps) => 
     setLoading(true);
     try {
       const [filesResult, photosResult] = await Promise.all([
-        supabase.from('claim_files').select('*').eq('claim_id', claimId),
+        supabase.from('claim_files').select('*, claim_folders(name)').eq('claim_id', claimId),
         supabase.from('claim_photos').select('*').eq('claim_id', claimId)
       ]);
 
@@ -67,7 +67,21 @@ export const EvidenceArsenal = ({ claimId, insights }: EvidenceArsenalProps) => 
     const categories: EvidenceCategory[] = [];
 
     // Core Documents
-    const hasEstimate = files.some(f => f.file_name?.toLowerCase().includes('estimate'));
+    const isOurEstimate = (f: any) => {
+      const name = f.file_name?.toLowerCase() || '';
+      const folder = f.claim_folders?.name?.toLowerCase() || '';
+      const classification = f.document_classification?.toLowerCase() || '';
+      // Check filename patterns
+      if (name.includes('estimate') || name.includes('xactimate') || name.includes('symbility') ||
+          name.includes('scope') || name.includes('bid') || name.includes('quote') ||
+          name.includes('contractor') || name.includes('rcv') || name.includes('acv')) return true;
+      // Check classification
+      if (classification === 'estimate' || classification === 'contractor') return true;
+      // Check if in our key folders (Freedom Documents, Supporting Evidence, Estimates)
+      if (folder.includes('freedom') || folder.includes('supporting evidence') || folder.includes('estimate')) return true;
+      return false;
+    };
+    const hasEstimate = files.some(isOurEstimate);
     const hasPolicy = files.some(f => f.file_name?.toLowerCase().includes('policy'));
     const hasDenial = files.some(f => f.file_name?.toLowerCase().includes('denial'));
     const hasProofOfLoss = files.some(f => 
