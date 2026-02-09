@@ -11,18 +11,21 @@
  import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
  import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
  import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+ import { ScrollArea } from "@/components/ui/scroll-area";
  import { 
    Scale, 
    ChevronDown, 
    Loader2,
-   Info
+   Info,
+   Eye
  } from "lucide-react";
  import { toast } from "sonner";
  import { cn } from "@/lib/utils";
  import { CausationBlameCounterSection } from "./CausationBlameCounterSection";
  
  // New modular imports
- import { CausationFormData, CausationResult, IndicatorValue } from "./causation/types";
+ import { CausationFormData, CausationResult, IndicatorValue, IndicatorBreakdown } from "./causation/types";
  import { 
    PERILS, 
    DAMAGE_TYPES, 
@@ -45,6 +48,7 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
   const [isOpen, setIsOpen] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [result, setResult] = useState<CausationResult | null>(null);
+  const [viewingTest, setViewingTest] = useState<any>(null);
   
   const [formData, setFormData] = useState<CausationFormData>({
     perilTested: '',
@@ -167,7 +171,79 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
     }
   };
 
+  // Reconstruct a CausationResult from a saved database test record
+  const reconstructResult = (test: any): { result: CausationResult; formData: CausationFormData } => {
+    const scoreBreakdown = typeof test.score_breakdown === 'string' 
+      ? JSON.parse(test.score_breakdown) 
+      : test.score_breakdown || {};
+    const indicatorBreakdown = scoreBreakdown?.indicatorBreakdown || [];
+    const reasoning = Array.isArray(test.reasoning) ? test.reasoning : [];
+    const alternatives = Array.isArray(test.alternatives_considered) ? test.alternatives_considered : [];
+
+    const topSupporting: IndicatorBreakdown[] = reasoning.map((r: string, i: number) => {
+      const match = r.match(/^(.+?)\s*\(\+(\d+)\)$/);
+      return {
+        id: `supporting-${i}`,
+        label: match ? match[1] : r,
+        state: 'present' as const,
+        weight: match ? parseInt(match[2]) : 0,
+        appliedWeight: match ? parseInt(match[2]) : 0,
+        isPositive: true,
+      };
+    });
+
+    const topOpposing: IndicatorBreakdown[] = alternatives.map((a: any, i: number) => {
+      const weightMatch = a.reasoning?.match(/\(-?(\d+)\)/);
+      return {
+        id: `opposing-${i}`,
+        label: a.cause || `Alternative ${i + 1}`,
+        state: 'present' as const,
+        weight: weightMatch ? parseInt(weightMatch[1]) : 0,
+        appliedWeight: weightMatch ? parseInt(weightMatch[1]) : 0,
+        isPositive: false,
+      };
+    });
+
+    const result: CausationResult = {
+      decision: test.decision || 'indeterminate',
+      decisionStatement: test.decision_statement || '',
+      butForStatement: `But for ${test.peril_tested}, the ${test.damage_type || 'damage'} would not have occurred.`,
+      minimumEvidenceMet: topSupporting.length > 0,
+      minimumEvidenceDetails: topSupporting.length === 0 ? ['No core supporting indicators were documented'] : [],
+      topSupportingIndicators: topSupporting,
+      topOpposingIndicators: topOpposing,
+      evidenceGaps: Array.isArray(test.evidence_gaps) ? test.evidence_gaps : [],
+      whatWouldChange: [],
+      scoring: {
+        windEvidenceScore: scoreBreakdown?.windEvidence || 0,
+        alternativeCauseScore: scoreBreakdown?.alternativeCause || 0,
+        netScore: test.total_score || 0,
+      },
+      indicatorBreakdown,
+      baselineSusceptibility: test.roof_age ? `Roof age: ${test.roof_age} years. Shingle: ${test.shingle_type || 'Unknown'}` : '',
+    };
+
+    const fd: CausationFormData = {
+      perilTested: test.peril_tested || '',
+      damageTypes: test.damage_type ? test.damage_type.split(', ') : [],
+      eventDate: test.event_date || '',
+      damageNoticedDate: test.damage_noticed_date || '',
+      indicators: {},
+      roofAge: test.roof_age?.toString() || '',
+      shingleType: test.shingle_type || '',
+      manufacturer: test.manufacturer || '',
+      priorRepairs: test.prior_repairs || '',
+      weatherEvidence: test.weather_evidence || '',
+      observationsNotes: test.observations_notes || '',
+      carrierBlameTactics: [],
+      blameEvidenceChecked: {},
+    };
+
+    return { result, formData: fd };
+  };
+
   return (
+    <>
     <Card className="border-primary/20">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>
@@ -196,13 +272,18 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
               <div className="p-3 bg-muted/30 rounded-lg">
                 <p className="text-xs font-medium mb-2">Previous Tests ({previousTests.length})</p>
                 <div className="flex flex-wrap gap-2">
-                  {previousTests.slice(0, 3).map((test: any) => (
+                  {previousTests.map((test: any) => (
                     <Badge 
                       key={test.id} 
                       variant="outline" 
-                      className={cn("text-xs", getDecisionColor(test.decision))}
+                      className={cn("text-xs cursor-pointer hover:opacity-80 transition-opacity", getDecisionColor(test.decision))}
+                      onClick={() => setViewingTest(test)}
                     >
+                      <Eye className="h-3 w-3 mr-1" />
                       {test.peril_tested}: {test.decision?.replace('_', ' ')}
+                      <span className="ml-1 opacity-60">
+                        ({new Date(test.created_at).toLocaleDateString()})
+                      </span>
                     </Badge>
                   ))}
                 </div>
@@ -528,6 +609,34 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
         </CollapsibleContent>
       </Collapsible>
     </Card>
+
+      {/* Previous Test Results Dialog */}
+      <Dialog open={!!viewingTest} onOpenChange={(open) => !open && setViewingTest(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Scale className="h-5 w-5 text-primary" />
+              Causation Test: {viewingTest?.peril_tested} — {viewingTest?.damage_type}
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                {viewingTest && new Date(viewingTest.created_at).toLocaleDateString()}
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-[70vh] pr-4">
+            {viewingTest && (() => {
+              const { result: savedResult, formData: savedFormData } = reconstructResult(viewingTest);
+              return (
+                <CausationResults
+                  result={savedResult}
+                  formData={savedFormData}
+                  claimNumber={claim?.claim_number}
+                />
+              );
+            })()}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
