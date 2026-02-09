@@ -126,7 +126,7 @@ export const DarwinWeatherHistory = ({ claimId, claim }: DarwinWeatherHistoryPro
               Retrieve historical weather data for the loss date to support your claim
             </p>
             <div className="text-sm text-muted-foreground mb-4">
-              <p>Loss Date: {claim.loss_date ? format(new Date(claim.loss_date), "MMMM d, yyyy") : "Not set"}</p>
+              <p>Loss Date: {claim.loss_date ? format(new Date(claim.loss_date + 'T00:00:00'), "MMMM d, yyyy") : "Not set"}</p>
               <p>Location: {claim.policyholder_address || "Not set"}</p>
             </div>
             <Button 
