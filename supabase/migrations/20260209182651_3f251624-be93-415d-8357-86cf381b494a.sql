@@ -1,0 +1,1 @@
+ALTER TABLE public.mortgage_companies ADD COLUMN IF NOT EXISTS address text;
