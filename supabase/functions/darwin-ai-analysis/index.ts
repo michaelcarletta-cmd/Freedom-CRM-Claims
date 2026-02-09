@@ -515,12 +515,22 @@ ${damageList ? `   Detected Damages:\n${damageList}` : ''}`;
         if (filesWithText && filesWithText.length > 0) {
           const fileNameLower = (f: any) => f.file_name?.toLowerCase() || '';
           
-          const estimates = filesWithText.filter((f: any) => 
-            f.document_classification === 'estimate' || 
-            fileNameLower(f).includes('estimate') ||
-            fileNameLower(f).includes('xactimate') ||
-            fileNameLower(f).includes('symbility')
-          );
+          const folderNameLower = (f: any) => f.claim_folders?.name?.toLowerCase() || '';
+          const isOurEstimate = (f: any) => {
+            const name = fileNameLower(f);
+            const folder = folderNameLower(f);
+            const classification = f.document_classification?.toLowerCase() || '';
+            // Filename patterns
+            if (name.includes('estimate') || name.includes('xactimate') || name.includes('symbility') ||
+                name.includes('scope') || name.includes('bid') || name.includes('quote') ||
+                name.includes('contractor') || name.includes('rcv') || name.includes('acv')) return true;
+            // Classification
+            if (classification === 'estimate' || classification === 'contractor') return true;
+            // Key folders: Freedom Documents, Supporting Evidence, Estimates
+            if (folder.includes('freedom') || folder.includes('supporting evidence') || folder.includes('estimate')) return true;
+            return false;
+          };
+          const estimates = filesWithText.filter(isOurEstimate);
           const inspectionDocs = filesWithText.filter((f: any) => 
             fileNameLower(f).includes('inspection') ||
             fileNameLower(f).includes('report')
@@ -568,8 +578,9 @@ ${stormReports.map((f: any) => `- ${f.file_name} (uploaded ${new Date(f.uploaded
 ${beforePhotos.length > 0 ? `BEFORE/PRE-STORM EVIDENCE (${beforePhotos.length}) - PROVES PRE-LOSS CONDITION:
 ${beforePhotos.map((f: any) => `- ${f.file_name} (uploaded ${new Date(f.uploaded_at).toLocaleDateString()})`).join('\n')}
 ` : ''}
-${estimates.length > 0 ? `ESTIMATES AVAILABLE (${estimates.length}):
-${estimates.map((f: any) => `- ${f.file_name} (uploaded ${new Date(f.uploaded_at).toLocaleDateString()})`).join('\n')}
+${estimates.length > 0 ? `OUR ESTIMATES / DEMAND DOCUMENTATION (${estimates.length}) - THIS IS OUR POSITION ON DAMAGES:
+CRITICAL: These documents represent OUR repair estimate and demand. Do NOT say we have "no estimate" or are "missing estimates" if these exist.
+${estimates.map((f: any) => `- ${f.file_name} [folder: ${f.claim_folders?.name || 'root'}] (uploaded ${new Date(f.uploaded_at).toLocaleDateString()})`).join('\n')}
 ` : ''}
 ${inspectionDocs.length > 0 ? `INSPECTION/REPORT DOCUMENTS (${inspectionDocs.length}):
 ${inspectionDocs.map((f: any) => `- ${f.file_name}`).join('\n')}
