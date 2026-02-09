@@ -18,9 +18,8 @@ interface MortgageCompany {
   phone: string | null;
   phone_extension: string | null;
   email: string | null;
+  address: string | null;
   is_active: boolean;
-  portal_username: string | null;
-  portal_password: string | null;
 }
 
 export const MortgageCompaniesTab = () => {
@@ -35,8 +34,7 @@ export const MortgageCompaniesTab = () => {
     email: "",
     phone: "",
     phone_extension: "",
-    portal_username: "",
-    portal_password: "",
+    address: "",
   });
 
   useEffect(() => {
@@ -79,8 +77,7 @@ export const MortgageCompaniesTab = () => {
         email: company.email || "",
         phone: company.phone || "",
         phone_extension: company.phone_extension || "",
-        portal_username: company.portal_username || "",
-        portal_password: company.portal_password || "",
+        address: company.address || "",
       });
     } else {
       setEditingCompany(null);
@@ -90,8 +87,7 @@ export const MortgageCompaniesTab = () => {
         email: "", 
         phone: "", 
         phone_extension: "",
-        portal_username: "",
-        portal_password: "",
+        address: "",
       });
     }
     setDialogOpen(true);
@@ -109,8 +105,7 @@ export const MortgageCompaniesTab = () => {
       phone: formData.phone || null,
       phone_extension: formData.phone_extension || null,
       email: formData.email || null,
-      portal_username: formData.portal_username || null,
-      portal_password: formData.portal_password || null,
+      address: formData.address || null,
     };
 
     if (editingCompany) {
@@ -144,8 +139,7 @@ export const MortgageCompaniesTab = () => {
       phone: "", 
       phone_extension: "", 
       email: "",
-      portal_username: "",
-      portal_password: "",
+      address: "",
     });
     fetchCompanies();
   };
@@ -289,27 +283,16 @@ export const MortgageCompaniesTab = () => {
               </div>
             </div>
 
-            {/* Portal Access Section */}
+            {/* Address Section */}
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-muted-foreground border-b pb-2">Portal Access</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Portal Username</Label>
-                  <Input
-                    value={formData.portal_username}
-                    onChange={(e) => setFormData({ ...formData, portal_username: e.target.value })}
-                    placeholder="Enter username"
-                  />
-                </div>
-                <div>
-                  <Label>Portal Password</Label>
-                  <Input
-                    type="password"
-                    value={formData.portal_password}
-                    onChange={(e) => setFormData({ ...formData, portal_password: e.target.value })}
-                    placeholder="Enter password"
-                  />
-                </div>
+              <h3 className="text-sm font-medium text-muted-foreground border-b pb-2">Address</h3>
+              <div>
+                <Label>Address</Label>
+                <Input
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  placeholder="Enter company address"
+                />
               </div>
             </div>
 
