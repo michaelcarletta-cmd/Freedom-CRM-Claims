@@ -578,37 +578,76 @@ Focus on actionable items. Don't generate warnings for things that are fine.`;
 
 ${claimContext}
 
-Look for IF/THEN coverage opportunities. For each one found:
-1. Identify the trigger condition (what's present in the claim)
-2. Identify the coverage opportunity (what it could unlock)
-3. Explain the connection
-4. Assess likelihood of success
-5. Recommend specific action
+Goal:
 
-Common triggers to check:
-- Wind/hail + roof damage + code deficiencies → Ordinance & Law coverage
-- Structural damage requiring temporary relocation → ALE coverage
-- Multiple trades affected + Uniform Appearance doctrine → Full replacement (focus on REPAIRABILITY and pre-loss condition restoration, NOT aesthetic matching)
-- Carrier delay + missed deadlines → Prompt pay penalties
-- Lowball estimate vs code requirements → Supplement opportunity
-- Failed/poor condition photos → Evidence of damage severity
-- Code upgrade requirements → Additional coverage under O&L
+Identify IF/THEN coverage opportunities using an evidential, claim-handling-accurate sequence. Do NOT jump directly to Ordinance & Law (O&L) just because wind/hail damage is confirmed. Instead:
 
-IMPORTANT: Do NOT reference "matching" as an argument. Focus on Repairability, Uniform Appearance, Pre-loss Condition, and Indemnification principles.
+1) Confirm covered peril and damage presence
+2) Evaluate repairability vs replacement based on age/condition/material availability/system integrity
+3) If replacement is supported, THEN evaluate code impacts and only then consider O&L
+4) If denial/partial denial, use confirmed peril and documented damage to challenge scope/cause conclusions
+
+For each trigger you find, provide:
+
+1. Trigger condition (what is present in the claim)
+2. Coverage opportunity (what it could unlock)
+3. Reasoning (specific evidence-based connection; avoid assumptions)
+4. Likelihood of success (high/medium/low)
+5. Recommended action (specific next step to strengthen coverage/scope)
+
+Hard Rules (must follow):
+
+- Ordinance & Law is NEVER a primary trigger. Only include O&L if replacement necessity is first supported by repairability analysis AND there is evidence/indication of code requirements.
+- If the carrier agrees there is wind/hail but limits scope to repairs, you must analyze whether repairs are feasible and durable, not just whether damage exists.
+- If the claim is denied or causation is disputed, identify re-open/rebuttal triggers tied to documented storm damage patterns, contemporaneous evidence, meteorological/event documentation if present in claimContext, and expert findings if available.
+- Prefer language like "supports," "indicates," "consistent with," and cite what in claimContext it's based on (photos, notes, age, brittleness, discontinued materials, mismatching, manufacturer requirements, test squares, etc.).
+- Do not claim "full replacement" unless you first establish why spot repair cannot reasonably restore pre-loss condition.
+
+Core Trigger Patterns to Check (in order):
+
+A) Covered Peril Threshold
+- IF wind/hail/storm peril is documented/confirmed + physical damage is observed
+  THEN coverage applicability is triggered and scope evaluation is required
+
+B) Repairability / Replaceability (must come before replacement and O&L)
+- IF damage exists + roof is aged/brittle/poor condition OR matching materials unavailable/discontinued OR repair would compromise system integrity
+  THEN replacement may be required to restore pre-loss condition (scope leverage)
+
+C) Uniform Appearance / Matching (only if supported by jurisdiction/policy/claim facts)
+- IF partial replacement/repair would cause clear mismatch + policy/jurisdiction supports matching considerations
+  THEN expand scope toward full replacement or larger section replacement
+
+D) Ordinance & Law (only after B supports replacement)
+- IF replacement is supported + code/permit requirements are implicated (e.g., decking, underlayment, ventilation, attachment standards)
+  THEN O&L may apply for incremental code compliance costs
+
+E) ALE / Loss of Use
+- IF structural/safety conditions or active repairs make home uninhabitable/unsafe OR required relocation is documented
+  THEN ALE / Additional Living Expense coverage opportunity
+
+F) Supplement / Scope Corrections
+- IF carrier estimate omits line items required for proper repair/replacement (code-related items only when supported) OR unit pricing/quantities appear inconsistent with required work
+  THEN supplement opportunity and re-inspection request
+
+G) Claim Handling / Statutory Leverage
+- IF carrier delay, missed statutory deadlines, inadequate investigation, or shifting denial rationale is documented
+  THEN prompt pay / bad faith / re-open leverage (state dependent; only if claimContext indicates)
 
 Return as JSON:
 {
   "coverage_triggers": [
     {
-      "trigger": "What condition exists",
-      "coverage_opportunity": "What coverage this unlocks",
-      "reasoning": "Why this applies",
+      "trigger": "What condition exists (quote or reference facts from claimContext)",
+      "coverage_opportunity": "What coverage/scope/claim right this unlocks",
+      "reasoning": "Why this applies, tied to specific evidence; include repairability analysis before replacement/O&L",
       "confidence": "high|medium|low",
-      "action_required": "What to do",
+      "action_required": "Specific next step (e.g., test square, brittleness test, material availability letter, engineer/roofer report, re-inspection request, supplement docs)",
       "potential_value": "Estimated impact if available"
     }
   ]
-}`;
+}
+
+Important: Create multiple triggers when appropriate (e.g., one for covered peril threshold, one for repairability replacement, one for O&L after replacement is supported, one for denial rebuttal).`;
 
       responseFormat = 'coverage_triggers';
     } else {
