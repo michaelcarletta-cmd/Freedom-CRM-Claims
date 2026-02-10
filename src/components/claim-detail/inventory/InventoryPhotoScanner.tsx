@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { Camera, CheckCircle2, AlertTriangle, XCircle, Loader2, ScanSearch, Check, X, Filter } from "lucide-react";
+import { Camera, CheckCircle2, AlertTriangle, XCircle, Loader2, ScanSearch, Check, X, Filter, Upload, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 
 interface DetectedItem {
@@ -75,6 +75,9 @@ export const InventoryPhotoScanner = ({ claimId, onItemsAdded }: InventoryPhotoS
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [bulkRoom, setBulkRoom] = useState("");
   const [progress, setProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchPhotos();
@@ -87,6 +90,55 @@ export const InventoryPhotoScanner = ({ claimId, onItemsAdded }: InventoryPhotoS
       .eq("claim_id", claimId)
       .order("created_at", { ascending: false });
     setPhotos((data as Photo[]) || []);
+  };
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      let uploadedCount = 0;
+
+      for (const file of Array.from(files)) {
+        const fileExt = file.name.split('.').pop()?.toLowerCase();
+        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+        const filePath = `${claimId}/inventory/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("claim-photos")
+          .upload(filePath, file);
+
+        if (uploadError) {
+          console.error("Upload error:", uploadError);
+          continue;
+        }
+
+        const { error: dbError } = await supabase
+          .from("claim_photos")
+          .insert({
+            claim_id: claimId,
+            file_path: filePath,
+            file_name: file.name,
+            file_size: file.size,
+            category: "Contents / Personal Property",
+            uploaded_by: userData.user?.id,
+          });
+
+        if (!dbError) uploadedCount++;
+      }
+
+      if (uploadedCount > 0) {
+        toast.success(`Uploaded ${uploadedCount} photo(s)`);
+        await fetchPhotos();
+      }
+    } catch (err: any) {
+      toast.error("Upload failed: " + err.message);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (cameraInputRef.current) cameraInputRef.current.value = "";
+    }
   };
 
   const togglePhoto = (id: string) => {
@@ -107,7 +159,6 @@ export const InventoryPhotoScanner = ({ claimId, onItemsAdded }: InventoryPhotoS
     try {
       const { data: userData } = await supabase.auth.getUser();
 
-      // Create scan run
       const { data: scanRun } = await supabase
         .from("inventory_scan_runs")
         .insert({
@@ -234,25 +285,79 @@ export const InventoryPhotoScanner = ({ claimId, onItemsAdded }: InventoryPhotoS
 
   const selectedCount = detectedItems.filter((i) => i.selected).length;
 
+  // Hidden file inputs
+  const fileInputs = (
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => handleFileUpload(e.target.files)}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => handleFileUpload(e.target.files)}
+      />
+    </>
+  );
+
   // IDLE / SELECTING
   if (stage === "idle" || stage === "selecting") {
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        {fileInputs}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <h3 className="text-sm font-medium flex items-center gap-2">
             <ScanSearch className="h-4 w-4" />
             Select Photos to Scan
           </h3>
-          <Button onClick={runPipeline} disabled={!selectedPhotoIds.length} size="sm">
-            <Camera className="h-4 w-4 mr-1" />
-            Scan {selectedPhotoIds.length} Photo{selectedPhotoIds.length !== 1 ? "s" : ""}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={uploading}
+            >
+              <Camera className="h-4 w-4 mr-1" />
+              Take Photo
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+              Upload Photos
+            </Button>
+            <Button onClick={runPipeline} disabled={!selectedPhotoIds.length} size="sm">
+              <ImagePlus className="h-4 w-4 mr-1" />
+              Scan {selectedPhotoIds.length} Photo{selectedPhotoIds.length !== 1 ? "s" : ""}
+            </Button>
+          </div>
         </div>
 
         {photos.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">
-            No photos found for this claim. Upload photos first.
-          </p>
+          <div className="border-2 border-dashed border-border rounded-lg p-8 text-center space-y-3">
+            <Camera className="h-10 w-10 text-muted-foreground mx-auto" />
+            <p className="text-sm text-muted-foreground">
+              No photos found. Take a photo or upload images to get started.
+            </p>
+            <div className="flex justify-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => cameraInputRef.current?.click()}>
+                <Camera className="h-4 w-4 mr-1" /> Take Photo
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-4 w-4 mr-1" /> Upload
+              </Button>
+            </div>
+          </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {photos.map((photo) => {
