@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Trash2, CheckCircle2, AlertTriangle, Bot, User } from "lucide-react";
+import { Trash2, CheckCircle2, AlertTriangle, Bot, User, Pencil, Save, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -39,6 +42,12 @@ const CONDITIONS: Record<string, string> = {
   poor: "Poor",
 };
 
+const COMMON_ROOMS = [
+  "Living Room", "Kitchen", "Master Bedroom", "Bedroom 2", "Bedroom 3",
+  "Bathroom", "Master Bathroom", "Dining Room", "Garage", "Basement",
+  "Attic", "Laundry Room", "Office/Den", "Patio/Deck", "Shed/Outbuilding", "Unassigned",
+];
+
 interface InventoryTableProps {
   items: InventoryItem[];
   loading: boolean;
@@ -46,6 +55,51 @@ interface InventoryTableProps {
 }
 
 export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProps) => {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<{
+    item_name: string;
+    room_name: string;
+    quantity: string;
+    replacement_cost: string;
+    actual_cash_value: string;
+  }>({ item_name: "", room_name: "", quantity: "1", replacement_cost: "", actual_cash_value: "" });
+
+  const startEdit = (item: InventoryItem) => {
+    setEditingId(item.id);
+    setEditData({
+      item_name: item.item_name,
+      room_name: item.room_name,
+      quantity: String(item.quantity),
+      replacement_cost: item.replacement_cost != null ? String(item.replacement_cost) : "",
+      actual_cash_value: item.actual_cash_value != null ? String(item.actual_cash_value) : "",
+    });
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const { error } = await supabase
+      .from("claim_home_inventory")
+      .update({
+        item_name: editData.item_name,
+        room_name: editData.room_name,
+        quantity: parseInt(editData.quantity) || 1,
+        replacement_cost: editData.replacement_cost ? parseFloat(editData.replacement_cost) : null,
+        actual_cash_value: editData.actual_cash_value ? parseFloat(editData.actual_cash_value) : null,
+      } as any)
+      .eq("id", editingId);
+
+    if (error) {
+      toast.error("Failed to update item");
+      console.error(error);
+    } else {
+      toast.success("Item updated");
+      setEditingId(null);
+      onRefresh();
+    }
+  };
+
   const deleteItem = async (id: string) => {
     const { error } = await supabase.from("claim_home_inventory").delete().eq("id", id);
     if (error) {
@@ -75,7 +129,7 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
 
   return (
     <TooltipProvider>
-      <div className="border rounded-lg overflow-hidden">
+      <div className="border rounded-lg overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -92,75 +146,159 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => (
-              <TableRow key={item.id} className={item.needs_review ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}>
-                <TableCell>
-                  {item.source === "ai_photo_scan" ? (
-                    <Badge variant="secondary" className="text-xs gap-1">
-                      <Bot className="h-3 w-3" /> AI
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs gap-1">
-                      <User className="h-3 w-3" /> Manual
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell className="font-medium text-sm">{item.room_name}</TableCell>
-                <TableCell>
-                  <div>
-                    <p className="text-sm">{item.item_name}</p>
-                    {item.manufacturer && (
-                      <p className="text-xs text-muted-foreground">
-                        {item.manufacturer} {item.model_number}
-                      </p>
+            {items.map((item) => {
+              const isEditing = editingId === item.id;
+              return (
+                <TableRow key={item.id} className={item.needs_review ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}>
+                  <TableCell>
+                    {item.source === "ai_photo_scan" ? (
+                      <Badge variant="secondary" className="text-xs gap-1">
+                        <Bot className="h-3 w-3" /> AI
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs gap-1">
+                        <User className="h-3 w-3" /> Manual
+                      </Badge>
                     )}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  {item.category && <Badge variant="secondary" className="text-xs">{item.category}</Badge>}
-                </TableCell>
-                <TableCell>{item.quantity}</TableCell>
-                <TableCell className="text-right font-medium">
-                  {item.replacement_cost ? `$${(item.replacement_cost * item.quantity).toLocaleString()}` : "—"}
-                </TableCell>
-                <TableCell className="text-right text-sm">
-                  {item.actual_cash_value ? `$${(item.actual_cash_value * item.quantity).toLocaleString()}` : "—"}
-                  {item.depreciation_rate && item.age_years ? (
-                    <p className="text-xs text-muted-foreground">
-                      {Math.round(item.depreciation_rate * 100)}%/yr × {item.age_years}yr
-                    </p>
-                  ) : null}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="text-xs">
-                    {CONDITIONS[item.condition_before_loss || ""] || item.condition_before_loss}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {item.source === "ai_photo_scan" && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex gap-0.5">
-                          {item.brand_confirmed ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
-                          {item.price_confirmed ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Brand: {item.brand_confirmed ? "Confirmed" : "Unconfirmed"}</p>
-                        <p>Price: {item.price_confirmed ? "Confirmed" : "Unconfirmed"}</p>
-                        {item.pricing_source && <p>Source: {item.pricing_source}</p>}
-                        {item.pricing_rationale && <p className="max-w-xs">{item.pricing_rationale}</p>}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Button variant="ghost" size="sm" onClick={() => deleteItem(item.id)}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                  <TableCell>
+                    {isEditing ? (
+                      <Select value={editData.room_name} onValueChange={(v) => setEditData({ ...editData, room_name: v })}>
+                        <SelectTrigger className="h-7 w-32 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {COMMON_ROOMS.map((r) => (
+                            <SelectItem key={r} value={r}>{r}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="font-medium text-sm">{item.room_name}</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {isEditing ? (
+                      <Input
+                        value={editData.item_name}
+                        onChange={(e) => setEditData({ ...editData, item_name: e.target.value })}
+                        className="h-7 text-xs w-40"
+                      />
+                    ) : (
+                      <div>
+                        <p className="text-sm">{item.item_name}</p>
+                        {item.manufacturer && (
+                          <p className="text-xs text-muted-foreground">
+                            {item.manufacturer} {item.model_number}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {item.category && <Badge variant="secondary" className="text-xs">{item.category}</Badge>}
+                  </TableCell>
+                  <TableCell>
+                    {isEditing ? (
+                      <Input
+                        type="number"
+                        min="1"
+                        value={editData.quantity}
+                        onChange={(e) => setEditData({ ...editData, quantity: e.target.value })}
+                        className="h-7 text-xs w-16"
+                      />
+                    ) : (
+                      item.quantity
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {isEditing ? (
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={editData.replacement_cost}
+                        onChange={(e) => setEditData({ ...editData, replacement_cost: e.target.value })}
+                        className="h-7 text-xs w-24 ml-auto"
+                        placeholder="0.00"
+                      />
+                    ) : (
+                      <span className="font-medium">
+                        {item.replacement_cost ? `$${(item.replacement_cost * item.quantity).toLocaleString()}` : "—"}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {isEditing ? (
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={editData.actual_cash_value}
+                        onChange={(e) => setEditData({ ...editData, actual_cash_value: e.target.value })}
+                        className="h-7 text-xs w-24 ml-auto"
+                        placeholder="0.00"
+                      />
+                    ) : (
+                      <div>
+                        <span className="text-sm">
+                          {item.actual_cash_value ? `$${(item.actual_cash_value * item.quantity).toLocaleString()}` : "—"}
+                        </span>
+                        {item.depreciation_rate && item.age_years ? (
+                          <p className="text-xs text-muted-foreground">
+                            {Math.round(item.depreciation_rate * 100)}%/yr × {item.age_years}yr
+                          </p>
+                        ) : null}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">
+                      {CONDITIONS[item.condition_before_loss || ""] || item.condition_before_loss}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {item.source === "ai_photo_scan" && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex gap-0.5">
+                            {item.brand_confirmed ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+                            {item.price_confirmed ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Brand: {item.brand_confirmed ? "Confirmed" : "Unconfirmed"}</p>
+                          <p>Price: {item.price_confirmed ? "Confirmed" : "Unconfirmed"}</p>
+                          {item.pricing_source && <p>Source: {item.pricing_source}</p>}
+                          {item.pricing_rationale && <p className="max-w-xs">{item.pricing_rationale}</p>}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {isEditing ? (
+                        <>
+                          <Button variant="ghost" size="sm" onClick={saveEdit}>
+                            <Save className="h-4 w-4 text-green-600" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={cancelEdit}>
+                            <X className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button variant="ghost" size="sm" onClick={() => startEdit(item)}>
+                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => deleteItem(item.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
