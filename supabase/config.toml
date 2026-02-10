@@ -137,3 +137,9 @@ verify_jwt = false
 
 [functions.claim-context-pipeline]
 verify_jwt = true
+
+[functions.process-rd-follow-ups]
+verify_jwt = false
+
+[functions.process-rd-check-tracking]
+verify_jwt = false
