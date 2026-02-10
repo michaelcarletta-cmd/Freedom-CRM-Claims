@@ -135,6 +135,23 @@ serve(async (req) => {
       let recipientEmail = claim.adjuster_email;
       let recipientName = claim.adjuster_name || 'Claims Department';
 
+      // If no adjuster on the claim record, check the claim_adjusters table
+      if (!recipientEmail) {
+        const { data: claimAdjuster } = await supabase
+          .from('claim_adjusters')
+          .select('adjuster_name, adjuster_email')
+          .eq('claim_id', claim.id)
+          .eq('is_primary', true)
+          .limit(1)
+          .single();
+
+        if (claimAdjuster?.adjuster_email) {
+          recipientEmail = claimAdjuster.adjuster_email;
+          recipientName = claimAdjuster.adjuster_name || 'Claims Department';
+          console.log(`Claim ${claim.claim_number}: Using adjuster from claim_adjusters: ${recipientEmail}`);
+        }
+      }
+
       if (!recipientEmail && claim.insurance_company) {
         // Look up carrier email from insurance_companies table
         const { data: carrier } = await supabase
