@@ -143,3 +143,6 @@ verify_jwt = false
 
 [functions.process-rd-check-tracking]
 verify_jwt = false
+
+[functions.inventory-photo-pipeline]
+verify_jwt = true
