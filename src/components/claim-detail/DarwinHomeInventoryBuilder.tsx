@@ -1,17 +1,19 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { Package, Plus, Copy, DollarSign, Trash2 } from "lucide-react";
+import { Package, Plus, Camera, ClipboardList, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
+import { InventoryPhotoScanner } from "./inventory/InventoryPhotoScanner";
+import { InventoryTable } from "./inventory/InventoryTable";
+import { InventorySummary } from "./inventory/InventorySummary";
 
 interface InventoryItem {
   id: string;
@@ -28,6 +30,17 @@ interface InventoryItem {
   model_number: string | null;
   is_total_loss: boolean;
   notes: string | null;
+  source?: string;
+  ai_confidence?: number;
+  brand_confirmed?: boolean;
+  model_confirmed?: boolean;
+  price_confirmed?: boolean;
+  pricing_source?: string;
+  pricing_rationale?: string;
+  category?: string;
+  needs_review?: boolean;
+  depreciation_rate?: number;
+  age_years?: number;
 }
 
 interface DarwinHomeInventoryBuilderProps {
@@ -36,21 +49,9 @@ interface DarwinHomeInventoryBuilderProps {
 }
 
 const COMMON_ROOMS = [
-  "Living Room",
-  "Kitchen",
-  "Master Bedroom",
-  "Bedroom 2",
-  "Bedroom 3",
-  "Bathroom",
-  "Master Bathroom",
-  "Dining Room",
-  "Garage",
-  "Basement",
-  "Attic",
-  "Laundry Room",
-  "Office/Den",
-  "Patio/Deck",
-  "Shed/Outbuilding",
+  "Living Room", "Kitchen", "Master Bedroom", "Bedroom 2", "Bedroom 3",
+  "Bathroom", "Master Bathroom", "Dining Room", "Garage", "Basement",
+  "Attic", "Laundry Room", "Office/Den", "Patio/Deck", "Shed/Outbuilding",
 ];
 
 const CONDITIONS = [
@@ -89,7 +90,7 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
     if (error) {
       console.error("Error fetching inventory:", error);
     } else {
-      setItems(data || []);
+      setItems((data as any[]) || []);
     }
     setLoading(false);
   };
@@ -120,8 +121,9 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
       model_number: formData.model_number || null,
       is_total_loss: formData.is_total_loss,
       notes: formData.notes || null,
+      source: "manual",
       created_by: userData.user?.id,
-    });
+    } as any);
 
     if (error) {
       toast.error("Failed to add item");
@@ -129,7 +131,7 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
     } else {
       toast.success("Item added to inventory");
       setFormData({
-        room_name: formData.room_name, // Keep room selected
+        room_name: formData.room_name,
         item_name: "",
         item_description: "",
         quantity: "1",
@@ -146,44 +148,6 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
     }
   };
 
-  const deleteItem = async (id: string) => {
-    const { error } = await supabase.from("claim_home_inventory").delete().eq("id", id);
-    if (error) {
-      toast.error("Failed to delete");
-    } else {
-      toast.success("Item removed");
-      fetchItems();
-    }
-  };
-
-  const exportInventory = () => {
-    const grouped = items.reduce((acc, item) => {
-      if (!acc[item.room_name]) acc[item.room_name] = [];
-      acc[item.room_name].push(item);
-      return acc;
-    }, {} as Record<string, InventoryItem[]>);
-
-    let csv = "Room,Item Name,Description,Qty,Original Price,Replacement Cost,Condition,Manufacturer,Model\n";
-    
-    items.forEach(item => {
-      csv += `"${item.room_name}","${item.item_name}","${item.item_description || ""}",${item.quantity},${item.original_purchase_price || ""},${item.replacement_cost || ""},"${item.condition_before_loss || ""}","${item.manufacturer || ""}","${item.model_number || ""}"\n`;
-    });
-
-    navigator.clipboard.writeText(csv);
-    toast.success("Inventory copied as CSV");
-  };
-
-  // Calculate totals
-  const totalRCV = items.reduce((sum, i) => sum + (i.replacement_cost || 0) * i.quantity, 0);
-  const totalOriginal = items.reduce((sum, i) => sum + (i.original_purchase_price || 0) * i.quantity, 0);
-  const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
-
-  // Group by room
-  const roomCounts = items.reduce((acc, item) => {
-    acc[item.room_name] = (acc[item.room_name] || 0) + item.quantity;
-    return acc;
-  }, {} as Record<string, number>);
-
   return (
     <Card>
       <CardHeader>
@@ -194,236 +158,108 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
               Home Inventory Builder
             </CardTitle>
             <CardDescription>
-              Document personal property for PA/NJ contents claims
+              AI-powered photo scanning & manual entry for contents claims
             </CardDescription>
           </div>
-          <div className="flex gap-2">
-            {items.length > 0 && (
-              <Button variant="outline" size="sm" onClick={exportInventory}>
-                <Copy className="h-4 w-4 mr-1" /> Export CSV
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-1" /> Add Item
               </Button>
-            )}
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm">
-                  <Plus className="h-4 w-4 mr-1" /> Add Item
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-lg">
-                <DialogHeader>
-                  <DialogTitle>Add Inventory Item</DialogTitle>
-                </DialogHeader>
-                <ScrollArea className="max-h-[70vh]">
-                  <div className="space-y-4 pr-4">
-                    <div className="space-y-2">
-                      <Label>Room *</Label>
-                      <Select
-                        value={formData.room_name}
-                        onValueChange={(v) => setFormData({ ...formData, room_name: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select room" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COMMON_ROOMS.map((room) => (
-                            <SelectItem key={room} value={room}>
-                              {room}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Item Name *</Label>
-                      <Input
-                        placeholder='e.g., Samsung 55" Smart TV'
-                        value={formData.item_name}
-                        onChange={(e) => setFormData({ ...formData, item_name: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Manufacturer</Label>
-                        <Input
-                          placeholder="Samsung"
-                          value={formData.manufacturer}
-                          onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Model #</Label>
-                        <Input
-                          placeholder="UN55TU7000"
-                          value={formData.model_number}
-                          onChange={(e) => setFormData({ ...formData, model_number: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label>Quantity</Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={formData.quantity}
-                          onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Original Price</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={formData.original_purchase_price}
-                          onChange={(e) => setFormData({ ...formData, original_purchase_price: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Replacement Cost</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={formData.replacement_cost}
-                          onChange={(e) => setFormData({ ...formData, replacement_cost: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Condition Before Loss</Label>
-                      <Select
-                        value={formData.condition_before_loss}
-                        onValueChange={(v) => setFormData({ ...formData, condition_before_loss: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {CONDITIONS.map((cond) => (
-                            <SelectItem key={cond.value} value={cond.value}>
-                              {cond.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Damage Description</Label>
-                      <Textarea
-                        placeholder="Describe the damage..."
-                        value={formData.damage_description}
-                        onChange={(e) => setFormData({ ...formData, damage_description: e.target.value })}
-                      />
-                    </div>
-
-                    <Button onClick={handleAddItem} className="w-full">
-                      Add to Inventory
-                    </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Add Inventory Item</DialogTitle>
+              </DialogHeader>
+              <ScrollArea className="max-h-[70vh]">
+                <div className="space-y-4 pr-4">
+                  <div className="space-y-2">
+                    <Label>Room *</Label>
+                    <Select value={formData.room_name} onValueChange={(v) => setFormData({ ...formData, room_name: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select room" /></SelectTrigger>
+                      <SelectContent>
+                        {COMMON_ROOMS.map((room) => (
+                          <SelectItem key={room} value={room}>{room}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </ScrollArea>
-              </DialogContent>
-            </Dialog>
-          </div>
+                  <div className="space-y-2">
+                    <Label>Item Name *</Label>
+                    <Input placeholder='e.g., Samsung 55" Smart TV' value={formData.item_name} onChange={(e) => setFormData({ ...formData, item_name: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Manufacturer</Label>
+                      <Input placeholder="Samsung" value={formData.manufacturer} onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Model #</Label>
+                      <Input placeholder="UN55TU7000" value={formData.model_number} onChange={(e) => setFormData({ ...formData, model_number: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>Quantity</Label>
+                      <Input type="number" min="1" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Original Price</Label>
+                      <Input type="number" step="0.01" placeholder="0.00" value={formData.original_purchase_price} onChange={(e) => setFormData({ ...formData, original_purchase_price: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Replacement Cost</Label>
+                      <Input type="number" step="0.01" placeholder="0.00" value={formData.replacement_cost} onChange={(e) => setFormData({ ...formData, replacement_cost: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Condition Before Loss</Label>
+                    <Select value={formData.condition_before_loss} onValueChange={(v) => setFormData({ ...formData, condition_before_loss: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {CONDITIONS.map((cond) => (
+                          <SelectItem key={cond.value} value={cond.value}>{cond.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Damage Description</Label>
+                    <Textarea placeholder="Describe the damage..." value={formData.damage_description} onChange={(e) => setFormData({ ...formData, damage_description: e.target.value })} />
+                  </div>
+                  <Button onClick={handleAddItem} className="w-full">Add to Inventory</Button>
+                </div>
+              </ScrollArea>
+            </DialogContent>
+          </Dialog>
         </div>
       </CardHeader>
       <CardContent>
-        {/* Summary */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-muted/50 rounded-lg p-4 text-center">
-            <p className="text-sm text-muted-foreground">Total Items</p>
-            <p className="text-2xl font-bold">{totalItems}</p>
-          </div>
-          <div className="bg-muted/50 rounded-lg p-4 text-center">
-            <p className="text-sm text-muted-foreground">Original Value</p>
-            <p className="text-2xl font-bold">${totalOriginal.toLocaleString()}</p>
-          </div>
-          <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-4 text-center">
-            <p className="text-sm text-green-700 dark:text-green-400">Replacement Cost</p>
-            <p className="text-2xl font-bold text-green-700 dark:text-green-400">${totalRCV.toLocaleString()}</p>
-          </div>
-        </div>
+        <Tabs defaultValue="scan" className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="scan" className="gap-1">
+              <Camera className="h-4 w-4" /> Scan Photos
+            </TabsTrigger>
+            <TabsTrigger value="inventory" className="gap-1">
+              <ClipboardList className="h-4 w-4" /> Inventory ({items.length})
+            </TabsTrigger>
+            <TabsTrigger value="summary" className="gap-1">
+              <BarChart3 className="h-4 w-4" /> Summary
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Room breakdown */}
-        {Object.keys(roomCounts).length > 0 && (
-          <div className="mb-4">
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(roomCounts).map(([room, count]) => (
-                <Badge key={room} variant="secondary">
-                  {room}: {count} items
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
+          <TabsContent value="scan">
+            <InventoryPhotoScanner claimId={claimId} onItemsAdded={fetchItems} />
+          </TabsContent>
 
-        {/* Items Table */}
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
-          </div>
-        ) : items.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
-            <p>No inventory items yet</p>
-            <p className="text-sm">Add items room by room for your contents claim</p>
-          </div>
-        ) : (
-          <div className="border rounded-lg overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Room</TableHead>
-                  <TableHead>Item</TableHead>
-                  <TableHead>Qty</TableHead>
-                  <TableHead className="text-right">RCV</TableHead>
-                  <TableHead>Condition</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium">{item.room_name}</TableCell>
-                    <TableCell>
-                      <div>
-                        <p>{item.item_name}</p>
-                        {item.manufacturer && (
-                          <p className="text-xs text-muted-foreground">
-                            {item.manufacturer} {item.model_number}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>{item.quantity}</TableCell>
-                    <TableCell className="text-right">
-                      {item.replacement_cost ? `$${(item.replacement_cost * item.quantity).toLocaleString()}` : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {CONDITIONS.find(c => c.value === item.condition_before_loss)?.label || item.condition_before_loss}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => deleteItem(item.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+          <TabsContent value="inventory">
+            <InventoryTable items={items} loading={loading} onRefresh={fetchItems} />
+          </TabsContent>
+
+          <TabsContent value="summary">
+            <InventorySummary items={items} />
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );

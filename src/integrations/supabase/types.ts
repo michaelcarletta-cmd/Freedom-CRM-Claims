@@ -1617,77 +1617,119 @@ export type Database = {
       claim_home_inventory: {
         Row: {
           actual_cash_value: number | null
+          age_years: number | null
+          ai_confidence: number | null
+          attributes: Json | null
+          brand_confirmed: boolean
+          category: string | null
           claim_id: string
+          comparable_url: string | null
           condition_before_loss: string | null
           created_at: string
           created_by: string | null
           damage_description: string | null
+          depreciation_rate: number | null
           id: string
           is_total_loss: boolean | null
           item_description: string | null
           item_name: string
           manufacturer: string | null
+          model_confirmed: boolean
           model_number: string | null
+          needs_review: boolean
           notes: string | null
           original_purchase_date: string | null
           original_purchase_price: number | null
           photo_file_paths: string[] | null
+          price_confirmed: boolean
+          pricing_rationale: string | null
+          pricing_source: string | null
           quantity: number | null
           receipt_file_path: string | null
           replacement_cost: number | null
           replacement_link: string | null
           room_name: string
           serial_number: string | null
+          source: string
+          source_photo_id: string | null
           updated_at: string
         }
         Insert: {
           actual_cash_value?: number | null
+          age_years?: number | null
+          ai_confidence?: number | null
+          attributes?: Json | null
+          brand_confirmed?: boolean
+          category?: string | null
           claim_id: string
+          comparable_url?: string | null
           condition_before_loss?: string | null
           created_at?: string
           created_by?: string | null
           damage_description?: string | null
+          depreciation_rate?: number | null
           id?: string
           is_total_loss?: boolean | null
           item_description?: string | null
           item_name: string
           manufacturer?: string | null
+          model_confirmed?: boolean
           model_number?: string | null
+          needs_review?: boolean
           notes?: string | null
           original_purchase_date?: string | null
           original_purchase_price?: number | null
           photo_file_paths?: string[] | null
+          price_confirmed?: boolean
+          pricing_rationale?: string | null
+          pricing_source?: string | null
           quantity?: number | null
           receipt_file_path?: string | null
           replacement_cost?: number | null
           replacement_link?: string | null
           room_name: string
           serial_number?: string | null
+          source?: string
+          source_photo_id?: string | null
           updated_at?: string
         }
         Update: {
           actual_cash_value?: number | null
+          age_years?: number | null
+          ai_confidence?: number | null
+          attributes?: Json | null
+          brand_confirmed?: boolean
+          category?: string | null
           claim_id?: string
+          comparable_url?: string | null
           condition_before_loss?: string | null
           created_at?: string
           created_by?: string | null
           damage_description?: string | null
+          depreciation_rate?: number | null
           id?: string
           is_total_loss?: boolean | null
           item_description?: string | null
           item_name?: string
           manufacturer?: string | null
+          model_confirmed?: boolean
           model_number?: string | null
+          needs_review?: boolean
           notes?: string | null
           original_purchase_date?: string | null
           original_purchase_price?: number | null
           photo_file_paths?: string[] | null
+          price_confirmed?: boolean
+          pricing_rationale?: string | null
+          pricing_source?: string | null
           quantity?: number | null
           receipt_file_path?: string | null
           replacement_cost?: number | null
           replacement_link?: string | null
           room_name?: string
           serial_number?: string | null
+          source?: string
+          source_photo_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1696,6 +1738,13 @@ export type Database = {
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_home_inventory_source_photo_id_fkey"
+            columns: ["source_photo_id"]
+            isOneToOne: false
+            referencedRelation: "claim_photos"
             referencedColumns: ["id"]
           },
         ]
@@ -3801,6 +3850,53 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      inventory_scan_runs: {
+        Row: {
+          claim_id: string
+          confirmed_count: number
+          created_at: string
+          created_by: string | null
+          detected_count: number
+          error_message: string | null
+          id: string
+          photo_ids: string[]
+          results: Json | null
+          status: string
+        }
+        Insert: {
+          claim_id: string
+          confirmed_count?: number
+          created_at?: string
+          created_by?: string | null
+          detected_count?: number
+          error_message?: string | null
+          id?: string
+          photo_ids?: string[]
+          results?: Json | null
+          status?: string
+        }
+        Update: {
+          claim_id?: string
+          confirmed_count?: number
+          created_at?: string
+          created_by?: string | null
+          detected_count?: number
+          error_message?: string | null
+          id?: string
+          photo_ids?: string[]
+          results?: Json | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_scan_runs_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       jobnimbus_sync_queue: {
         Row: {
