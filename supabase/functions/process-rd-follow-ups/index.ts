@@ -131,12 +131,28 @@ serve(async (req) => {
     for (const automation of rdClaims) {
       const claim = (automation as any).claims;
       
-      // RD follow-ups always go to the adjuster
-      const recipientEmail = claim.adjuster_email;
-      const recipientName = claim.adjuster_name || 'Claims Department';
+      // RD follow-ups go to the adjuster, or fall back to the carrier's email
+      let recipientEmail = claim.adjuster_email;
+      let recipientName = claim.adjuster_name || 'Claims Department';
+
+      if (!recipientEmail && claim.insurance_company) {
+        // Look up carrier email from insurance_companies table
+        const { data: carrier } = await supabase
+          .from('insurance_companies')
+          .select('email, name')
+          .ilike('name', `%${claim.insurance_company}%`)
+          .limit(1)
+          .single();
+
+        if (carrier?.email) {
+          recipientEmail = carrier.email;
+          recipientName = carrier.name || claim.insurance_company;
+          console.log(`Claim ${claim.claim_number}: No adjuster email, using carrier email: ${recipientEmail}`);
+        }
+      }
 
       if (!recipientEmail) {
-        console.log(`Claim ${claim.claim_number}: No adjuster email found for RD follow-up, skipping`);
+        console.log(`Claim ${claim.claim_number}: No adjuster or carrier email found for RD follow-up, skipping`);
         continue;
       }
 
