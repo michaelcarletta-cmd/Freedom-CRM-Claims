@@ -235,30 +235,34 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
         </div>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="scan" className="w-full">
-          <TabsList className="mb-4">
-            <TabsTrigger value="scan" className="gap-1">
-              <Camera className="h-4 w-4" /> Scan Photos
-            </TabsTrigger>
-            <TabsTrigger value="inventory" className="gap-1">
-              <ClipboardList className="h-4 w-4" /> Inventory ({items.length})
-            </TabsTrigger>
-            <TabsTrigger value="summary" className="gap-1">
-              <BarChart3 className="h-4 w-4" /> Summary
-            </TabsTrigger>
-          </TabsList>
+        <Tabs defaultValue="scan" className="w-full" orientation="vertical">
+          <div className="flex flex-col md:flex-row gap-4">
+            <TabsList className="flex flex-col h-auto items-stretch bg-muted/50 p-1 rounded-lg md:w-48 shrink-0 gap-1">
+              <TabsTrigger value="scan" className="justify-start gap-2 w-full">
+                <Camera className="h-4 w-4" /> Scan Photos
+              </TabsTrigger>
+              <TabsTrigger value="inventory" className="justify-start gap-2 w-full">
+                <ClipboardList className="h-4 w-4" /> Inventory ({items.length})
+              </TabsTrigger>
+              <TabsTrigger value="summary" className="justify-start gap-2 w-full">
+                <BarChart3 className="h-4 w-4" /> Summary
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="scan">
-            <InventoryPhotoScanner claimId={claimId} onItemsAdded={fetchItems} />
-          </TabsContent>
+            <div className="flex-1 min-w-0 overflow-auto">
+              <TabsContent value="scan" className="mt-0">
+                <InventoryPhotoScanner claimId={claimId} onItemsAdded={fetchItems} />
+              </TabsContent>
 
-          <TabsContent value="inventory">
-            <InventoryTable items={items} loading={loading} onRefresh={fetchItems} />
-          </TabsContent>
+              <TabsContent value="inventory" className="mt-0">
+                <InventoryTable items={items} loading={loading} onRefresh={fetchItems} />
+              </TabsContent>
 
-          <TabsContent value="summary">
-            <InventorySummary items={items} />
-          </TabsContent>
+              <TabsContent value="summary" className="mt-0">
+                <InventorySummary items={items} />
+              </TabsContent>
+            </div>
+          </div>
         </Tabs>
       </CardContent>
     </Card>
