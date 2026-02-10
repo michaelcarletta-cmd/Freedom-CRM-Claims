@@ -374,7 +374,7 @@ export const InventoryPhotoScanner = ({ claimId, onItemsAdded }: InventoryPhotoS
                     <Checkbox checked={isSelected} />
                     <span className="text-xs truncate flex-1">{photo.file_name}</span>
                   </div>
-                  {photo.category && (
+                  {photo.category && photo.category !== "null" && (
                     <Badge variant="secondary" className="mt-1 text-xs">
                       {photo.category}
                     </Badge>
