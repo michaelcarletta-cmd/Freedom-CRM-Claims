@@ -330,6 +330,262 @@ ${JSON.stringify(ctx, null, 2)}`;
       });
     }
 
+    // ── UNIFIED: build_full (runs all stages in one call) ──
+    if (action === "build_full") {
+      const { overrides, measurementPdfBase64: fullPdfBase64, measurementPdfName: fullPdfName } = body;
+      const claimId = body.claimId;
+      if (!claimId) throw new Error("claimId required");
+
+      // 1. Load claim data
+      const { data: claimData, error: claimErr } = await supabase
+        .from("claims")
+        .select("id, claim_number, loss_type, loss_description")
+        .eq("id", claimId)
+        .single();
+      if (claimErr || !claimData) throw new Error("Claim not found");
+
+      // 2. Load photos from claim_photos
+      const { data: photosData } = await supabase
+        .from("claim_photos")
+        .select("id, file_name, file_path, category, description, ai_material_type, ai_detected_damages, ai_condition_rating, ai_analysis_summary")
+        .eq("claim_id", claimId)
+        .order("created_at", { ascending: false });
+      const photos = photosData || [];
+
+      // 3. Parse measurement report if PDF provided
+      let parsedMeasurement = { source: null, raw_text: null, sections: { roof: {}, interior: {}, siding: {}, gutters: {}, openings: {}, notes: null } };
+      let measurementRawText: string | null = null;
+
+      if (fullPdfBase64) {
+        // Extract structured measurements via AI
+        const measSystemPrompt = `You are an expert construction measurement report parser. Extract ALL measurements from EVERY PAGE of the PDF into a normalized JSON object.
+
+Return ONLY this JSON (no other text):
+{
+  "source": "eagleview"|"hover"|"symbility"|"other",
+  "raw_text": "<FULL extracted text from ALL pages of the document>",
+  "sections": {
+    "roof": { "total_squares": 0, "planes": [], "pitch": "", "ridges_lf": 0, "hips_lf": 0, "valleys_lf": 0, "drip_edge_lf": 0, "eaves_lf": 0, "rakes_lf": 0, "starter_lf": 0, "step_flashing_lf": 0, "headwall_flashing_lf": 0, "vents": 0, "pipe_boots": 0 },
+    "gutters": { "eave_length_lf": 0, "gutter_lf": 0, "downspout_count": 0, "downspout_lf": 0 },
+    "siding": { "wall_sf": 0, "elevations": [], "trim_lf": 0 },
+    "interior": { "rooms": [], "ceiling_sf": 0, "wall_sf": 0, "openings_count": 0 },
+    "openings": { "windows": 0, "doors": 0, "garage_doors": 0 },
+    "notes": "any other info"
+  }
+}
+CRITICAL: The "raw_text" field MUST contain the COMPLETE text from ALL pages. Do NOT summarize or truncate.
+Use 0 or [] for missing data. Never omit a section.`;
+
+        const measContent = [
+          { type: "text", text: `Parse this measurement report (${fullPdfName || "report.pdf"}). Extract every measurement from ALL pages. Include full raw text.` },
+          { type: "image_url", image_url: { url: `data:application/pdf;base64,${fullPdfBase64}` } },
+        ];
+
+        const measRaw = await callAI(apiKey, measSystemPrompt, JSON.stringify(measContent), "google/gemini-2.5-flash");
+        const measParsed = parseJSON(measRaw);
+        parsedMeasurement = {
+          source: measParsed.source || "other",
+          raw_text: measParsed.raw_text || null,
+          sections: {
+            roof: measParsed.sections?.roof || {},
+            interior: measParsed.sections?.interior || {},
+            siding: measParsed.sections?.siding || {},
+            gutters: measParsed.sections?.gutters || {},
+            openings: measParsed.sections?.openings || {},
+            notes: measParsed.sections?.notes || null,
+          },
+        };
+        measurementRawText = measParsed.raw_text || null;
+        console.log(`Measurement report parsed: source=${parsedMeasurement.source}, raw_text_length=${measurementRawText?.length || 0}`);
+      }
+
+      // 4. HARD RULE: Extract photo findings FIRST
+      const description = claimData.loss_description || "";
+      const loss_cause = claimData.loss_type || "unknown";
+
+      const findingsSystemPrompt = `You extract structured damage findings from property photos for insurance claims.
+For each photo, identify damage and return a JSON array of findings.
+
+Return ONLY a JSON array:
+[
+  {
+    "area": "Kitchen ceiling",
+    "scope": "interior"|"roof"|"siding"|"gutters"|"other",
+    "material": "drywall"|null,
+    "damage": "water stain with active drip",
+    "severity": "minor"|"moderate"|"severe",
+    "recommended_action": "repair"|"replace"|"detach_reset"|"clean"|"inspect",
+    "confidence": 0.85
+  }
+]
+
+Reported loss cause: ${loss_cause}
+Description: ${description}
+Number of photos to analyze: ${photos.length}
+
+IMPORTANT:
+- Each photo should produce 1-3 findings
+- scope must match damage location (ceiling/wall/floor = interior, shingles = roof, etc.)
+- Be specific about area names
+- confidence 0.0-1.0`;
+
+      let photoInfo = "";
+      if (photos.length > 0) {
+        photoInfo = photos.map((p: any) => {
+          let info = `Photo: ${p.file_name} [${p.category || "general"}]`;
+          if (p.description) info += `\n  Description: ${p.description}`;
+          if (p.ai_material_type) info += `\n  Material: ${p.ai_material_type}`;
+          if (p.ai_condition_rating) info += `\n  Condition: ${p.ai_condition_rating}`;
+          if (p.ai_analysis_summary) info += `\n  Analysis: ${p.ai_analysis_summary}`;
+          if (p.ai_detected_damages && Array.isArray(p.ai_detected_damages)) {
+            info += `\n  Damages: ${JSON.stringify(p.ai_detected_damages)}`;
+          }
+          return info;
+        }).join("\n\n");
+      }
+
+      const findingsRaw = await callAI(apiKey, findingsSystemPrompt, photoInfo || `No photos available. Use description: "${description}". Return findings based on described damage.`);
+      const photoFindings = Array.isArray(parseJSON(findingsRaw)) ? parseJSON(findingsRaw) : [];
+      console.log(`Photo findings extracted: ${photoFindings.length}`);
+
+      // 5. HARD RULE: Scope classification BEFORE estimate
+      const descLower = description.toLowerCase();
+      const photoScopes = photoFindings.map((f: any) => f.scope);
+      const hasRoofPhotos = photoScopes.includes("roof");
+
+      const classifySystemPrompt = `You are a scope classifier for insurance claims. Analyze the claim context and determine which repair scopes apply.
+
+Return ONLY this JSON:
+{
+  "primary_scopes": ["interior","roof","siding","gutters"],
+  "confidence": { "interior": 0.9, "roof": 0.1, "siding": 0.0, "gutters": 0.2, "other": 0.0 },
+  "missing_info": ["No interior measurements available"]
+}
+
+Rules:
+- confidence is 0.0-1.0 per scope
+- primary_scopes = scopes with confidence >= 0.5
+- If nothing >= 0.5, set primary_scopes to ["general"]
+- Do NOT assign roof confidence >= 0.5 unless there is EXPLICIT evidence of roof damage
+- Having a measurement report alone does NOT mean roof is damaged
+- Interior water damage does NOT imply roof damage unless explicitly stated`;
+
+      const classifyUserPrompt = `Description: ${description}
+Loss cause: ${loss_cause}
+Photo findings (${photoFindings.length}): ${JSON.stringify(photoFindings)}
+Photo scopes found: ${JSON.stringify([...new Set(photoScopes)])}
+Has roof photos with damage: ${hasRoofPhotos}
+Measurement sections: ${JSON.stringify(Object.keys(parsedMeasurement.sections).filter(k => {
+        const s = (parsedMeasurement.sections as any)[k];
+        return s && typeof s === "object" && Object.keys(s).length > 0 && k !== "notes";
+      }))}
+${measurementRawText ? `\nMeasurement report text (first 5000 chars):\n${measurementRawText.substring(0, 5000)}` : ""}`;
+
+      const classifyRaw = await callAI(apiKey, classifySystemPrompt, classifyUserPrompt);
+      let scopeClassification = parseJSON(classifyRaw);
+
+      // Post-processing guardrail
+      if (scopeClassification.confidence) {
+        const roofKeywords = ["roof", "shingle", "hail", "wind damage to roof", "missing shingles"];
+        const descMentionsRoof = roofKeywords.some(kw => descLower.includes(kw));
+        if (!hasRoofPhotos && !descMentionsRoof) {
+          scopeClassification.confidence.roof = Math.min(scopeClassification.confidence.roof || 0, 0.2);
+        }
+        scopeClassification.primary_scopes = Object.entries(scopeClassification.confidence)
+          .filter(([_, conf]) => (conf as number) >= 0.5)
+          .map(([scope]) => scope);
+        if (scopeClassification.primary_scopes.length === 0) {
+          scopeClassification.primary_scopes = ["general"];
+        }
+      }
+      console.log(`Scope classification: ${JSON.stringify(scopeClassification.primary_scopes)}`);
+
+      // 6. Generate estimate (ONLY for classified scopes)
+      const primaryScopes = scopeClassification.primary_scopes || ["general"];
+      const allScopes = ["interior", "roof", "siding", "gutters", "structural", "exterior"];
+      const excludedScopes = allScopes.filter((s: string) => !primaryScopes.includes(s));
+      const userOverrides = overrides || { quality_grade: "standard", include_op: true, tax_rate: 0, price_list: null };
+
+      const estimateSystemPrompt = `You are an expert Xactimate estimate generator for insurance claims. Generate line items per scope.
+
+ABSOLUTE RULES:
+1. You may ONLY generate line items for these scopes: ${JSON.stringify(primaryScopes)}
+2. You MUST NOT generate ANY line items for these scopes: ${JSON.stringify(excludedScopes)}
+3. ${!primaryScopes.includes("roof") ? "DO NOT INCLUDE ANY ROOF LINE ITEMS." : "Roof items are allowed."}
+
+QUANTITY RULES:
+- If measurements exist → qty_basis = "measured", use actual measurements
+- If measurements missing → qty_basis = "allowance", estimate minimums from findings
+- Always include assumptions for allowance items
+- Parse the measurement report into structured quantities by section. Use structured quantities when available; otherwise use allowances.
+
+Quality grade: ${userOverrides.quality_grade}
+Include O&P: ${userOverrides.include_op} (if true and 3+ trades, add 10% overhead + 10% profit)
+Tax rate: ${userOverrides.tax_rate}%
+
+Return ONLY this JSON:
+{
+  "estimate": [
+    {
+      "scope": "interior",
+      "items": [
+        {
+          "line_code": "DRYWL12" or null,
+          "description": "Drywall 1/2\\" - hung, taped, floated",
+          "unit": "SF",
+          "qty": 64,
+          "qty_basis": "allowance",
+          "assumptions": "Assumes 1 room ceiling patch ~64 SF"
+        }
+      ]
+    }
+  ],
+  "missing_info_to_finalize": ["Interior room dimensions needed"],
+  "questions_for_user": ["How many rooms affected?"]
+}`;
+
+      const fullCtx = {
+        description,
+        loss_cause,
+        photo_findings: photoFindings,
+        scope_classification: scopeClassification,
+        measurement_report: parsedMeasurement,
+        user_overrides: userOverrides,
+      };
+
+      const estimateRaw = await callAI(apiKey, estimateSystemPrompt, `FULL CLAIM CONTEXT (ONLY generate for scopes: ${JSON.stringify(primaryScopes)}):\n${JSON.stringify(fullCtx, null, 2)}`, "google/gemini-2.5-pro");
+      const estimateResult = parseJSON(estimateRaw);
+
+      // HARD GUARDRAIL: strip scopes not in primary
+      if (estimateResult.estimate && Array.isArray(estimateResult.estimate)) {
+        estimateResult.estimate = estimateResult.estimate.filter((s: any) => primaryScopes.includes(s.scope));
+      }
+
+      // Save pipeline record
+      const { data: pipeline } = await supabase
+        .from("claim_context_pipelines")
+        .insert([{
+          claim_id: claimId,
+          stage: "estimate",
+          status: "complete",
+          claim_context: fullCtx as any,
+          estimate_result: estimateResult as any,
+        }])
+        .select("id")
+        .single();
+
+      return new Response(JSON.stringify({
+        success: true,
+        pipeline_id: pipeline?.id,
+        scope_classification: scopeClassification,
+        photo_findings: photoFindings,
+        measurement_report: parsedMeasurement,
+        estimate_result: estimateResult,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: "Unknown action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
