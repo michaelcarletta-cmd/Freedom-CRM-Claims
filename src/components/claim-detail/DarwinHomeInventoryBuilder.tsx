@@ -249,7 +249,7 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
               </TabsTrigger>
             </TabsList>
 
-            <div className="flex-1 min-w-0 overflow-auto">
+            <div className="flex-1 min-w-0">
               <TabsContent value="scan" className="mt-0">
                 <InventoryPhotoScanner claimId={claimId} onItemsAdded={fetchItems} />
               </TabsContent>

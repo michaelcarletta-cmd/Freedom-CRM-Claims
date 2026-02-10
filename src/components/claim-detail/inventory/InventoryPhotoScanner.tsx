@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { Camera, CheckCircle2, AlertTriangle, XCircle, Loader2, ScanSearch, Check, X, Filter, Upload, ImagePlus } from "lucide-react";
@@ -443,8 +443,8 @@ export const InventoryPhotoScanner = ({ claimId, onItemsAdded }: InventoryPhotoS
       </div>
 
       {/* Items */}
-      <ScrollArea className="max-h-[500px]">
-        <div className="space-y-2">
+      <div className="overflow-y-auto max-h-[60vh] border rounded-lg">
+        <div className="space-y-2 p-2">
           {filteredItems.map((item, idx) => {
             const realIdx = detectedItems.indexOf(item);
             return (
@@ -516,7 +516,7 @@ export const InventoryPhotoScanner = ({ claimId, onItemsAdded }: InventoryPhotoS
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Footer actions */}
       <div className="flex items-center justify-between pt-3 border-t">
