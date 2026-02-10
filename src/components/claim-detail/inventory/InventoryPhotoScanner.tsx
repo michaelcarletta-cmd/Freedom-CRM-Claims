@@ -407,12 +407,12 @@ export const InventoryPhotoScanner = ({ claimId, onItemsAdded }: InventoryPhotoS
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 border-b pb-3">
+      <div className="flex flex-wrap items-center gap-3 border-b pb-3">
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-36 h-8 text-xs">
-              <SelectValue />
+            <SelectTrigger className="w-40 h-8 text-xs">
+              <SelectValue placeholder="Filter category" />
             </SelectTrigger>
             <SelectContent>
               {CATEGORIES.map((c) => (
@@ -422,16 +422,19 @@ export const InventoryPhotoScanner = ({ claimId, onItemsAdded }: InventoryPhotoS
           </Select>
         </div>
 
-        <Select value={bulkRoom} onValueChange={setBulkRoom}>
-          <SelectTrigger className="w-40 h-8 text-xs">
-            <SelectValue placeholder="Assign room..." />
-          </SelectTrigger>
-          <SelectContent>
-            {COMMON_ROOMS.map((r) => (
-              <SelectItem key={r} value={r}>{r}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">Room:</span>
+          <Select value={bulkRoom} onValueChange={setBulkRoom}>
+            <SelectTrigger className="w-44 h-8 text-xs">
+              <SelectValue placeholder="Select room..." />
+            </SelectTrigger>
+            <SelectContent>
+              {COMMON_ROOMS.map((r) => (
+                <SelectItem key={r} value={r}>{r}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         <div className="flex gap-1 ml-auto">
           <Button variant="outline" size="sm" className="text-xs h-7" onClick={acceptAllConfirmed}>
