@@ -106,7 +106,7 @@ export const InventoryPhotoScanner = ({ claimId, onItemsAdded }: InventoryPhotoS
         const filePath = `${claimId}/inventory/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-          .from("claim-photos")
+          .from("claim-files")
           .upload(filePath, file);
 
         if (uploadError) {
