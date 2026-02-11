@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Search, AlertTriangle, Wrench, Sparkles, HelpCircle, Trash2, ChevronDown, ChevronRight, Camera, BarChart3 } from "lucide-react";
+import { Loader2, Search, AlertTriangle, Wrench, Sparkles, HelpCircle, Trash2, ChevronDown, ChevronRight, Camera, BarChart3, XCircle } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
@@ -69,6 +69,8 @@ interface AnalysisResult {
   };
 }
 
+const BATCH_SIZE = 7;
+
 const ACTION_CONFIG: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
   replace: { label: "Replace", icon: <Trash2 className="h-3 w-3" />, className: "bg-destructive/15 text-destructive border-destructive/30" },
   repair: { label: "Repair", icon: <Wrench className="h-3 w-3" />, className: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
@@ -87,25 +89,147 @@ export function PhotoDamageFindings({ claimId, photoCount }: { claimId: string; 
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [activeTab, setActiveTab] = useState<"inventory" | "replace" | "xactimate">("replace");
   const [expandedPhotos, setExpandedPhotos] = useState<Set<string>>(new Set());
+  const [progressText, setProgressText] = useState("");
+  const [progressPct, setProgressPct] = useState(0);
+  const cancelRef = useRef(false);
 
   const runAnalysis = async () => {
     setLoading(true);
+    setProgressText("Fetching photo list...");
+    setProgressPct(0);
+    cancelRef.current = false;
+
     try {
-      const { data, error } = await supabase.functions.invoke("photo-damage-analyzer", {
-        body: { claimId },
+      // Step 1: Get all photo IDs and claim description
+      const { data: listData, error: listError } = await supabase.functions.invoke("photo-damage-analyzer", {
+        body: { claimId, mode: "list" },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (listError) throw listError;
+      if (listData?.error) throw new Error(listData.error);
 
-      setResult(data);
-      toast.success(`Analysis complete: ${data.stats?.total_items_detected || 0} items found across ${data.stats?.photos_processed || 0} photos`);
+      const allPhotoIds: string[] = listData.photoIds || [];
+      const claimDescription: string = listData.claimDescription || "";
+
+      if (allPhotoIds.length === 0) {
+        throw new Error("No photos found for this claim");
+      }
+
+      // Step 2: Create batches
+      const batches: string[][] = [];
+      for (let i = 0; i < allPhotoIds.length; i += BATCH_SIZE) {
+        batches.push(allPhotoIds.slice(i, i + BATCH_SIZE));
+      }
+
+      const allPhotoEntries: PhotoEntry[] = [];
+      const allNotes: string[] = [];
+      const totalBatches = batches.length;
+
+      // Step 3: Process each batch sequentially
+      for (let i = 0; i < totalBatches; i++) {
+        if (cancelRef.current) {
+          allNotes.push("Analysis cancelled by user");
+          break;
+        }
+
+        setProgressText(`Pass 1: Analyzing batch ${i + 1}/${totalBatches} (${batches[i].length} photos)...`);
+        setProgressPct(Math.round(((i) / (totalBatches + 1)) * 100));
+
+        try {
+          const { data: batchData, error: batchError } = await supabase.functions.invoke("photo-damage-analyzer", {
+            body: { claimId, mode: "batch", photoIds: batches[i], claimDescription },
+          });
+
+          if (batchError) throw batchError;
+          if (batchData?.error) throw new Error(batchData.error);
+
+          if (batchData?.photos) {
+            allPhotoEntries.push(...batchData.photos);
+          }
+          if (batchData?.notes) {
+            allNotes.push(...batchData.notes);
+          }
+        } catch (batchErr: any) {
+          console.error(`Batch ${i + 1} failed:`, batchErr);
+          // Create placeholder entries for failed batch
+          for (const pid of batches[i]) {
+            allPhotoEntries.push({
+              photo_id: pid,
+              inferred_area: "Unknown",
+              items: [{ item: "Batch processing failed", damage: "N/A", action: "investigate", why: batchErr.message || "AI batch failed; rerun analysis", severity: "minor", trade_category_code: "GEN", confidence: 0 }],
+              missing_photo_request: "Rerun analysis for this batch",
+            });
+          }
+          allNotes.push(`Batch ${i + 1} failed: ${batchErr.message || "Unknown error"}`);
+        }
+
+        // Small delay between batches
+        if (i < totalBatches - 1) {
+          await new Promise(r => setTimeout(r, 800));
+        }
+      }
+
+      // Ensure all photo_ids are represented
+      const processedIds = new Set(allPhotoEntries.map(p => p.photo_id));
+      for (const pid of allPhotoIds) {
+        if (!processedIds.has(pid)) {
+          allPhotoEntries.push({
+            photo_id: pid,
+            inferred_area: "Unknown",
+            items: [{ item: "Missing from output", damage: "N/A", action: "investigate", why: "Missing from batch output; rerun", severity: "minor", trade_category_code: "GEN", confidence: 0 }],
+            missing_photo_request: "Rerun analysis",
+          });
+        }
+      }
+
+      const pass1Inventory = { photos: allPhotoEntries, notes: allNotes };
+      const totalItems = allPhotoEntries.reduce((s, p) => s + (p.items?.length || 0), 0);
+
+      // Step 4: Pass 2 - Deduplicate (text-only)
+      setProgressText(`Pass 2: Deduplicating ${totalItems} items...`);
+      setProgressPct(Math.round((totalBatches / (totalBatches + 1)) * 100));
+
+      let pass2Result: any = null;
+      try {
+        const { data: dedupData, error: dedupError } = await supabase.functions.invoke("photo-damage-analyzer", {
+          body: { claimId, mode: "deduplicate", pass1Data: pass1Inventory, claimDescription },
+        });
+
+        if (dedupError) throw dedupError;
+        if (dedupData?.error) throw new Error(dedupData.error);
+        pass2Result = dedupData;
+      } catch (dedupErr: any) {
+        console.error("Pass 2 failed:", dedupErr);
+        allNotes.push(`Pass 2 deduplication failed: ${dedupErr.message || "Unknown error"}`);
+      }
+
+      const finalResult: AnalysisResult = {
+        pass1_inventory: pass1Inventory,
+        ...(pass2Result || {}),
+        stats: {
+          total_photos: allPhotoIds.length,
+          photos_processed: allPhotoEntries.length,
+          total_items_detected: totalItems,
+          deduped_items: pass2Result?.damage_findings?.reduce((s: number, f: any) => s + (f.items?.length || 0), 0) || 0,
+        },
+      };
+
+      setResult(finalResult);
+      setProgressPct(100);
+      toast.success(`Analysis complete: ${totalItems} items found across ${allPhotoEntries.length} photos`);
     } catch (err: any) {
       console.error("Analysis error:", err);
       toast.error(err.message || "Failed to analyze photos");
     } finally {
       setLoading(false);
+      setProgressText("");
+      setProgressPct(0);
     }
+  };
+
+  const cancelAnalysis = () => {
+    cancelRef.current = true;
+    toast.info("Cancelling after current batch completes...");
   };
 
   const togglePhoto = (photoId: string) => {
@@ -136,16 +260,24 @@ export function PhotoDamageFindings({ claimId, photoCount }: { claimId: string; 
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground mb-3">
-            Analyzes every photo individually in batches, then deduplicates into a replace/repair list and Xactimate plan.
+            Analyzes every photo individually in batches of {BATCH_SIZE}, then deduplicates into a replace/repair list and Xactimate plan.
           </p>
-          <Button onClick={runAnalysis} disabled={loading || photoCount === 0} className="gap-2">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            {loading ? `Analyzing ${photoCount} Photos (batched)...` : `Analyze ${photoCount} Photo${photoCount !== 1 ? "s" : ""}`}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={runAnalysis} disabled={loading || photoCount === 0} className="gap-2">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              {loading ? "Analyzing..." : `Analyze ${photoCount} Photo${photoCount !== 1 ? "s" : ""}`}
+            </Button>
+            {loading && (
+              <Button variant="outline" size="sm" onClick={cancelAnalysis} className="gap-1">
+                <XCircle className="h-3.5 w-3.5" /> Cancel
+              </Button>
+            )}
+          </div>
           {loading && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Processing in batches of 7. This may take a few minutes for large photo sets.
-            </p>
+            <div className="mt-3 space-y-2">
+              <Progress value={progressPct} className="h-2" />
+              <p className="text-xs text-muted-foreground">{progressText}</p>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -165,11 +297,24 @@ export function PhotoDamageFindings({ claimId, photoCount }: { claimId: string; 
               <span className="flex items-center gap-1"><BarChart3 className="h-3.5 w-3.5" /> {stats.total_items_detected} items detected</span>
               {stats.deduped_items > 0 && <span className="text-muted-foreground">→ {stats.deduped_items} unique items</span>}
             </div>
-            <Button variant="outline" size="sm" onClick={runAnalysis} disabled={loading} className="gap-1">
-              {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
-              Re-analyze
-            </Button>
+            <div className="flex items-center gap-2">
+              {loading && (
+                <Button variant="outline" size="sm" onClick={cancelAnalysis} className="gap-1">
+                  <XCircle className="h-3 w-3" /> Cancel
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={runAnalysis} disabled={loading} className="gap-1">
+                {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                Re-analyze
+              </Button>
+            </div>
           </div>
+          {loading && (
+            <div className="mb-3 space-y-1">
+              <Progress value={progressPct} className="h-2" />
+              <p className="text-xs text-muted-foreground">{progressText}</p>
+            </div>
+          )}
           {/* Tab buttons */}
           <div className="flex gap-1">
             <Button variant={activeTab === "replace" ? "default" : "ghost"} size="sm" onClick={() => setActiveTab("replace")}>
