@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PhotoAnnotationEditor } from "./PhotoAnnotationEditor";
 import { PhotoReportDialog } from "./PhotoReportDialog";
+import { PhotoDamageFindings } from "./PhotoDamageFindings";
 
 interface ClaimPhoto {
   id: string;
@@ -1124,6 +1125,9 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
         claim={claim}
         claimId={claimId}
       />
+
+      {/* Photo Damage Analyzer */}
+      <PhotoDamageFindings claimId={claimId} photoCount={photos.length} />
     </div>
   );
 }

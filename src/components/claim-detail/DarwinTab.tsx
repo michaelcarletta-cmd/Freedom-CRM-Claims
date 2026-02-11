@@ -44,7 +44,6 @@ const VisualClaimTimeline = lazy(() => import("@/components/claim-detail/VisualC
 const DarwinComplianceChecker = lazy(() => import("@/components/claim-detail/DarwinComplianceChecker").then(m => ({ default: m.DarwinComplianceChecker })));
 const ClaimTimeline = lazy(() => import("@/components/claim-detail/ClaimTimeline").then(m => ({ default: m.ClaimTimeline })));
 const ProofOfLossGenerator = lazy(() => import("@/components/claim-detail/ProofOfLossGenerator").then(m => ({ default: m.ProofOfLossGenerator })));
-const EnhancedEstimateBuilder = lazy(() => import("@/components/claim-detail/EnhancedEstimateBuilder").then(m => ({ default: m.EnhancedEstimateBuilder })));
 const ClaimContextPipeline = lazy(() => import("@/components/claim-detail/ClaimContextPipeline").then(m => ({ default: m.ClaimContextPipeline })));
 const RecoverableDepreciationInvoice = lazy(() => import("@/components/claim-detail/RecoverableDepreciationInvoice").then(m => ({ default: m.RecoverableDepreciationInvoice })));
 const ClaimAutomationSettings = lazy(() => import("@/components/claim-detail/ClaimAutomationSettings").then(m => ({ default: m.ClaimAutomationSettings })));
@@ -297,7 +296,6 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                 <DarwinAutoSummary claimId={claimId} claim={claim} />
                 <DarwinOneClickPackage claimId={claimId} claim={claim} />
                 <ProofOfLossGenerator claimId={claimId} claim={claim} />
-                <EnhancedEstimateBuilder claimId={claimId} claim={claim} />
                 <ClaimContextPipeline claimId={claimId} claim={claim} />
               </Suspense>
             </CardContent>
