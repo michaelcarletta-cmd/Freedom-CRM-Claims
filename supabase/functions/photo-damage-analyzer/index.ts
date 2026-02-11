@@ -69,11 +69,23 @@ serve(async (req) => {
     if (photosError) throw new Error("Failed to fetch photos");
     if (!photos || photos.length === 0) throw new Error("No photos found for this claim");
 
-    // Download and base64-encode photos (limit to 5 to avoid timeouts/memory)
+    // Download and base64-encode photos (limit to 2 to stay within 150MB memory)
     const photoContent: any[] = [];
     const captionLines: string[] = [];
 
-    for (const photo of photos.slice(0, 5)) {
+    // Build captions for ALL photos (lightweight)
+    for (const photo of photos) {
+      const caption = [
+        photo.description || photo.category || "(no caption)",
+        photo.ai_material_type ? `Material: ${photo.ai_material_type}` : null,
+        photo.ai_condition_rating ? `Condition: ${photo.ai_condition_rating}` : null,
+        photo.ai_analysis_summary ? `AI: ${photo.ai_analysis_summary}` : null,
+      ].filter(Boolean).join(" | ");
+      captionLines.push(`- ${photo.id}: ${caption}`);
+    }
+
+    // Only encode first 2 photos as base64 to avoid memory exhaustion
+    for (const photo of photos.slice(0, 2)) {
       try {
         const { data: fileData, error: dlError } = await supabase.storage
           .from("claim-files")
@@ -81,12 +93,20 @@ serve(async (req) => {
 
         if (!dlError && fileData) {
           const arrayBuffer = await fileData.arrayBuffer();
-          const uint8 = new Uint8Array(arrayBuffer);
-          let binary = "";
-          for (let i = 0; i < uint8.length; i++) {
-            binary += String.fromCharCode(uint8[i]);
+          // Skip photos larger than 4MB to prevent memory issues
+          if (arrayBuffer.byteLength > 4 * 1024 * 1024) {
+            console.log(`Skipping large photo ${photo.id}: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB`);
+            continue;
           }
-          const base64 = btoa(binary);
+          const uint8 = new Uint8Array(arrayBuffer);
+          // Chunked base64 encoding to reduce peak memory
+          const CHUNK = 32768;
+          const chunks: string[] = [];
+          for (let i = 0; i < uint8.length; i += CHUNK) {
+            const slice = uint8.subarray(i, Math.min(i + CHUNK, uint8.length));
+            chunks.push(String.fromCharCode(...slice));
+          }
+          const base64 = btoa(chunks.join(""));
           const mimeType = fileData.type || "image/jpeg";
 
           photoContent.push({
@@ -97,18 +117,9 @@ serve(async (req) => {
       } catch (e) {
         console.error("Failed to download photo:", photo.id, e);
       }
-
-      const caption = [
-        photo.description || photo.category || "(no caption)",
-        photo.ai_material_type ? `Material: ${photo.ai_material_type}` : null,
-        photo.ai_condition_rating ? `Condition: ${photo.ai_condition_rating}` : null,
-        photo.ai_analysis_summary ? `AI: ${photo.ai_analysis_summary}` : null,
-      ].filter(Boolean).join(" | ");
-
-      captionLines.push(`- ${photo.id}: ${caption}`);
     }
 
-    if (photoContent.length === 0) throw new Error("Could not load any photos for analysis");
+    if (photoContent.length === 0) throw new Error("Could not load any photos for analysis. Photos may be too large (>4MB each).");
 
     const claimDescription = [
       claim.loss_description || "No description",
