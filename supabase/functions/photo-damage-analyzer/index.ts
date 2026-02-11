@@ -7,37 +7,215 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are a property damage inspector and Xactimate workflow assistant.
+const BATCH_SIZE = 7;
 
-Your job is NOT to create a priced estimate.
+const PASS1_SYSTEM_PROMPT = `You are a property damage photo inspector.
 
-Your job is to:
-1) Identify what materials or items are damaged in the provided photos.
-2) Determine whether each item should be:
-   - replace: visible material failure, deformation, swelling, delamination, missing pieces, contamination
-   - repair: small localized damage that can be patched/blended
-   - clean_restore: soot/dirt/surface staining without material failure
-   - investigate: ONLY if the material or damage cannot be seen clearly; must include a specific question about what photo/angle is needed
-3) Explain WHY the action is required using visible evidence only.
-4) Convert those findings into an Xactimate add-item plan using:
-   - category_code (CAT only)
-   - selector_hint (search phrase, not full CAT/SEL codes)
+TASK: Create a PHOTO-BY-PHOTO damage inventory.
+You MUST return one entry for EACH photo_id provided.
 
-STRICT OUTPUT REQUIREMENTS:
-- For each photo, extract at least 2 distinct observations unless the photo is unusable.
-- Across the whole set, output at least 12 total damaged/affected items unless there truly are fewer; if fewer, explain why in the "notes" array.
-- Group output by area/room/elevation. If no caption exists, infer a reasonable area label from the photo content.
-- For each affected area, consider finish + substrate + trim (example: paint + drywall + baseboard).
-- If water damage is present, include remediation (WTR/CLN) + removal + rebuild recommendations where evidence supports it.
-- "investigate" is allowed ONLY if the material or damage cannot be seen clearly; otherwise pick replace/repair/clean_restore.
+RULES:
+- For each photo: list 2–8 distinct damaged items visible in that photo (unless unusable).
+- Do NOT summarize across photos. Do NOT merge items across different photos.
+- Use inferred_area (room/elevation) from caption or visual cues.
+- For each item: include item, damage, action (replace/repair/clean_restore/investigate), why, severity, and trade_category_code (Xactimate category only).
+- Only use investigate if the damage/material truly cannot be seen; if investigate, include a specific missing_photo_request.
+- No pricing. No quantities. No Xactimate selector codes.
 
-CRITICAL RULES:
-- Do NOT create pricing.
-- Do NOT guess Xactimate selector codes — use category_code (CAT only) + selector_hint phrases.
-- Use ONLY visible evidence from photos and captions.
-- Be thorough: missing items costs the policyholder money. Over-document, do not under-document.
+Return ONLY valid JSON matching the schema.`;
 
-Return ONLY valid JSON that matches the schema.`;
+const PASS2_SYSTEM_PROMPT = `You are a property damage claim specialist producing a final scope summary.
+
+You will receive a raw photo-by-photo damage inventory. Your job:
+1. Group items by inferred_area.
+2. Deduplicate: if the same item + action + damage appears in multiple photos in the same area, merge into one entry and collect all photo_ids as evidence.
+3. For each unique item, produce:
+   - item, material, damage, action, why, severity, trade_category_code, evidence_photo_ids[]
+4. Produce an Xactimate add-item plan:
+   - For each area, list category_code (CAT only) + selector_hint (search phrase, NOT full selector codes)
+   - Link each to the damage item it covers
+5. If water damage is present, include remediation + removal + rebuild recommendations.
+
+RULES:
+- No pricing. No quantities.
+- Do NOT guess Xactimate selector codes.
+- Return ONLY valid JSON matching the schema.`;
+
+// Pass 1 tool schema - per-photo inventory
+const pass1ToolSchema = {
+  type: "function",
+  function: {
+    name: "report_photo_inventory",
+    description: "Report per-photo damage inventory",
+    parameters: {
+      type: "object",
+      properties: {
+        photos: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              photo_id: { type: "string" },
+              inferred_area: { type: "string" },
+              items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    item: { type: "string" },
+                    material: { type: "string" },
+                    damage: { type: "string" },
+                    action: { type: "string", enum: ["replace", "repair", "clean_restore", "investigate"] },
+                    why: { type: "string" },
+                    severity: { type: "string", enum: ["minor", "moderate", "severe"] },
+                    trade_category_code: { type: "string" },
+                    confidence: { type: "number" },
+                  },
+                  required: ["item", "damage", "action", "why", "severity", "trade_category_code", "confidence"],
+                },
+              },
+              missing_photo_request: { type: "string" },
+            },
+            required: ["photo_id", "inferred_area", "items"],
+          },
+        },
+        notes: { type: "array", items: { type: "string" } },
+      },
+      required: ["photos"],
+    },
+  },
+};
+
+// Pass 2 tool schema - deduped/grouped output
+const pass2ToolSchema = {
+  type: "function",
+  function: {
+    name: "report_grouped_analysis",
+    description: "Report deduplicated grouped damage analysis and Xactimate plan",
+    parameters: {
+      type: "object",
+      properties: {
+        damage_findings: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              area: { type: "string" },
+              items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    item: { type: "string" },
+                    material: { type: "string" },
+                    damage: { type: "string" },
+                    action: { type: "string", enum: ["replace", "repair", "clean_restore", "investigate"] },
+                    why: { type: "string" },
+                    severity: { type: "string", enum: ["minor", "moderate", "severe"] },
+                    trade_category_code: { type: "string" },
+                    confidence: { type: "number" },
+                    evidence_photo_ids: { type: "array", items: { type: "string" } },
+                  },
+                  required: ["item", "damage", "action", "why", "evidence_photo_ids"],
+                },
+              },
+            },
+            required: ["area", "items"],
+          },
+        },
+        xactimate_plan: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              area: { type: "string" },
+              trade_groups: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    category_code: { type: "string" },
+                    items: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          selector_hint: { type: "string" },
+                          reason: { type: "string" },
+                          linked_replace_item: { type: "string" },
+                        },
+                        required: ["selector_hint", "reason", "linked_replace_item"],
+                      },
+                    },
+                  },
+                  required: ["category_code", "items"],
+                },
+              },
+            },
+            required: ["area", "trade_groups"],
+          },
+        },
+        notes: { type: "array", items: { type: "string" } },
+        questions: { type: "array", items: { type: "string" } },
+      },
+      required: ["damage_findings", "xactimate_plan"],
+    },
+  },
+};
+
+async function callAI(apiKey: string, body: any, timeoutMs = 120000): Promise<any> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("AI gateway error:", response.status, errorText);
+      if (response.status === 429 || response.status === 402) {
+        throw { status: response.status, message: response.status === 429 ? "Rate limit exceeded. Please try again shortly." : "AI credits exhausted. Please add funds." };
+      }
+      throw new Error(`AI gateway error: ${response.status}`);
+    }
+
+    const text = await response.text();
+    if (!text || text.trim().length === 0) {
+      throw new Error("AI gateway returned empty response");
+    }
+
+    return JSON.parse(text);
+  } catch (e) {
+    clearTimeout(timeout);
+    throw e;
+  }
+}
+
+function extractToolResult(aiData: any): any {
+  const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+  if (toolCall?.function?.arguments) {
+    return JSON.parse(toolCall.function.arguments);
+  }
+  const content = aiData.choices?.[0]?.message?.content || "";
+  if (content) {
+    const jsonStart = content.indexOf("{");
+    const jsonEnd = content.lastIndexOf("}");
+    if (jsonStart >= 0 && jsonEnd > jsonStart) {
+      return JSON.parse(content.slice(jsonStart, jsonEnd + 1));
+    }
+  }
+  throw new Error("No parseable result in AI response");
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -48,7 +226,6 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -65,53 +242,15 @@ serve(async (req) => {
 
     if (claimError || !claim) throw new Error("Claim not found");
 
-    // Get photos with signed URLs
+    // Get all photos
     const { data: photos, error: photosError } = await supabase
       .from("claim_photos")
-      .select("id, file_path, file_name, category, description, ai_analysis_summary, ai_detected_damages, ai_material_type, ai_condition_rating")
+      .select("id, file_path, file_name, category, description, ai_analysis_summary, ai_material_type, ai_condition_rating")
       .eq("claim_id", claimId)
       .order("created_at", { ascending: false });
 
     if (photosError) throw new Error("Failed to fetch photos");
     if (!photos || photos.length === 0) throw new Error("No photos found for this claim");
-
-    // Use signed URLs instead of base64 to avoid memory exhaustion
-    const photoContent: any[] = [];
-    const captionLines: string[] = [];
-
-    // Build captions for ALL photos (lightweight)
-    for (const photo of photos) {
-      const caption = [
-        photo.description || photo.category || "(no caption)",
-        photo.ai_material_type ? `Material: ${photo.ai_material_type}` : null,
-        photo.ai_condition_rating ? `Condition: ${photo.ai_condition_rating}` : null,
-        photo.ai_analysis_summary ? `AI: ${photo.ai_analysis_summary}` : null,
-      ].filter(Boolean).join(" | ");
-      captionLines.push(`- ${photo.id}: ${caption}`);
-    }
-
-    // Use signed URLs for up to 5 photos (no memory overhead)
-    // Limit to 10 photos to avoid AI gateway timeout
-    for (const photo of photos.slice(0, 10)) {
-      try {
-        const { data: signedData, error: signError } = await supabase.storage
-          .from("claim-files")
-          .createSignedUrl(photo.file_path, 600); // 10 min expiry
-
-        if (!signError && signedData?.signedUrl) {
-          photoContent.push({
-            type: "image_url",
-            image_url: { url: signedData.signedUrl },
-          });
-        } else {
-          console.error("Failed to sign URL for photo:", photo.id, signError);
-        }
-      } catch (e) {
-        console.error("Failed to create signed URL:", photo.id, e);
-      }
-    }
-
-    if (photoContent.length === 0) throw new Error("Could not generate signed URLs for any photos.");
 
     const claimDescription = [
       claim.loss_description || "No description",
@@ -119,169 +258,190 @@ serve(async (req) => {
       claim.policyholder_address ? `Property: ${claim.policyholder_address}` : null,
     ].filter(Boolean).join("\n");
 
-    const toolSchema = {
-      type: "function",
-      function: {
-        name: "report_damage_analysis",
-        description: "Report the damage analysis findings and Xactimate plan",
-        parameters: {
-          type: "object",
-          properties: {
-            damage_findings: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  area: { type: "string" },
-                  items: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        item: { type: "string" },
-                        action: { type: "string", enum: ["replace", "repair", "clean_restore", "investigate"] },
-                        why: { type: "string" },
-                        evidence: { type: "array", items: { type: "string" } },
-                        confidence: { type: "number" },
-                      },
-                      required: ["item", "action", "why", "confidence"],
-                    },
-                  },
-                },
-                required: ["area", "items"],
-              },
+    // ============= PASS 1: Photo-by-photo inventory in batches =============
+    console.log(`Pass 1: Processing ${photos.length} photos in batches of ${BATCH_SIZE}`);
+
+    const allPhotoEntries: any[] = [];
+    const allNotes: string[] = [];
+    const processedPhotoIds = new Set<string>();
+
+    // Create batches
+    const batches: typeof photos[] = [];
+    for (let i = 0; i < photos.length; i += BATCH_SIZE) {
+      batches.push(photos.slice(i, i + BATCH_SIZE));
+    }
+
+    for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+      const batch = batches[batchIdx];
+      console.log(`Pass 1 batch ${batchIdx + 1}/${batches.length}: ${batch.length} photos`);
+
+      // Get signed URLs for this batch
+      const batchContent: any[] = [];
+      const batchCaptions: string[] = [];
+      const batchPhotoIds: string[] = [];
+
+      for (const photo of batch) {
+        const caption = [
+          photo.description || photo.category || "(no caption)",
+          photo.ai_material_type ? `Material: ${photo.ai_material_type}` : null,
+          photo.ai_condition_rating ? `Condition: ${photo.ai_condition_rating}` : null,
+          photo.ai_analysis_summary ? `AI: ${photo.ai_analysis_summary}` : null,
+        ].filter(Boolean).join(" | ");
+
+        batchCaptions.push(`photo_id="${photo.id}": ${caption}`);
+        batchPhotoIds.push(photo.id);
+
+        try {
+          const { data: signedData, error: signError } = await supabase.storage
+            .from("claim-files")
+            .createSignedUrl(photo.file_path, 600);
+
+          if (!signError && signedData?.signedUrl) {
+            batchContent.push({
+              type: "image_url",
+              image_url: { url: signedData.signedUrl },
+            });
+          } else {
+            console.error("Failed to sign URL for photo:", photo.id);
+          }
+        } catch (e) {
+          console.error("Failed to create signed URL:", photo.id, e);
+        }
+      }
+
+      if (batchContent.length === 0) {
+        console.warn(`Batch ${batchIdx + 1}: no signed URLs, creating placeholder entries`);
+        for (const pid of batchPhotoIds) {
+          allPhotoEntries.push({
+            photo_id: pid,
+            inferred_area: "Unknown",
+            items: [{ item: "Unable to access photo", damage: "N/A", action: "investigate", why: "Photo could not be loaded for analysis", severity: "minor", trade_category_code: "GEN", confidence: 0 }],
+            missing_photo_request: "Re-upload or re-run analysis",
+          });
+          processedPhotoIds.add(pid);
+        }
+        continue;
+      }
+
+      try {
+        const aiData = await callAI(LOVABLE_API_KEY, {
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: PASS1_SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: `CLAIM: ${claimDescription}\n\nPHOTO CAPTIONS (use photo_id in your response):\n${batchCaptions.join("\n")}\n\nYou MUST return one entry for each of these photo_ids: ${batchPhotoIds.join(", ")}` },
+                ...batchContent,
+              ],
             },
-            xactimate_plan: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  area: { type: "string" },
-                  trade_groups: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        category_code: { type: "string" },
-                        items: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: {
-                              selector_hint: { type: "string" },
-                              reason: { type: "string" },
-                              linked_replace_item: { type: "string" },
-                            },
-                            required: ["selector_hint", "reason", "linked_replace_item"],
-                          },
-                        },
-                      },
-                      required: ["category_code", "items"],
-                    },
-                  },
-                },
-                required: ["area", "trade_groups"],
-              },
-            },
-            notes: { type: "array", items: { type: "string" } },
-            questions: { type: "array", items: { type: "string" } },
+          ],
+          tools: [pass1ToolSchema],
+          tool_choice: { type: "function", function: { name: "report_photo_inventory" } },
+        });
+
+        const result = extractToolResult(aiData);
+
+        if (result.photos) {
+          for (const entry of result.photos) {
+            allPhotoEntries.push(entry);
+            processedPhotoIds.add(entry.photo_id);
+          }
+        }
+        if (result.notes) {
+          allNotes.push(...result.notes);
+        }
+      } catch (e: any) {
+        console.error(`Batch ${batchIdx + 1} failed:`, e);
+        // If rate limited or payment issue, throw immediately
+        if (e.status === 429 || e.status === 402) {
+          return new Response(JSON.stringify({ error: e.message }), {
+            status: e.status,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        // Otherwise create placeholder entries for this batch
+        for (const pid of batchPhotoIds) {
+          if (!processedPhotoIds.has(pid)) {
+            allPhotoEntries.push({
+              photo_id: pid,
+              inferred_area: "Unknown",
+              items: [{ item: "Batch processing failed", damage: "N/A", action: "investigate", why: "AI batch failed; rerun analysis", severity: "minor", trade_category_code: "GEN", confidence: 0 }],
+              missing_photo_request: "Rerun analysis for this batch",
+            });
+            processedPhotoIds.add(pid);
+          }
+        }
+        allNotes.push(`Batch ${batchIdx + 1} failed: ${e.message || "Unknown error"}`);
+      }
+
+      // Small delay between batches to avoid rate limiting
+      if (batchIdx < batches.length - 1) {
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+
+    // Fallback: create placeholder entries for any missing photos
+    for (const photo of photos) {
+      if (!processedPhotoIds.has(photo.id)) {
+        allPhotoEntries.push({
+          photo_id: photo.id,
+          inferred_area: "Unknown",
+          items: [{ item: "Missing from batch output", damage: "N/A", action: "investigate", why: "Missing from batch output; rerun", severity: "minor", trade_category_code: "GEN", confidence: 0 }],
+          missing_photo_request: "Rerun analysis",
+        });
+      }
+    }
+
+    const pass1Result = { photos: allPhotoEntries, notes: allNotes };
+
+    console.log(`Pass 1 complete: ${allPhotoEntries.length} photo entries, ${allPhotoEntries.reduce((sum, p) => sum + (p.items?.length || 0), 0)} total items`);
+
+    // ============= PASS 2: Deduplicate and group (text-only) =============
+    console.log("Pass 2: Deduplicating and grouping...");
+
+    let pass2Result;
+    try {
+      const pass1Summary = JSON.stringify(pass1Result, null, 1);
+
+      const aiData = await callAI(LOVABLE_API_KEY, {
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: PASS2_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: `CLAIM: ${claimDescription}\n\nRAW PHOTO-BY-PHOTO INVENTORY (${allPhotoEntries.length} photos, ${allPhotoEntries.reduce((s, p) => s + (p.items?.length || 0), 0)} items):\n\n${pass1Summary}`,
           },
-          required: ["damage_findings", "xactimate_plan"],
-        },
+        ],
+        tools: [pass2ToolSchema],
+        tool_choice: { type: "function", function: { name: "report_grouped_analysis" } },
+      }, 180000); // 3 min timeout for larger text
+
+      pass2Result = extractToolResult(aiData);
+    } catch (e: any) {
+      console.error("Pass 2 failed:", e);
+      if (e.status === 429 || e.status === 402) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: e.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      // Return pass1 only if pass2 fails
+      pass2Result = null;
+    }
+
+    const finalResult = {
+      pass1_inventory: pass1Result,
+      ...(pass2Result || {}),
+      stats: {
+        total_photos: photos.length,
+        photos_processed: allPhotoEntries.length,
+        total_items_detected: allPhotoEntries.reduce((s, p) => s + (p.items?.length || 0), 0),
+        deduped_items: pass2Result?.damage_findings?.reduce((s: number, f: any) => s + (f.items?.length || 0), 0) || 0,
       },
     };
 
-    // 120s timeout to avoid hanging on large requests
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120000);
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `CLAIM DESCRIPTION:\n${claimDescription}` },
-              { type: "text", text: `PHOTO CAPTIONS (all ${photos.length} photos):\n${captionLines.join("\n")}` },
-              { type: "text", text: `VISUAL EVIDENCE (${photoContent.length} of ${photos.length} photos attached — analyze ALL captions above even for photos not visually attached):` },
-              ...photoContent,
-            ],
-          },
-        ],
-        tools: [toolSchema],
-        tool_choice: { type: "function", function: { name: "report_damage_analysis" } },
-      }),
-    });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again shortly." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const aiText = await response.text();
-    console.log("AI response length:", aiText.length);
-    
-    if (!aiText || aiText.trim().length === 0) {
-      throw new Error("AI gateway returned an empty response. The request may have timed out. Try with fewer photos.");
-    }
-
-    let aiData;
-    try {
-      aiData = JSON.parse(aiText);
-    } catch (e) {
-      console.error("Failed to parse AI response:", aiText.slice(0, 500));
-      throw new Error("Failed to parse AI gateway response");
-    }
-
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    const content = aiData.choices?.[0]?.message?.content || "";
-
-    let result;
-    if (toolCall?.function?.arguments) {
-      try {
-        result = JSON.parse(toolCall.function.arguments);
-      } catch (e) {
-        console.error("Failed to parse tool call arguments:", toolCall.function.arguments?.slice(0, 500));
-        throw new Error("Failed to parse AI tool call response");
-      }
-    } else if (content) {
-      const jsonStart = content.indexOf("{");
-      const jsonEnd = content.lastIndexOf("}");
-      if (jsonStart >= 0 && jsonEnd > jsonStart) {
-        result = JSON.parse(content.slice(jsonStart, jsonEnd + 1));
-      } else {
-        console.error("No JSON found in content:", content.slice(0, 500));
-        throw new Error("Could not parse AI response");
-      }
-    } else {
-      console.error("No tool call or content in response:", JSON.stringify(aiData).slice(0, 500));
-      throw new Error("Empty AI response");
-    }
-
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify(finalResult), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
