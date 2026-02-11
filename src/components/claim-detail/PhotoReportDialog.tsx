@@ -335,7 +335,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       }
     } catch (error: any) {
       console.error("AI report error:", error);
-      if (error.name === 'AbortError' || error.message?.includes('connection')) {
+      if (error.name === 'AbortError' || error.message?.includes('connection') || error.message?.includes('Failed to fetch') || error.name === 'TypeError') {
         // Connection issue - start polling for completed report
         setPollingForResult(true);
         toast({ 
