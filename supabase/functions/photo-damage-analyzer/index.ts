@@ -223,7 +223,13 @@ async function callAI(apiKey: string, body: any, timeoutMs = 90000): Promise<any
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
+  // Always set max_tokens to prevent truncation
+  if (!body.max_tokens) {
+    body.max_tokens = 16384;
+  }
+
   try {
+    console.log(`callAI: model=${body.model}, max_tokens=${body.max_tokens}, timeout=${timeoutMs}ms`);
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       signal: controller.signal,
@@ -250,11 +256,33 @@ async function callAI(apiKey: string, body: any, timeoutMs = 90000): Promise<any
       throw new Error("AI gateway returned empty response");
     }
 
-    return JSON.parse(text);
+    const parsed = JSON.parse(text);
+    console.log(`callAI response: finish_reason=${parsed.choices?.[0]?.finish_reason}, has_tool_calls=${!!parsed.choices?.[0]?.message?.tool_calls}, content_length=${parsed.choices?.[0]?.message?.content?.length || 0}`);
+    return parsed;
   } catch (e) {
     clearTimeout(timeout);
     throw e;
   }
+}
+
+async function callAIWithRetry(apiKey: string, body: any, timeoutMs = 180000, maxRetries = 2): Promise<any> {
+  let lastError: any;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const aiData = await callAI(apiKey, body, timeoutMs);
+      const result = extractToolResult(aiData);
+      return result;
+    } catch (e: any) {
+      lastError = e;
+      console.error(`AI attempt ${attempt + 1} failed:`, e.message || e);
+      if (attempt < maxRetries) {
+        const delay = 2000 * (attempt + 1);
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastError;
 }
 
 function extractToolResult(aiData: any): any {
@@ -264,12 +292,13 @@ function extractToolResult(aiData: any): any {
     try {
       return JSON.parse(toolCall.function.arguments);
     } catch (e) {
-      console.error("Failed to parse tool_call arguments:", toolCall.function.arguments?.substring(0, 500));
+      console.error("Failed to parse tool_call arguments, length:", toolCall.function.arguments?.length, "first 500:", toolCall.function.arguments?.substring(0, 500));
     }
   }
   // Try content as JSON
   const content = aiData.choices?.[0]?.message?.content || "";
   if (content) {
+    console.log("extractToolResult: no tool_calls, trying content. Length:", content.length, "first 200:", content.substring(0, 200));
     // Try extracting JSON object
     const jsonStart = content.indexOf("{");
     const jsonEnd = content.lastIndexOf("}");
@@ -277,7 +306,7 @@ function extractToolResult(aiData: any): any {
       try {
         return JSON.parse(content.slice(jsonStart, jsonEnd + 1));
       } catch (e) {
-        console.error("Failed to parse content JSON:", content.substring(0, 500));
+        console.error("Failed to parse content JSON, range:", jsonStart, "-", jsonEnd);
       }
     }
     // Try extracting JSON array
@@ -287,17 +316,18 @@ function extractToolResult(aiData: any): any {
       try {
         return { items: JSON.parse(content.slice(arrStart, arrEnd + 1)) };
       } catch (e) {
-        console.error("Failed to parse content array:", content.substring(0, 500));
+        console.error("Failed to parse content array, range:", arrStart, "-", arrEnd);
       }
     }
   }
   // Log full structure for debugging
   const finishReason = aiData.choices?.[0]?.finish_reason;
-  console.error("extractToolResult failed. finish_reason:", finishReason, "has content:", !!content, "content length:", content?.length, "tool_calls:", !!toolCall);
+  const refusal = aiData.choices?.[0]?.message?.refusal;
+  console.error("extractToolResult FAILED. finish_reason:", finishReason, "refusal:", refusal, "has content:", !!content, "content length:", content?.length, "has tool_calls:", !!toolCall, "full message keys:", Object.keys(aiData.choices?.[0]?.message || {}));
   if (finishReason === "length") {
     throw new Error("AI response was truncated (too long). Try analyzing fewer items.");
   }
-  throw new Error("No parseable result in AI response");
+  throw new Error(`No parseable result in AI response (finish_reason: ${finishReason})`);
 }
 
 serve(async (req) => {
@@ -457,7 +487,7 @@ serve(async (req) => {
       const pass1Summary = JSON.stringify(pass1Data, null, 1);
       const totalItems = (pass1Data.photos || []).reduce((s: number, p: any) => s + (p.items?.length || 0), 0);
 
-      const aiData = await callAI(LOVABLE_API_KEY, {
+      const result = await callAIWithRetry(LOVABLE_API_KEY, {
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: PASS2_SYSTEM_PROMPT },
@@ -468,9 +498,8 @@ serve(async (req) => {
         ],
         tools: [pass2ToolSchema],
         tool_choice: { type: "function", function: { name: "report_grouped_analysis" } },
-      }, 180000);
+      }, 180000, 2);
 
-      const result = extractToolResult(aiData);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -501,7 +530,7 @@ serve(async (req) => {
         claim?.loss_type ? `Loss type: ${claim.loss_type}` : null,
       ].filter(Boolean).join("\n");
 
-      const aiData = await callAI(LOVABLE_API_KEY, {
+      const result = await callAIWithRetry(LOVABLE_API_KEY, {
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: ESTIMATE_SYSTEM_PROMPT },
@@ -512,9 +541,8 @@ serve(async (req) => {
         ],
         tools: [estimateToolSchema],
         tool_choice: { type: "function", function: { name: "report_cost_estimate" } },
-      }, 180000);
+      }, 180000, 2);
 
-      const result = extractToolResult(aiData);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
