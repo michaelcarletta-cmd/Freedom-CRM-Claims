@@ -84,7 +84,7 @@ const SEVERITY_CONFIG: Record<string, string> = {
   severe: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
 };
 
-export function PhotoDamageFindings({ claimId, photoCount }: { claimId: string; photoCount: number }) {
+export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], currentPage = 1, totalPages = 1 }: { claimId: string; photoCount: number; pagePhotoIds?: string[]; currentPage?: number; totalPages?: number }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [activeTab, setActiveTab] = useState<"inventory" | "replace" | "xactimate">("replace");
@@ -92,43 +92,60 @@ export function PhotoDamageFindings({ claimId, photoCount }: { claimId: string; 
   const [progressText, setProgressText] = useState("");
   const [progressPct, setProgressPct] = useState(0);
   const cancelRef = useRef(false);
+  // Accumulate pass1 results across multiple page analyses
+  const accumulatedPhotosRef = useRef<PhotoEntry[]>([]);
+  const accumulatedNotesRef = useRef<string[]>([]);
 
-  const runAnalysis = async () => {
+  const runAnalysis = async (analyzeAll = false) => {
     setLoading(true);
-    setProgressText("Fetching photo list...");
     setProgressPct(0);
     cancelRef.current = false;
 
     try {
-      // Step 1: Get all photo IDs and claim description
-      const { data: listData, error: listError } = await supabase.functions.invoke("photo-damage-analyzer", {
-        body: { claimId, mode: "list" },
-      });
+      // Determine which photo IDs to analyze
+      let targetPhotoIds: string[];
+      let claimDescription: string;
 
-      if (listError) throw listError;
-      if (listData?.error) throw new Error(listData.error);
-
-      const allPhotoIds: string[] = listData.photoIds || [];
-      const claimDescription: string = listData.claimDescription || "";
-
-      if (allPhotoIds.length === 0) {
-        throw new Error("No photos found for this claim");
+      if (analyzeAll) {
+        setProgressText("Fetching all photo IDs...");
+        const { data: listData, error: listError } = await supabase.functions.invoke("photo-damage-analyzer", {
+          body: { claimId, mode: "list" },
+        });
+        if (listError) throw listError;
+        if (listData?.error) throw new Error(listData.error);
+        targetPhotoIds = listData.photoIds || [];
+        claimDescription = listData.claimDescription || "";
+        // Reset accumulated data when doing full analysis
+        accumulatedPhotosRef.current = [];
+        accumulatedNotesRef.current = [];
+      } else {
+        // Page-by-page: use the photo IDs from the current page
+        targetPhotoIds = pagePhotoIds;
+        setProgressText(`Fetching claim info...`);
+        const { data: listData } = await supabase.functions.invoke("photo-damage-analyzer", {
+          body: { claimId, mode: "list" },
+        });
+        claimDescription = listData?.claimDescription || "";
       }
 
-      // Step 2: Create batches
+      if (targetPhotoIds.length === 0) {
+        throw new Error("No photos to analyze");
+      }
+
+      // Create batches of 7
       const batches: string[][] = [];
-      for (let i = 0; i < allPhotoIds.length; i += BATCH_SIZE) {
-        batches.push(allPhotoIds.slice(i, i + BATCH_SIZE));
+      for (let i = 0; i < targetPhotoIds.length; i += BATCH_SIZE) {
+        batches.push(targetPhotoIds.slice(i, i + BATCH_SIZE));
       }
 
-      const allPhotoEntries: PhotoEntry[] = [];
-      const allNotes: string[] = [];
+      const newPhotoEntries: PhotoEntry[] = [];
+      const newNotes: string[] = [];
       const totalBatches = batches.length;
 
-      // Step 3: Process each batch sequentially
+      // Process each batch sequentially
       for (let i = 0; i < totalBatches; i++) {
         if (cancelRef.current) {
-          allNotes.push("Analysis cancelled by user");
+          newNotes.push("Analysis cancelled by user");
           break;
         }
 
@@ -144,36 +161,34 @@ export function PhotoDamageFindings({ claimId, photoCount }: { claimId: string; 
           if (batchData?.error) throw new Error(batchData.error);
 
           if (batchData?.photos) {
-            allPhotoEntries.push(...batchData.photos);
+            newPhotoEntries.push(...batchData.photos);
           }
           if (batchData?.notes) {
-            allNotes.push(...batchData.notes);
+            newNotes.push(...batchData.notes);
           }
         } catch (batchErr: any) {
           console.error(`Batch ${i + 1} failed:`, batchErr);
-          // Create placeholder entries for failed batch
           for (const pid of batches[i]) {
-            allPhotoEntries.push({
+            newPhotoEntries.push({
               photo_id: pid,
               inferred_area: "Unknown",
               items: [{ item: "Batch processing failed", damage: "N/A", action: "investigate", why: batchErr.message || "AI batch failed; rerun analysis", severity: "minor", trade_category_code: "GEN", confidence: 0 }],
               missing_photo_request: "Rerun analysis for this batch",
             });
           }
-          allNotes.push(`Batch ${i + 1} failed: ${batchErr.message || "Unknown error"}`);
+          newNotes.push(`Batch ${i + 1} failed: ${batchErr.message || "Unknown error"}`);
         }
 
-        // Small delay between batches
         if (i < totalBatches - 1) {
           await new Promise(r => setTimeout(r, 800));
         }
       }
 
-      // Ensure all photo_ids are represented
-      const processedIds = new Set(allPhotoEntries.map(p => p.photo_id));
-      for (const pid of allPhotoIds) {
+      // Ensure all target photo_ids are represented
+      const processedIds = new Set(newPhotoEntries.map(p => p.photo_id));
+      for (const pid of targetPhotoIds) {
         if (!processedIds.has(pid)) {
-          allPhotoEntries.push({
+          newPhotoEntries.push({
             photo_id: pid,
             inferred_area: "Unknown",
             items: [{ item: "Missing from output", damage: "N/A", action: "investigate", why: "Missing from batch output; rerun", severity: "minor", trade_category_code: "GEN", confidence: 0 }],
@@ -182,11 +197,21 @@ export function PhotoDamageFindings({ claimId, photoCount }: { claimId: string; 
         }
       }
 
+      // Merge with accumulated results (replace existing photo_ids, add new ones)
+      const existingById = new Map(accumulatedPhotosRef.current.map(p => [p.photo_id, p]));
+      for (const entry of newPhotoEntries) {
+        existingById.set(entry.photo_id, entry);
+      }
+      accumulatedPhotosRef.current = Array.from(existingById.values());
+      accumulatedNotesRef.current = [...accumulatedNotesRef.current, ...newNotes];
+
+      const allPhotoEntries = accumulatedPhotosRef.current;
+      const allNotes = accumulatedNotesRef.current;
       const pass1Inventory = { photos: allPhotoEntries, notes: allNotes };
       const totalItems = allPhotoEntries.reduce((s, p) => s + (p.items?.length || 0), 0);
 
-      // Step 4: Pass 2 - Deduplicate (text-only)
-      setProgressText(`Pass 2: Deduplicating ${totalItems} items...`);
+      // Pass 2 - Deduplicate (text-only)
+      setProgressText(`Pass 2: Deduplicating ${totalItems} items across ${allPhotoEntries.length} photos...`);
       setProgressPct(Math.round((totalBatches / (totalBatches + 1)) * 100));
 
       let pass2Result: any = null;
@@ -207,7 +232,7 @@ export function PhotoDamageFindings({ claimId, photoCount }: { claimId: string; 
         pass1_inventory: pass1Inventory,
         ...(pass2Result || {}),
         stats: {
-          total_photos: allPhotoIds.length,
+          total_photos: analyzeAll ? targetPhotoIds.length : accumulatedPhotosRef.current.length,
           photos_processed: allPhotoEntries.length,
           total_items_detected: totalItems,
           deduped_items: pass2Result?.damage_findings?.reduce((s: number, f: any) => s + (f.items?.length || 0), 0) || 0,
@@ -216,7 +241,8 @@ export function PhotoDamageFindings({ claimId, photoCount }: { claimId: string; 
 
       setResult(finalResult);
       setProgressPct(100);
-      toast.success(`Analysis complete: ${totalItems} items found across ${allPhotoEntries.length} photos`);
+      const label = analyzeAll ? "all photos" : `page ${currentPage}`;
+      toast.success(`Analysis complete (${label}): ${newPhotoEntries.length} photos → ${newPhotoEntries.reduce((s, p) => s + (p.items?.length || 0), 0)} items`);
     } catch (err: any) {
       console.error("Analysis error:", err);
       toast.error(err.message || "Failed to analyze photos");
@@ -260,12 +286,16 @@ export function PhotoDamageFindings({ claimId, photoCount }: { claimId: string; 
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground mb-3">
-            Analyzes every photo individually in batches of {BATCH_SIZE}, then deduplicates into a replace/repair list and Xactimate plan.
+            Analyzes photos in batches of {BATCH_SIZE}, then deduplicates into a replace/repair list and Xactimate plan. Analyze page-by-page or all at once.
           </p>
-          <div className="flex items-center gap-2">
-            <Button onClick={runAnalysis} disabled={loading || photoCount === 0} className="gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button onClick={() => runAnalysis(false)} disabled={loading || pagePhotoIds.length === 0} className="gap-2">
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-              {loading ? "Analyzing..." : `Analyze ${photoCount} Photo${photoCount !== 1 ? "s" : ""}`}
+              {loading ? "Analyzing..." : `Analyze This Page (${pagePhotoIds.length})`}
+            </Button>
+            <Button variant="outline" onClick={() => runAnalysis(true)} disabled={loading || photoCount === 0} className="gap-2">
+              <Search className="h-4 w-4" />
+              Analyze All {photoCount} Photos
             </Button>
             {loading && (
               <Button variant="outline" size="sm" onClick={cancelAnalysis} className="gap-1">
@@ -303,9 +333,13 @@ export function PhotoDamageFindings({ claimId, photoCount }: { claimId: string; 
                   <XCircle className="h-3 w-3" /> Cancel
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={runAnalysis} disabled={loading} className="gap-1">
+              <Button variant="outline" size="sm" onClick={() => runAnalysis(false)} disabled={loading} className="gap-1">
                 {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
-                Re-analyze
+                Analyze Page ({pagePhotoIds.length})
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => runAnalysis(true)} disabled={loading} className="gap-1">
+                <Search className="h-3 w-3" />
+                All
               </Button>
             </div>
           </div>
