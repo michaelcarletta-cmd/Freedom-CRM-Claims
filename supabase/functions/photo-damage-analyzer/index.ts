@@ -14,22 +14,28 @@ Your job is NOT to create a priced estimate.
 Your job is to:
 1) Identify what materials or items are damaged in the provided photos.
 2) Determine whether each item should be:
-   - replace
-   - repair
-   - clean_restore
-   - investigate
+   - replace: visible material failure, deformation, swelling, delamination, missing pieces, contamination
+   - repair: small localized damage that can be patched/blended
+   - clean_restore: soot/dirt/surface staining without material failure
+   - investigate: ONLY if the material or damage cannot be seen clearly; must include a specific question about what photo/angle is needed
 3) Explain WHY the action is required using visible evidence only.
 4) Convert those findings into an Xactimate add-item plan using:
    - category_code (CAT only)
    - selector_hint (search phrase, not full CAT/SEL codes)
 
+STRICT OUTPUT REQUIREMENTS:
+- For each photo, extract at least 2 distinct observations unless the photo is unusable.
+- Across the whole set, output at least 12 total damaged/affected items unless there truly are fewer; if fewer, explain why in the "notes" array.
+- Group output by area/room/elevation. If no caption exists, infer a reasonable area label from the photo content.
+- For each affected area, consider finish + substrate + trim (example: paint + drywall + baseboard).
+- If water damage is present, include remediation (WTR/CLN) + removal + rebuild recommendations where evidence supports it.
+- "investigate" is allowed ONLY if the material or damage cannot be seen clearly; otherwise pick replace/repair/clean_restore.
+
 CRITICAL RULES:
 - Do NOT create pricing.
-- Do NOT guess Xactimate selector codes.
+- Do NOT guess Xactimate selector codes — use category_code (CAT only) + selector_hint phrases.
 - Use ONLY visible evidence from photos and captions.
-- If evidence is unclear, choose "investigate".
-- Include remediation (WTR/CLN), removal, and replacement when applicable.
-- Group output by area/room if captions provide location.
+- Be thorough: missing items costs the policyholder money. Over-document, do not under-document.
 
 Return ONLY valid JSON that matches the schema.`;
 
@@ -85,7 +91,7 @@ serve(async (req) => {
     }
 
     // Use signed URLs for up to 5 photos (no memory overhead)
-    for (const photo of photos.slice(0, 5)) {
+    for (const photo of photos.slice(0, 20)) {
       try {
         const { data: signedData, error: signError } = await supabase.storage
           .from("claim-files")
