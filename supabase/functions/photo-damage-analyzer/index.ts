@@ -69,20 +69,33 @@ serve(async (req) => {
     if (photosError) throw new Error("Failed to fetch photos");
     if (!photos || photos.length === 0) throw new Error("No photos found for this claim");
 
-    // Generate signed URLs for photos
+    // Download and base64-encode photos (limit to 5 to avoid timeouts/memory)
     const photoContent: any[] = [];
     const captionLines: string[] = [];
 
-    for (const photo of photos.slice(0, 20)) {
-      const { data: urlData } = await supabase.storage
-        .from("claim-files")
-        .createSignedUrl(photo.file_path, 3600);
+    for (const photo of photos.slice(0, 5)) {
+      try {
+        const { data: fileData, error: dlError } = await supabase.storage
+          .from("claim-files")
+          .download(photo.file_path);
 
-      if (urlData?.signedUrl) {
-        photoContent.push({
-          type: "image_url",
-          image_url: { url: urlData.signedUrl },
-        });
+        if (!dlError && fileData) {
+          const arrayBuffer = await fileData.arrayBuffer();
+          const uint8 = new Uint8Array(arrayBuffer);
+          let binary = "";
+          for (let i = 0; i < uint8.length; i++) {
+            binary += String.fromCharCode(uint8[i]);
+          }
+          const base64 = btoa(binary);
+          const mimeType = fileData.type || "image/jpeg";
+
+          photoContent.push({
+            type: "image_url",
+            image_url: { url: `data:${mimeType};base64,${base64}` },
+          });
+        }
+      } catch (e) {
+        console.error("Failed to download photo:", photo.id, e);
       }
 
       const caption = [
@@ -94,6 +107,8 @@ serve(async (req) => {
 
       captionLines.push(`- ${photo.id}: ${caption}`);
     }
+
+    if (photoContent.length === 0) throw new Error("Could not load any photos for analysis");
 
     const claimDescription = [
       claim.loss_description || "No description",
@@ -180,7 +195,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {
@@ -218,6 +233,10 @@ serve(async (req) => {
     const aiText = await response.text();
     console.log("AI response length:", aiText.length);
     
+    if (!aiText || aiText.trim().length === 0) {
+      throw new Error("AI gateway returned an empty response. The request may have timed out. Try with fewer photos.");
+    }
+
     let aiData;
     try {
       aiData = JSON.parse(aiText);
