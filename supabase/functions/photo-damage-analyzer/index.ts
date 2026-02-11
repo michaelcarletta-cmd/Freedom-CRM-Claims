@@ -53,9 +53,9 @@ serve(async (req) => {
     // Get claim description
     const { data: claim, error: claimError } = await supabase
       .from("claims")
-      .select("description, loss_type, property_address")
+      .select("loss_description, loss_type, policyholder_address")
       .eq("id", claimId)
-      .single();
+      .maybeSingle();
 
     if (claimError || !claim) throw new Error("Claim not found");
 
@@ -96,9 +96,9 @@ serve(async (req) => {
     }
 
     const claimDescription = [
-      claim.description || "No description",
+      claim.loss_description || "No description",
       claim.loss_type ? `Loss type: ${claim.loss_type}` : null,
-      claim.property_address ? `Property: ${claim.property_address}` : null,
+      claim.policyholder_address ? `Property: ${claim.policyholder_address}` : null,
     ].filter(Boolean).join("\n");
 
     const toolSchema = {
