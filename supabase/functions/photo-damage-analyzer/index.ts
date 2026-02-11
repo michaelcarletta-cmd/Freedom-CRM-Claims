@@ -69,7 +69,7 @@ serve(async (req) => {
     if (photosError) throw new Error("Failed to fetch photos");
     if (!photos || photos.length === 0) throw new Error("No photos found for this claim");
 
-    // Download and base64-encode photos (limit to 2 to stay within 150MB memory)
+    // Use signed URLs instead of base64 to avoid memory exhaustion
     const photoContent: any[] = [];
     const captionLines: string[] = [];
 
@@ -84,42 +84,27 @@ serve(async (req) => {
       captionLines.push(`- ${photo.id}: ${caption}`);
     }
 
-    // Only encode first 2 photos as base64 to avoid memory exhaustion
-    for (const photo of photos.slice(0, 2)) {
+    // Use signed URLs for up to 5 photos (no memory overhead)
+    for (const photo of photos.slice(0, 5)) {
       try {
-        const { data: fileData, error: dlError } = await supabase.storage
+        const { data: signedData, error: signError } = await supabase.storage
           .from("claim-files")
-          .download(photo.file_path);
+          .createSignedUrl(photo.file_path, 600); // 10 min expiry
 
-        if (!dlError && fileData) {
-          const arrayBuffer = await fileData.arrayBuffer();
-          // Skip photos larger than 4MB to prevent memory issues
-          if (arrayBuffer.byteLength > 4 * 1024 * 1024) {
-            console.log(`Skipping large photo ${photo.id}: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB`);
-            continue;
-          }
-          const uint8 = new Uint8Array(arrayBuffer);
-          // Chunked base64 encoding to reduce peak memory
-          const CHUNK = 32768;
-          const chunks: string[] = [];
-          for (let i = 0; i < uint8.length; i += CHUNK) {
-            const slice = uint8.subarray(i, Math.min(i + CHUNK, uint8.length));
-            chunks.push(String.fromCharCode(...slice));
-          }
-          const base64 = btoa(chunks.join(""));
-          const mimeType = fileData.type || "image/jpeg";
-
+        if (!signError && signedData?.signedUrl) {
           photoContent.push({
             type: "image_url",
-            image_url: { url: `data:${mimeType};base64,${base64}` },
+            image_url: { url: signedData.signedUrl },
           });
+        } else {
+          console.error("Failed to sign URL for photo:", photo.id, signError);
         }
       } catch (e) {
-        console.error("Failed to download photo:", photo.id, e);
+        console.error("Failed to create signed URL:", photo.id, e);
       }
     }
 
-    if (photoContent.length === 0) throw new Error("Could not load any photos for analysis. Photos may be too large (>4MB each).");
+    if (photoContent.length === 0) throw new Error("Could not generate signed URLs for any photos.");
 
     const claimDescription = [
       claim.loss_description || "No description",
