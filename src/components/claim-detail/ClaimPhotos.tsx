@@ -1127,7 +1127,13 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
       />
 
       {/* Photo Damage Analyzer */}
-      <PhotoDamageFindings claimId={claimId} photoCount={photos.length} />
+      <PhotoDamageFindings
+        claimId={claimId}
+        photoCount={photos.length}
+        pagePhotoIds={paginatedPhotos.map(p => p.id)}
+        currentPage={currentPage}
+        totalPages={totalPages}
+      />
     </div>
   );
 }
