@@ -269,7 +269,11 @@ async function callAIWithRetry(apiKey: string, body: any, timeoutMs = 180000, ma
   let lastError: any;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const aiData = await callAI(apiKey, body, timeoutMs);
+      // On retry, remove forced tool_choice as it can cause finish_reason: error
+      const requestBody = attempt > 0 && body.tool_choice 
+        ? { ...body, tool_choice: "auto" } 
+        : body;
+      const aiData = await callAI(apiKey, requestBody, timeoutMs);
       const result = extractToolResult(aiData);
       return result;
     } catch (e: any) {
@@ -277,7 +281,7 @@ async function callAIWithRetry(apiKey: string, body: any, timeoutMs = 180000, ma
       console.error(`AI attempt ${attempt + 1} failed:`, e.message || e);
       if (attempt < maxRetries) {
         const delay = 2000 * (attempt + 1);
-        console.log(`Retrying in ${delay}ms...`);
+        console.log(`Retrying in ${delay}ms (will relax tool_choice)...`);
         await new Promise(r => setTimeout(r, delay));
       }
     }
@@ -429,7 +433,7 @@ serve(async (req) => {
         });
       }
 
-      const aiData = await callAI(LOVABLE_API_KEY, {
+      const result = await callAIWithRetry(LOVABLE_API_KEY, {
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: PASS1_SYSTEM_PROMPT },
@@ -443,9 +447,8 @@ serve(async (req) => {
         ],
         tools: [pass1ToolSchema],
         tool_choice: { type: "function", function: { name: "report_photo_inventory" } },
-      });
+      }, 180000, 2);
 
-      const result = extractToolResult(aiData);
 
       // Fill in missing photo_ids
       const returnedIds = new Set((result.photos || []).map((p: any) => p.photo_id));
