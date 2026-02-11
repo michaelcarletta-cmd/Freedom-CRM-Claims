@@ -258,17 +258,44 @@ async function callAI(apiKey: string, body: any, timeoutMs = 90000): Promise<any
 }
 
 function extractToolResult(aiData: any): any {
+  // Try tool_calls first
   const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
   if (toolCall?.function?.arguments) {
-    return JSON.parse(toolCall.function.arguments);
+    try {
+      return JSON.parse(toolCall.function.arguments);
+    } catch (e) {
+      console.error("Failed to parse tool_call arguments:", toolCall.function.arguments?.substring(0, 500));
+    }
   }
+  // Try content as JSON
   const content = aiData.choices?.[0]?.message?.content || "";
   if (content) {
+    // Try extracting JSON object
     const jsonStart = content.indexOf("{");
     const jsonEnd = content.lastIndexOf("}");
     if (jsonStart >= 0 && jsonEnd > jsonStart) {
-      return JSON.parse(content.slice(jsonStart, jsonEnd + 1));
+      try {
+        return JSON.parse(content.slice(jsonStart, jsonEnd + 1));
+      } catch (e) {
+        console.error("Failed to parse content JSON:", content.substring(0, 500));
+      }
     }
+    // Try extracting JSON array
+    const arrStart = content.indexOf("[");
+    const arrEnd = content.lastIndexOf("]");
+    if (arrStart >= 0 && arrEnd > arrStart) {
+      try {
+        return { items: JSON.parse(content.slice(arrStart, arrEnd + 1)) };
+      } catch (e) {
+        console.error("Failed to parse content array:", content.substring(0, 500));
+      }
+    }
+  }
+  // Log full structure for debugging
+  const finishReason = aiData.choices?.[0]?.finish_reason;
+  console.error("extractToolResult failed. finish_reason:", finishReason, "has content:", !!content, "content length:", content?.length, "tool_calls:", !!toolCall);
+  if (finishReason === "length") {
+    throw new Error("AI response was truncated (too long). Try analyzing fewer items.");
   }
   throw new Error("No parseable result in AI response");
 }
@@ -441,7 +468,7 @@ serve(async (req) => {
         ],
         tools: [pass2ToolSchema],
         tool_choice: { type: "function", function: { name: "report_grouped_analysis" } },
-      }, 120000);
+      }, 180000);
 
       const result = extractToolResult(aiData);
       return new Response(JSON.stringify(result), {
@@ -485,7 +512,7 @@ serve(async (req) => {
         ],
         tools: [estimateToolSchema],
         tool_choice: { type: "function", function: { name: "report_cost_estimate" } },
-      }, 120000);
+      }, 180000);
 
       const result = extractToolResult(aiData);
       return new Response(JSON.stringify(result), {
