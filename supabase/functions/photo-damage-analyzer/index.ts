@@ -215,22 +215,40 @@ serve(async (req) => {
       throw new Error(`AI gateway error: ${response.status}`);
     }
 
-    const aiData = await response.json();
+    const aiText = await response.text();
+    console.log("AI response length:", aiText.length);
+    
+    let aiData;
+    try {
+      aiData = JSON.parse(aiText);
+    } catch (e) {
+      console.error("Failed to parse AI response:", aiText.slice(0, 500));
+      throw new Error("Failed to parse AI gateway response");
+    }
+
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+    const content = aiData.choices?.[0]?.message?.content || "";
 
     let result;
     if (toolCall?.function?.arguments) {
-      result = JSON.parse(toolCall.function.arguments);
-    } else {
-      // Fallback: try parsing content as JSON
-      const content = aiData.choices?.[0]?.message?.content || "";
+      try {
+        result = JSON.parse(toolCall.function.arguments);
+      } catch (e) {
+        console.error("Failed to parse tool call arguments:", toolCall.function.arguments?.slice(0, 500));
+        throw new Error("Failed to parse AI tool call response");
+      }
+    } else if (content) {
       const jsonStart = content.indexOf("{");
       const jsonEnd = content.lastIndexOf("}");
       if (jsonStart >= 0 && jsonEnd > jsonStart) {
         result = JSON.parse(content.slice(jsonStart, jsonEnd + 1));
       } else {
+        console.error("No JSON found in content:", content.slice(0, 500));
         throw new Error("Could not parse AI response");
       }
+    } else {
+      console.error("No tool call or content in response:", JSON.stringify(aiData).slice(0, 500));
+      throw new Error("Empty AI response");
     }
 
     return new Response(JSON.stringify(result), {
