@@ -16,7 +16,8 @@ RULES:
 - For each photo: list 2–8 distinct damaged items visible in that photo (unless unusable).
 - Do NOT summarize across photos. Do NOT merge items across different photos.
 - Use inferred_area (room/elevation) from caption or visual cues.
-- For each item: include item, damage, action (replace/repair/clean_restore/investigate), why, severity, and trade_category_code (Xactimate category only).
+- For each item: include item, damage, action (replace/repair/clean_restore/investigate), why, severity, trade_category_code (Xactimate category only), and repair_method.
+- repair_method: a concise description of HOW to perform the repair or replacement (e.g. "Remove damaged section, install new 5/8\" drywall, tape, mud, texture to match, prime and paint 2 coats" or "Sand, prime, apply 2 coats exterior latex paint" or "Remove and replace with matching laminate flooring, including underlayment"). Be specific about materials, techniques, and steps.
 - Only use investigate if the damage/material truly cannot be seen; if investigate, include a specific missing_photo_request.
 - No pricing. No quantities. No Xactimate selector codes.
 
@@ -28,7 +29,8 @@ You will receive a raw photo-by-photo damage inventory. Your job:
 1. Group items by inferred_area.
 2. Deduplicate: if the same item + action + damage appears in multiple photos in the same area, merge into one entry and collect all photo_ids as evidence.
 3. For each unique item, produce:
-   - item, material, damage, action, why, severity, trade_category_code, evidence_photo_ids[]
+   - item, material, damage, action, why, severity, trade_category_code, repair_method, evidence_photo_ids[]
+   - repair_method: consolidate/refine the repair methods from the raw inventory into a single best description of how to perform this repair or replacement.
 4. Produce an Xactimate add-item plan:
    - For each area, list category_code (CAT only) + selector_hint (search phrase, NOT full selector codes)
    - Link each to the damage item it covers
@@ -66,9 +68,10 @@ const pass1ToolSchema = {
                     why: { type: "string" },
                     severity: { type: "string", enum: ["minor", "moderate", "severe"] },
                     trade_category_code: { type: "string" },
+                    repair_method: { type: "string", description: "Concise step-by-step description of how to perform the repair or replacement" },
                     confidence: { type: "number" },
                   },
-                  required: ["item", "damage", "action", "why", "severity", "trade_category_code", "confidence"],
+                  required: ["item", "damage", "action", "why", "severity", "trade_category_code", "repair_method", "confidence"],
                 },
               },
               missing_photo_request: { type: "string" },
@@ -110,9 +113,10 @@ const pass2ToolSchema = {
                     severity: { type: "string", enum: ["minor", "moderate", "severe"] },
                     trade_category_code: { type: "string" },
                     confidence: { type: "number" },
+                    repair_method: { type: "string", description: "Step-by-step description of how to perform the repair or replacement" },
                     evidence_photo_ids: { type: "array", items: { type: "string" } },
                   },
-                  required: ["item", "damage", "action", "why", "evidence_photo_ids"],
+                  required: ["item", "damage", "action", "why", "repair_method", "evidence_photo_ids"],
                 },
               },
             },
