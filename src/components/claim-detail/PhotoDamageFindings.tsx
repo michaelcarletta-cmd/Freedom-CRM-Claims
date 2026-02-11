@@ -113,6 +113,42 @@ const SEVERITY_CONFIG: Record<string, string> = {
   severe: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
 };
 
+// Helper: invoke edge function with DB polling fallback for gateway timeouts
+async function invokeWithPolling(claimId: string, body: any, jobKey: string, stagePrefix: string) {
+  try {
+    const { data, error } = await supabase.functions.invoke("photo-damage-analyzer", {
+      body: { ...body, jobKey },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data;
+  } catch (err: any) {
+    const isTimeout = err.name === 'FunctionsFetchError' || err.message?.includes('Load failed') || err.message?.includes('Failed to fetch') || err.name === 'TypeError';
+    if (!isTimeout) throw err;
+
+    console.log(`Connection dropped for ${stagePrefix}, polling DB for result...`);
+    // Poll DB for the saved result (edge function saves before returning)
+    for (let i = 0; i < 40; i++) { // up to ~200 seconds
+      await new Promise(r => setTimeout(r, 5000));
+      const { data: cached } = await supabase
+        .from("claim_context_pipelines")
+        .select("claim_context")
+        .eq("claim_id", claimId)
+        .eq("stage", `${stagePrefix}_${jobKey}`)
+        .eq("status", "completed")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cached?.claim_context) {
+        console.log(`Got cached result for ${stagePrefix}`);
+        return cached.claim_context;
+      }
+    }
+    throw new Error("Analysis timed out after polling - please try again");
+  }
+}
+
 export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], currentPage = 1, totalPages = 1 }: { claimId: string; photoCount: number; pagePhotoIds?: string[]; currentPage?: number; totalPages?: number }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -183,12 +219,8 @@ export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], cu
         setProgressPct(Math.round(((i) / (totalBatches + 1)) * 100));
 
         try {
-          const { data: batchData, error: batchError } = await supabase.functions.invoke("photo-damage-analyzer", {
-            body: { claimId, mode: "batch", photoIds: batches[i], claimDescription },
-          });
-
-          if (batchError) throw batchError;
-          if (batchData?.error) throw new Error(batchData.error);
+          const batchJobKey = `b${i}_${Date.now()}`;
+          const batchData = await invokeWithPolling(claimId, { claimId, mode: "batch", photoIds: batches[i], claimDescription }, batchJobKey, "pda_batch");
 
           if (batchData?.photos) {
             newPhotoEntries.push(...batchData.photos);
@@ -246,13 +278,9 @@ export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], cu
 
       let pass2Result: any = null;
       try {
-        const { data: dedupData, error: dedupError } = await supabase.functions.invoke("photo-damage-analyzer", {
-          body: { claimId, mode: "deduplicate", pass1Data: pass1Inventory, claimDescription },
-        });
-
-        if (dedupError) throw dedupError;
-        if (dedupData?.error) throw new Error(dedupData.error);
-        pass2Result = dedupData;
+        const dedupJobKey = `dedup_${Date.now()}`;
+        setProgressText(`Pass 2: Deduplicating ${totalItems} items across ${allPhotoEntries.length} photos (may take a minute)...`);
+        pass2Result = await invokeWithPolling(claimId, { claimId, mode: "deduplicate", pass1Data: pass1Inventory, claimDescription }, dedupJobKey, "pda_dedup");
       } catch (dedupErr: any) {
         console.error("Pass 2 failed:", dedupErr);
         allNotes.push(`Pass 2 deduplication failed: ${dedupErr.message || "Unknown error"}`);
@@ -287,11 +315,8 @@ export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], cu
     if (!result?.damage_findings) return;
     setEstimateLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("photo-damage-analyzer", {
-        body: { claimId, mode: "estimate", damage_findings: result.damage_findings },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const estimateJobKey = `est_${Date.now()}`;
+      const data = await invokeWithPolling(claimId, { claimId, mode: "estimate", damage_findings: result.damage_findings }, estimateJobKey, "pda_estimate");
       setResult(prev => prev ? { ...prev, estimate: data } : prev);
       setActiveTab("estimate");
       toast.success("Cost estimate generated!");

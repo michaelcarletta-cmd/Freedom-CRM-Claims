@@ -348,7 +348,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json();
-    const { claimId, mode = "batch", photoIds, pass1Data, claimDescription } = body;
+    const { claimId, mode = "batch", photoIds, pass1Data, claimDescription, jobKey } = body;
 
     if (!claimId) throw new Error("claimId is required");
 
@@ -464,6 +464,20 @@ serve(async (req) => {
         }
       }
 
+      // Save result to DB for polling fallback
+      if (jobKey) {
+        try {
+          await supabase.from("claim_context_pipelines").insert({
+            claim_id: claimId,
+            stage: `pda_batch_${jobKey}`,
+            status: "completed",
+            claim_context: result,
+          });
+        } catch (e) {
+          console.error("Failed to save batch result cache:", e);
+        }
+      }
+
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -502,6 +516,20 @@ serve(async (req) => {
         tools: [pass2ToolSchema],
         tool_choice: { type: "function", function: { name: "report_grouped_analysis" } },
       }, 180000, 2);
+
+      // Save result to DB for polling fallback
+      if (jobKey) {
+        try {
+          await supabase.from("claim_context_pipelines").insert({
+            claim_id: claimId,
+            stage: `pda_dedup_${jobKey}`,
+            status: "completed",
+            claim_context: result,
+          });
+        } catch (e) {
+          console.error("Failed to save dedup result cache:", e);
+        }
+      }
 
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -545,6 +573,20 @@ serve(async (req) => {
         tools: [estimateToolSchema],
         tool_choice: { type: "function", function: { name: "report_cost_estimate" } },
       }, 180000, 2);
+
+      // Save result to DB for polling fallback
+      if (jobKey) {
+        try {
+          await supabase.from("claim_context_pipelines").insert({
+            claim_id: claimId,
+            stage: `pda_estimate_${jobKey}`,
+            status: "completed",
+            claim_context: result,
+          });
+        } catch (e) {
+          console.error("Failed to save estimate result cache:", e);
+        }
+      }
 
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
