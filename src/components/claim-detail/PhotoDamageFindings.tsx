@@ -20,6 +20,7 @@ interface PhotoEntry {
     why: string;
     severity?: "minor" | "moderate" | "severe";
     trade_category_code?: string;
+    repair_method?: string;
     confidence?: number;
   }[];
   missing_photo_request?: string | null;
@@ -35,6 +36,7 @@ interface DamageFinding {
     why: string;
     severity?: string;
     trade_category_code?: string;
+    repair_method?: string;
     confidence?: number;
     evidence_photo_ids?: string[];
   }[];
@@ -376,14 +378,15 @@ export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], cu
           <CardContent className="p-0">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[130px]">Area</TableHead>
-                  <TableHead>Item</TableHead>
-                  <TableHead className="w-[100px]">Action</TableHead>
-                  <TableHead className="w-[80px]">Severity</TableHead>
-                  <TableHead>Why</TableHead>
-                  <TableHead className="w-[80px]">Photos</TableHead>
-                </TableRow>
+                 <TableRow>
+                   <TableHead className="w-[130px]">Area</TableHead>
+                   <TableHead>Item</TableHead>
+                   <TableHead className="w-[100px]">Action</TableHead>
+                   <TableHead className="w-[80px]">Severity</TableHead>
+                   <TableHead>Method</TableHead>
+                   <TableHead>Why</TableHead>
+                   <TableHead className="w-[80px]">Photos</TableHead>
+                 </TableRow>
               </TableHeader>
               <TableBody>
                 {result.damage_findings.flatMap((finding) =>
@@ -410,6 +413,7 @@ export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], cu
                             </Badge>
                           )}
                         </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{item.repair_method || "—"}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{item.why}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {item.evidence_photo_ids?.length || 0}
@@ -511,12 +515,13 @@ export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], cu
                   <div className="ml-6 mb-2 border rounded-md overflow-hidden">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Item</TableHead>
-                          <TableHead className="w-[90px]">Action</TableHead>
-                          <TableHead className="w-[70px]">Severity</TableHead>
-                          <TableHead>Why</TableHead>
-                        </TableRow>
+                         <TableRow>
+                           <TableHead>Item</TableHead>
+                           <TableHead className="w-[90px]">Action</TableHead>
+                           <TableHead className="w-[70px]">Severity</TableHead>
+                           <TableHead>Method</TableHead>
+                           <TableHead>Why</TableHead>
+                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {photo.items.map((item, idx) => {
@@ -537,6 +542,7 @@ export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], cu
                                   </Badge>
                                 )}
                               </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{item.repair_method || "—"}</TableCell>
                               <TableCell className="text-xs text-muted-foreground">{item.why}</TableCell>
                             </TableRow>
                           );
