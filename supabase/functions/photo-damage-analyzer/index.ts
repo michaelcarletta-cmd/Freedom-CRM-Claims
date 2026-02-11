@@ -91,7 +91,8 @@ serve(async (req) => {
     }
 
     // Use signed URLs for up to 5 photos (no memory overhead)
-    for (const photo of photos.slice(0, 20)) {
+    // Limit to 10 photos to avoid AI gateway timeout
+    for (const photo of photos.slice(0, 10)) {
       try {
         const { data: signedData, error: signError } = await supabase.storage
           .from("claim-files")
@@ -190,8 +191,13 @@ serve(async (req) => {
       },
     };
 
+    // 120s timeout to avoid hanging on large requests
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000);
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
+      signal: controller.signal,
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
@@ -204,7 +210,8 @@ serve(async (req) => {
             role: "user",
             content: [
               { type: "text", text: `CLAIM DESCRIPTION:\n${claimDescription}` },
-              { type: "text", text: `PHOTO CAPTIONS:\n${captionLines.join("\n")}` },
+              { type: "text", text: `PHOTO CAPTIONS (all ${photos.length} photos):\n${captionLines.join("\n")}` },
+              { type: "text", text: `VISUAL EVIDENCE (${photoContent.length} of ${photos.length} photos attached — analyze ALL captions above even for photos not visually attached):` },
               ...photoContent,
             ],
           },
@@ -213,6 +220,8 @@ serve(async (req) => {
         tool_choice: { type: "function", function: { name: "report_damage_analysis" } },
       }),
     });
+
+    clearTimeout(timeout);
 
     if (!response.ok) {
       const errorText = await response.text();
