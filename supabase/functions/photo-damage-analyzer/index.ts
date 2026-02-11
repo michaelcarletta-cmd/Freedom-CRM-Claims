@@ -7,8 +7,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const BATCH_SIZE = 7;
-
 const PASS1_SYSTEM_PROMPT = `You are a property damage photo inspector.
 
 TASK: Create a PHOTO-BY-PHOTO damage inventory.
@@ -41,7 +39,6 @@ RULES:
 - Do NOT guess Xactimate selector codes.
 - Return ONLY valid JSON matching the schema.`;
 
-// Pass 1 tool schema - per-photo inventory
 const pass1ToolSchema = {
   type: "function",
   function: {
@@ -86,7 +83,6 @@ const pass1ToolSchema = {
   },
 };
 
-// Pass 2 tool schema - deduped/grouped output
 const pass2ToolSchema = {
   type: "function",
   function: {
@@ -163,7 +159,7 @@ const pass2ToolSchema = {
   },
 };
 
-async function callAI(apiKey: string, body: any, timeoutMs = 120000): Promise<any> {
+async function callAI(apiKey: string, body: any, timeoutMs = 90000): Promise<any> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -230,57 +226,45 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { claimId } = await req.json();
+    const body = await req.json();
+    const { claimId, mode = "batch", photoIds, pass1Data, claimDescription } = body;
+
     if (!claimId) throw new Error("claimId is required");
 
-    // Get claim description
-    const { data: claim, error: claimError } = await supabase
-      .from("claims")
-      .select("loss_description, loss_type, policyholder_address")
-      .eq("id", claimId)
-      .maybeSingle();
+    // =================== MODE: BATCH (Pass 1 - one batch of photos) ===================
+    if (mode === "batch") {
+      if (!photoIds || !Array.isArray(photoIds) || photoIds.length === 0) {
+        throw new Error("photoIds array is required for batch mode");
+      }
 
-    if (claimError || !claim) throw new Error("Claim not found");
+      // Get claim info if not provided
+      let desc = claimDescription;
+      if (!desc) {
+        const { data: claim } = await supabase
+          .from("claims")
+          .select("loss_description, loss_type, policyholder_address")
+          .eq("id", claimId)
+          .maybeSingle();
+        desc = [
+          claim?.loss_description || "No description",
+          claim?.loss_type ? `Loss type: ${claim.loss_type}` : null,
+          claim?.policyholder_address ? `Property: ${claim.policyholder_address}` : null,
+        ].filter(Boolean).join("\n");
+      }
 
-    // Get all photos
-    const { data: photos, error: photosError } = await supabase
-      .from("claim_photos")
-      .select("id, file_path, file_name, category, description, ai_analysis_summary, ai_material_type, ai_condition_rating")
-      .eq("claim_id", claimId)
-      .order("created_at", { ascending: false });
+      // Fetch photo records for this batch
+      const { data: photos, error: photosError } = await supabase
+        .from("claim_photos")
+        .select("id, file_path, file_name, category, description, ai_analysis_summary, ai_material_type, ai_condition_rating")
+        .in("id", photoIds);
 
-    if (photosError) throw new Error("Failed to fetch photos");
-    if (!photos || photos.length === 0) throw new Error("No photos found for this claim");
+      if (photosError) throw new Error("Failed to fetch photos");
 
-    const claimDescription = [
-      claim.loss_description || "No description",
-      claim.loss_type ? `Loss type: ${claim.loss_type}` : null,
-      claim.policyholder_address ? `Property: ${claim.policyholder_address}` : null,
-    ].filter(Boolean).join("\n");
-
-    // ============= PASS 1: Photo-by-photo inventory in batches =============
-    console.log(`Pass 1: Processing ${photos.length} photos in batches of ${BATCH_SIZE}`);
-
-    const allPhotoEntries: any[] = [];
-    const allNotes: string[] = [];
-    const processedPhotoIds = new Set<string>();
-
-    // Create batches
-    const batches: typeof photos[] = [];
-    for (let i = 0; i < photos.length; i += BATCH_SIZE) {
-      batches.push(photos.slice(i, i + BATCH_SIZE));
-    }
-
-    for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-      const batch = batches[batchIdx];
-      console.log(`Pass 1 batch ${batchIdx + 1}/${batches.length}: ${batch.length} photos`);
-
-      // Get signed URLs for this batch
       const batchContent: any[] = [];
       const batchCaptions: string[] = [];
       const batchPhotoIds: string[] = [];
 
-      for (const photo of batch) {
+      for (const photo of (photos || [])) {
         const caption = [
           photo.description || photo.category || "(no caption)",
           photo.ai_material_type ? `Material: ${photo.ai_material_type}` : null,
@@ -301,108 +285,90 @@ serve(async (req) => {
               type: "image_url",
               image_url: { url: signedData.signedUrl },
             });
-          } else {
-            console.error("Failed to sign URL for photo:", photo.id);
           }
         } catch (e) {
           console.error("Failed to create signed URL:", photo.id, e);
         }
       }
 
+      // Also add placeholder for any photoIds not found in DB
+      for (const pid of photoIds) {
+        if (!batchPhotoIds.includes(pid)) {
+          batchPhotoIds.push(pid);
+          batchCaptions.push(`photo_id="${pid}": (photo not found in database)`);
+        }
+      }
+
       if (batchContent.length === 0) {
-        console.warn(`Batch ${batchIdx + 1}: no signed URLs, creating placeholder entries`);
-        for (const pid of batchPhotoIds) {
-          allPhotoEntries.push({
+        // No images could be loaded, return placeholder entries
+        const placeholderPhotos = batchPhotoIds.map(pid => ({
+          photo_id: pid,
+          inferred_area: "Unknown",
+          items: [{ item: "Unable to access photo", damage: "N/A", action: "investigate", why: "Photo could not be loaded for analysis", severity: "minor", trade_category_code: "GEN", confidence: 0 }],
+          missing_photo_request: "Re-upload or re-run analysis",
+        }));
+        return new Response(JSON.stringify({ photos: placeholderPhotos, notes: ["No images could be loaded for this batch"] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const aiData = await callAI(LOVABLE_API_KEY, {
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: PASS1_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: `CLAIM: ${desc}\n\nPHOTO CAPTIONS (use photo_id in your response):\n${batchCaptions.join("\n")}\n\nYou MUST return one entry for each of these photo_ids: ${batchPhotoIds.join(", ")}` },
+              ...batchContent,
+            ],
+          },
+        ],
+        tools: [pass1ToolSchema],
+        tool_choice: { type: "function", function: { name: "report_photo_inventory" } },
+      });
+
+      const result = extractToolResult(aiData);
+
+      // Fill in missing photo_ids
+      const returnedIds = new Set((result.photos || []).map((p: any) => p.photo_id));
+      for (const pid of batchPhotoIds) {
+        if (!returnedIds.has(pid)) {
+          if (!result.photos) result.photos = [];
+          result.photos.push({
             photo_id: pid,
             inferred_area: "Unknown",
-            items: [{ item: "Unable to access photo", damage: "N/A", action: "investigate", why: "Photo could not be loaded for analysis", severity: "minor", trade_category_code: "GEN", confidence: 0 }],
-            missing_photo_request: "Re-upload or re-run analysis",
-          });
-          processedPhotoIds.add(pid);
-        }
-        continue;
-      }
-
-      try {
-        const aiData = await callAI(LOVABLE_API_KEY, {
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: PASS1_SYSTEM_PROMPT },
-            {
-              role: "user",
-              content: [
-                { type: "text", text: `CLAIM: ${claimDescription}\n\nPHOTO CAPTIONS (use photo_id in your response):\n${batchCaptions.join("\n")}\n\nYou MUST return one entry for each of these photo_ids: ${batchPhotoIds.join(", ")}` },
-                ...batchContent,
-              ],
-            },
-          ],
-          tools: [pass1ToolSchema],
-          tool_choice: { type: "function", function: { name: "report_photo_inventory" } },
-        });
-
-        const result = extractToolResult(aiData);
-
-        if (result.photos) {
-          for (const entry of result.photos) {
-            allPhotoEntries.push(entry);
-            processedPhotoIds.add(entry.photo_id);
-          }
-        }
-        if (result.notes) {
-          allNotes.push(...result.notes);
-        }
-      } catch (e: any) {
-        console.error(`Batch ${batchIdx + 1} failed:`, e);
-        // If rate limited or payment issue, throw immediately
-        if (e.status === 429 || e.status === 402) {
-          return new Response(JSON.stringify({ error: e.message }), {
-            status: e.status,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            items: [{ item: "Missing from batch output", damage: "N/A", action: "investigate", why: "Missing from batch output; rerun", severity: "minor", trade_category_code: "GEN", confidence: 0 }],
+            missing_photo_request: "Rerun analysis",
           });
         }
-        // Otherwise create placeholder entries for this batch
-        for (const pid of batchPhotoIds) {
-          if (!processedPhotoIds.has(pid)) {
-            allPhotoEntries.push({
-              photo_id: pid,
-              inferred_area: "Unknown",
-              items: [{ item: "Batch processing failed", damage: "N/A", action: "investigate", why: "AI batch failed; rerun analysis", severity: "minor", trade_category_code: "GEN", confidence: 0 }],
-              missing_photo_request: "Rerun analysis for this batch",
-            });
-            processedPhotoIds.add(pid);
-          }
-        }
-        allNotes.push(`Batch ${batchIdx + 1} failed: ${e.message || "Unknown error"}`);
       }
 
-      // Small delay between batches to avoid rate limiting
-      if (batchIdx < batches.length - 1) {
-        await new Promise(r => setTimeout(r, 1000));
-      }
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Fallback: create placeholder entries for any missing photos
-    for (const photo of photos) {
-      if (!processedPhotoIds.has(photo.id)) {
-        allPhotoEntries.push({
-          photo_id: photo.id,
-          inferred_area: "Unknown",
-          items: [{ item: "Missing from batch output", damage: "N/A", action: "investigate", why: "Missing from batch output; rerun", severity: "minor", trade_category_code: "GEN", confidence: 0 }],
-          missing_photo_request: "Rerun analysis",
-        });
+    // =================== MODE: DEDUPLICATE (Pass 2 - text only) ===================
+    if (mode === "deduplicate") {
+      if (!pass1Data) throw new Error("pass1Data is required for deduplicate mode");
+
+      let desc = claimDescription;
+      if (!desc) {
+        const { data: claim } = await supabase
+          .from("claims")
+          .select("loss_description, loss_type, policyholder_address")
+          .eq("id", claimId)
+          .maybeSingle();
+        desc = [
+          claim?.loss_description || "No description",
+          claim?.loss_type ? `Loss type: ${claim.loss_type}` : null,
+          claim?.policyholder_address ? `Property: ${claim.policyholder_address}` : null,
+        ].filter(Boolean).join("\n");
       }
-    }
 
-    const pass1Result = { photos: allPhotoEntries, notes: allNotes };
-
-    console.log(`Pass 1 complete: ${allPhotoEntries.length} photo entries, ${allPhotoEntries.reduce((sum, p) => sum + (p.items?.length || 0), 0)} total items`);
-
-    // ============= PASS 2: Deduplicate and group (text-only) =============
-    console.log("Pass 2: Deduplicating and grouping...");
-
-    let pass2Result;
-    try {
-      const pass1Summary = JSON.stringify(pass1Result, null, 1);
+      const pass1Summary = JSON.stringify(pass1Data, null, 1);
+      const totalItems = (pass1Data.photos || []).reduce((s: number, p: any) => s + (p.items?.length || 0), 0);
 
       const aiData = await callAI(LOVABLE_API_KEY, {
         model: "google/gemini-2.5-flash",
@@ -410,45 +376,56 @@ serve(async (req) => {
           { role: "system", content: PASS2_SYSTEM_PROMPT },
           {
             role: "user",
-            content: `CLAIM: ${claimDescription}\n\nRAW PHOTO-BY-PHOTO INVENTORY (${allPhotoEntries.length} photos, ${allPhotoEntries.reduce((s, p) => s + (p.items?.length || 0), 0)} items):\n\n${pass1Summary}`,
+            content: `CLAIM: ${desc}\n\nRAW PHOTO-BY-PHOTO INVENTORY (${(pass1Data.photos || []).length} photos, ${totalItems} items):\n\n${pass1Summary}`,
           },
         ],
         tools: [pass2ToolSchema],
         tool_choice: { type: "function", function: { name: "report_grouped_analysis" } },
-      }, 180000); // 3 min timeout for larger text
+      }, 120000);
 
-      pass2Result = extractToolResult(aiData);
-    } catch (e: any) {
-      console.error("Pass 2 failed:", e);
-      if (e.status === 429 || e.status === 402) {
-        return new Response(JSON.stringify({ error: e.message }), {
-          status: e.status,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      // Return pass1 only if pass2 fails
-      pass2Result = null;
+      const result = extractToolResult(aiData);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const finalResult = {
-      pass1_inventory: pass1Result,
-      ...(pass2Result || {}),
-      stats: {
-        total_photos: photos.length,
-        photos_processed: allPhotoEntries.length,
-        total_items_detected: allPhotoEntries.reduce((s, p) => s + (p.items?.length || 0), 0),
-        deduped_items: pass2Result?.damage_findings?.reduce((s: number, f: any) => s + (f.items?.length || 0), 0) || 0,
-      },
-    };
+    // =================== MODE: LIST (get photo IDs for a claim) ===================
+    if (mode === "list") {
+      const { data: photos, error: photosError } = await supabase
+        .from("claim_photos")
+        .select("id")
+        .eq("claim_id", claimId)
+        .order("created_at", { ascending: false });
 
-    return new Response(JSON.stringify(finalResult), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
+      if (photosError) throw new Error("Failed to fetch photos");
+
+      const { data: claim } = await supabase
+        .from("claims")
+        .select("loss_description, loss_type, policyholder_address")
+        .eq("id", claimId)
+        .maybeSingle();
+
+      const desc = [
+        claim?.loss_description || "No description",
+        claim?.loss_type ? `Loss type: ${claim.loss_type}` : null,
+        claim?.policyholder_address ? `Property: ${claim.policyholder_address}` : null,
+      ].filter(Boolean).join("\n");
+
+      return new Response(JSON.stringify({
+        photoIds: (photos || []).map(p => p.id),
+        claimDescription: desc,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    throw new Error(`Unknown mode: ${mode}`);
+  } catch (error: any) {
     console.error("photo-damage-analyzer error:", error);
+    const status = error.status || 500;
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: error.message || error instanceof Error ? error.message : "Unknown error" }),
+      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
