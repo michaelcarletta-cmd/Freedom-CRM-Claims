@@ -86,6 +86,62 @@ const pass1ToolSchema = {
   },
 };
 
+const ESTIMATE_SYSTEM_PROMPT = `You are a construction cost estimator for insurance property claims.
+
+TASK: Given a deduped damage inventory (items with repair methods) and the property location, produce a detailed cost estimate with material and labor costs.
+
+RULES:
+- Use regional pricing appropriate for the property location (state/city).
+- For each item provide: unit (SF, LF, EA, SQ, etc.), quantity estimate based on typical residential sizes if not specified, material_cost_per_unit, labor_cost_per_unit, and total.
+- Include O&P (Overhead & Profit) at 20% as a separate line item at the end.
+- Include a tax line item at the local tax rate for materials only.
+- Be realistic with quantities - use standard residential dimensions when exact measurements aren't available.
+- Group items by area, matching the input structure.
+- Include a brief note on any assumptions made about quantities.
+- Return ONLY valid JSON matching the schema.`;
+
+const estimateToolSchema = {
+  type: "function",
+  function: {
+    name: "report_cost_estimate",
+    description: "Report detailed cost estimate with material and labor breakdown",
+    parameters: {
+      type: "object",
+      properties: {
+        location_used: { type: "string", description: "The location used for regional pricing" },
+        price_date: { type: "string", description: "Date basis for pricing (e.g. Q1 2025)" },
+        line_items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              area: { type: "string" },
+              item: { type: "string" },
+              action: { type: "string" },
+              repair_method: { type: "string" },
+              unit: { type: "string" },
+              quantity: { type: "number" },
+              material_cost_per_unit: { type: "number" },
+              labor_cost_per_unit: { type: "number" },
+              total: { type: "number" },
+            },
+            required: ["area", "item", "action", "unit", "quantity", "material_cost_per_unit", "labor_cost_per_unit", "total"],
+          },
+        },
+        subtotal_materials: { type: "number" },
+        subtotal_labor: { type: "number" },
+        tax_rate: { type: "number" },
+        tax_amount: { type: "number" },
+        overhead_and_profit_pct: { type: "number" },
+        overhead_and_profit_amount: { type: "number" },
+        grand_total: { type: "number" },
+        assumptions: { type: "array", items: { type: "string" } },
+      },
+      required: ["line_items", "subtotal_materials", "subtotal_labor", "tax_amount", "overhead_and_profit_amount", "grand_total"],
+    },
+  },
+};
+
 const pass2ToolSchema = {
   type: "function",
   function: {
@@ -385,6 +441,50 @@ serve(async (req) => {
         ],
         tools: [pass2ToolSchema],
         tool_choice: { type: "function", function: { name: "report_grouped_analysis" } },
+      }, 120000);
+
+      const result = extractToolResult(aiData);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // =================== MODE: ESTIMATE (generate cost estimate from damage findings) ===================
+    if (mode === "estimate") {
+      const { damage_findings } = body;
+      if (!damage_findings || !Array.isArray(damage_findings)) {
+        throw new Error("damage_findings array is required for estimate mode");
+      }
+
+      // Get claim location
+      const { data: claim } = await supabase
+        .from("claims")
+        .select("loss_description, loss_type, policyholder_address, policyholder_city, policyholder_state, policyholder_zip")
+        .eq("id", claimId)
+        .maybeSingle();
+
+      const location = [
+        claim?.policyholder_city,
+        claim?.policyholder_state,
+        claim?.policyholder_zip,
+      ].filter(Boolean).join(", ") || claim?.policyholder_address || "Unknown US location";
+
+      const desc = [
+        claim?.loss_description || "No description",
+        claim?.loss_type ? `Loss type: ${claim.loss_type}` : null,
+      ].filter(Boolean).join("\n");
+
+      const aiData = await callAI(LOVABLE_API_KEY, {
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: ESTIMATE_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: `PROPERTY LOCATION: ${location}\n\nCLAIM: ${desc}\n\nDAMAGE INVENTORY TO ESTIMATE:\n${JSON.stringify(damage_findings, null, 1)}`,
+          },
+        ],
+        tools: [estimateToolSchema],
+        tool_choice: { type: "function", function: { name: "report_cost_estimate" } },
       }, 120000);
 
       const result = extractToolResult(aiData);

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Search, AlertTriangle, Wrench, Sparkles, HelpCircle, Trash2, ChevronDown, ChevronRight, Camera, BarChart3, XCircle } from "lucide-react";
+import { Loader2, Search, AlertTriangle, Wrench, Sparkles, HelpCircle, Trash2, ChevronDown, ChevronRight, Camera, BarChart3, XCircle, DollarSign } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,6 +54,32 @@ interface XactimatePlanItem {
   }[];
 }
 
+interface EstimateLineItem {
+  area: string;
+  item: string;
+  action: string;
+  repair_method?: string;
+  unit: string;
+  quantity: number;
+  material_cost_per_unit: number;
+  labor_cost_per_unit: number;
+  total: number;
+}
+
+interface EstimateResult {
+  location_used?: string;
+  price_date?: string;
+  line_items: EstimateLineItem[];
+  subtotal_materials: number;
+  subtotal_labor: number;
+  tax_rate?: number;
+  tax_amount: number;
+  overhead_and_profit_pct?: number;
+  overhead_and_profit_amount: number;
+  grand_total: number;
+  assumptions?: string[];
+}
+
 interface AnalysisResult {
   pass1_inventory: {
     photos: PhotoEntry[];
@@ -63,6 +89,7 @@ interface AnalysisResult {
   xactimate_plan?: XactimatePlanItem[];
   notes?: string[];
   questions?: string[];
+  estimate?: EstimateResult;
   stats: {
     total_photos: number;
     photos_processed: number;
@@ -89,11 +116,12 @@ const SEVERITY_CONFIG: Record<string, string> = {
 export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], currentPage = 1, totalPages = 1 }: { claimId: string; photoCount: number; pagePhotoIds?: string[]; currentPage?: number; totalPages?: number }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [activeTab, setActiveTab] = useState<"inventory" | "replace" | "xactimate">("replace");
+  const [activeTab, setActiveTab] = useState<"inventory" | "replace" | "xactimate" | "estimate">("replace");
   const [expandedPhotos, setExpandedPhotos] = useState<Set<string>>(new Set());
   const [progressText, setProgressText] = useState("");
   const [progressPct, setProgressPct] = useState(0);
   const cancelRef = useRef(false);
+  const [estimateLoading, setEstimateLoading] = useState(false);
   // Accumulate pass1 results across multiple page analyses
   const accumulatedPhotosRef = useRef<PhotoEntry[]>([]);
   const accumulatedNotesRef = useRef<string[]>([]);
@@ -255,6 +283,26 @@ export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], cu
     }
   };
 
+  const generateEstimate = async () => {
+    if (!result?.damage_findings) return;
+    setEstimateLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("photo-damage-analyzer", {
+        body: { claimId, mode: "estimate", damage_findings: result.damage_findings },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setResult(prev => prev ? { ...prev, estimate: data } : prev);
+      setActiveTab("estimate");
+      toast.success("Cost estimate generated!");
+    } catch (err: any) {
+      console.error("Estimate error:", err);
+      toast.error(err.message || "Failed to generate estimate");
+    } finally {
+      setEstimateLoading(false);
+    }
+  };
+
   const cancelAnalysis = () => {
     cancelRef.current = true;
     toast.info("Cancelling after current batch completes...");
@@ -361,6 +409,16 @@ export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], cu
             </Button>
             <Button variant={activeTab === "inventory" ? "default" : "ghost"} size="sm" onClick={() => setActiveTab("inventory")}>
               Photo-by-Photo ({stats.photos_processed})
+            </Button>
+            <Button
+              variant={activeTab === "estimate" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => result.estimate ? setActiveTab("estimate") : generateEstimate()}
+              disabled={estimateLoading || !result.damage_findings}
+              className="gap-1"
+            >
+              {estimateLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <DollarSign className="h-3 w-3" />}
+              {result.estimate ? "Estimate" : "Generate Estimate"}
             </Button>
           </div>
         </CardContent>
@@ -478,6 +536,108 @@ export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], cu
               </TableBody>
             </Table>
           </CardContent>
+        </Card>
+      )}
+
+      {/* Tab: Cost Estimate */}
+      {activeTab === "estimate" && result.estimate && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-primary" />
+                Cost Estimate
+              </CardTitle>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {result.estimate.location_used && <span>📍 {result.estimate.location_used}</span>}
+                {result.estimate.price_date && <span>• {result.estimate.price_date}</span>}
+                <Button variant="outline" size="sm" onClick={generateEstimate} disabled={estimateLoading} className="gap-1 ml-2">
+                  {estimateLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <DollarSign className="h-3 w-3" />}
+                  Re-estimate
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[120px]">Area</TableHead>
+                  <TableHead>Item</TableHead>
+                  <TableHead className="w-[70px]">Action</TableHead>
+                  <TableHead className="w-[50px] text-right">Qty</TableHead>
+                  <TableHead className="w-[50px] text-right">Unit</TableHead>
+                  <TableHead className="w-[90px] text-right">Material/Unit</TableHead>
+                  <TableHead className="w-[90px] text-right">Labor/Unit</TableHead>
+                  <TableHead className="w-[100px] text-right">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {result.estimate.line_items.map((item, idx) => {
+                  const config = ACTION_CONFIG[item.action] || ACTION_CONFIG.investigate;
+                  return (
+                    <TableRow key={idx}>
+                      <TableCell className="font-medium text-sm">{item.area}</TableCell>
+                      <TableCell className="text-sm">{item.item}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`gap-1 text-xs ${config.className}`}>
+                          {config.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-sm">{item.quantity}</TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">{item.unit}</TableCell>
+                      <TableCell className="text-right text-sm">${item.material_cost_per_unit.toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-sm">${item.labor_cost_per_unit.toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-sm font-medium">${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    </TableRow>
+                  );
+                })}
+                <TableRow className="border-t-2">
+                  <TableCell colSpan={5} />
+                  <TableCell className="text-right text-sm font-medium">Materials:</TableCell>
+                  <TableCell className="text-right text-sm font-medium" colSpan={2}>
+                    ${result.estimate.subtotal_materials.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell colSpan={5} />
+                  <TableCell className="text-right text-sm font-medium">Labor:</TableCell>
+                  <TableCell className="text-right text-sm font-medium" colSpan={2}>
+                    ${result.estimate.subtotal_labor.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell colSpan={5} />
+                  <TableCell className="text-right text-sm text-muted-foreground">Tax{result.estimate.tax_rate ? ` (${result.estimate.tax_rate}%)` : ""}:</TableCell>
+                  <TableCell className="text-right text-sm" colSpan={2}>
+                    ${result.estimate.tax_amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell colSpan={5} />
+                  <TableCell className="text-right text-sm text-muted-foreground">O&P{result.estimate.overhead_and_profit_pct ? ` (${result.estimate.overhead_and_profit_pct}%)` : ""}:</TableCell>
+                  <TableCell className="text-right text-sm" colSpan={2}>
+                    ${result.estimate.overhead_and_profit_amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </TableCell>
+                </TableRow>
+                <TableRow className="border-t-2 bg-muted/50">
+                  <TableCell colSpan={5} />
+                  <TableCell className="text-right font-bold text-base">Grand Total:</TableCell>
+                  <TableCell className="text-right font-bold text-base text-primary" colSpan={2}>
+                    ${result.estimate.grand_total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+          {result.estimate.assumptions && result.estimate.assumptions.length > 0 && (
+            <CardContent className="pt-3">
+              <p className="text-xs font-medium mb-1">Assumptions</p>
+              <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
+                {result.estimate.assumptions.map((a, i) => <li key={i}>{a}</li>)}
+              </ul>
+            </CardContent>
+          )}
         </Card>
       )}
 
