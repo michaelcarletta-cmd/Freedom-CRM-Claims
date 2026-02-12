@@ -553,11 +553,36 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
+      // Embed images as base64 so Word can display them without network access
+      toast({ title: "Embedding photos into Word document..." });
+      let htmlWithEmbeddedImages = data.html as string;
+      
+      for (const photo of photoUrls) {
+        if (photo.url) {
+          try {
+            const response = await fetch(photo.url);
+            const blob = await response.blob();
+            const base64 = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+            // Replace all occurrences of this signed URL with the base64 data URI
+            const escapedUrl = photo.url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+            htmlWithEmbeddedImages = htmlWithEmbeddedImages.split(escapedUrl).join(base64);
+            // Also replace unescaped version in case
+            htmlWithEmbeddedImages = htmlWithEmbeddedImages.split(photo.url).join(base64);
+          } catch (e) {
+            console.warn("Could not embed photo:", photo.fileName, e);
+          }
+        }
+      }
+
       // Wrap HTML in Word-compatible container so user can edit in Word
       const wordHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="UTF-8"><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
 <style>@page { size: 8.5in 11in; margin: 0.5in; } body { font-family: Calibri, sans-serif; } .page-break { page-break-after: always; }</style>
-</head><body>${data.html}</body></html>`;
+</head><body>${htmlWithEmbeddedImages}</body></html>`;
 
       const blob = new Blob([wordHtml], { type: "application/msword" });
       const url = URL.createObjectURL(blob);
