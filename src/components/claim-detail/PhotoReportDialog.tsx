@@ -515,20 +515,43 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       
       const selectedPhotoData = photos.filter(p => selectedPhotos.includes(p.id));
       
+      // Fetch claim data for header
+      const { data: claimData } = await supabase
+        .from("claims")
+        .select("claim_number, policyholder_name, policyholder_address, loss_date")
+        .eq("id", claimId)
+        .single();
+
+      // Convert all photos to base64 first
       const BATCH_SIZE = 8;
-      const photoUrls: { 
-        url: string; fileName: string; category: string; description: string; photoNumber: number;
+      const photoEntries: { 
+        base64: string; fileName: string; category: string; description: string; photoNumber: number;
         aiAnalysis?: { material_type: string | null; condition_rating: string | null; condition_notes: string | null; detected_damages: any; summary: string | null; } | null;
       }[] = [];
       
       for (let i = 0; i < selectedPhotoData.length; i += BATCH_SIZE) {
         const batch = selectedPhotoData.slice(i, i + BATCH_SIZE);
+        toast({ title: `Processing photos ${i + 1}-${Math.min(i + BATCH_SIZE, selectedPhotoData.length)} of ${selectedPhotoData.length}...` });
         const batchResults = await Promise.all(
           batch.map(async (photo, batchIdx) => {
             const path = photo.annotated_file_path || photo.file_path;
             const { data } = await supabase.storage.from("claim-files").createSignedUrl(path, 3600);
+            let base64 = "";
+            if (data?.signedUrl) {
+              try {
+                const response = await fetch(data.signedUrl);
+                const blob = await response.blob();
+                base64 = await new Promise<string>((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result as string);
+                  reader.readAsDataURL(blob);
+                });
+              } catch (e) {
+                console.warn("Could not fetch photo:", photo.file_name, e);
+              }
+            }
             return {
-              url: data?.signedUrl || "",
+              base64,
               fileName: photo.file_name,
               category: photo.category || "General",
               description: photo.description || "",
@@ -543,46 +566,68 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
             };
           })
         );
-        photoUrls.push(...batchResults);
+        photoEntries.push(...batchResults);
       }
 
-      const { data, error } = await supabase.functions.invoke("generate-photo-report-pdf", {
-        body: { claimId, reportTitle, photoUrls, companyBranding, includeAiContext: includeAIAnalysis },
-      });
+      const esc = (s: string | null | undefined) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const reportDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      const companyName = esc(companyBranding?.company_name || 'Freedom Adjustment');
 
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
-
-      // Embed images as base64 so Word can display them without network access
-      toast({ title: "Embedding photos into Word document..." });
-      let htmlWithEmbeddedImages = data.html as string;
-      
-      for (const photo of photoUrls) {
-        if (photo.url) {
-          try {
-            const response = await fetch(photo.url);
-            const blob = await response.blob();
-            const base64 = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.readAsDataURL(blob);
-            });
-            // Replace all occurrences of this signed URL with the base64 data URI
-            const escapedUrl = photo.url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-            htmlWithEmbeddedImages = htmlWithEmbeddedImages.split(escapedUrl).join(base64);
-            // Also replace unescaped version in case
-            htmlWithEmbeddedImages = htmlWithEmbeddedImages.split(photo.url).join(base64);
-          } catch (e) {
-            console.warn("Could not embed photo:", photo.fileName, e);
-          }
+      // Build photo cards HTML with base64 images directly
+      const photoCardsHtml = photoEntries.map((photo, idx) => {
+        let aiHtml = '';
+        if (photo.aiAnalysis) {
+          const a = photo.aiAnalysis;
+          const topDamages = (a.detected_damages || []).slice(0, 3);
+          aiHtml = `<div style="margin-top:8px;padding:10px;background:#f8fbff;border:1px solid #d4e5f7;border-left:3px solid #1976d2;border-radius:4px;">
+            <div style="font-size:11px;font-weight:600;color:#1565c0;text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #e3f2fd;">Damage Assessment</div>
+            ${a.material_type ? `<div style="font-size:11px;"><b>Material:</b> ${esc(a.material_type)}</div>` : ''}
+            ${a.condition_rating ? `<div style="font-size:11px;"><b>Condition:</b> <span style="font-weight:600;color:${a.condition_rating === 'poor' || a.condition_rating === 'failed' ? '#c62828' : a.condition_rating === 'fair' ? '#f57c00' : '#2e7d32'}">${esc(a.condition_rating.toUpperCase())}</span></div>` : ''}
+            ${a.condition_notes ? `<div style="font-size:11px;color:#444;margin-top:4px;">${esc(a.condition_notes)}</div>` : ''}
+            ${topDamages.length > 0 ? `<div style="margin-top:6px;"><div style="font-size:10px;font-weight:600;color:#c62828;">Detected Damages:</div>${topDamages.map((d: any) => `<div style="padding:3px 6px;margin:2px 0;background:#fff5f5;border:1px solid #ffcdd2;border-radius:4px;font-size:10px;"><b style="color:#c62828;">${esc(d.type)}</b> - ${esc(d.severity || 'N/A')}${d.location ? ` at ${esc(d.location)}` : ''}</div>`).join('')}</div>` : ''}
+            ${a.summary ? `<div style="margin-top:6px;padding:6px;background:#e3f2fd;border-radius:4px;font-size:11px;font-style:italic;color:#1565c0;">${esc(a.summary)}</div>` : ''}
+          </div>`;
         }
-      }
 
-      // Wrap HTML in Word-compatible container so user can edit in Word
+        return `${idx > 0 ? '<br clear="all" style="page-break-before:always;">' : ''}
+          <div style="page-break-inside:avoid;padding:10px 0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee;">
+              <span style="font-weight:600;color:#1e3a5f;font-size:14px;">Photo ${photo.photoNumber}</span>
+              <span style="font-size:11px;padding:3px 8px;background:#e3f2fd;color:#1976d2;border-radius:10px;">${esc(photo.category)}</span>
+            </div>
+            <div style="padding:10px 0;text-align:center;">
+              ${photo.base64 ? `<img src="${photo.base64}" alt="Photo ${photo.photoNumber}" style="max-width:100%;max-height:4.5in;" />` : '<p style="color:#999;">[Photo could not be loaded]</p>'}
+            </div>
+            <div style="padding:4px 0;">
+              <div style="font-weight:500;font-size:12px;">${esc(photo.fileName)}</div>
+              ${photo.description ? `<div style="font-size:12px;color:#666;">${esc(photo.description)}</div>` : ''}
+              ${aiHtml}
+            </div>
+          </div>`;
+      }).join('');
+
       const wordHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="UTF-8"><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
-<style>@page { size: 8.5in 11in; margin: 0.5in; } body { font-family: Calibri, sans-serif; } .page-break { page-break-after: always; }</style>
-</head><body>${htmlWithEmbeddedImages}</body></html>`;
+<style>@page { size: 8.5in 11in; margin: 0.5in; } body { font-family: Calibri, sans-serif; }</style>
+</head><body>
+<div style="background:linear-gradient(135deg,#1e3a5f,#2d5a87);color:white;padding:30px;text-align:center;">
+  <div style="font-size:16px;opacity:0.9;">${companyName}</div>
+  <h1 style="font-size:24px;margin:8px 0;">${esc(reportTitle)}</h1>
+  <div style="font-size:13px;opacity:0.8;">${reportDate}</div>
+</div>
+<table style="width:100%;border-bottom:1px solid #ddd;padding:10px 0;" cellpadding="8">
+  <tr>
+    <td><div style="font-size:10px;color:#666;text-transform:uppercase;">Claim Number</div><div style="font-size:14px;font-weight:600;">${esc(claimData?.claim_number)}</div></td>
+    <td><div style="font-size:10px;color:#666;text-transform:uppercase;">Policyholder</div><div style="font-size:14px;font-weight:600;">${esc(claimData?.policyholder_name)}</div></td>
+    <td><div style="font-size:10px;color:#666;text-transform:uppercase;">Property Address</div><div style="font-size:14px;font-weight:600;">${esc(claimData?.policyholder_address)}</div></td>
+    <td><div style="font-size:10px;color:#666;text-transform:uppercase;">Loss Date</div><div style="font-size:14px;font-weight:600;">${claimData?.loss_date ? new Date(claimData.loss_date).toLocaleDateString() : 'N/A'}</div></td>
+  </tr>
+</table>
+${photoCardsHtml}
+<div style="text-align:center;padding:15px;color:#666;font-size:11px;border-top:1px solid #ddd;">
+  Generated on ${reportDate} • ${photoEntries.length} photos included
+</div>
+</body></html>`;
 
       const blob = new Blob([wordHtml], { type: "application/msword" });
       const url = URL.createObjectURL(blob);
@@ -594,7 +639,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      toast({ title: "Word document downloaded - you can edit page layouts in Word" });
+      toast({ title: "Word document downloaded with embedded photos" });
     } catch (error: any) {
       console.error("Photo DOCX error:", error);
       toast({ title: "Error generating Word document", description: error.message || "Please try again", variant: "destructive" });
