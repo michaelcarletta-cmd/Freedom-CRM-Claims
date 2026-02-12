@@ -289,10 +289,20 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
     await analyzePhotoBatch(unanalyzedPhotos, "photos");
   };
 
+  // Re-analyze ALL photos (including already analyzed)
+  const reanalyzeAllPhotos = async () => {
+    await analyzePhotoBatch([...photos], "photos (re-analysis)");
+  };
+
   // Analyze only photos on the current page that haven't been analyzed
   const analyzeCurrentPage = async () => {
     const unanalyzedOnPage = paginatedPhotos.filter(p => !p.ai_analyzed_at);
     await analyzePhotoBatch(unanalyzedOnPage, `photos on this page`);
+  };
+
+  // Re-analyze all photos on current page (including already analyzed)
+  const reanalyzeCurrentPage = async () => {
+    await analyzePhotoBatch([...paginatedPhotos], `photos on this page (re-analysis)`);
   };
 
   const handleUpload = async () => {
@@ -653,6 +663,17 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
                 <Brain className="h-4 w-4 mr-2" />
                 Analyze All ({photos.filter(p => !p.ai_analyzed_at).length})
               </Button>
+              {photos.some(p => p.ai_analyzed_at) && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={reanalyzeAllPhotos}
+                  disabled={analyzingAll || photos.length === 0}
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Re-analyze All ({photos.length})
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => setReportDialogOpen(true)}>
                 <FileText className="h-4 w-4 mr-2" />
                 Generate Report
