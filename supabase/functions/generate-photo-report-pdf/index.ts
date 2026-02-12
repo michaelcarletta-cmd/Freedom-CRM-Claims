@@ -91,6 +91,7 @@ serve(async (req) => {
       }
 
       return `
+        ${idx > 0 ? '<div class="page-break"></div>' : ''}
         <div class="photo-card">
           <div class="photo-header">
             <span class="photo-number">Photo ${photo.photoNumber || idx + 1}</span>
@@ -149,13 +150,15 @@ serve(async (req) => {
     }
     .photo-card { 
       background: white; 
-      page-break-before: always;
       page-break-inside: avoid;
       break-inside: avoid;
-      padding: 20px 30px;
+      padding: 15px 30px;
     }
-    .photo-card:first-child {
-      page-break-before: avoid;
+    .page-break {
+      page-break-after: always;
+      break-after: always;
+      height: 0;
+      display: block;
     }
     .photo-header {
       display: flex;
@@ -181,7 +184,7 @@ serve(async (req) => {
     }
     .photo-container img { 
       max-width: 100%; 
-      max-height: 6in;
+      max-height: 4.5in;
       object-fit: contain;
       border-radius: 4px;
     }
@@ -312,8 +315,8 @@ serve(async (req) => {
     }
     @media print {
       body { background: white; }
-      .photo-card { page-break-before: always; page-break-inside: avoid; break-inside: avoid; }
-      .photo-card:first-child { page-break-before: avoid; }
+      .page-break { page-break-after: always; break-after: always; }
+      .photo-card { page-break-inside: avoid; break-inside: avoid; }
     }
   </style>
 </head>

@@ -481,9 +481,9 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
           margin: 0,
           filename: `${reportTitle.replace(/[^a-z0-9]/gi, "_")}_ai_referenced.pdf`,
           image: { type: "jpeg", quality: 0.85 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
+          html2canvas: { scale: 2, useCORS: true, logging: false, scrollY: 0 },
           jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
-          pagebreak: { mode: ['css'] },
+          pagebreak: { mode: ['css', 'legacy'], before: '.page-break' },
         } as any)
         .from(container)
         .save();
@@ -584,9 +584,9 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
           margin: 0,
           filename: `${reportTitle.replace(/[^a-z0-9]/gi, "_")}_photos.pdf`,
           image: { type: "jpeg", quality: 0.85 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
+          html2canvas: { scale: 2, useCORS: true, logging: false, scrollY: 0 },
           jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
-          pagebreak: { mode: ['css'] },
+          pagebreak: { mode: ['css', 'legacy'], before: '.page-break' },
         } as any)
         .from(container)
         .save();
