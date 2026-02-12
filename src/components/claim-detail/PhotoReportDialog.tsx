@@ -987,7 +987,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
                   </Button>
                 </div>
               ) : (
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {(generating || pollingForResult) && (
                     <Button variant="outline" onClick={checkForCompletedReport} disabled={pollingForResult}>
                       {pollingForResult ? (
@@ -1000,6 +1000,14 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
                       )}
                     </Button>
                   )}
+                  <Button variant="outline" onClick={generatePhotoPdf} disabled={generating || selectedPhotos.length === 0}>
+                    <Image className="h-4 w-4 mr-2" />
+                    {generating ? "Generating..." : "Photos PDF"}
+                  </Button>
+                  <Button variant="outline" onClick={generatePhotoDocx} disabled={generating || selectedPhotos.length === 0}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    {generating ? "Generating..." : "Photos Word (.doc)"}
+                  </Button>
                   <Button onClick={generateAIReport} disabled={generating || pollingForResult || selectedPhotos.length === 0}>
                     {generating ? (
                       <>
