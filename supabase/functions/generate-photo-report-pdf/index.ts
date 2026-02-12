@@ -149,15 +149,10 @@ serve(async (req) => {
     }
     .photo-card { 
       background: white; 
-      overflow: hidden; 
       page-break-before: always;
       page-break-inside: avoid;
       break-inside: avoid;
       padding: 20px 30px;
-      height: 100vh;
-      max-height: 10in;
-      display: flex;
-      flex-direction: column;
     }
     .photo-card:first-child {
       page-break-before: avoid;
@@ -168,7 +163,6 @@ serve(async (req) => {
       align-items: center;
       padding: 8px 0;
       border-bottom: 1px solid #eee;
-      flex-shrink: 0;
     }
     .photo-number { font-weight: 600; color: #1e3a5f; font-size: 14px; }
     .photo-category { 
@@ -183,19 +177,16 @@ serve(async (req) => {
       display: flex;
       justify-content: center;
       align-items: center;
-      flex: 1;
-      min-height: 0;
       overflow: hidden;
     }
     .photo-container img { 
       max-width: 100%; 
-      max-height: 100%;
+      max-height: 6in;
       object-fit: contain;
       border-radius: 4px;
     }
     .photo-details { 
       padding: 8px 0 0 0; 
-      flex-shrink: 0;
     }
     .photo-filename { font-weight: 500; font-size: 12px; margin-bottom: 2px; }
     .photo-description { font-size: 12px; color: #666; margin-bottom: 4px; }
@@ -269,8 +260,6 @@ serve(async (req) => {
       color: #444;
       line-height: 1.3;
       margin-bottom: 6px;
-      max-height: 3em;
-      overflow: hidden;
     }
     .ai-damages { margin-top: 6px; }
     .ai-damages-title {
@@ -312,8 +301,6 @@ serve(async (req) => {
       font-style: italic;
       color: #1565c0;
       line-height: 1.3;
-      max-height: 3em;
-      overflow: hidden;
     }
     .footer {
       text-align: center;
