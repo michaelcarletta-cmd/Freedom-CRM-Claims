@@ -48,11 +48,6 @@ interface PhotoReportDialogProps {
 
 const AI_REPORT_TYPES = [
   { 
-    id: "demand-package", 
-    name: "Complete Demand Package", 
-    description: "Full package with letterhead, table of contents, demand letter, valuation, and photo documentation" 
-  },
-  { 
     id: "full-report", 
     name: "Forensic Photo Report", 
     description: "Comprehensive forensic analysis with damage assessment and restoration requirements" 
@@ -61,16 +56,6 @@ const AI_REPORT_TYPES = [
     id: "damage-assessment", 
     name: "Damage Assessment", 
     description: "Focused analysis of visible damage with severity ratings and repair scope" 
-  },
-  { 
-    id: "proof-of-loss", 
-    name: "Proof of Loss Valuation", 
-    description: "Detailed scope of work with forensic documentation supporting claim value" 
-  },
-  { 
-    id: "final-demand", 
-    name: "Final Demand Letter", 
-    description: "Professional demand letter with state insurance code references and liability sections" 
   },
   { 
     id: "before-after", 
