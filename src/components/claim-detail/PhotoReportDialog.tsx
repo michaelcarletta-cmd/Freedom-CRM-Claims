@@ -503,6 +503,81 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
     }
   };
 
+  const generatePhotoDocx = async () => {
+    if (selectedPhotos.length === 0) {
+      toast({ title: "Please select at least one photo", variant: "destructive" });
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      toast({ title: "Generating Word document with photos..." });
+      
+      const selectedPhotoData = photos.filter(p => selectedPhotos.includes(p.id));
+      
+      const BATCH_SIZE = 8;
+      const photoUrls: { 
+        url: string; fileName: string; category: string; description: string; photoNumber: number;
+        aiAnalysis?: { material_type: string | null; condition_rating: string | null; condition_notes: string | null; detected_damages: any; summary: string | null; } | null;
+      }[] = [];
+      
+      for (let i = 0; i < selectedPhotoData.length; i += BATCH_SIZE) {
+        const batch = selectedPhotoData.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(async (photo, batchIdx) => {
+            const path = photo.annotated_file_path || photo.file_path;
+            const { data } = await supabase.storage.from("claim-files").createSignedUrl(path, 3600);
+            return {
+              url: data?.signedUrl || "",
+              fileName: photo.file_name,
+              category: photo.category || "General",
+              description: photo.description || "",
+              photoNumber: i + batchIdx + 1,
+              aiAnalysis: includeAIAnalysis && photo.ai_analyzed_at ? {
+                material_type: photo.ai_material_type || null,
+                condition_rating: photo.ai_condition_rating || null,
+                condition_notes: photo.ai_condition_notes || null,
+                detected_damages: photo.ai_detected_damages || [],
+                summary: photo.ai_analysis_summary || null,
+              } : null,
+            };
+          })
+        );
+        photoUrls.push(...batchResults);
+      }
+
+      const { data, error } = await supabase.functions.invoke("generate-photo-report-pdf", {
+        body: { claimId, reportTitle, photoUrls, companyBranding, includeAiContext: includeAIAnalysis },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      // Wrap HTML in Word-compatible container so user can edit in Word
+      const wordHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
+<style>@page { size: 8.5in 11in; margin: 0.5in; } body { font-family: Calibri, sans-serif; } .page-break { page-break-after: always; }</style>
+</head><body>${data.html}</body></html>`;
+
+      const blob = new Blob([wordHtml], { type: "application/msword" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${reportTitle.replace(/[^a-z0-9]/gi, "_")}_photos.doc`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({ title: "Word document downloaded - you can edit page layouts in Word" });
+    } catch (error: any) {
+      console.error("Photo DOCX error:", error);
+      toast({ title: "Error generating Word document", description: error.message || "Please try again", variant: "destructive" });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const generatePhotoPdf = async () => {
     if (selectedPhotos.length === 0) {
       toast({ title: "Please select at least one photo", variant: "destructive" });
@@ -900,7 +975,11 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
                   )}
                   <Button variant="outline" onClick={generatePhotoPdf} disabled={generating}>
                     <Image className="h-4 w-4 mr-2" />
-                    {generating ? "Generating..." : "All Selected Photos PDF"}
+                    {generating ? "Generating..." : "Photos PDF"}
+                  </Button>
+                  <Button variant="outline" onClick={generatePhotoDocx} disabled={generating}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    {generating ? "Generating..." : "Photos Word (.doc)"}
                   </Button>
                   <Button onClick={saveAIReport} disabled={generating}>
                     <FileText className="h-4 w-4 mr-2" />
