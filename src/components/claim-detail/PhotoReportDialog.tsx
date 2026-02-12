@@ -478,12 +478,13 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
 
       await html2pdf()
         .set({
-          margin: 0.25,
+          margin: [0.3, 0.25, 0.3, 0.25],
           filename: `${reportTitle.replace(/[^a-z0-9]/gi, "_")}_ai_referenced.pdf`,
           image: { type: "jpeg", quality: 0.85 },
           html2canvas: { scale: 1.5, useCORS: true, logging: false },
           jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
-        })
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'], before: '.photo-card' },
+        } as any)
         .from(container)
         .save();
 
@@ -580,12 +581,13 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
 
       await html2pdf()
         .set({
-          margin: 0.25,
+          margin: [0.3, 0.25, 0.3, 0.25],
           filename: `${reportTitle.replace(/[^a-z0-9]/gi, "_")}_photos.pdf`,
           image: { type: "jpeg", quality: 0.85 },
           html2canvas: { scale: 1.5, useCORS: true, logging: false },
           jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
-        })
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'], before: '.photo-card' },
+        } as any)
         .from(container)
         .save();
 

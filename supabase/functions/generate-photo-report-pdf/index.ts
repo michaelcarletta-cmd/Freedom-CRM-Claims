@@ -55,8 +55,7 @@ serve(async (req) => {
         aiAnalysisHtml = `
           <div class="ai-analysis">
             <div class="ai-header">
-              <span class="ai-icon">🧠</span>
-              <span class="ai-title">Darwin AI Analysis</span>
+              <span class="ai-title">Damage Assessment</span>
             </div>
             <div class="ai-grid">
               ${analysis.material_type ? `<div class="ai-item"><span class="ai-label">Material:</span> <span class="ai-value">${escapeHtml(analysis.material_type)}</span></div>` : ''}
@@ -83,7 +82,7 @@ serve(async (req) => {
         // Fallback for legacy aiContext format
         aiAnalysisHtml = `
           <div class="ai-context">
-            <span class="ai-label">AI Analysis:</span>
+            <span class="ai-label">Damage Assessment:</span>
             <span class="ai-text">${escapeHtml(photo.aiContext)}</span>
           </div>
         `;
@@ -145,9 +144,6 @@ serve(async (req) => {
     .claim-info-value { font-size: 16px; font-weight: 600; }
     .photos-container { 
       padding: 30px;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-      gap: 20px;
     }
     .photo-card { 
       background: white; 
@@ -155,6 +151,8 @@ serve(async (req) => {
       overflow: hidden; 
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
       break-inside: avoid;
+      page-break-inside: avoid;
+      margin-bottom: 20px;
     }
     .photo-header {
       display: flex;
@@ -224,7 +222,6 @@ serve(async (req) => {
       padding-bottom: 8px;
       border-bottom: 1px solid #e3f2fd;
     }
-    .ai-icon { font-size: 16px; }
     .ai-title {
       font-size: 13px;
       font-weight: 600;
@@ -332,8 +329,7 @@ serve(async (req) => {
     }
     @media print {
       body { background: white; }
-      .photo-card { page-break-inside: avoid; }
-      .photos-container { grid-template-columns: 1fr; }
+      .photo-card { page-break-inside: avoid; break-inside: avoid; }
     }
   </style>
 </head>
