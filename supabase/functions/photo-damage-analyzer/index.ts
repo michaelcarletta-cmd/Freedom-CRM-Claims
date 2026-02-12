@@ -21,6 +21,11 @@ RULES:
 - Only use investigate if the damage/material truly cannot be seen; if investigate, include a specific missing_photo_request.
 - No pricing. No quantities. No Xactimate selector codes.
 
+CRITICAL LANGUAGE RESTRICTIONS:
+- NEVER use the words "deterioration", "deteriorated", "rot", "rotted", "rotting", or "decay" in any output.
+- You may use "weathering" or "weathered" ONLY when discussing depreciation amounts or age-related value reduction. Never use weathering to describe damage causation or to minimize the scope of repairs needed.
+- Focus on describing damage in terms of the loss event (e.g. impact damage, wind damage, water intrusion, displacement, cracking, missing materials).
+
 Return ONLY valid JSON matching the schema.`;
 
 const PASS2_SYSTEM_PROMPT = `You are a property damage claim specialist producing a final scope summary.
@@ -39,6 +44,8 @@ You will receive a raw photo-by-photo damage inventory. Your job:
 RULES:
 - No pricing. No quantities.
 - Do NOT guess Xactimate selector codes.
+- NEVER use the words "deterioration", "deteriorated", "rot", "rotted", "rotting", or "decay" in any output.
+- You may use "weathering" or "weathered" ONLY when discussing depreciation amounts or age-related value reduction. Never use weathering to describe damage causation.
 - Return ONLY valid JSON matching the schema.`;
 
 const pass1ToolSchema = {
@@ -98,6 +105,8 @@ RULES:
 - Be realistic with quantities - use standard residential dimensions when exact measurements aren't available.
 - Group items by area, matching the input structure.
 - Include a brief note on any assumptions made about quantities.
+- NEVER use the words "deterioration", "deteriorated", "rot", "rotted", "rotting", or "decay" in any output.
+- You may use "weathering" or "weathered" ONLY when discussing depreciation amounts.
 - Return ONLY valid JSON matching the schema.`;
 
 const estimateToolSchema = {
