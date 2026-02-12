@@ -169,7 +169,20 @@ async function processBatch(
     throw new Error(`AI API error: ${response.status}`);
   }
 
-  const result = await response.json();
+  const responseText = await response.text();
+  let result;
+  try {
+    result = JSON.parse(responseText);
+  } catch (parseError) {
+    console.error(`Batch ${batchNumber} JSON parse failed, response length: ${responseText.length}, first 200 chars:`, responseText.substring(0, 200));
+    // Try to extract partial content if possible
+    const contentMatch = responseText.match(/"content"\s*:\s*"([\s\S]*?)(?:"|$)/);
+    if (contentMatch) {
+      console.log(`Batch ${batchNumber}: extracted partial content (${contentMatch[1].length} chars)`);
+      return contentMatch[1];
+    }
+    throw new Error(`Batch ${batchNumber} returned invalid JSON (${responseText.length} bytes)`);
+  }
   return result.choices?.[0]?.message?.content || '';
 }
 
@@ -733,21 +746,29 @@ ${claimContext}
       const batchImages = allImageContents.slice(startIdx, endIdx);
       const batchDescriptions = allPhotoDescriptions.slice(startIdx, endIdx);
       
-      try {
-        const batchResult = await processBatch(
-          batchImages,
-          batchDescriptions,
-          i + 1,
-          totalBatches,
-          systemPrompt,
-          userPrompt,
-          LOVABLE_API_KEY
-        );
-        batchResults.push(batchResult);
-        console.log(`Batch ${i + 1}/${totalBatches} complete, result length: ${batchResult.length}`);
-      } catch (error) {
-        console.error(`Batch ${i + 1} failed:`, error);
-        // Continue with other batches
+      let batchResult: string | null = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          batchResult = await processBatch(
+            batchImages,
+            batchDescriptions,
+            i + 1,
+            totalBatches,
+            systemPrompt,
+            userPrompt,
+            LOVABLE_API_KEY
+          );
+          batchResults.push(batchResult);
+          console.log(`Batch ${i + 1}/${totalBatches} complete, result length: ${batchResult.length}`);
+          break;
+        } catch (error) {
+          console.error(`Batch ${i + 1} attempt ${attempt + 1} failed:`, error);
+          if (attempt === 0) {
+            console.log(`Retrying batch ${i + 1}...`);
+            await new Promise(r => setTimeout(r, 2000));
+          }
+          // Continue with other batches after final attempt
+        }
       }
     }
 
