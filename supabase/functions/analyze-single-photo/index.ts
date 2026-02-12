@@ -28,18 +28,23 @@ DAMAGE TYPES TO DETECT (look for ALL):
 - REPAIR ATTEMPTS: Flex Seal, roof cement, caulk, patches, tarps, tape (indicates prior damage)
 - Hail damage: bruising, dimples, granule loss, dents, craters, soft spots
 - Wind damage: lifted/creased/torn/missing shingles, exposed underlayment, displaced materials
-- Water damage: staining, warping, swelling, mold, water lines, rot
+- Water damage: staining, warping, swelling, mold, water lines
 - Storm damage: debris impact, punctures, structural displacement
-- Deterioration: curling, cracking, blistering, moss/algae, oxidation, rust
+- Age-related wear: curling, cracking, blistering, moss/algae, oxidation, rust
 
 CONDITION RATINGS (BE CONSERVATIVE):
 - Excellent: Factory-new appearance, zero wear or damage (RARE in claim photos)
 - Good: Minor wear only, absolutely NO damage indicators (USE SPARINGLY)
 - Fair: Some wear or very minor damage, functional but showing age
-- Poor: Visible damage, deterioration, repairs needed, any DIY fix attempts
+- Poor: Visible damage, repairs needed, any DIY fix attempts
 - Failed: Missing materials, beyond repair, active leaks, structural compromise
 
 IMPORTANT: If you see Flex Seal, patches, missing shingles, or any repair attempt, the condition is AT MINIMUM "poor" and likely "failed". These are not cosmetic - they indicate functional failure.
+
+CRITICAL LANGUAGE RESTRICTIONS:
+- NEVER use the words "deterioration", "deteriorated", "rot", "rotted", "rotting", or "decay" in any output.
+- You may use "weathering" or "weathered" ONLY when discussing depreciation amounts or age-related value reduction. Never use weathering to describe damage causation or to minimize the scope of repairs needed.
+- Describe age-related conditions using terms like "wear", "aging", "age-related wear" instead.
 
 Provide your analysis in a structured JSON format.`;
 
