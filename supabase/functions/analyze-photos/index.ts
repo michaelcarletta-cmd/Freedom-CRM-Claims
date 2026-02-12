@@ -143,7 +143,8 @@ async function processBatch(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-pro",
+      model: "google/gemini-2.5-flash",
+      max_tokens: 8192,
       messages: [
         { role: "system", content: systemPrompt },
         {
@@ -158,7 +159,8 @@ async function processBatch(
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
+    let errorText = '';
+    try { errorText = await response.text(); } catch (_) { errorText = 'Could not read error body'; }
     console.error(`Batch ${batchNumber} failed:`, response.status, errorText);
     if (response.status === 429) {
       throw new Error(`Rate limit exceeded. Please try again later.`);
@@ -169,13 +171,19 @@ async function processBatch(
     throw new Error(`AI API error: ${response.status}`);
   }
 
-  const responseText = await response.text();
+  let responseText = '';
+  try {
+    responseText = await response.text();
+  } catch (bodyError) {
+    console.error(`Batch ${batchNumber} body read failed:`, bodyError);
+    throw new Error(`Batch ${batchNumber} response body truncated`);
+  }
+
   let result;
   try {
     result = JSON.parse(responseText);
   } catch (parseError) {
-    console.error(`Batch ${batchNumber} JSON parse failed, response length: ${responseText.length}, first 200 chars:`, responseText.substring(0, 200));
-    // Try to extract partial content if possible
+    console.error(`Batch ${batchNumber} JSON parse failed, length: ${responseText.length}, first 200:`, responseText.substring(0, 200));
     const contentMatch = responseText.match(/"content"\s*:\s*"([\s\S]*?)(?:"|$)/);
     if (contentMatch) {
       console.log(`Batch ${batchNumber}: extracted partial content (${contentMatch[1].length} chars)`);
