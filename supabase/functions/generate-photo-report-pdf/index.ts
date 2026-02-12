@@ -152,7 +152,11 @@ serve(async (req) => {
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
       break-inside: avoid;
       page-break-inside: avoid;
-      margin-bottom: 20px;
+      page-break-before: always;
+      margin-bottom: 0;
+    }
+    .photo-card:first-child {
+      page-break-before: avoid;
     }
     .photo-header {
       display: flex;
@@ -329,7 +333,9 @@ serve(async (req) => {
     }
     @media print {
       body { background: white; }
-      .photo-card { page-break-inside: avoid; break-inside: avoid; }
+      .photo-card { page-break-inside: avoid; break-inside: avoid; page-break-before: always; }
+      .photo-card:first-child { page-break-before: avoid; }
+    }
     }
   </style>
 </head>
