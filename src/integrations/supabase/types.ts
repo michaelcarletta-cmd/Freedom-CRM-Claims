@@ -134,6 +134,7 @@ export type Database = {
           content: string
           created_at: string
           document_id: string
+          embedding: string | null
           id: string
           metadata: Json | null
         }
@@ -142,6 +143,7 @@ export type Database = {
           content: string
           created_at?: string
           document_id: string
+          embedding?: string | null
           id?: string
           metadata?: Json | null
         }
@@ -150,6 +152,7 @@ export type Database = {
           content?: string
           created_at?: string
           document_id?: string
+          embedding?: string | null
           id?: string
           metadata?: Json | null
         }
@@ -5632,6 +5635,23 @@ export type Database = {
           p_record_type: string
         }
         Returns: string
+      }
+      match_knowledge_chunks: {
+        Args: {
+          filter_category?: string
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          chunk_index: number
+          content: string
+          doc_category: string
+          doc_file_name: string
+          document_id: string
+          id: string
+          metadata: Json
+          similarity: number
+        }[]
       }
       register_session: {
         Args: {

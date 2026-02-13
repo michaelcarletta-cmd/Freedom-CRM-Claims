@@ -243,125 +243,169 @@ async function analyzeDocument(fileUrl: string, fileName: string): Promise<strin
   }
 }
 
-// Search knowledge base for relevant chunks with diversity and logging
+// Generate query embedding via the generate-embeddings edge function
+async function getQueryEmbedding(question: string): Promise<number[] | null> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/generate-embeddings`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: question }),
+    });
+    
+    if (!response.ok) {
+      console.error('[KB Retrieval] Failed to generate query embedding:', response.status);
+      return null;
+    }
+    
+    const data = await response.json();
+    return data.embedding || null;
+  } catch (error) {
+    console.error('[KB Retrieval] Embedding generation error:', error);
+    return null;
+  }
+}
+
+// Search knowledge base using hybrid search (embedding + keyword)
 async function searchKnowledgeBase(supabase: any, question: string, category?: string): Promise<string> {
   try {
-    const MAX_CHUNKS_PER_DOC = 3; // Prevent dominant document bias
-    const TOP_K = 10; // Return top 10 diverse results
+    const MAX_CHUNKS_PER_DOC = 3;
+    const TOP_K = 10;
     
-    // Fetch chunks — use a larger pool for better diversity
-    let query = supabase
-      .from("ai_knowledge_chunks")
-      .select(`
-        content,
-        metadata,
-        document_id,
-        ai_knowledge_documents!inner(category, file_name, status)
-      `)
-      .eq("ai_knowledge_documents.status", "completed");
-
-    if (category) {
-      query = query.eq("ai_knowledge_documents.category", category);
+    // === STEP 1: Semantic search via embeddings ===
+    const queryEmbedding = await getQueryEmbedding(question);
+    
+    let semanticResults: any[] = [];
+    if (queryEmbedding) {
+      const { data: embeddingResults, error: embError } = await supabase.rpc(
+        'match_knowledge_chunks',
+        {
+          query_embedding: queryEmbedding,
+          match_count: 30,
+          filter_category: category || null,
+        }
+      );
+      
+      if (embError) {
+        console.error('[KB Retrieval] Semantic search error:', embError.message);
+      } else {
+        semanticResults = (embeddingResults || []).map((r: any) => ({
+          id: r.id,
+          content: r.content,
+          metadata: r.metadata,
+          document_id: r.document_id,
+          chunk_index: r.chunk_index,
+          semantic_score: r.similarity,
+          doc_file_name: r.doc_file_name,
+          doc_category: r.doc_category,
+        }));
+        console.log(`[KB Retrieval] Semantic search returned ${semanticResults.length} results`);
+      }
+    } else {
+      console.log('[KB Retrieval] No embedding available, falling back to keyword-only search');
     }
-
-    const { data: chunks, error } = await query.limit(500);
-
-    if (error || !chunks || chunks.length === 0) {
-      console.log("[KB Retrieval] No knowledge base chunks found");
-      return "";
+    
+    // === STEP 2: Keyword scoring (lightweight fallback / hybrid boost) ===
+    // Fetch chunks for keyword scoring
+    let keywordPool: any[] = [];
+    if (semanticResults.length < TOP_K) {
+      let query = supabase
+        .from("ai_knowledge_chunks")
+        .select(`content, metadata, document_id, ai_knowledge_documents!inner(category, file_name, status)`)
+        .eq("ai_knowledge_documents.status", "completed");
+      if (category) {
+        query = query.eq("ai_knowledge_documents.category", category);
+      }
+      const { data: chunks } = await query.limit(500);
+      keywordPool = chunks || [];
     }
-
-    // Count unique documents
-    const uniqueDocs = new Set(chunks.map((c: any) => c.document_id));
-    console.log(`[KB Retrieval] Pool: ${chunks.length} chunks from ${uniqueDocs.size} documents`);
-
+    
     const questionLower = question.toLowerCase();
     const questionWords = questionLower
       .split(/\s+/)
-      .filter(w => w.length >= 2)
-      .map(w => w.replace(/[^a-z0-9&]/g, ''))
-      .filter(w => w.length >= 2);
+      .filter((w: string) => w.length >= 2)
+      .map((w: string) => w.replace(/[^a-z0-9&]/g, ''))
+      .filter((w: string) => w.length >= 2);
     
     const importantTerms = [
       'depreciation', 'acv', 'rcv', 'actual cash value', 'replacement cost',
       'ordinance', 'law', 'code', 'compliance', 'deductible', 'coverage',
-      'policy', 'claim', 'adjuster', 'supplement', 'denial', 'settlement',
-      'recoverable', 'non-recoverable', 'dwelling', 'roofing', 'damage',
-      'wind', 'hail', 'storm', 'inspection', 'estimate', 'xactimate',
-      'framing', 'shingle', 'flashing', 'underlayment', 'ventilation',
-      'moisture', 'mold', 'leak', 'structural', 'insulation'
+      'policy', 'supplement', 'denial', 'settlement', 'recoverable',
+      'non-recoverable', 'dwelling', 'roofing', 'damage', 'wind', 'hail',
+      'storm', 'inspection', 'estimate', 'xactimate'
     ];
     
     const matchedTerms = importantTerms.filter(term => questionLower.includes(term));
-    const isAcvQuestion = /\bacv\b|actual cash value|code upgrade|ordinance and law|ordinance & law/i.test(questionLower);
     
-    const scoredChunks = chunks.map((chunk: any) => {
+    // Score keyword pool
+    const keywordScored = keywordPool.map((chunk: any) => {
       const contentLower = chunk.content.toLowerCase();
-      const sourceName = (chunk.ai_knowledge_documents?.file_name || '').toLowerCase();
-      const docCategory = (chunk.ai_knowledge_documents?.category || '').toLowerCase();
-      const docId = chunk.document_id;
-      const isFromAcvAudio = sourceName.includes('acv and code upgrade');
-      const isFromAudioRecording = isFromAcvAudio || (docCategory === 'building-codes' && sourceName.includes('acv'));
-      
       let score = 0;
-      
-      // Word-level scoring
-      questionWords.forEach(word => {
+      questionWords.forEach((word: string) => {
         if (contentLower.includes(word)) {
           score += 1;
-          if (importantTerms.includes(word)) {
-            score += 2;
-          }
+          if (importantTerms.includes(word)) score += 2;
         }
       });
-      
-      // Phrase-level scoring
       matchedTerms.forEach(term => {
-        if (contentLower.includes(term)) {
-          score += 3;
-        }
+        if (contentLower.includes(term)) score += 3;
       });
-      
-      // Exact phrase matches in quotes
-      const phrases = questionLower.match(/["']([^"']+)["']/g);
-      if (phrases) {
-        phrases.forEach(phrase => {
-          const cleanPhrase = phrase.replace(/["']/g, '');
-          if (contentLower.includes(cleanPhrase)) {
-            score += 5;
-          }
+      return {
+        ...chunk,
+        keyword_score: score,
+        doc_file_name: chunk.ai_knowledge_documents?.file_name || 'Unknown',
+        doc_category: chunk.ai_knowledge_documents?.category || 'General',
+      };
+    }).filter((c: any) => c.keyword_score > 0);
+    
+    // === STEP 3: Merge and deduplicate ===
+    const chunkMap = new Map<string, any>();
+    
+    // Add semantic results (normalized score 0-1)
+    for (const r of semanticResults) {
+      chunkMap.set(r.id, {
+        ...r,
+        hybrid_score: (r.semantic_score || 0) * 0.7, // 70% weight for semantic
+        keyword_score: 0,
+        semantic_score: r.semantic_score || 0,
+      });
+    }
+    
+    // Merge keyword results
+    const maxKeyword = Math.max(...keywordScored.map((c: any) => c.keyword_score), 1);
+    for (const r of keywordScored) {
+      const normalizedKw = r.keyword_score / maxKeyword;
+      const existing = chunkMap.get(r.id);
+      if (existing) {
+        existing.keyword_score = normalizedKw;
+        existing.hybrid_score = (existing.semantic_score * 0.7) + (normalizedKw * 0.3);
+      } else {
+        chunkMap.set(r.id || `kw-${r.document_id}-${r.chunk_index}`, {
+          ...r,
+          hybrid_score: normalizedKw * 0.3, // keyword-only gets 30% weight
+          keyword_score: normalizedKw,
+          semantic_score: 0,
         });
       }
-      
-      // Boost for ACV-specific questions
-      if (isAcvQuestion && isFromAudioRecording) {
-        score += 30;
-      }
-      
-      // Small recency boost based on metadata
-      const chunkCategory = (chunk.metadata as any)?.category || '';
-      if (category && chunkCategory === category) {
-        score += 1;
-      }
-      
-      return { ...chunk, score, sourceName, docCategory, docId, isFromAudioRecording };
-    }).filter((c: any) => c.score > 0);
+    }
     
-    // Sort by score descending
-    scoredChunks.sort((a: any, b: any) => b.score - a.score);
+    // Sort by hybrid score
+    const allResults = Array.from(chunkMap.values());
+    allResults.sort((a, b) => b.hybrid_score - a.hybrid_score);
     
-    // Apply per-document diversity cap
+    // === STEP 4: Per-document diversity cap ===
     const docChunkCounts: Record<string, number> = {};
     const diverseChunks: any[] = [];
     
-    for (const chunk of scoredChunks) {
-      const docId = chunk.docId;
+    for (const chunk of allResults) {
+      const docId = chunk.document_id;
       const currentCount = docChunkCounts[docId] || 0;
-      
-      // Allow ACV audio to bypass cap for ACV questions
-      const maxForDoc = (isAcvQuestion && chunk.isFromAudioRecording) ? 6 : MAX_CHUNKS_PER_DOC;
-      
-      if (currentCount < maxForDoc) {
+      if (currentCount < MAX_CHUNKS_PER_DOC) {
         diverseChunks.push(chunk);
         docChunkCounts[docId] = currentCount + 1;
         if (diverseChunks.length >= TOP_K) break;
@@ -369,23 +413,25 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
     }
 
     // === RETRIEVAL LOGGING ===
-    const docScoreSummary: Record<string, { name: string; chunks: number; topScore: number }> = {};
+    const docScoreSummary: Record<string, { name: string; chunks: number; topHybrid: number; topSemantic: number; topKeyword: number }> = {};
     for (const chunk of diverseChunks) {
-      const name = chunk.ai_knowledge_documents?.file_name || 'Unknown';
-      if (!docScoreSummary[chunk.docId]) {
-        docScoreSummary[chunk.docId] = { name, chunks: 0, topScore: 0 };
+      const name = chunk.doc_file_name || 'Unknown';
+      if (!docScoreSummary[chunk.document_id]) {
+        docScoreSummary[chunk.document_id] = { name, chunks: 0, topHybrid: 0, topSemantic: 0, topKeyword: 0 };
       }
-      docScoreSummary[chunk.docId].chunks++;
-      docScoreSummary[chunk.docId].topScore = Math.max(docScoreSummary[chunk.docId].topScore, chunk.score);
+      docScoreSummary[chunk.document_id].chunks++;
+      docScoreSummary[chunk.document_id].topHybrid = Math.max(docScoreSummary[chunk.document_id].topHybrid, chunk.hybrid_score);
+      docScoreSummary[chunk.document_id].topSemantic = Math.max(docScoreSummary[chunk.document_id].topSemantic, chunk.semantic_score);
+      docScoreSummary[chunk.document_id].topKeyword = Math.max(docScoreSummary[chunk.document_id].topKeyword, chunk.keyword_score);
     }
     
     console.log(`[KB Retrieval] Query: "${question.substring(0, 80)}..."`);
-    console.log(`[KB Retrieval] Scored ${scoredChunks.length} matching chunks → selected ${diverseChunks.length} diverse chunks`);
+    console.log(`[KB Retrieval] Mode: ${queryEmbedding ? 'HYBRID (semantic+keyword)' : 'KEYWORD-ONLY (no embedding)'}`);
+    console.log(`[KB Retrieval] Total candidates: ${allResults.length} → selected ${diverseChunks.length} diverse chunks`);
     console.log(`[KB Retrieval] Document distribution:`);
-    for (const [docId, info] of Object.entries(docScoreSummary)) {
-      console.log(`  - ${info.name}: ${info.chunks} chunks, top score: ${info.topScore}`);
+    for (const [, info] of Object.entries(docScoreSummary)) {
+      console.log(`  - ${info.name}: ${info.chunks} chunks, hybrid=${info.topHybrid.toFixed(3)}, semantic=${info.topSemantic.toFixed(3)}, keyword=${info.topKeyword.toFixed(3)}`);
     }
-    console.log(`[KB Retrieval] Scores: [${diverseChunks.map((c: any) => c.score).join(', ')}]`);
     // === END RETRIEVAL LOGGING ===
 
     if (diverseChunks.length === 0) {
@@ -398,9 +444,9 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
     knowledgeContext += "When answering, explicitly mention that this comes from the user's uploaded training materials.\n\n";
     
     diverseChunks.forEach((chunk: any, i: number) => {
-      const source = chunk.ai_knowledge_documents?.file_name || "Unknown source";
-      const docCategory = chunk.ai_knowledge_documents?.category || "General";
-      knowledgeContext += `--- Source ${i + 1}: ${source} (${docCategory}, score: ${chunk.score}) ---\n${chunk.content}\n\n`;
+      const source = chunk.doc_file_name || "Unknown source";
+      const docCategory = chunk.doc_category || "General";
+      knowledgeContext += `--- Source ${i + 1}: ${source} (${docCategory}, hybrid=${chunk.hybrid_score.toFixed(3)}) ---\n${chunk.content}\n\n`;
     });
     
     knowledgeContext += "=== END KNOWLEDGE BASE CONTENT ===\n";
