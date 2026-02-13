@@ -63,9 +63,7 @@ serve(async (req) => {
             </div>
             <div class="ai-grid">
               ${analysis.material_type ? `<div class="ai-item"><span class="ai-label">Material:</span> <span class="ai-value">${escapeHtml(analysis.material_type)}</span></div>` : ''}
-              ${analysis.condition_rating ? `<div class="ai-item"><span class="ai-label">Condition:</span> <span class="ai-value ai-condition-${escapeHtml(analysis.condition_rating)}">${escapeHtml(analysis.condition_rating.toUpperCase())}</span></div>` : ''}
             </div>
-            ${analysis.condition_notes ? `<div class="ai-notes">${escapeHtml(analysis.condition_notes)}</div>` : ''}
             ${topDamages.length > 0 ? `
               <div class="ai-damages">
                 <div class="ai-damages-title">Detected Damages:</div>
