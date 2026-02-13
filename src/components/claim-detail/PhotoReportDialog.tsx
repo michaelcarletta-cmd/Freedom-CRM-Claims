@@ -582,8 +582,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
           aiHtml = `<div style="margin-top:8px;padding:10px;background:#f8fbff;border:1px solid #d4e5f7;border-left:3px solid #1976d2;border-radius:4px;">
             <div style="font-size:11px;font-weight:600;color:#1565c0;text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #e3f2fd;">Damage Assessment</div>
             ${a.material_type ? `<div style="font-size:11px;"><b>Material:</b> ${esc(a.material_type)}</div>` : ''}
-            ${a.condition_rating ? `<div style="font-size:11px;"><b>Condition:</b> <span style="font-weight:600;color:${a.condition_rating === 'poor' || a.condition_rating === 'failed' ? '#c62828' : a.condition_rating === 'fair' ? '#f57c00' : '#2e7d32'}">${esc(a.condition_rating.toUpperCase())}</span></div>` : ''}
-            ${a.condition_notes ? `<div style="font-size:11px;color:#444;margin-top:4px;">${esc(a.condition_notes)}</div>` : ''}
+            
             ${topDamages.length > 0 ? `<div style="margin-top:6px;"><div style="font-size:10px;font-weight:600;color:#c62828;">Detected Damages:</div>${topDamages.map((d: any) => `<div style="padding:3px 6px;margin:2px 0;background:#fff5f5;border:1px solid #ffcdd2;border-radius:4px;font-size:10px;"><b style="color:#c62828;">${esc(d.type)}</b> - ${esc(d.severity || 'N/A')}${d.location ? ` at ${esc(d.location)}` : ''}</div>`).join('')}</div>` : ''}
             ${a.summary ? `<div style="margin-top:6px;padding:6px;background:#e3f2fd;border-radius:4px;font-size:11px;font-style:italic;color:#1565c0;">${esc(a.summary)}</div>` : ''}
           </div>`;
