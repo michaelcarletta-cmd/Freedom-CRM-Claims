@@ -596,7 +596,7 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
               <span style="font-size:11px;padding:3px 8px;background:#e3f2fd;color:#1976d2;border-radius:10px;">${esc(photo.category)}</span>
             </div>
             <div style="padding:10px 0;text-align:center;">
-              ${photo.base64 ? `<img src="${photo.base64}" alt="Photo ${photo.photoNumber}" style="max-width:100%;max-height:4.5in;" />` : '<p style="color:#999;">[Photo could not be loaded]</p>'}
+              ${photo.base64 ? `<img src="${photo.base64}" alt="Photo ${photo.photoNumber}" width="480" height="384" style="width:5in;height:4in;object-fit:contain;" />` : '<p style="color:#999;">[Photo could not be loaded]</p>'}
             </div>
             <div style="padding:4px 0;">
               <div style="font-weight:500;font-size:12px;">${esc(photo.fileName)}</div>
