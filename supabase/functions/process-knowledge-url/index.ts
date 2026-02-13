@@ -282,12 +282,42 @@ serve(async (req) => {
       },
     }));
 
-    const { error: insertError } = await supabase
+    const { data: insertedChunks, error: insertError } = await supabase
       .from('ai_knowledge_chunks')
-      .insert(chunkInserts);
+      .insert(chunkInserts)
+      .select('id, content');
 
     if (insertError) {
       throw new Error(`Failed to insert chunks: ${insertError.message}`);
+    }
+
+    // Generate embeddings for the chunks
+    if (insertedChunks && insertedChunks.length > 0) {
+      console.log(`Generating embeddings for ${insertedChunks.length} chunks...`);
+      try {
+        const embeddingResponse = await fetch(
+          `${supabaseUrl}/functions/v1/generate-embeddings`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              texts: insertedChunks.map((c: any) => c.content),
+              chunkIds: insertedChunks.map((c: any) => c.id),
+            }),
+          }
+        );
+        if (!embeddingResponse.ok) {
+          console.error('Embedding generation failed:', await embeddingResponse.text());
+        } else {
+          const embResult = await embeddingResponse.json();
+          console.log(`Embeddings generated: ${embResult.processed} chunks`);
+        }
+      } catch (embError) {
+        console.error('Embedding generation error (non-fatal):', embError);
+      }
     }
 
     // Update document status and title
