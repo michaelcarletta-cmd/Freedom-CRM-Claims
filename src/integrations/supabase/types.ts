@@ -1423,6 +1423,7 @@ export type Database = {
           classification_metadata: Json | null
           darwin_processed_at: string | null
           document_classification: string | null
+          email_id: string | null
           extracted_text: string | null
           file_name: string
           file_path: string
@@ -1446,6 +1447,7 @@ export type Database = {
           classification_metadata?: Json | null
           darwin_processed_at?: string | null
           document_classification?: string | null
+          email_id?: string | null
           extracted_text?: string | null
           file_name: string
           file_path: string
@@ -1469,6 +1471,7 @@ export type Database = {
           classification_metadata?: Json | null
           darwin_processed_at?: string | null
           document_classification?: string | null
+          email_id?: string | null
           extracted_text?: string | null
           file_name?: string
           file_path?: string
@@ -1492,6 +1495,13 @@ export type Database = {
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_files_email_id_fkey"
+            columns: ["email_id"]
+            isOneToOne: false
+            referencedRelation: "emails"
             referencedColumns: ["id"]
           },
           {

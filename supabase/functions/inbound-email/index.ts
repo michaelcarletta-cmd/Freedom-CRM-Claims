@@ -389,7 +389,7 @@ serve(async (req) => {
           continue;
         }
         
-        // Create file record
+        // Create file record linked to the email
         const { data: fileRecord, error: fileError } = await supabase
           .from('claim_files')
           .insert({
@@ -400,6 +400,7 @@ serve(async (req) => {
             file_type: contentType,
             source: 'email_attachment',
             uploaded_by: null,
+            email_id: insertedEmail?.id || null,
           })
           .select()
           .single();
