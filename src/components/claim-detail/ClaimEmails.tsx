@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Mail, Send, Loader2, MailOpen, Reply } from "lucide-react";
+import { Mail, Send, Loader2, MailOpen, Reply, Paperclip, Download, FileText, Image as ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EmailComposer } from "@/components/EmailComposer";
 import { useQuery } from "@tanstack/react-query";
@@ -210,6 +210,34 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
     },
   });
 
+  // Fetch email attachments (files linked to emails or source=email_attachment)
+  const { data: emailAttachments } = useQuery({
+    queryKey: ["email-attachments", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_files")
+        .select("id, file_name, file_path, file_type, file_size, email_id, uploaded_at")
+        .eq("claim_id", claimId)
+        .eq("source", "email_attachment")
+        .order("uploaded_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Group attachments by email_id
+  const attachmentsByEmail = useMemo(() => {
+    const map = new Map<string, typeof emailAttachments>();
+    emailAttachments?.forEach(file => {
+      if (file.email_id) {
+        const existing = map.get(file.email_id) || [];
+        existing.push(file);
+        map.set(file.email_id, existing);
+      }
+    });
+    return map;
+  }, [emailAttachments]);
+
   // Decode email bodies that may be incorrectly stored as base64
   const decodedEmails = useMemo(() => {
     if (!emails) return [];
@@ -218,6 +246,27 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
       decodedBody: decodeEmailBody(email.body)
     }));
   }, [emails]);
+
+  const handleDownloadAttachment = async (filePath: string, fileName: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('claim-files')
+        .download(filePath);
+      if (error || !data) return;
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Download error:', e);
+    }
+  };
+
+  const isImageType = (fileType: string | null) => {
+    return fileType?.startsWith('image/');
+  };
 
   return (
     <div className="space-y-4">
@@ -274,6 +323,35 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
                 <div className="text-sm text-foreground whitespace-pre-wrap bg-muted/50 rounded p-3">
                   {email.decodedBody}
                 </div>
+                {/* Email Attachments */}
+                {attachmentsByEmail.get(email.id)?.length ? (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                      <Paperclip className="h-3 w-3" />
+                      {attachmentsByEmail.get(email.id)!.length} Attachment{attachmentsByEmail.get(email.id)!.length > 1 ? 's' : ''}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {attachmentsByEmail.get(email.id)!.map(file => (
+                        <div key={file.id} className="flex items-center gap-2 p-2 rounded-md border bg-background hover:bg-muted/50 transition-colors">
+                          {isImageType(file.file_type) ? (
+                            <ImageIcon className="h-4 w-4 text-primary flex-shrink-0" />
+                          ) : (
+                            <FileText className="h-4 w-4 text-primary flex-shrink-0" />
+                          )}
+                          <span className="text-xs truncate flex-1">{file.file_name}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleDownloadAttachment(file.file_path, file.file_name)}
+                          >
+                            <Download className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="mt-3 flex justify-end">
                   <Button
                     variant="outline"
