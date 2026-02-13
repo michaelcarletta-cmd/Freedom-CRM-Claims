@@ -16,20 +16,56 @@ const AI_EXTRACTION_LIMIT = 5 * 1024 * 1024; // 5MB
 // Image direct URL threshold - larger images use direct URLs to save memory
 const IMAGE_DIRECT_URL_THRESHOLD = 4 * 1024 * 1024; // 4MB
 
-// Split text into chunks for RAG
-function splitIntoChunks(text: string, chunkSize = 1000, overlap = 200): string[] {
+// Split text into chunks for RAG with heading preservation
+function splitIntoChunks(text: string, chunkSize = 600, overlap = 100): string[] {
+  // Split by headings/sections first, then by size
+  const sections = text.split(/(?=^#{1,6}\s|^\[Slide |^\[Image:|^\[Title:|^---)/m);
   const chunks: string[] = [];
-  let start = 0;
-  
-  while (start < text.length) {
-    const end = Math.min(start + chunkSize, text.length);
-    chunks.push(text.slice(start, end));
-    start = end - overlap;
-    if (start < 0) start = 0;
-    if (end === text.length) break;
+  let currentChunk = '';
+  let currentHeading = '';
+
+  for (const section of sections) {
+    // Detect if this section starts with a heading
+    const headingMatch = section.match(/^(#{1,6}\s.+|^\[.+?\])/m);
+    if (headingMatch) {
+      currentHeading = headingMatch[0].trim();
+    }
+
+    if (currentChunk.length + section.length <= chunkSize) {
+      currentChunk += section;
+    } else {
+      // Save current chunk if it has content
+      if (currentChunk.trim().length > 0) {
+        chunks.push(currentChunk.trim());
+      }
+      // For long sections, split with overlap and prepend heading context
+      if (section.length > chunkSize) {
+        let start = 0;
+        while (start < section.length) {
+          const end = Math.min(start + chunkSize, section.length);
+          let chunkText = section.slice(start, end);
+          // Prepend heading context if this isn't the first sub-chunk
+          if (start > 0 && currentHeading) {
+            chunkText = `[Context: ${currentHeading}]\n${chunkText}`;
+          }
+          chunks.push(chunkText.trim());
+          start = end - overlap;
+          if (start < 0) start = 0;
+          if (end === section.length) break;
+        }
+        currentChunk = '';
+      } else {
+        currentChunk = section;
+      }
+    }
   }
-  
-  return chunks;
+
+  if (currentChunk.trim().length > 0) {
+    chunks.push(currentChunk.trim());
+  }
+
+  // Filter out empty chunks
+  return chunks.filter(c => c.length > 20);
 }
 
 // Get mime type from file type

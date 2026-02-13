@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe, AlignLeft } from "lucide-react";
+import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe, AlignLeft, RefreshCw } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -632,14 +632,49 @@ export const AIKnowledgeBaseSettings = () => {
                         )}
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setDeleteDocId(doc.id)}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {(doc.status === 'failed' || doc.status === 'processing') && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={async () => {
+                            try {
+                              toast.info(`Reprocessing ${doc.file_name}...`);
+                              if (doc.file_type === 'url') {
+                                await supabase.functions.invoke('process-knowledge-url', {
+                                  body: { documentId: doc.id, url: doc.file_path }
+                                });
+                              } else if (doc.file_type === 'text') {
+                                // For text docs we don't have the original content, reset to pending
+                                await supabase.from('ai_knowledge_documents').update({ status: 'pending' }).eq('id', doc.id);
+                                toast.info('Text documents need to be re-uploaded to reprocess');
+                                return;
+                              } else {
+                                await supabase.functions.invoke('process-knowledge-document', {
+                                  body: { documentId: doc.id }
+                                });
+                              }
+                              queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
+                              toast.success('Reprocessing started');
+                            } catch (err: any) {
+                              toast.error(err.message || 'Failed to reprocess');
+                            }
+                          }}
+                          className="text-primary hover:text-primary hover:bg-primary/10"
+                          title="Reprocess document"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setDeleteDocId(doc.id)}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
