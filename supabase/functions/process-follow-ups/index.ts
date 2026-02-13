@@ -154,7 +154,7 @@ GUIDELINES:
       }
 
       const emailBody = aiData.choices[0].message.content;
-      const subject = `Follow-up: Claim ${claim.claim_number || claim.id.slice(0, 8)}`;
+      const subject = `${claim.claim_number || claim.id.slice(0, 8)}`;
 
       // Build claim email for CC
       const sanitizedPolicyNumber = claim.policy_number 
