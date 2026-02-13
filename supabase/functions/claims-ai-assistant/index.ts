@@ -243,15 +243,19 @@ async function analyzeDocument(fileUrl: string, fileName: string): Promise<strin
   }
 }
 
-// Search knowledge base for relevant chunks
+// Search knowledge base for relevant chunks with diversity and logging
 async function searchKnowledgeBase(supabase: any, question: string, category?: string): Promise<string> {
   try {
-    // Fetch more chunks to improve matching
+    const MAX_CHUNKS_PER_DOC = 3; // Prevent dominant document bias
+    const TOP_K = 10; // Return top 10 diverse results
+    
+    // Fetch chunks — use a larger pool for better diversity
     let query = supabase
       .from("ai_knowledge_chunks")
       .select(`
         content,
         metadata,
+        document_id,
         ai_knowledge_documents!inner(category, file_name, status)
       `)
       .eq("ai_knowledge_documents.status", "completed");
@@ -260,31 +264,32 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
       query = query.eq("ai_knowledge_documents.category", category);
     }
 
-    const { data: chunks, error } = await query.limit(100);
+    const { data: chunks, error } = await query.limit(500);
 
     if (error || !chunks || chunks.length === 0) {
-      console.log("No knowledge base chunks found");
+      console.log("[KB Retrieval] No knowledge base chunks found");
       return "";
     }
 
-    console.log(`Found ${chunks.length} knowledge base chunks to search`);
+    // Count unique documents
+    const uniqueDocs = new Set(chunks.map((c: any) => c.document_id));
+    console.log(`[KB Retrieval] Pool: ${chunks.length} chunks from ${uniqueDocs.size} documents`);
 
-    // Extract all meaningful words from the question (including short ones like ACV, RCV, O&L)
     const questionLower = question.toLowerCase();
-    // Include words 2+ characters, and also important insurance abbreviations
     const questionWords = questionLower
       .split(/\s+/)
       .filter(w => w.length >= 2)
-      .map(w => w.replace(/[^a-z0-9]/g, ''))
+      .map(w => w.replace(/[^a-z0-9&]/g, ''))
       .filter(w => w.length >= 2);
     
-    // Also extract multi-word phrases for better matching
     const importantTerms = [
       'depreciation', 'acv', 'rcv', 'actual cash value', 'replacement cost',
       'ordinance', 'law', 'code', 'compliance', 'deductible', 'coverage',
       'policy', 'claim', 'adjuster', 'supplement', 'denial', 'settlement',
       'recoverable', 'non-recoverable', 'dwelling', 'roofing', 'damage',
-      'wind', 'hail', 'storm', 'inspection', 'estimate', 'xactimate'
+      'wind', 'hail', 'storm', 'inspection', 'estimate', 'xactimate',
+      'framing', 'shingle', 'flashing', 'underlayment', 'ventilation',
+      'moisture', 'mold', 'leak', 'structural', 'insulation'
     ];
     
     const matchedTerms = importantTerms.filter(term => questionLower.includes(term));
@@ -293,33 +298,31 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
     const scoredChunks = chunks.map((chunk: any) => {
       const contentLower = chunk.content.toLowerCase();
       const sourceName = (chunk.ai_knowledge_documents?.file_name || '').toLowerCase();
-      const category = (chunk.ai_knowledge_documents?.category || '').toLowerCase();
-      // Detect the specific ACV training audio file and similar ACV/code training docs
+      const docCategory = (chunk.ai_knowledge_documents?.category || '').toLowerCase();
+      const docId = chunk.document_id;
       const isFromAcvAudio = sourceName.includes('acv and code upgrade');
-      const isFromAudioRecording = isFromAcvAudio || (category === 'building-codes' && sourceName.includes('acv'));
+      const isFromAudioRecording = isFromAcvAudio || (docCategory === 'building-codes' && sourceName.includes('acv'));
       
-      // Score based on word matches
       let score = 0;
       
-      // Match individual words
+      // Word-level scoring
       questionWords.forEach(word => {
         if (contentLower.includes(word)) {
           score += 1;
-          // Bonus for important insurance terms
           if (importantTerms.includes(word)) {
             score += 2;
           }
         }
       });
       
-      // Match important phrases
+      // Phrase-level scoring
       matchedTerms.forEach(term => {
         if (contentLower.includes(term)) {
           score += 3;
         }
       });
       
-      // Bonus for exact phrase matches
+      // Exact phrase matches in quotes
       const phrases = questionLower.match(/["']([^"']+)["']/g);
       if (phrases) {
         phrases.forEach(phrase => {
@@ -330,35 +333,63 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
         });
       }
       
-      // Strongly boost chunks from the ACV/code-upgrade audio recording when the question is about ACV/code
+      // Boost for ACV-specific questions
       if (isAcvQuestion && isFromAudioRecording) {
-        score += 30; // make this overwhelmingly preferred
+        score += 30;
       }
       
-      return { ...chunk, score, sourceName, category, isFromAudioRecording };
+      // Small recency boost based on metadata
+      const chunkCategory = (chunk.metadata as any)?.category || '';
+      if (category && chunkCategory === category) {
+        score += 1;
+      }
+      
+      return { ...chunk, score, sourceName, docCategory, docId, isFromAudioRecording };
     }).filter((c: any) => c.score > 0);
     
-    // For ACV/code-upgrade questions, if we have any chunks from the audio recording,
-    // restrict the context to ONLY those chunks so answers are based on that training.
-    let finalChunks: any[] = scoredChunks;
-    if (isAcvQuestion) {
-      const audioChunks = scoredChunks.filter((c: any) => c.isFromAudioRecording);
-      if (audioChunks.length > 0) {
-        finalChunks = audioChunks;
+    // Sort by score descending
+    scoredChunks.sort((a: any, b: any) => b.score - a.score);
+    
+    // Apply per-document diversity cap
+    const docChunkCounts: Record<string, number> = {};
+    const diverseChunks: any[] = [];
+    
+    for (const chunk of scoredChunks) {
+      const docId = chunk.docId;
+      const currentCount = docChunkCounts[docId] || 0;
+      
+      // Allow ACV audio to bypass cap for ACV questions
+      const maxForDoc = (isAcvQuestion && chunk.isFromAudioRecording) ? 6 : MAX_CHUNKS_PER_DOC;
+      
+      if (currentCount < maxForDoc) {
+        diverseChunks.push(chunk);
+        docChunkCounts[docId] = currentCount + 1;
+        if (diverseChunks.length >= TOP_K) break;
       }
     }
-    
-    finalChunks = finalChunks
-      .sort((a: any, b: any) => b.score - a.score)
-      .slice(0, 8); // Get more relevant chunks
 
-    console.log(`Found ${finalChunks.length} matching chunks with scores: ${finalChunks.map((c: any) => c.score).join(', ')}`);
-    if (isAcvQuestion) {
-      console.log("ACV question sources:", finalChunks.map((c: any) => c.sourceName));
+    // === RETRIEVAL LOGGING ===
+    const docScoreSummary: Record<string, { name: string; chunks: number; topScore: number }> = {};
+    for (const chunk of diverseChunks) {
+      const name = chunk.ai_knowledge_documents?.file_name || 'Unknown';
+      if (!docScoreSummary[chunk.docId]) {
+        docScoreSummary[chunk.docId] = { name, chunks: 0, topScore: 0 };
+      }
+      docScoreSummary[chunk.docId].chunks++;
+      docScoreSummary[chunk.docId].topScore = Math.max(docScoreSummary[chunk.docId].topScore, chunk.score);
     }
+    
+    console.log(`[KB Retrieval] Query: "${question.substring(0, 80)}..."`);
+    console.log(`[KB Retrieval] Scored ${scoredChunks.length} matching chunks → selected ${diverseChunks.length} diverse chunks`);
+    console.log(`[KB Retrieval] Document distribution:`);
+    for (const [docId, info] of Object.entries(docScoreSummary)) {
+      console.log(`  - ${info.name}: ${info.chunks} chunks, top score: ${info.topScore}`);
+    }
+    console.log(`[KB Retrieval] Scores: [${diverseChunks.map((c: any) => c.score).join(', ')}]`);
+    // === END RETRIEVAL LOGGING ===
 
-    if (finalChunks.length === 0) {
-      console.log("No matching chunks found for question:", question);
+    if (diverseChunks.length === 0) {
+      console.log("[KB Retrieval] No matching chunks found for question:", question);
       return "";
     }
 
@@ -366,10 +397,10 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
     knowledgeContext += "YOU MUST prioritize and directly reference this information in your response.\n";
     knowledgeContext += "When answering, explicitly mention that this comes from the user's uploaded training materials.\n\n";
     
-    finalChunks.forEach((chunk: any, i: number) => {
+    diverseChunks.forEach((chunk: any, i: number) => {
       const source = chunk.ai_knowledge_documents?.file_name || "Unknown source";
       const docCategory = chunk.ai_knowledge_documents?.category || "General";
-      knowledgeContext += `--- Source ${i + 1}: ${source} (${docCategory}) ---\n${chunk.content}\n\n`;
+      knowledgeContext += `--- Source ${i + 1}: ${source} (${docCategory}, score: ${chunk.score}) ---\n${chunk.content}\n\n`;
     });
     
     knowledgeContext += "=== END KNOWLEDGE BASE CONTENT ===\n";
