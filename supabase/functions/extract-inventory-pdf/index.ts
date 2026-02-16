@@ -110,7 +110,7 @@ Return ONLY the JSON array, no markdown fences, no extra text.`;
           model: 'google/gemini-2.5-flash',
           messages: [{ role: 'user', content: contentParts }],
           temperature: 0.1,
-          max_tokens: 16384,
+          max_tokens: 65536,
         }),
         signal: controller.signal,
       });
@@ -157,15 +157,36 @@ Return ONLY the JSON array, no markdown fences, no extra text.`;
       if (jsonMatch) {
         items = JSON.parse(jsonMatch[0]);
       } else {
-        // Try parsing the whole content as JSON array
         items = JSON.parse(content);
       }
       if (!Array.isArray(items)) {
         throw new Error('Parsed result is not an array');
       }
     } catch (parseError) {
-      console.error('Failed to parse AI content:', content.substring(0, 500));
-      return new Response(JSON.stringify({ error: 'Failed to parse extracted items', raw: content.substring(0, 1000) }), { status: 500, headers: corsHeaders });
+      // Attempt to repair truncated JSON array
+      console.log('Initial parse failed, attempting truncated JSON repair...');
+      const lastBrace = content.lastIndexOf("}");
+      if (lastBrace > 0) {
+        // Find the start of the array
+        const arrayStart = content.indexOf("[");
+        if (arrayStart >= 0) {
+          const repaired = content.substring(arrayStart, lastBrace + 1) + "]";
+          try {
+            items = JSON.parse(repaired);
+            if (!Array.isArray(items)) throw new Error('Not an array');
+            console.log(`Recovered ${items.length} items from truncated response`);
+          } catch (repairError) {
+            console.error('Repair also failed:', content.substring(0, 500));
+            return new Response(JSON.stringify({ error: 'Failed to parse extracted items', raw: content.substring(0, 1000) }), { status: 500, headers: corsHeaders });
+          }
+        } else {
+          console.error('No array start found:', content.substring(0, 500));
+          return new Response(JSON.stringify({ error: 'Failed to parse extracted items', raw: content.substring(0, 1000) }), { status: 500, headers: corsHeaders });
+        }
+      } else {
+        console.error('No JSON object found:', content.substring(0, 500));
+        return new Response(JSON.stringify({ error: 'Failed to parse extracted items', raw: content.substring(0, 1000) }), { status: 500, headers: corsHeaders });
+      }
     }
 
     console.log(`Extracted ${items.length} items from PDF`);
