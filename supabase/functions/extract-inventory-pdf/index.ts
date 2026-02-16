@@ -146,7 +146,10 @@ Return ONLY the JSON array, no markdown fences, no extra text.`;
       return new Response(JSON.stringify({ error: 'AI returned an invalid response. Try a smaller or clearer document.' }), { status: 500, headers: corsHeaders });
     }
 
-    const content = aiResult.choices?.[0]?.message?.content || '';
+    let content = aiResult.choices?.[0]?.message?.content || '';
+    
+    // Strip markdown fences if present
+    content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
     let items;
     try {
@@ -154,7 +157,11 @@ Return ONLY the JSON array, no markdown fences, no extra text.`;
       if (jsonMatch) {
         items = JSON.parse(jsonMatch[0]);
       } else {
-        throw new Error('No JSON array found in response');
+        // Try parsing the whole content as JSON array
+        items = JSON.parse(content);
+      }
+      if (!Array.isArray(items)) {
+        throw new Error('Parsed result is not an array');
       }
     } catch (parseError) {
       console.error('Failed to parse AI content:', content.substring(0, 500));
