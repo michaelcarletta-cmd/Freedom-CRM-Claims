@@ -140,6 +140,12 @@ export const InventoryPDFImport = ({ claimId, onItemsAdded }: InventoryPDFImport
     );
   };
 
+  const updateField = (idx: number, field: keyof ExtractedItem, value: any) => {
+    setExtractedItems((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))
+    );
+  };
+
   const addToInventory = async () => {
     const selected = extractedItems.filter((i) => i.selected);
     if (!selected.length) {
@@ -269,10 +275,17 @@ export const InventoryPDFImport = ({ claimId, onItemsAdded }: InventoryPDFImport
               />
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-sm">
                 <div>
-                  <p className="font-medium">{item.item_name}</p>
-                  {item.manufacturer && (
-                    <p className="text-xs text-muted-foreground">{item.manufacturer} {item.model_number || ""}</p>
-                  )}
+                  <Input
+                    value={item.item_name}
+                    onChange={(e) => updateField(idx, "item_name", e.target.value)}
+                    className="h-7 text-xs font-medium"
+                  />
+                  <Input
+                    value={item.manufacturer || ""}
+                    onChange={(e) => updateField(idx, "manufacturer", e.target.value || null)}
+                    placeholder="Manufacturer"
+                    className="h-6 text-xs mt-1"
+                  />
                 </div>
                 <div>
                   <Select value={item.room_name} onValueChange={(v) => updateRoom(idx, v)}>
@@ -286,25 +299,55 @@ export const InventoryPDFImport = ({ claimId, onItemsAdded }: InventoryPDFImport
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="text-xs space-y-0.5">
-                  <p>Qty: {item.quantity}</p>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">Qty:</span>
+                  <Input
+                    type="number"
+                    value={item.quantity}
+                    onChange={(e) => updateField(idx, "quantity", parseInt(e.target.value) || 1)}
+                    className="h-7 text-xs w-14"
+                    min={1}
+                  />
                   {item.category && <Badge variant="secondary" className="text-xs">{item.category}</Badge>}
                 </div>
-                <div className="text-xs space-y-0.5">
-                  {item.replacement_cost != null && (
-                    <p className="text-green-700 dark:text-green-400">RCV: ${item.replacement_cost.toLocaleString()}</p>
-                  )}
-                  {item.actual_cash_value != null && (
-                    <p className="text-blue-700 dark:text-blue-400">ACV: ${item.actual_cash_value.toLocaleString()}</p>
-                  )}
-                  {item.original_purchase_price != null && (
-                    <p>Orig: ${item.original_purchase_price.toLocaleString()}</p>
-                  )}
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground w-8">RCV:</span>
+                    <Input
+                      type="number"
+                      value={item.replacement_cost ?? ""}
+                      onChange={(e) => updateField(idx, "replacement_cost", e.target.value ? parseFloat(e.target.value) : null)}
+                      className="h-6 text-xs"
+                      step="0.01"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground w-8">ACV:</span>
+                    <Input
+                      type="number"
+                      value={item.actual_cash_value ?? ""}
+                      onChange={(e) => updateField(idx, "actual_cash_value", e.target.value ? parseFloat(e.target.value) : null)}
+                      className="h-6 text-xs"
+                      step="0.01"
+                    />
+                  </div>
                 </div>
-                <div className="text-xs">
-                  {item.condition_before_loss && <p>Cond: {item.condition_before_loss}</p>}
-                  {item.age_years != null && <p>Age: {item.age_years}yr</p>}
-                  {item.notes && <p className="text-muted-foreground truncate">{item.notes}</p>}
+                <div className="space-y-1">
+                  <Input
+                    value={item.condition_before_loss || ""}
+                    onChange={(e) => updateField(idx, "condition_before_loss", e.target.value || null)}
+                    placeholder="Condition"
+                    className="h-6 text-xs"
+                  />
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">Age:</span>
+                    <Input
+                      type="number"
+                      value={item.age_years ?? ""}
+                      onChange={(e) => updateField(idx, "age_years", e.target.value ? parseInt(e.target.value) : null)}
+                      className="h-6 text-xs w-14"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
