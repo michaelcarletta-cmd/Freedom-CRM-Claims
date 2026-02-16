@@ -47,6 +47,23 @@ Deno.serve(async (req) => {
 
     const { claimId, toNumber, messageBody } = await req.json();
 
+    if (!claimId || !toNumber || !messageBody) {
+      return new Response(
+        JSON.stringify({ error: 'Missing required fields: claimId, toNumber, messageBody' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Normalize phone number to E.164 format
+    const normalizePhone = (phone: string): string => {
+      const digits = phone.replace(/\D/g, '');
+      if (digits.length === 10) return `+1${digits}`;
+      if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+      return phone.startsWith('+') ? phone : `+${digits}`;
+    };
+
+    const normalizedToNumber = normalizePhone(toNumber);
+
     console.log(`Sending SMS to ${normalizedToNumber} for claim ${claimId}`);
 
     // Send SMS via Telnyx
