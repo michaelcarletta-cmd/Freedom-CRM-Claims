@@ -1,12 +1,11 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -17,47 +16,36 @@ serve(async (req) => {
     const TELNYX_MESSAGING_PROFILE_ID = Deno.env.get('TELNYX_MESSAGING_PROFILE_ID');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 
     if (!TELNYX_API_KEY || !TELNYX_PHONE_NUMBER) {
       throw new Error('Missing Telnyx credentials');
     }
 
-    const { claimId, toNumber, messageBody } = await req.json();
-
-    if (!claimId || !toNumber || !messageBody) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: claimId, toNumber, messageBody' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Normalize phone number to E.164 format
-    const normalizePhone = (phone: string): string => {
-      const digits = phone.replace(/\D/g, '');
-      if (digits.length === 10) {
-        return `+1${digits}`;
-      } else if (digits.length === 11 && digits.startsWith('1')) {
-        return `+${digits}`;
-      }
-      return phone.startsWith('+') ? phone : `+${digits}`;
-    };
-    
-    const normalizedToNumber = normalizePhone(toNumber);
-
-    // Get user ID from auth header
+    // Validate auth
     const authHeader = req.headers.get('Authorization');
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      global: { headers: { Authorization: authHeader || '' } }
-    });
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const token = authHeader.replace('Bearer ', '');
+    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { claimId, toNumber, messageBody } = await req.json();
 
     console.log(`Sending SMS to ${normalizedToNumber} for claim ${claimId}`);
 
