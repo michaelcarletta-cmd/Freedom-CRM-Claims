@@ -32,7 +32,13 @@ serve(async (req) => {
 You are given a document (PDF or image) that contains a list of personal property items, such as a contents claim list, 
 personal property inventory, or carrier's contents settlement sheet.
 
-Extract EVERY item listed. For each item, extract as much of the following as possible:
+CRITICAL INSTRUCTIONS:
+1. Extract EVERY SINGLE LINE ITEM. Do NOT skip, merge, or combine items. Each row in the document = one JSON object.
+2. Count every item row carefully. If the document has 175 rows, you must return exactly 175 objects.
+3. Go page by page, top to bottom, left to right. Do not stop early.
+4. After your first pass, do a SECOND PASS to verify you haven't missed any items, especially on page boundaries.
+
+For each item, extract as much of the following as possible:
 
 - item_name: The name/description of the item (required)
 - room_name: The room it belongs to (if listed), otherwise "Unassigned"
@@ -40,7 +46,7 @@ Extract EVERY item listed. For each item, extract as much of the following as po
 - manufacturer: Brand or manufacturer name (if listed)
 - model_number: Model number (if listed)
 - original_purchase_price: Original purchase price (if listed), as a number
-- replacement_cost: Replacement cost / RCV (if listed), as a number
+- replacement_cost: Replacement cost / RCV (if listed), as a number. If the document only has one price column, use it here AND in original_purchase_price.
 - actual_cash_value: ACV (if listed), as a number
 - condition_before_loss: Condition (new, good, fair, poor) if listed
 - category: One of: Electronics, Furniture, Appliances, Clothing, Kitchenware, Decor, Bedding, Tools, Sports, Toys, Other
@@ -53,28 +59,11 @@ IMPORTANT RULES:
 - If the document has columns like "Description", "Qty", "RCV", "ACV", "Age", etc., map them to the fields above
 - Convert all monetary values to plain numbers (no $ signs, no commas)
 - If a room/location column exists, use it for room_name
+- If there is only one price column (e.g. "Price" or "Cost"), put the value in BOTH replacement_cost and original_purchase_price
 - Be thorough — do not skip items
+- Do NOT merge multiple items into one entry
 
-Return ONLY a JSON array of objects. Example:
-[
-  {
-    "item_name": "Samsung 55\" Smart TV",
-    "room_name": "Living Room",
-    "quantity": 1,
-    "manufacturer": "Samsung",
-    "model_number": "UN55TU7000",
-    "original_purchase_price": 499.99,
-    "replacement_cost": 549.99,
-    "actual_cash_value": 329.99,
-    "condition_before_loss": "good",
-    "category": "Electronics",
-    "age_years": 3,
-    "depreciation_rate": 0.10,
-    "notes": null
-  }
-]
-
-Return ONLY the JSON array, no markdown fences, no extra text.`;
+Return ONLY a JSON array of objects. No markdown fences, no extra text, no commentary.`;
 
     const contentParts: any[] = [{ type: 'text', text: prompt }];
 
