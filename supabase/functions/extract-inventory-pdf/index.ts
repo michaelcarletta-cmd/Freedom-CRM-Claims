@@ -33,35 +33,37 @@ You are given a document (PDF or image) that contains a list of personal propert
 personal property inventory, or carrier's contents settlement sheet.
 
 CRITICAL INSTRUCTIONS:
-1. Extract EVERY SINGLE LINE ITEM. Do NOT skip, merge, or combine items. Each row in the document = one JSON object.
-2. Count every item row carefully. If the document has 175 rows, you must return exactly 175 objects.
-3. Go page by page, top to bottom, left to right. Do not stop early.
-4. After your first pass, do a SECOND PASS to verify you haven't missed any items, especially on page boundaries.
+1. Extract EVERY SINGLE LINE ITEM. Do NOT skip, merge, or combine items. Each numbered row in the document = one JSON object.
+2. The document likely has a summary/header on page 1 that states the total number of items (e.g. "Objects: 175"). Your extracted count MUST match that number exactly.
+3. Go page by page, top to bottom. Process EVERY page including the last one. Do not stop early.
+4. Some pages have inconsistent table formatting (columns may shift, merge, or wrap). Still extract every row.
+5. After extraction, COUNT your results. If your count doesn't match the document's stated total, re-scan for missed items.
+6. Pay special attention to pages where the table header row changes format — items on those pages are often missed.
 
 For each item, extract as much of the following as possible:
 
 - item_name: The name/description of the item (required)
-- room_name: The room it belongs to (if listed), otherwise "Unassigned"
+- room_name: The room it belongs to (if listed), otherwise "Unassigned". Room headers appear as section headings in the document.
 - quantity: Number of items (default 1)
 - manufacturer: Brand or manufacturer name (if listed)
 - model_number: Model number (if listed)
-- original_purchase_price: Original purchase price (if listed), as a number
-- replacement_cost: Replacement cost / RCV (if listed), as a number. If the document only has one price column, use it here AND in original_purchase_price.
+- original_purchase_price: The listed price as a number
+- replacement_cost: Same as the price if only one price column exists
 - actual_cash_value: ACV (if listed), as a number
 - condition_before_loss: Condition (new, good, fair, poor) if listed
 - category: One of: Electronics, Furniture, Appliances, Clothing, Kitchenware, Decor, Bedding, Tools, Sports, Toys, Other
 - age_years: Age in years if listed
 - depreciation_rate: Depreciation rate as a decimal (e.g. 0.10 for 10%) if listed
-- notes: Any additional notes about the item
+- notes: Any comments column text about the item
 
 IMPORTANT RULES:
 - Extract ALL items, even if there are hundreds
 - If the document has columns like "Description", "Qty", "RCV", "ACV", "Age", etc., map them to the fields above
 - Convert all monetary values to plain numbers (no $ signs, no commas)
-- If a room/location column exists, use it for room_name
+- If a room/location section heading exists, use it for room_name for all items under that heading
 - If there is only one price column (e.g. "Price" or "Cost"), put the value in BOTH replacement_cost and original_purchase_price
-- Be thorough — do not skip items
 - Do NOT merge multiple items into one entry
+- Include the "Comments" column content in the notes field
 
 Return ONLY a JSON array of objects. No markdown fences, no extra text, no commentary.`;
 
@@ -96,7 +98,7 @@ Return ONLY a JSON array of objects. No markdown fences, no extra text, no comme
           'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
+          model: 'google/gemini-2.5-pro',
           messages: [{ role: 'user', content: contentParts }],
           temperature: 0.1,
           max_tokens: 65536,
