@@ -95,32 +95,61 @@ Return ONLY the JSON array, no markdown fences, no extra text.`;
 
     console.log(`Processing inventory PDF: ${fileName}, size: ${Math.round(fileBase64.length / 1024)}KB base64`);
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [{ role: 'user', content: contentParts }],
-        temperature: 0.1,
-        max_tokens: 16384,
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+
+    let response;
+    try {
+      response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [{ role: 'user', content: contentParts }],
+          temperature: 0.1,
+          max_tokens: 16384,
+        }),
+        signal: controller.signal,
+      });
+    } catch (fetchErr: any) {
+      clearTimeout(timeoutId);
+      console.error('Fetch error (likely timeout):', fetchErr.message);
+      return new Response(JSON.stringify({ error: 'AI request timed out. Try a smaller file or fewer pages.' }), { status: 504, headers: corsHeaders });
+    }
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('AI API error:', errorText);
+      console.error('AI API error:', response.status, errorText);
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }), { status: 429, headers: corsHeaders });
+      }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: 'AI credits exhausted. Please add funds.' }), { status: 402, headers: corsHeaders });
+      }
       return new Response(JSON.stringify({ error: 'AI analysis failed', details: errorText }), { status: 500, headers: corsHeaders });
     }
 
-    const aiResult = await response.json();
+    let aiResult;
+    try {
+      const rawText = await response.text();
+      console.log(`AI response length: ${rawText.length} chars`);
+      if (!rawText || rawText.trim().length === 0) {
+        return new Response(JSON.stringify({ error: 'AI returned an empty response. The file may be too large or complex.' }), { status: 500, headers: corsHeaders });
+      }
+      aiResult = JSON.parse(rawText);
+    } catch (jsonErr: any) {
+      console.error('Failed to parse AI response JSON:', jsonErr.message);
+      return new Response(JSON.stringify({ error: 'AI returned an invalid response. Try a smaller or clearer document.' }), { status: 500, headers: corsHeaders });
+    }
+
     const content = aiResult.choices?.[0]?.message?.content || '';
 
     let items;
     try {
-      // Try to find JSON array in response
       const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         items = JSON.parse(jsonMatch[0]);
@@ -128,7 +157,7 @@ Return ONLY the JSON array, no markdown fences, no extra text.`;
         throw new Error('No JSON array found in response');
       }
     } catch (parseError) {
-      console.error('Failed to parse AI response:', content.substring(0, 500));
+      console.error('Failed to parse AI content:', content.substring(0, 500));
       return new Response(JSON.stringify({ error: 'Failed to parse extracted items', raw: content.substring(0, 1000) }), { status: 500, headers: corsHeaders });
     }
 

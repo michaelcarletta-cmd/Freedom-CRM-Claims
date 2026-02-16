@@ -55,8 +55,8 @@ export const InventoryPDFImport = ({ claimId, onItemsAdded }: InventoryPDFImport
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("File must be under 5MB for AI processing");
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File must be under 10MB for AI processing");
       return;
     }
 
