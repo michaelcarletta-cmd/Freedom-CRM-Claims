@@ -96,22 +96,26 @@ export const InventoryPDFImport = ({ claimId, onItemsAdded }: InventoryPDFImport
 
       setProgress(100);
 
-      const items: ExtractedItem[] = data.items.map((item: any) => ({
-        item_name: item.item_name || "Unknown Item",
-        room_name: item.room_name || "Unassigned",
-        quantity: item.quantity || 1,
-        manufacturer: item.manufacturer || null,
-        model_number: item.model_number || null,
-        original_purchase_price: item.original_purchase_price || null,
-        replacement_cost: item.replacement_cost || null,
-        actual_cash_value: item.actual_cash_value || null,
-        condition_before_loss: item.condition_before_loss || null,
-        category: item.category || null,
-        age_years: item.age_years || null,
-        depreciation_rate: item.depreciation_rate || null,
-        notes: item.notes || null,
-        selected: true,
-      }));
+      const items: ExtractedItem[] = data.items.map((item: any) => {
+        const rcv = item.replacement_cost ?? item.original_purchase_price ?? null;
+        const opp = item.original_purchase_price ?? item.replacement_cost ?? null;
+        return {
+          item_name: item.item_name || "Unknown Item",
+          room_name: item.room_name || "Unassigned",
+          quantity: item.quantity || 1,
+          manufacturer: item.manufacturer || null,
+          model_number: item.model_number || null,
+          original_purchase_price: opp,
+          replacement_cost: rcv,
+          actual_cash_value: item.actual_cash_value ?? null,
+          condition_before_loss: item.condition_before_loss || null,
+          category: item.category || null,
+          age_years: item.age_years ?? null,
+          depreciation_rate: item.depreciation_rate ?? null,
+          notes: item.notes || null,
+          selected: true,
+        };
+      });
 
       setExtractedItems(items);
       setStage("results");
