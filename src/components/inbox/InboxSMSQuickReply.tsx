@@ -23,8 +23,8 @@ export const InboxSMSQuickReply = ({ claimId, toNumber, onSent }: InboxSMSQuickR
     try {
       const { error } = await supabase.functions.invoke("send-sms", {
         body: {
-          to: toNumber,
-          message: message.trim(),
+          toNumber,
+          messageBody: message.trim(),
           claimId,
         },
       });
