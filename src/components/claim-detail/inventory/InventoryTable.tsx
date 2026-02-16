@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Trash2, CheckCircle2, AlertTriangle, Bot, User, Pencil, Save, X } from "lucide-react";
+import { Trash2, CheckCircle2, AlertTriangle, Bot, User, Pencil, Save, X, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -55,6 +55,7 @@ interface InventoryTableProps {
 }
 
 export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProps) => {
+  const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<{
     item_name: string;
@@ -63,6 +64,18 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
     replacement_cost: string;
     actual_cash_value: string;
   }>({ item_name: "", room_name: "", quantity: "1", replacement_cost: "", actual_cash_value: "" });
+
+  const filteredItems = items.filter((item) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      item.item_name.toLowerCase().includes(q) ||
+      item.room_name.toLowerCase().includes(q) ||
+      (item.manufacturer?.toLowerCase().includes(q) ?? false) ||
+      (item.model_number?.toLowerCase().includes(q) ?? false) ||
+      (item.category?.toLowerCase().includes(q) ?? false)
+    );
+  });
 
   const startEdit = (item: InventoryItem) => {
     setEditingId(item.id);
@@ -129,6 +142,21 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
 
   return (
     <TooltipProvider>
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search items, rooms, manufacturers..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {searchQuery && (
+          <p className="text-xs text-muted-foreground">
+            Showing {filteredItems.length} of {items.length} items
+          </p>
+        )}
       <div className="border rounded-lg overflow-x-auto">
         <Table>
           <TableHeader>
@@ -146,7 +174,7 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => {
+            {filteredItems.map((item) => {
               const isEditing = editingId === item.id;
               return (
                 <TableRow key={item.id} className={item.needs_review ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}>
@@ -301,6 +329,7 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
             })}
           </TableBody>
         </Table>
+      </div>
       </div>
     </TooltipProvider>
   );
