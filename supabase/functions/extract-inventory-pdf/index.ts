@@ -98,7 +98,7 @@ Return ONLY a JSON array of objects. No markdown fences, no extra text, no comme
           'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-pro',
+          model: 'google/gemini-2.5-flash',
           messages: [{ role: 'user', content: contentParts }],
           temperature: 0.1,
           max_tokens: 65536,
