@@ -1,7 +1,10 @@
+import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Copy, DollarSign } from "lucide-react";
+import { Copy, DollarSign, FileSpreadsheet, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import * as XLSX from "xlsx";
 
 interface InventoryItem {
   id: string;
@@ -19,13 +22,18 @@ interface InventoryItem {
   category?: string;
   pricing_source?: string;
   pricing_rationale?: string;
+  age_years?: number;
+  depreciation_rate?: number;
 }
 
 interface InventorySummaryProps {
   items: InventoryItem[];
+  claimId?: string;
 }
 
-export const InventorySummary = ({ items }: InventorySummaryProps) => {
+export const InventorySummary = ({ items, claimId }: InventorySummaryProps) => {
+  const [exporting, setExporting] = useState(false);
+
   const totalRCV = items.reduce((sum, i) => sum + (i.replacement_cost || 0) * i.quantity, 0);
   const totalACV = items.reduce((sum, i) => sum + (i.actual_cash_value || 0) * i.quantity, 0);
   const totalOriginal = items.reduce((sum, i) => sum + (i.original_purchase_price || 0) * i.quantity, 0);
@@ -33,12 +41,6 @@ export const InventorySummary = ({ items }: InventorySummaryProps) => {
 
   const roomCounts = items.reduce((acc, item) => {
     acc[item.room_name] = (acc[item.room_name] || 0) + item.quantity;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const categoryCounts = items.reduce((acc, item) => {
-    const cat = item.category || "Uncategorized";
-    acc[cat] = (acc[cat] || 0) + item.quantity;
     return acc;
   }, {} as Record<string, number>);
 
@@ -58,6 +60,119 @@ export const InventorySummary = ({ items }: InventorySummaryProps) => {
     });
     navigator.clipboard.writeText(csv);
     toast.success("Inventory copied as CSV");
+  };
+
+  const exportExcelWithLetterhead = async () => {
+    setExporting(true);
+    try {
+      // Fetch company branding
+      const { data: branding } = await supabase
+        .from("company_branding" as any)
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+
+      const brand = branding as any;
+      const companyName = brand?.company_name || "Company Name";
+      const companyAddress = brand?.company_address || "";
+      const companyPhone = brand?.company_phone || "";
+      const companyEmail = brand?.company_email || "";
+
+      // Build worksheet data with letterhead header rows
+      const wsData: any[][] = [];
+
+      // Letterhead rows
+      wsData.push([companyName]);
+      if (companyAddress) {
+        companyAddress.split("\n").forEach((line: string) => wsData.push([line.trim()]));
+      }
+      if (companyPhone || companyEmail) {
+        wsData.push([
+          [companyPhone, companyEmail].filter(Boolean).join("  |  ")
+        ]);
+      }
+      wsData.push([]); // blank line
+      wsData.push(["PERSONAL PROPERTY INVENTORY"]);
+      wsData.push([`Generated: ${new Date().toLocaleDateString()}`]);
+      wsData.push([]); // blank line
+
+      const headerRowIndex = wsData.length;
+
+      // Column headers
+      wsData.push([
+        "Room", "Item Name", "Description", "Qty",
+        "Original Price", "RCV (per unit)", "RCV Total",
+        "ACV (per unit)", "ACV Total",
+        "Condition", "Manufacturer", "Model", "Category", "Age (yrs)"
+      ]);
+
+      // Data rows
+      items.forEach((item) => {
+        wsData.push([
+          item.room_name,
+          item.item_name,
+          item.item_description || "",
+          item.quantity,
+          item.original_purchase_price || "",
+          item.replacement_cost || "",
+          item.replacement_cost ? item.replacement_cost * item.quantity : "",
+          item.actual_cash_value || "",
+          item.actual_cash_value ? item.actual_cash_value * item.quantity : "",
+          item.condition_before_loss || "",
+          item.manufacturer || "",
+          item.model_number || "",
+          item.category || "",
+          item.age_years != null ? item.age_years : "",
+        ]);
+      });
+
+      // Totals row
+      wsData.push([]);
+      wsData.push([
+        "", "", "TOTALS", totalItems,
+        totalOriginal || "", "", totalRCV || "",
+        "", totalACV || "",
+        "", "", "", "", "",
+      ]);
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      // Column widths
+      ws["!cols"] = [
+        { wch: 16 }, // Room
+        { wch: 30 }, // Item Name
+        { wch: 25 }, // Description
+        { wch: 6 },  // Qty
+        { wch: 14 }, // Original
+        { wch: 14 }, // RCV/unit
+        { wch: 14 }, // RCV total
+        { wch: 14 }, // ACV/unit
+        { wch: 14 }, // ACV total
+        { wch: 12 }, // Condition
+        { wch: 16 }, // Manufacturer
+        { wch: 14 }, // Model
+        { wch: 14 }, // Category
+        { wch: 10 }, // Age
+      ];
+
+      // Merge letterhead company name across columns
+      ws["!merges"] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, "Inventory");
+
+      // Download
+      XLSX.writeFile(wb, `Personal_Property_Inventory_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      toast.success("Excel file downloaded with letterhead");
+    } catch (err: any) {
+      console.error("Excel export error:", err);
+      toast.error("Export failed: " + err.message);
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -127,11 +242,19 @@ export const InventorySummary = ({ items }: InventorySummaryProps) => {
         </div>
       )}
 
-      {/* Export */}
+      {/* Export buttons */}
       {items.length > 0 && (
-        <div className="pt-2">
+        <div className="pt-2 flex flex-wrap gap-2">
           <Button variant="outline" onClick={exportInventory}>
-            <Copy className="h-4 w-4 mr-1" /> Export CSV
+            <Copy className="h-4 w-4 mr-1" /> Copy CSV
+          </Button>
+          <Button onClick={exportExcelWithLetterhead} disabled={exporting}>
+            {exporting ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4 mr-1" />
+            )}
+            Export Excel with Letterhead
           </Button>
         </div>
       )}

@@ -9,11 +9,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { Package, Plus, Camera, ClipboardList, BarChart3 } from "lucide-react";
+import { Package, Plus, Camera, ClipboardList, BarChart3, FileUp } from "lucide-react";
 import { toast } from "sonner";
 import { InventoryPhotoScanner } from "./inventory/InventoryPhotoScanner";
 import { InventoryTable } from "./inventory/InventoryTable";
 import { InventorySummary } from "./inventory/InventorySummary";
+import { InventoryPDFImport } from "./inventory/InventoryPDFImport";
 
 interface InventoryItem {
   id: string;
@@ -241,6 +242,9 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
               <TabsTrigger value="scan" className="justify-start gap-2 w-full">
                 <Camera className="h-4 w-4" /> Scan Photos
               </TabsTrigger>
+              <TabsTrigger value="pdf" className="justify-start gap-2 w-full">
+                <FileUp className="h-4 w-4" /> Import PDF
+              </TabsTrigger>
               <TabsTrigger value="inventory" className="justify-start gap-2 w-full">
                 <ClipboardList className="h-4 w-4" /> Inventory ({items.length})
               </TabsTrigger>
@@ -254,12 +258,16 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
                 <InventoryPhotoScanner claimId={claimId} onItemsAdded={fetchItems} />
               </TabsContent>
 
+              <TabsContent value="pdf" className="mt-0">
+                <InventoryPDFImport claimId={claimId} onItemsAdded={fetchItems} />
+              </TabsContent>
+
               <TabsContent value="inventory" className="mt-0">
                 <InventoryTable items={items} loading={loading} onRefresh={fetchItems} />
               </TabsContent>
 
               <TabsContent value="summary" className="mt-0">
-                <InventorySummary items={items} />
+                <InventorySummary items={items} claimId={claimId} />
               </TabsContent>
             </div>
           </div>
