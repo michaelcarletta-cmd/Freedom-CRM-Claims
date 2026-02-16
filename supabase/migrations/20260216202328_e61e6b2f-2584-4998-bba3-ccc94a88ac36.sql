@@ -1,0 +1,1 @@
+DROP POLICY "Authenticated users can view claim files" ON storage.objects;
