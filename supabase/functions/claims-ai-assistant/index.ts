@@ -1845,42 +1845,75 @@ async function searchCommunications(supabase: any, searchQuery: string, communic
 
     // Search emails
     if (communicationType === "all" || communicationType === "emails") {
-      // Build OR filter with all search terms and claim number variations
-      const orParts: string[] = [];
-      for (const term of searchTerms) {
-        orParts.push(`subject.ilike.%${term}%`, `body.ilike.%${term}%`);
-      }
-      // Also search by original query in recipient fields
-      orParts.push(`recipient_email.ilike.%${searchQuery}%`, `recipient_name.ilike.%${searchQuery}%`);
+      let allEmails: any[] = [];
 
-      let emailQuery = supabase
-        .from("emails")
-        .select("*, claims!inner(claim_number, policyholder_name)")
-        .or(orParts.join(','))
-        .gte("created_at", start.toISOString())
-        .lte("created_at", end.toISOString())
-        .order("created_at", { ascending: false })
-        .limit(20);
-
+      // When scoped to a specific claim, ALWAYS fetch all emails for that claim first
       if (claimId) {
-        emailQuery = emailQuery.eq("claim_id", claimId);
+        const { data: claimEmails, error: claimEmailErr } = await supabase
+          .from("emails")
+          .select("*, claims!inner(claim_number, policyholder_name)")
+          .eq("claim_id", claimId)
+          .gte("created_at", start.toISOString())
+          .lte("created_at", end.toISOString())
+          .order("created_at", { ascending: false })
+          .limit(50);
+        
+        if (claimEmailErr) console.error("Claim email fetch error:", claimEmailErr.message);
+        if (claimEmails) allEmails = claimEmails;
       }
 
-      const { data: emails, error: emailError } = await emailQuery;
-      if (emailError) {
-        console.error("Email search error:", emailError.message);
-      }
-      if (emails) {
-        for (const email of emails) {
-          results.push({
-            type: "Email",
-            date: email.created_at || email.sent_at,
-            claim: `${email.claims?.claim_number || 'N/A'} - ${email.claims?.policyholder_name || 'Unknown'}`,
-            direction: email.sent_by ? "Sent" : "Received",
-            summary: `To: ${email.recipient_email || email.recipient_name || 'Unknown'} | Subject: ${email.subject}`,
-            content: email.body?.substring(0, 300)
-          });
+      // Also do text-based search (for cross-claim searches or additional filtering)
+      if (!claimId || searchQuery) {
+        const orParts: string[] = [];
+        for (const term of searchTerms) {
+          orParts.push(`subject.ilike.%${term}%`, `body.ilike.%${term}%`);
         }
+        orParts.push(`recipient_email.ilike.%${searchQuery}%`, `recipient_name.ilike.%${searchQuery}%`);
+
+        let emailQuery = supabase
+          .from("emails")
+          .select("*, claims!inner(claim_number, policyholder_name)")
+          .or(orParts.join(','))
+          .gte("created_at", start.toISOString())
+          .lte("created_at", end.toISOString())
+          .order("created_at", { ascending: false })
+          .limit(20);
+
+        if (claimId) emailQuery = emailQuery.eq("claim_id", claimId);
+
+        const { data: searchEmails, error: searchErr } = await emailQuery;
+        if (searchErr) console.error("Email search error:", searchErr.message);
+        if (searchEmails) {
+          // Merge without duplicates
+          const existingIds = new Set(allEmails.map((e: any) => e.id));
+          for (const e of searchEmails) {
+            if (!existingIds.has(e.id)) allEmails.push(e);
+          }
+        }
+      }
+
+      // Deduplicate and format
+      for (const email of allEmails) {
+        const isInbound = email.recipient_type === 'inbound';
+        
+        // Extract sender info from body for inbound emails
+        let senderInfo = '';
+        if (isInbound && email.body) {
+          // Try to extract sender from common email patterns in the body
+          const fromMatch = email.body.match(/(?:^|\n)(?:From|from):\s*(.+?)(?:\n|<)/m);
+          if (fromMatch) senderInfo = fromMatch[1].trim();
+        }
+
+        results.push({
+          type: "Email",
+          date: email.sent_at || email.created_at,
+          claim: `${email.claims?.claim_number || 'N/A'} - ${email.claims?.policyholder_name || 'Unknown'}`,
+          direction: isInbound ? "📥 Received" : "📤 Sent",
+          summary: isInbound 
+            ? `From: ${senderInfo || 'External'} → ${email.recipient_email || 'Unknown'} | Subject: ${email.subject}`
+            : `To: ${email.recipient_email || email.recipient_name || 'Unknown'} (${email.recipient_type || 'unknown'}) | Subject: ${email.subject}`,
+          content: email.body?.substring(0, 800)
+        });
       }
     }
 
@@ -2001,6 +2034,38 @@ async function searchCommunications(supabase: any, searchQuery: string, communic
         output += `   📅 Deadlines: ${result.deadlines}\n`;
       }
       output += "\n";
+    }
+
+    // Auto-add found communications to the claim timeline if in claim mode
+    if (claimId && results.length > 0) {
+      let addedCount = 0;
+      for (const result of results) {
+        if (result.type === "Email") {
+          // Check if this email is already logged in claim_updates
+          const contentPreview = `[Darwin Found] ${result.direction} Email — ${result.summary}`;
+          const { data: existing } = await supabase
+            .from("claim_updates")
+            .select("id")
+            .eq("claim_id", claimId)
+            .eq("update_type", "communication_log")
+            .ilike("content", `%${result.summary.substring(0, 60)}%`)
+            .limit(1);
+
+          if (!existing || existing.length === 0) {
+            const timelineContent = `${contentPreview}\nDate: ${new Date(result.date).toLocaleString()}\n${result.content ? 'Preview: ' + result.content.substring(0, 400) : ''}`;
+            await supabase.from("claim_updates").insert({
+              claim_id: claimId,
+              update_type: "communication_log",
+              content: timelineContent,
+              created_at: result.date
+            });
+            addedCount++;
+          }
+        }
+      }
+      if (addedCount > 0) {
+        output += `\n✅ Added ${addedCount} communication(s) to the claim timeline.\n`;
+      }
     }
 
     return output;
