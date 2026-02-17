@@ -1960,20 +1960,22 @@ async function searchCommunications(supabase: any, searchQuery: string, communic
 }
 
 // Helper function to search claim history and timeline
-async function searchClaimHistory(supabase: any, searchQuery: string, eventType: string, timePeriod: string, claimName?: string): Promise<string> {
+async function searchClaimHistory(supabase: any, searchQuery: string, eventType: string, timePeriod: string, claimName?: string, forceClaimId?: string): Promise<string> {
   try {
     const { start, end } = getDateRange(timePeriod);
     const events: any[] = [];
 
-    // Resolve claim ID if name provided
-    let claimId: string | null = null;
+    // Use forced claim ID (from claim mode) or resolve from name
+    let claimId: string | null = forceClaimId || null;
     let claimInfo = "";
-    if (claimName) {
+    if (!claimId && claimName) {
       const foundClaim = await findClaimByClientName(supabase, claimName);
       if (foundClaim) {
         claimId = foundClaim.id;
         claimInfo = ` for ${foundClaim.claim_number} - ${foundClaim.policyholder_name}`;
       }
+    } else if (claimId && claimName) {
+      claimInfo = ` for ${claimName}`;
     }
 
     // Search claim updates/notes
@@ -2991,6 +2993,14 @@ You must NEVER default to roofing, hail, shingle, or wind damage assumptions unl
 You have access to the user's active claims and pending tasks. Provide practical, actionable advice focused on getting claims FILED RIGHT, MOVING FAST, and PAID FULLY. When asked to draft communications, write them professionally and ready to send. Be thorough and strategic.`
       : `You are Darwin, an elite public adjuster AI consultant specializing in property damage claims. You think and operate like the best public adjusters in the industry, with a relentless focus on getting claims FILED RIGHT, MOVING FAST, and PAID FULLY.
 
+=== ABSOLUTE RULE: CURRENT CLAIM FOCUS ===
+You are currently embedded INSIDE a specific claim. ALL of your responses, tool calls, searches, and analysis MUST be about THIS claim and THIS claim ONLY.
+- When the user says "this claim", "the claim", "this file", or refers to anything without specifying a different claim, they mean the claim in your current context.
+- NEVER reference, confuse, or substitute a different claim's number, policyholder, or details.
+- When using tools like search_communications, search_claim_history, or search_tasks, do NOT pass a claim_name parameter — the system will automatically scope to the current claim.
+- If the user explicitly asks about a DIFFERENT claim by name, only then should you use get_full_claim_context to look it up.
+- Before responding, VERIFY that any claim number or policyholder name you mention matches the claim in your context. If it doesn't match, you have the WRONG claim — stop and correct yourself.
+
 === DARWIN CORE PHILOSOPHY (BRELLY-INSPIRED) ===
 
 FUNDAMENTAL TRUTH: At the end of the day, your insurance claim is your responsibility. The insurance company owes good faith handling, but they don't owe money until you've PROVEN your covered losses.
@@ -3730,12 +3740,18 @@ ${knowledgeBaseContext || ''}`
             const params = JSON.parse(toolCall.function.arguments);
             console.log("Searching claim history:", params);
             
+            // When in claim mode, automatically scope to the current claim
+            const effectiveClaimName = (claimId && !params.claim_name && claim) 
+              ? claim.claim_number || claim.policyholder_name 
+              : params.claim_name;
+            
             const historyResult = await searchClaimHistory(
               supabase,
               params.search_query || "",
               params.event_type || "all",
               params.time_period || "this_week",
-              params.claim_name
+              effectiveClaimName,
+              claimId || undefined
             );
             answer = historyResult;
           } catch (parseErr) {
