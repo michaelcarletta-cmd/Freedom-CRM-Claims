@@ -152,3 +152,6 @@ verify_jwt = true
 
 [functions.outlook-email-sync]
 verify_jwt = false
+
+[functions.outlook-oauth-callback]
+verify_jwt = false

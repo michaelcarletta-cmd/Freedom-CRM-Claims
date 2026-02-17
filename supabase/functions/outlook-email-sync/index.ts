@@ -6,123 +6,93 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// Simple IMAP client using Deno's TCP
-async function connectIMAP(host: string, port: number, email: string, password: string): Promise<any[]> {
-  const conn = await Deno.connectTls({ hostname: host, port });
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  
-  const readResponse = async (): Promise<string> => {
-    const buf = new Uint8Array(65536);
-    const n = await conn.read(buf);
-    if (n === null) return '';
-    return decoder.decode(buf.subarray(0, n));
-  };
+// Refresh Microsoft OAuth tokens
+async function refreshTokens(refreshToken: string): Promise<{ access_token: string; refresh_token: string; expires_at: string }> {
+  const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID')!;
+  const MS_CLIENT_SECRET = Deno.env.get('MS_CLIENT_SECRET')!;
 
-  const sendCommand = async (tag: string, cmd: string): Promise<string> => {
-    await conn.write(encoder.encode(`${tag} ${cmd}\r\n`));
-    let response = '';
-    let attempts = 0;
-    while (attempts < 20) {
-      const chunk = await readResponse();
-      response += chunk;
-      if (response.includes(`${tag} OK`) || response.includes(`${tag} NO`) || response.includes(`${tag} BAD`)) {
-        break;
-      }
-      attempts++;
-    }
-    return response;
-  };
+  const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: MS_CLIENT_ID,
+      client_secret: MS_CLIENT_SECRET,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+      scope: 'https://graph.microsoft.com/Mail.Read offline_access User.Read',
+    }),
+  });
 
-  try {
-    // Read greeting
-    await readResponse();
-
-    // Login
-    const loginResp = await sendCommand('A1', `LOGIN "${email}" "${password}"`);
-    if (loginResp.includes('A1 NO') || loginResp.includes('A1 BAD')) {
-      throw new Error('Authentication failed. Check your email and app password.');
-    }
-
-    // Select INBOX
-    await sendCommand('A2', 'SELECT INBOX');
-
-    // Search for recent emails (last 30 days)
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const dateStr = thirtyDaysAgo.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }).replace(',', '');
-    // Format: DD-Mon-YYYY
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const formattedDate = `${thirtyDaysAgo.getDate()}-${months[thirtyDaysAgo.getMonth()]}-${thirtyDaysAgo.getFullYear()}`;
-    
-    const searchResp = await sendCommand('A3', `SEARCH SINCE ${formattedDate}`);
-    
-    // Parse message IDs from search response
-    const searchLine = searchResp.split('\r\n').find(l => l.startsWith('* SEARCH'));
-    if (!searchLine || searchLine.trim() === '* SEARCH') {
-      await sendCommand('A99', 'LOGOUT');
-      conn.close();
-      return [];
-    }
-
-    const msgIds = searchLine.replace('* SEARCH ', '').trim().split(' ').filter(Boolean);
-    
-    // Limit to most recent 50 messages
-    const recentIds = msgIds.slice(-50);
-    
-    const emails: any[] = [];
-    
-    for (const id of recentIds) {
-      try {
-        // Fetch headers and body preview
-        const fetchResp = await sendCommand(`F${id}`, `FETCH ${id} (BODY[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)] BODY[TEXT]<0.2000>)`);
-        
-        // Parse headers
-        const fromMatch = fetchResp.match(/From:\s*(.+?)(?:\r\n(?!\s)|$)/i);
-        const toMatch = fetchResp.match(/To:\s*(.+?)(?:\r\n(?!\s)|$)/i);
-        const subjectMatch = fetchResp.match(/Subject:\s*(.+?)(?:\r\n(?!\s)|$)/i);
-        const dateMatch = fetchResp.match(/Date:\s*(.+?)(?:\r\n(?!\s)|$)/i);
-        const messageIdMatch = fetchResp.match(/Message-ID:\s*(.+?)(?:\r\n(?!\s)|$)/i);
-        
-        // Extract body text (simplified)
-        const bodyParts = fetchResp.split('BODY[TEXT]<0>');
-        let bodyText = '';
-        if (bodyParts.length > 1) {
-          bodyText = bodyParts[1].substring(0, 2000);
-          // Clean up IMAP artifacts
-          bodyText = bodyText.replace(/\)\r\n.*$/s, '').trim();
-        }
-
-        emails.push({
-          from: fromMatch?.[1]?.trim() || 'Unknown',
-          to: toMatch?.[1]?.trim() || 'Unknown',
-          subject: subjectMatch?.[1]?.trim() || '(No Subject)',
-          date: dateMatch?.[1]?.trim() || new Date().toISOString(),
-          message_id: messageIdMatch?.[1]?.trim() || '',
-          body_preview: bodyText.substring(0, 500),
-        });
-      } catch (e) {
-        console.error(`Error fetching message ${id}:`, e);
-      }
-    }
-
-    // Logout
-    await sendCommand('A99', 'LOGOUT');
-    conn.close();
-    
-    return emails;
-  } catch (error) {
-    try { conn.close(); } catch(_) {}
-    throw error;
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Token refresh failed: ${errText}`);
   }
+
+  const tokens = await response.json();
+  return {
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+  };
 }
 
-// Parse email address from "Name <email@domain.com>" format
-function parseEmailAddress(raw: string): { name: string; email: string } {
-  const match = raw.match(/^"?([^"<]*)"?\s*<?([^>]+)>?$/);
-  if (match) {
-    return { name: match[1].trim() || match[2].trim(), email: match[2].trim() };
+// Get a valid access token, refreshing if needed
+async function getAccessToken(connection: any, supabase: any): Promise<string> {
+  let tokenData: any;
+  try {
+    tokenData = JSON.parse(connection.encrypted_password);
+  } catch {
+    throw new Error('Invalid token data. Please reconnect your Outlook account.');
   }
-  return { name: raw.trim(), email: raw.trim() };
+
+  const expiresAt = new Date(tokenData.expires_at);
+  // Refresh if expires within 5 minutes
+  if (expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
+    const newTokens = await refreshTokens(tokenData.refresh_token);
+    // Update stored tokens
+    await supabase
+      .from('email_connections')
+      .update({
+        encrypted_password: JSON.stringify(newTokens),
+        last_sync_error: null,
+      })
+      .eq('id', connection.id);
+    return newTokens.access_token;
+  }
+
+  return tokenData.access_token;
+}
+
+// Fetch emails from Microsoft Graph API
+async function fetchGraphEmails(accessToken: string): Promise<any[]> {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const response = await fetch(
+    `https://graph.microsoft.com/v1.0/me/messages?` +
+    `$filter=receivedDateTime ge ${thirtyDaysAgo}` +
+    `&$select=from,toRecipients,subject,receivedDateTime,bodyPreview,internetMessageId` +
+    `&$top=100&$orderby=receivedDateTime desc`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Graph API error (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  return (data.value || []).map((msg: any) => ({
+    from: msg.from?.emailAddress?.address || 'Unknown',
+    from_name: msg.from?.emailAddress?.name || '',
+    to: msg.toRecipients?.[0]?.emailAddress?.address || 'Unknown',
+    to_name: msg.toRecipients?.[0]?.emailAddress?.name || '',
+    subject: msg.subject || '(No Subject)',
+    date: msg.receivedDateTime,
+    body_preview: msg.bodyPreview || '',
+    message_id: msg.internetMessageId || '',
+  }));
 }
 
 serve(async (req) => {
@@ -131,54 +101,38 @@ serve(async (req) => {
   }
 
   try {
-    // Auth
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Not authenticated');
     const token = authHeader.replace('Bearer ', '');
-    
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
+
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) throw new Error('Not authenticated');
 
-    const { action, claim_id, connection_id, email_address, password, imap_host, imap_port } = await req.json();
+    const { action, claim_id, connection_id } = await req.json();
 
-    if (action === 'test_connection') {
-      // Test IMAP connection
-      const emails = await connectIMAP(
-        imap_host || 'outlook.office365.com',
-        imap_port || 993,
-        email_address,
-        password
-      );
-      
-      return new Response(JSON.stringify({ success: true, email_count: emails.length }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    if (action === 'get_auth_url') {
+      const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID');
+      if (!MS_CLIENT_ID) throw new Error('Microsoft OAuth not configured');
 
-    if (action === 'save_connection') {
-      // Save connection (password stored as-is — in production, encrypt server-side)
-      const { data, error } = await supabase
-        .from('email_connections')
-        .upsert({
-          user_id: user.id,
-          email_address,
-          imap_host: imap_host || 'outlook.office365.com',
-          imap_port: imap_port || 993,
-          encrypted_password: password,
-          provider: 'outlook',
-          is_active: true,
-          last_sync_error: null,
-        }, { onConflict: 'user_id,email_address' })
-        .select()
-        .single();
+      const redirectUri = `${supabaseUrl}/functions/v1/outlook-oauth-callback`;
+      const state = btoa(JSON.stringify({
+        userId: user.id,
+        redirectUrl: req.headers.get('origin') || req.headers.get('referer') || '',
+      }));
 
-      if (error) throw error;
+      const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
+        `client_id=${MS_CLIENT_ID}` +
+        `&response_type=code` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&scope=${encodeURIComponent('https://graph.microsoft.com/Mail.Read offline_access User.Read')}` +
+        `&state=${state}` +
+        `&response_mode=query`;
 
-      return new Response(JSON.stringify({ success: true, connection: { id: data.id, email_address: data.email_address } }), {
+      return new Response(JSON.stringify({ authUrl }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -186,17 +140,15 @@ serve(async (req) => {
     if (action === 'sync_emails') {
       if (!claim_id) throw new Error('claim_id is required');
 
-      // Get the user's email connection
+      // Get user's email connection
       let query = supabase
         .from('email_connections')
         .select('*')
         .eq('user_id', user.id)
         .eq('is_active', true);
-      
-      if (connection_id) {
-        query = query.eq('id', connection_id);
-      }
-      
+
+      if (connection_id) query = query.eq('id', connection_id);
+
       const { data: connections, error: connError } = await query.limit(1).single();
       if (connError || !connections) throw new Error('No active email connection found. Please connect your Outlook account in Settings.');
 
@@ -211,25 +163,31 @@ serve(async (req) => {
 
       if (!claim) throw new Error('Claim not found');
 
-      // Fetch emails via IMAP
-      let emails: any[];
+      // Get access token (auto-refreshes if needed)
+      let accessToken: string;
       try {
-        emails = await connectIMAP(
-          connection.imap_host,
-          connection.imap_port,
-          connection.email_address,
-          connection.encrypted_password
-        );
-      } catch (imapError: any) {
-        // Update connection with error
+        accessToken = await getAccessToken(connection, supabase);
+      } catch (tokenErr: any) {
         await supabase
           .from('email_connections')
-          .update({ last_sync_error: imapError.message })
+          .update({ last_sync_error: tokenErr.message })
           .eq('id', connection.id);
-        throw new Error(`IMAP connection failed: ${imapError.message}`);
+        throw new Error(`Authentication failed: ${tokenErr.message}. Please reconnect your Outlook account.`);
       }
 
-      // Build matching keywords from claim
+      // Fetch emails via Microsoft Graph
+      let emails: any[];
+      try {
+        emails = await fetchGraphEmails(accessToken);
+      } catch (graphErr: any) {
+        await supabase
+          .from('email_connections')
+          .update({ last_sync_error: graphErr.message })
+          .eq('id', connection.id);
+        throw new Error(`Email fetch failed: ${graphErr.message}`);
+      }
+
+      // Build matching keywords
       const matchTerms = [
         claim.claim_number,
         claim.policyholder_email,
@@ -237,7 +195,6 @@ serve(async (req) => {
         claim.insurance_email,
       ].filter(Boolean).map(t => t!.toLowerCase());
 
-      // Also match on adjuster emails
       const { data: adjusters } = await supabase
         .from('claim_adjusters')
         .select('adjuster_email, adjuster_name')
@@ -250,9 +207,9 @@ serve(async (req) => {
         });
       }
 
-      // Filter emails that match claim
+      // Filter matching emails
       const matchingEmails = emails.filter(email => {
-        const searchText = `${email.from} ${email.to} ${email.subject} ${email.body_preview}`.toLowerCase();
+        const searchText = `${email.from} ${email.from_name} ${email.to} ${email.to_name} ${email.subject} ${email.body_preview}`.toLowerCase();
         return matchTerms.some(term => searchText.includes(term));
       });
 
@@ -269,9 +226,6 @@ serve(async (req) => {
       // Insert new emails
       let importedCount = 0;
       for (const email of matchingEmails) {
-        const parsedFrom = parseEmailAddress(email.from);
-        const parsedTo = parseEmailAddress(email.to);
-        
         let sentAt: string;
         try {
           sentAt = new Date(email.date).toISOString();
@@ -282,9 +236,8 @@ serve(async (req) => {
         const key = `${email.subject}|${sentAt.substring(0, 16)}`;
         if (existingKeys.has(key)) continue;
 
-        // Determine if inbound or outbound
-        const isInbound = parsedTo.email.toLowerCase() === connection.email_address.toLowerCase() ||
-                          parsedFrom.email.toLowerCase() !== connection.email_address.toLowerCase();
+        const isInbound = email.to.toLowerCase() === connection.email_address.toLowerCase() ||
+                          email.from.toLowerCase() !== connection.email_address.toLowerCase();
 
         const { error: insertError } = await supabase
           .from('emails')
@@ -292,8 +245,8 @@ serve(async (req) => {
             claim_id,
             subject: email.subject,
             body: email.body_preview,
-            recipient_email: isInbound ? parsedFrom.email : parsedTo.email,
-            recipient_name: isInbound ? parsedFrom.name : parsedTo.name,
+            recipient_email: isInbound ? email.from : email.to,
+            recipient_name: isInbound ? email.from_name : email.to_name,
             recipient_type: isInbound ? 'inbound' : 'outlook_sync',
             sent_at: sentAt,
           });
@@ -310,11 +263,11 @@ serve(async (req) => {
         .update({ last_sync_at: new Date().toISOString(), last_sync_error: null })
         .eq('id', connection.id);
 
-      return new Response(JSON.stringify({ 
-        success: true, 
+      return new Response(JSON.stringify({
+        success: true,
         total_fetched: emails.length,
         matching: matchingEmails.length,
-        imported: importedCount 
+        imported: importedCount,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
