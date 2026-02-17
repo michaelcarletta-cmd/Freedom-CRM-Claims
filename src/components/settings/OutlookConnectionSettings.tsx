@@ -3,13 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Loader2, CheckCircle, XCircle, Trash2 } from "lucide-react";
+import { Mail, Loader2, CheckCircle, XCircle, Trash2, ExternalLink, Copy, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) {
   const [connecting, setConnecting] = useState(false);
+  const [authUrl, setAuthUrl] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -43,7 +44,7 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
     },
   });
 
-  const handleSignIn = async () => {
+  const handleGetAuthUrl = async () => {
     setConnecting(true);
     try {
       const { data, error } = await supabase.functions.invoke("outlook-email-sync", {
@@ -51,40 +52,21 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
-
-      // Open Microsoft OAuth URL directly — use named window without noopener so we can track it
-      const popup = window.open(data.authUrl, 'outlook-oauth', 'width=700,height=800,scrollbars=yes');
-      if (!popup) {
-        // Fallback: copy URL approach
-        try {
-          await navigator.clipboard.writeText(data.authUrl);
-          toast({ 
-            title: "Popup blocked", 
-            description: "The Microsoft sign-in URL has been copied to your clipboard. Open a new browser tab and paste it.", 
-          });
-        } catch {
-          toast({ title: "Popup blocked", description: "Please allow popups for this site and try again.", variant: "destructive" });
-        }
-        setConnecting(false);
-        return;
-      }
-
-      // Poll for window close & refresh connections
-      const pollTimer = setInterval(() => {
-        try {
-          if (popup.closed) {
-            clearInterval(pollTimer);
-            setConnecting(false);
-            queryClient.invalidateQueries({ queryKey: ["email-connections"] });
-            toast({ title: "Outlook connection", description: "Checking connection status..." });
-          }
-        } catch {
-          // Cross-origin — keep polling
-        }
-      }, 1000);
+      setAuthUrl(data.authUrl);
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
       setConnecting(false);
+    }
+  };
+
+  const handleCopyUrl = async () => {
+    if (!authUrl) return;
+    try {
+      await navigator.clipboard.writeText(authUrl);
+      toast({ title: "Copied!", description: "Paste this URL in a new browser tab to sign in with Microsoft." });
+    } catch {
+      toast({ title: "Copy failed", description: "Please select and copy the URL manually.", variant: "destructive" });
     }
   };
 
@@ -143,8 +125,8 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
                         <XCircle className="h-3 w-3" /> Error
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-xs gap-1 text-green-700 border-green-500/30">
-                        <CheckCircle className="h-3 w-3" /> Active
+                      <Badge variant="outline" className="text-xs gap-1 border-green-500/30">
+                        <CheckCircle className="h-3 w-3 text-green-700" /> Active
                       </Badge>
                     )}
                     <Button
@@ -161,24 +143,65 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
             </div>
           )}
 
-          {/* Sign in with Microsoft button */}
+          {/* Sign in with Microsoft */}
           <div className="space-y-4">
-            <Button
-              onClick={handleSignIn}
-              disabled={connecting}
-              className="w-full"
-              variant="outline"
-            >
-              {connecting ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Mail className="h-4 w-4 mr-2" />
-              )}
-              {connecting ? "Redirecting to Microsoft..." : "Sign in with Microsoft"}
-            </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              Uses secure OAuth 2.0 — your password is never stored
-            </p>
+            {!authUrl ? (
+              <>
+                <Button
+                  onClick={handleGetAuthUrl}
+                  disabled={connecting}
+                  className="w-full"
+                  variant="outline"
+                >
+                  {connecting ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Mail className="h-4 w-4 mr-2" />
+                  )}
+                  {connecting ? "Generating sign-in link..." : "Sign in with Microsoft"}
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  Uses secure OAuth 2.0 — your password is never stored
+                </p>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Open this link in a new browser tab to sign in:</p>
+                <div className="flex gap-2">
+                  <a
+                    href={authUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-md border bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Open Microsoft Sign-In
+                  </a>
+                  <Button variant="outline" size="icon" onClick={handleCopyUrl} title="Copy URL">
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  After signing in, come back here and click "Check Connection" below.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      queryClient.invalidateQueries({ queryKey: ["email-connections"] });
+                      toast({ title: "Checking...", description: "Looking for your Microsoft connection." });
+                    }}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Check Connection
+                  </Button>
+                  <Button variant="ghost" onClick={() => setAuthUrl(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </div>
