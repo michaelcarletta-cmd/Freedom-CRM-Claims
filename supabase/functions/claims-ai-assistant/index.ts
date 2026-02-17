@@ -1785,20 +1785,22 @@ async function searchUserActivity(supabase: any, userId: string, timePeriod: str
 }
 
 // Helper function to search communications across all claims
-async function searchCommunications(supabase: any, searchQuery: string, communicationType: string, timePeriod: string, claimName?: string): Promise<string> {
+async function searchCommunications(supabase: any, searchQuery: string, communicationType: string, timePeriod: string, claimName?: string, forceClaimId?: string): Promise<string> {
   try {
     const { start, end } = getDateRange(timePeriod);
     const results: any[] = [];
 
-    // Resolve claim ID if name provided
-    let claimId: string | null = null;
+    // Use forced claim ID (from claim mode) or resolve from name
+    let claimId: string | null = forceClaimId || null;
     let claimInfo = "";
-    if (claimName) {
+    if (!claimId && claimName) {
       const foundClaim = await findClaimByClientName(supabase, claimName);
       if (foundClaim) {
         claimId = foundClaim.id;
         claimInfo = ` for claim ${foundClaim.claim_number} - ${foundClaim.policyholder_name}`;
       }
+    } else if (claimId && claimName) {
+      claimInfo = ` for claim ${claimName}`;
     }
 
     // Search emails
@@ -2828,10 +2830,12 @@ SEARCH COMMUNICATIONS (search_communications):
 - Searches ALL emails, SMS, notes, and communications diary entries across all claims
 - Can search by keywords, adjuster names, topics, etc.
 - Can optionally filter to a specific claim by name
+- IMPORTANT: When the user says "this claim" or "about this claim", do NOT pass a claim_name - the system will automatically scope to the current claim context
 - Examples:
   - "what did the adjuster and I discuss about depreciation" → search_communications({ search_query: "depreciation" })
   - "find all emails mentioning denial" → search_communications({ search_query: "denial", communication_type: "emails" })
   - "show me communications with State Farm" → search_communications({ search_query: "State Farm" })
+  - "find emails from State Farm about this claim" → search_communications({ search_query: "State Farm", communication_type: "emails" })
 
 SEARCH CLAIM HISTORY (search_claim_history):
 - Use this for timeline questions like "what happened last week", "when did we last contact...", "show me status changes"
@@ -3702,12 +3706,19 @@ ${knowledgeBaseContext || ''}`
             const params = JSON.parse(toolCall.function.arguments);
             console.log("Searching communications:", params);
             
+            // When in claim mode, automatically scope to the current claim
+            // instead of relying on the AI to resolve claim_name
+            const effectiveClaimName = (claimId && !params.claim_name && claim) 
+              ? claim.claim_number || claim.policyholder_name 
+              : params.claim_name;
+            
             const communicationsResult = await searchCommunications(
               supabase, 
               params.search_query, 
               params.communication_type || "all",
               params.time_period || "all_time",
-              params.claim_name
+              effectiveClaimName,
+              claimId || undefined
             );
             answer = communicationsResult;
           } catch (parseErr) {
