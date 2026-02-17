@@ -4248,32 +4248,41 @@ Analyze the above claim context and detect the optimal Declared Position. Return
         const violations = additionalContext?.violations || [];
         const userContext = additionalContext?.userContext || '';
         const state = additionalContext?.state || stateInfo.state;
-        const deptName = state === 'NJ' 
-          ? 'New Jersey Department of Banking and Insurance (DOBI)' 
-          : 'Pennsylvania Insurance Department';
+        const deptNameMap: Record<string, string> = {
+          'NJ': 'New Jersey Department of Banking and Insurance (DOBI)',
+          'PA': 'Pennsylvania Insurance Department',
+          'TX': 'Texas Department of Insurance (TDI)',
+          'FL': 'Florida Department of Financial Services / Office of Insurance Regulation',
+        };
+        const deptName = deptNameMap[state] || `${stateInfo.stateName} Department of Insurance`;
         
         const violationsList = violations.map((v: any, i: number) => 
           `${i + 1}. ${v.title} (${v.citation}): ${v.description}${v.deadlineDays ? ` — ${v.deadlineDays}-day deadline` : ''}${v.consequence ? ` — Consequence: ${v.consequence}` : ''}`
         ).join('\n');
 
-        systemPrompt = `You are Darwin, an expert public adjuster drafting a formal complaint letter to the ${deptName}.
-You write authoritative, well-structured regulatory complaint letters that:
-1. Clearly identify the complainant (policyholder) and the respondent (insurance company)
-2. State specific regulation violations with exact citations
-3. Describe the factual basis for each violation using claim-specific details
-4. Explain why the carrier's actions violate each cited regulation
-5. Specify the relief being requested (investigation, enforcement action, compliance order)
-6. Maintain a professional, factual tone throughout
+        systemPrompt = `You are Darwin, an expert public adjuster drafting a formal regulatory complaint letter to the ${deptName}.
 
-FORMATTING RULES:
-- Use formal letter format with date, addresses, salutation, body paragraphs, and closing
-- Number each violation separately with its citation
-- Include a "Statement of Facts" section before violations
-- Include a "Relief Requested" section at the end
-- Reference claim number, policy number, and loss date throughout
+You write aggressive, meticulously detailed complaint letters that leave NO doubt the carrier has acted improperly. Your letters:
+1. Clearly identify the complainant (policyholder) and the respondent (insurance company)
+2. State SPECIFIC regulation violations with EXACT statutory citations
+3. For EACH violation, provide a detailed factual narrative showing exactly HOW the carrier violated the regulation — quote carrier statements, reference specific dates, describe specific carrier conduct
+4. Explain the IMPACT of each violation on the policyholder (financial harm, delay, emotional distress, inability to repair)
+5. Connect the dots between carrier actions and regulatory prohibitions — explain WHY each action constitutes a violation, not just that it is one
+6. Identify patterns of carrier misconduct (e.g., making baseless accusations about damage cause without evidence, ignoring contradictory evidence, predetermined investigation outcomes)
+7. Specify concrete relief being requested (investigation, enforcement action, compliance order, penalties)
+
+CRITICAL RULES:
+- When the carrier has made accusations (man-made damage, pre-existing conditions, wear and tear, improper installation) WITHOUT providing physical proof, forensic analysis, or documented evidence, EXPLICITLY call this out as a violation of the duty to conduct a reasonable investigation
+- Reference the policyholder's photographs and documentation as evidence — call them "photographs" NOT "AI-analyzed photos"
+- Detail how the carrier's engineer report or adjuster findings are biased, unsupported, or contradicted by the physical evidence and photographs
+- Reference specific claim timeline events: date of loss, date claim filed, dates of carrier responses, dates of inspections, dates of denials
+- When the carrier has blamed the policyholder or asserted alternative causation, explain that the carrier bears the burden of proving an exclusion applies and has failed to meet that burden
 - DO NOT cite case law or legal precedents
-- DO NOT provide legal advice
-- Focus on regulatory violations and documented facts only
+- DO NOT provide legal advice — frame everything as regulatory violations and factual disputes
+- Use formal letter format with date, addresses, salutation, body paragraphs, and closing
+- Number each violation separately with its exact statutory citation
+- Include a "Statement of Facts" section that reads like a compelling chronological narrative of carrier misconduct
+- Include a "Relief Requested" section at the end with specific enforcement actions
 
 State: ${stateInfo.stateName}
 Applicable Regulations: ${stateInfo.adminCode}
@@ -4286,16 +4295,39 @@ ${claimSummary}
 SPECIFIC REGULATION VIOLATIONS TO CITE:
 ${violationsList}
 
-${userContext ? `ADDITIONAL CONTEXT FROM ADJUSTER:\n${userContext}\n` : ''}
+${userContext ? `ADDITIONAL CONTEXT FROM THE PUBLIC ADJUSTER:\n${userContext}\n` : ''}
 
-Draft the complete formal complaint letter. Include:
-1. Proper formatting with today's date, complainant info, carrier info
-2. A clear "Statement of Facts" summarizing the claim timeline and carrier conduct
-3. Each regulation violation as a numbered section with the exact citation, what the regulation requires, and how the carrier violated it based on the claim facts
-4. A "Relief Requested" section specifying what action you want the department to take
-5. Professional closing
+Draft a comprehensive, hard-hitting formal complaint letter. Structure it as follows:
 
-The letter should be ready to send with minimal editing.`;
+1. HEADER: Today's date, complainant name/address, carrier name, claim number, policy number, date of loss
+
+2. INTRODUCTION: State who you are (the policyholder's public adjuster), what this complaint is about, and that you are filing on behalf of the insured
+
+3. STATEMENT OF FACTS: A detailed chronological narrative of:
+   - The loss event and damage sustained
+   - The claim filing and carrier's handling timeline
+   - Specific carrier actions/inactions that constitute misconduct
+   - Any baseless accusations the carrier made (man-made damage, wear and tear, pre-existing conditions) and the LACK of evidence supporting those accusations
+   - How the carrier's investigation was inadequate, biased, or predetermined
+   - What evidence (photographs, contractor estimates, weather data) contradicts the carrier's position
+
+4. REGULATORY VIOLATIONS: For each selected violation:
+   - State the exact citation and what the regulation requires
+   - Describe in detail the SPECIFIC carrier conduct that violates this regulation
+   - Explain HOW the carrier's actions fit the definition of the violation
+   - Describe the harm caused to the policyholder by this violation
+   - If relevant, note how this may be part of a pattern of conduct (general business practice)
+
+5. RELIEF REQUESTED: Specifically request:
+   - Formal investigation of the carrier's claims handling
+   - Determination of regulatory violations
+   - Appropriate penalties and enforcement action
+   - Order requiring the carrier to re-evaluate the claim in good faith
+   - Any other specific relief based on the violations cited
+
+6. CLOSING: Professional closing with contact information
+
+The letter must be detailed enough that a regulator can understand exactly what the carrier did wrong and why it violates the cited statutes. Every accusation must be supported by the claim facts provided.`;
         break;
       }
 

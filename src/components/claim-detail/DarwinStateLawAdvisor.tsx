@@ -36,6 +36,10 @@ export const DarwinStateLawAdvisor = ({ claimId, claim }: DarwinStateLawAdvisorP
       const address = claim.policyholder_address.toUpperCase();
       if (address.includes("NJ") || address.includes("NEW JERSEY")) {
         setSelectedState("NJ");
+      } else if (address.includes("TX") || address.includes("TEXAS")) {
+        setSelectedState("TX");
+      } else if (address.includes("FL") || address.includes("FLORIDA")) {
+        setSelectedState("FL");
       } else if (address.includes("PA") || address.includes("PENNSYLVANIA")) {
         setSelectedState("PA");
       }
@@ -133,7 +137,7 @@ export const DarwinStateLawAdvisor = ({ claimId, claim }: DarwinStateLawAdvisorP
           State Law Advisor
         </CardTitle>
         <CardDescription>
-          PA & NJ insurance regulations, deadlines, and bad faith statutes
+          PA, NJ, TX & FL insurance regulations, deadlines, and bad faith statutes
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -144,6 +148,12 @@ export const DarwinStateLawAdvisor = ({ claimId, claim }: DarwinStateLawAdvisorP
             </TabsTrigger>
             <TabsTrigger value="NJ" className="w-full justify-center gap-2 px-3 py-2">
               <span>New Jersey</span>
+            </TabsTrigger>
+            <TabsTrigger value="TX" className="w-full justify-center gap-2 px-3 py-2">
+              <span>Texas</span>
+            </TabsTrigger>
+            <TabsTrigger value="FL" className="w-full justify-center gap-2 px-3 py-2">
+              <span>Florida</span>
             </TabsTrigger>
           </TabsList>
 
