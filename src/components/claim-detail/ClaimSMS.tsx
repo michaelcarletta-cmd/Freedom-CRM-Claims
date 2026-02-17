@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { MessageSquare, Send, Phone, X, Plus, Users, FileText } from "lucide-react";
 import { format } from "date-fns";
-import { formatPhoneNumber } from "@/lib/utils";
+import { formatPhoneNumber, parseLocalDate } from "@/lib/utils";
 
 interface SMSMessage {
   id: string;
@@ -247,7 +247,7 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
     // Replace inspection fields with actual inspection data if available
     if (inspectionData) {
       const formattedDate = inspectionData.inspection_date 
-        ? format(new Date(inspectionData.inspection_date), "MMMM d, yyyy")
+        ? format(parseLocalDate(inspectionData.inspection_date), "MMMM d, yyyy")
         : "";
       // Format time to 12-hour format (e.g., "2:30 PM")
       let formattedTime = "";
