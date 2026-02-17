@@ -42,6 +42,7 @@ const DarwinSmartDocumentSort = lazy(() => import("@/components/claim-detail/Dar
 const DarwinEstimateGapAnalysis = lazy(() => import("@/components/claim-detail/DarwinEstimateGapAnalysis").then(m => ({ default: m.DarwinEstimateGapAnalysis })));
 const VisualClaimTimeline = lazy(() => import("@/components/claim-detail/VisualClaimTimeline").then(m => ({ default: m.VisualClaimTimeline })));
 const DarwinComplianceChecker = lazy(() => import("@/components/claim-detail/DarwinComplianceChecker").then(m => ({ default: m.DarwinComplianceChecker })));
+const DarwinDOBILetterDrafter = lazy(() => import("@/components/claim-detail/DarwinDOBILetterDrafter").then(m => ({ default: m.DarwinDOBILetterDrafter })));
 const ClaimTimeline = lazy(() => import("@/components/claim-detail/ClaimTimeline").then(m => ({ default: m.ClaimTimeline })));
 const ProofOfLossGenerator = lazy(() => import("@/components/claim-detail/ProofOfLossGenerator").then(m => ({ default: m.ProofOfLossGenerator })));
 const ClaimContextPipeline = lazy(() => import("@/components/claim-detail/ClaimContextPipeline").then(m => ({ default: m.ClaimContextPipeline })));
@@ -381,6 +382,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             <DarwinDeadlineTracker claimId={claimId} claim={claim} />
             <DarwinQualifyingLanguage claimId={claimId} claim={claim} />
             <DarwinComplianceChecker claimId={claimId} claim={claim} />
+            <DarwinDOBILetterDrafter claimId={claimId} claim={claim} />
             <DarwinBuildingCodes claimId={claimId} claim={claim} />
           </ToolCategory>
 
