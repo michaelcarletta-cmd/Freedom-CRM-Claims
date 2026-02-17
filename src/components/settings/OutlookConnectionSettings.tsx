@@ -52,26 +52,34 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      // Open directly in a new window/tab to bypass auth-bridge interception
-      const newWindow = window.open('', '_blank');
-      if (!newWindow) {
-        toast({ title: "Popup blocked", description: "Please allow popups for this site and try again.", variant: "destructive" });
+      // Open Microsoft OAuth URL directly in new tab to bypass auth-bridge
+      const popup = window.open(data.authUrl, '_blank', 'noopener');
+      if (!popup) {
+        // Fallback: copy URL approach
+        try {
+          await navigator.clipboard.writeText(data.authUrl);
+          toast({ 
+            title: "Popup blocked", 
+            description: "The Microsoft sign-in URL has been copied to your clipboard. Open a new browser tab and paste it.", 
+          });
+        } catch {
+          toast({ title: "Popup blocked", description: "Please allow popups for this site and try again.", variant: "destructive" });
+        }
         setConnecting(false);
         return;
       }
-      newWindow.location.href = data.authUrl;
 
-      // Poll for window close & check for success
-      const pollTimer = setInterval(async () => {
+      // Poll for window close & refresh connections
+      const pollTimer = setInterval(() => {
         try {
-          if (newWindow.closed) {
+          if (popup.closed) {
             clearInterval(pollTimer);
             setConnecting(false);
             queryClient.invalidateQueries({ queryKey: ["email-connections"] });
             toast({ title: "Outlook connection", description: "Checking connection status..." });
           }
         } catch {
-          // Cross-origin access error means the window navigated to Microsoft - keep polling
+          // Cross-origin — keep polling
         }
       }, 1000);
     } catch (e: any) {
