@@ -1784,6 +1784,29 @@ async function searchUserActivity(supabase: any, userId: string, timePeriod: str
   }
 }
 
+// Generate claim number variations by stripping/adding dashes at common positions
+function generateClaimNumberVariations(claimNumber: string): string[] {
+  if (!claimNumber) return [];
+  const variations = new Set<string>();
+  // Original
+  variations.add(claimNumber);
+  // Fully stripped of dashes/hyphens
+  const stripped = claimNumber.replace(/[-\s]/g, '');
+  variations.add(stripped);
+  // Common carrier formats: XX-XXXX-XXX, XX-XXXXXXX, etc.
+  if (stripped.length >= 4) {
+    // Try dash after first 2 chars
+    variations.add(stripped.slice(0, 2) + '-' + stripped.slice(2));
+    // Try dashes after 2 and 6 chars  
+    if (stripped.length >= 7) {
+      variations.add(stripped.slice(0, 2) + '-' + stripped.slice(2, 6) + '-' + stripped.slice(6));
+    }
+    // Try dash after first 4 chars
+    variations.add(stripped.slice(0, 4) + '-' + stripped.slice(4));
+  }
+  return Array.from(variations);
+}
+
 // Helper function to search communications across all claims
 async function searchCommunications(supabase: any, searchQuery: string, communicationType: string, timePeriod: string, claimName?: string, forceClaimId?: string): Promise<string> {
   try {
@@ -1793,22 +1816,47 @@ async function searchCommunications(supabase: any, searchQuery: string, communic
     // Use forced claim ID (from claim mode) or resolve from name
     let claimId: string | null = forceClaimId || null;
     let claimInfo = "";
+    let claimNumber: string | null = null;
     if (!claimId && claimName) {
       const foundClaim = await findClaimByClientName(supabase, claimName);
       if (foundClaim) {
         claimId = foundClaim.id;
+        claimNumber = foundClaim.claim_number;
         claimInfo = ` for claim ${foundClaim.claim_number} - ${foundClaim.policyholder_name}`;
       }
-    } else if (claimId && claimName) {
-      claimInfo = ` for claim ${claimName}`;
+    } else if (claimId) {
+      claimInfo = claimName ? ` for claim ${claimName}` : '';
+      // Fetch claim number for variation matching
+      const { data: claimData } = await supabase.from("claims").select("claim_number").eq("id", claimId).single();
+      if (claimData) claimNumber = claimData.claim_number;
+    }
+
+    // Build search terms including claim number variations
+    const searchTerms = [searchQuery];
+    if (claimNumber) {
+      const variations = generateClaimNumberVariations(claimNumber);
+      // Only add variations that aren't already the search query
+      for (const v of variations) {
+        if (v.toLowerCase() !== searchQuery.toLowerCase()) {
+          searchTerms.push(v);
+        }
+      }
     }
 
     // Search emails
     if (communicationType === "all" || communicationType === "emails") {
+      // Build OR filter with all search terms and claim number variations
+      const orParts: string[] = [];
+      for (const term of searchTerms) {
+        orParts.push(`subject.ilike.%${term}%`, `body.ilike.%${term}%`);
+      }
+      // Also search by original query in recipient fields
+      orParts.push(`recipient_email.ilike.%${searchQuery}%`, `recipient_name.ilike.%${searchQuery}%`);
+
       let emailQuery = supabase
         .from("emails")
         .select("*, claims!inner(claim_number, policyholder_name)")
-        .or(`subject.ilike.%${searchQuery}%,body.ilike.%${searchQuery}%,recipient_email.ilike.%${searchQuery}%,recipient_name.ilike.%${searchQuery}%`)
+        .or(orParts.join(','))
         .gte("created_at", start.toISOString())
         .lte("created_at", end.toISOString())
         .order("created_at", { ascending: false })
