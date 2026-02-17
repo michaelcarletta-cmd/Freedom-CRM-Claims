@@ -50,6 +50,8 @@ export const DarwinDOBILetterDrafter = ({ claimId, claim }: DarwinDOBILetterDraf
   const detectedState = (() => {
     const address = (claim?.policyholder_address || "").toUpperCase();
     if (address.includes("NJ") || address.includes("NEW JERSEY")) return "NJ";
+    if (address.includes("TX") || address.includes("TEXAS")) return "TX";
+    if (address.includes("FL") || address.includes("FLORIDA")) return "FL";
     return "PA"; // Default to PA
   })();
 
@@ -158,9 +160,14 @@ export const DarwinDOBILetterDrafter = ({ claimId, claim }: DarwinDOBILetterDraf
         <CollapsibleContent>
           <CardContent className="space-y-5">
             <p className="text-sm text-muted-foreground">
-              Draft a formal complaint letter to the {detectedState === "NJ" ? "NJ Department of Banking & Insurance (DOBI)" : "PA Insurance Department"}. 
+              Draft a formal complaint letter to the {
+                detectedState === "NJ" ? "NJ Department of Banking & Insurance (DOBI)" :
+                detectedState === "TX" ? "Texas Department of Insurance (TDI)" :
+                detectedState === "FL" ? "Florida Office of Insurance Regulation" :
+                "PA Insurance Department"
+              }. 
               Select the specific regulations the carrier is violating and Darwin will draft a detailed complaint letter citing the violations, 
-              policy conditions, and what relief you are requesting.
+              policy conditions, carrier misconduct, and what relief you are requesting.
             </p>
 
             {/* Regulation Selection */}
