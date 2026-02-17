@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Mail, Send, Loader2, MailOpen, Reply, Paperclip, Download, FileText, Image as ImageIcon } from "lucide-react";
+import { OutlookEmailSync } from "./OutlookEmailSync";
 import { Badge } from "@/components/ui/badge";
 import { EmailComposer } from "@/components/EmailComposer";
 import { useQuery } from "@tanstack/react-query";
@@ -270,15 +271,18 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <h3 className="text-lg font-semibold">Email Communications</h3>
-        <Button 
-          className="bg-primary hover:bg-primary/90"
-          onClick={handleComposeNew}
-        >
-          <Send className="h-4 w-4 mr-2" />
-          Compose Email
-        </Button>
+        <div className="flex items-center gap-2">
+          <OutlookEmailSync claimId={claimId} />
+          <Button 
+            className="bg-primary hover:bg-primary/90"
+            onClick={handleComposeNew}
+          >
+            <Send className="h-4 w-4 mr-2" />
+            Compose Email
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (

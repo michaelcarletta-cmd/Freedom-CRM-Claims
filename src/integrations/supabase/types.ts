@@ -3410,6 +3410,51 @@ export type Database = {
         }
         Relationships: []
       }
+      email_connections: {
+        Row: {
+          created_at: string
+          email_address: string
+          encrypted_password: string
+          id: string
+          imap_host: string
+          imap_port: number
+          is_active: boolean
+          last_sync_at: string | null
+          last_sync_error: string | null
+          provider: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email_address: string
+          encrypted_password: string
+          id?: string
+          imap_host?: string
+          imap_port?: number
+          is_active?: boolean
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          provider?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email_address?: string
+          encrypted_password?: string
+          id?: string
+          imap_host?: string
+          imap_port?: number
+          is_active?: boolean
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          provider?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       email_templates: {
         Row: {
           body: string

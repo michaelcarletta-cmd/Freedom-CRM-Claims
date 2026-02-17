@@ -45,6 +45,7 @@ import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
 import { SignatureFieldTemplatesSettings } from "@/components/settings/SignatureFieldTemplatesSettings";
 import { CausationRubricSettings } from "@/components/settings/CausationRubricSettings";
 import { RDAutomationSettings } from "@/components/settings/RDAutomationSettings";
+import { OutlookConnectionSettings } from "@/components/settings/OutlookConnectionSettings";
 interface ClaimStatus {
   id: string;
   name: string;
@@ -519,6 +520,7 @@ export default function Settings() {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="space-y-6">
+                  <OutlookConnectionSettings embedded />
                   <MakeIntegrationSettings embedded />
                   <QuickBooksSettings embedded />
                 </CardContent>
