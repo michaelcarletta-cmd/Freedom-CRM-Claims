@@ -1333,7 +1333,7 @@ ${tasks && tasks.length > 0
 
 RECENT COMMUNICATIONS (Emails):
 ${emails && emails.length > 0 
-  ? emails.map((e: any) => `- ${e.direction === 'inbound' ? 'FROM' : 'TO'}: ${e.from_email || e.to_email} | Subject: ${e.subject} | Date: ${new Date(e.created_at).toLocaleDateString()}`).join('\n')
+  ? emails.map((e: any) => `- ${e.sent_by ? 'TO' : 'FROM'}: ${e.recipient_email || e.recipient_name || 'Unknown'} | Subject: ${e.subject} | Date: ${new Date(e.created_at || e.sent_at).toLocaleDateString()}`).join('\n')
   : '- No emails on file'}
 
 RECENT ACTIVITY:
@@ -1808,7 +1808,7 @@ async function searchCommunications(supabase: any, searchQuery: string, communic
       let emailQuery = supabase
         .from("emails")
         .select("*, claims!inner(claim_number, policyholder_name)")
-        .or(`subject.ilike.%${searchQuery}%,body.ilike.%${searchQuery}%,from_email.ilike.%${searchQuery}%,to_email.ilike.%${searchQuery}%`)
+        .or(`subject.ilike.%${searchQuery}%,body.ilike.%${searchQuery}%,recipient_email.ilike.%${searchQuery}%,recipient_name.ilike.%${searchQuery}%`)
         .gte("created_at", start.toISOString())
         .lte("created_at", end.toISOString())
         .order("created_at", { ascending: false })
@@ -1818,15 +1818,18 @@ async function searchCommunications(supabase: any, searchQuery: string, communic
         emailQuery = emailQuery.eq("claim_id", claimId);
       }
 
-      const { data: emails } = await emailQuery;
+      const { data: emails, error: emailError } = await emailQuery;
+      if (emailError) {
+        console.error("Email search error:", emailError.message);
+      }
       if (emails) {
         for (const email of emails) {
           results.push({
             type: "Email",
-            date: email.created_at,
+            date: email.created_at || email.sent_at,
             claim: `${email.claims?.claim_number || 'N/A'} - ${email.claims?.policyholder_name || 'Unknown'}`,
-            direction: email.direction === "inbound" ? "Received" : "Sent",
-            summary: `${email.direction === "inbound" ? "From" : "To"}: ${email.from_email || email.to_email} | Subject: ${email.subject}`,
+            direction: email.sent_by ? "Sent" : "Received",
+            summary: `To: ${email.recipient_email || email.recipient_name || 'Unknown'} | Subject: ${email.subject}`,
             content: email.body?.substring(0, 300)
           });
         }
@@ -2123,10 +2126,10 @@ async function searchClaimHistory(supabase: any, searchQuery: string, eventType:
       if (data) {
         for (const item of data) {
           events.push({
-            type: item.direction === "inbound" ? "Email Received" : "Email Sent",
-            date: item.created_at,
+            type: item.sent_by ? "Email Sent" : "Email Received",
+            date: item.created_at || item.sent_at,
             claim: `${item.claims?.claim_number} - ${item.claims?.policyholder_name}`,
-            description: `Subject: ${item.subject} | ${item.direction === "inbound" ? "From" : "To"}: ${item.from_email || item.to_email}`
+            description: `Subject: ${item.subject} | To: ${item.recipient_email || item.recipient_name || 'Unknown'}`
           });
         }
       }
