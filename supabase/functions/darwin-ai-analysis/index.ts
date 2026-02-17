@@ -232,7 +232,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling' | 'position_detection';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling' | 'position_detection' | 'dobi_letter';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -4241,6 +4241,61 @@ Rules:
         userPrompt = `${claimSummary}
 
 Analyze the above claim context and detect the optimal Declared Position. Return ONLY valid JSON.`;
+        break;
+      }
+
+      case 'dobi_letter': {
+        const violations = additionalContext?.violations || [];
+        const userContext = additionalContext?.userContext || '';
+        const state = additionalContext?.state || stateInfo.state;
+        const deptName = state === 'NJ' 
+          ? 'New Jersey Department of Banking and Insurance (DOBI)' 
+          : 'Pennsylvania Insurance Department';
+        
+        const violationsList = violations.map((v: any, i: number) => 
+          `${i + 1}. ${v.title} (${v.citation}): ${v.description}${v.deadlineDays ? ` — ${v.deadlineDays}-day deadline` : ''}${v.consequence ? ` — Consequence: ${v.consequence}` : ''}`
+        ).join('\n');
+
+        systemPrompt = `You are Darwin, an expert public adjuster drafting a formal complaint letter to the ${deptName}.
+You write authoritative, well-structured regulatory complaint letters that:
+1. Clearly identify the complainant (policyholder) and the respondent (insurance company)
+2. State specific regulation violations with exact citations
+3. Describe the factual basis for each violation using claim-specific details
+4. Explain why the carrier's actions violate each cited regulation
+5. Specify the relief being requested (investigation, enforcement action, compliance order)
+6. Maintain a professional, factual tone throughout
+
+FORMATTING RULES:
+- Use formal letter format with date, addresses, salutation, body paragraphs, and closing
+- Number each violation separately with its citation
+- Include a "Statement of Facts" section before violations
+- Include a "Relief Requested" section at the end
+- Reference claim number, policy number, and loss date throughout
+- DO NOT cite case law or legal precedents
+- DO NOT provide legal advice
+- Focus on regulatory violations and documented facts only
+
+State: ${stateInfo.stateName}
+Applicable Regulations: ${stateInfo.adminCode}
+Insurance Code: ${stateInfo.insuranceCode}`;
+
+        userPrompt = `Draft a formal complaint letter to the ${deptName} for the following claim:
+
+${claimSummary}
+
+SPECIFIC REGULATION VIOLATIONS TO CITE:
+${violationsList}
+
+${userContext ? `ADDITIONAL CONTEXT FROM ADJUSTER:\n${userContext}\n` : ''}
+
+Draft the complete formal complaint letter. Include:
+1. Proper formatting with today's date, complainant info, carrier info
+2. A clear "Statement of Facts" summarizing the claim timeline and carrier conduct
+3. Each regulation violation as a numbered section with the exact citation, what the regulation requires, and how the carrier violated it based on the claim facts
+4. A "Relief Requested" section specifying what action you want the department to take
+5. Professional closing
+
+The letter should be ready to send with minimal editing.`;
         break;
       }
 
