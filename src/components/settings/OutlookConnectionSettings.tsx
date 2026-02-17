@@ -52,22 +52,26 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      // Open in popup to avoid iframe restrictions
-      const popup = window.open(data.authUrl, 'outlook-oauth', 'width=600,height=700,scrollbars=yes');
-      if (!popup) {
+      // Open directly in a new window/tab to bypass auth-bridge interception
+      const newWindow = window.open('', '_blank');
+      if (!newWindow) {
         toast({ title: "Popup blocked", description: "Please allow popups for this site and try again.", variant: "destructive" });
         setConnecting(false);
         return;
       }
+      newWindow.location.href = data.authUrl;
 
-      // Poll for popup close & check for success
+      // Poll for window close & check for success
       const pollTimer = setInterval(async () => {
-        if (popup.closed) {
-          clearInterval(pollTimer);
-          setConnecting(false);
-          // Refresh connections to see if one was added
-          queryClient.invalidateQueries({ queryKey: ["email-connections"] });
-          toast({ title: "Outlook connection", description: "Checking connection status..." });
+        try {
+          if (newWindow.closed) {
+            clearInterval(pollTimer);
+            setConnecting(false);
+            queryClient.invalidateQueries({ queryKey: ["email-connections"] });
+            toast({ title: "Outlook connection", description: "Checking connection status..." });
+          }
+        } catch {
+          // Cross-origin access error means the window navigated to Microsoft - keep polling
         }
       }, 1000);
     } catch (e: any) {
