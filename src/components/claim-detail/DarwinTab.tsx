@@ -40,6 +40,8 @@ const DarwinSystematicDismantler = lazy(() => import("@/components/claim-detail/
 const DarwinAutoSummary = lazy(() => import("@/components/claim-detail/DarwinAutoSummary").then(m => ({ default: m.DarwinAutoSummary })));
 const DarwinSmartDocumentSort = lazy(() => import("@/components/claim-detail/DarwinSmartDocumentSort").then(m => ({ default: m.DarwinSmartDocumentSort })));
 const DarwinEstimateGapAnalysis = lazy(() => import("@/components/claim-detail/DarwinEstimateGapAnalysis").then(m => ({ default: m.DarwinEstimateGapAnalysis })));
+const DarwinEstimateComparison = lazy(() => import("@/components/claim-detail/DarwinEstimateComparison").then(m => ({ default: m.DarwinEstimateComparison })));
+const DarwinDocumentTimeline = lazy(() => import("@/components/claim-detail/DarwinDocumentTimeline").then(m => ({ default: m.DarwinDocumentTimeline })));
 const VisualClaimTimeline = lazy(() => import("@/components/claim-detail/VisualClaimTimeline").then(m => ({ default: m.VisualClaimTimeline })));
 const DarwinComplianceChecker = lazy(() => import("@/components/claim-detail/DarwinComplianceChecker").then(m => ({ default: m.DarwinComplianceChecker })));
 const DarwinDOBILetterDrafter = lazy(() => import("@/components/claim-detail/DarwinDOBILetterDrafter").then(m => ({ default: m.DarwinDOBILetterDrafter })));
@@ -329,6 +331,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
               icon={<FileText className="h-4 w-4" />}
               defaultOpen={autoAnalyses.some(a => a.analysis_type === 'estimate_gap_analysis')}
             >
+            <DarwinEstimateComparison claimId={claimId} claim={claim} />
             <DarwinEstimateGapAnalysis claimId={claimId} claim={claim} />
             <DarwinSmartExtraction claimId={claimId} claim={claim} />
             <DarwinDocumentComparison claimId={claimId} claim={claim} />
@@ -400,9 +403,10 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
           {/* Timeline & History */}
           <ToolCategory
             title="Timeline & History"
-            description="Visual claim history and audit trail"
+            description="Visual claim history, document-based timeline, and audit trail"
             icon={<Clock className="h-4 w-4" />}
           >
+            <DarwinDocumentTimeline claimId={claimId} claim={claim} />
             <VisualClaimTimeline claimId={claimId} claim={claim} />
             <ClaimTimeline claimId={claimId} claim={claim} />
           </ToolCategory>

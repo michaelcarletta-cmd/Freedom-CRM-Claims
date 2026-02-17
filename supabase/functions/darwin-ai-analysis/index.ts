@@ -232,7 +232,7 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling' | 'position_detection' | 'dobi_letter';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling' | 'position_detection' | 'dobi_letter' | 'estimate_comparison' | 'document_timeline';
   content?: string; // For denial letters, correspondence, or engineer reports
   pdfContent?: string; // Base64 encoded PDF content
   pdfFileName?: string;
@@ -966,6 +966,19 @@ For EVERY line item, you MUST provide:
 - NEVER argue "matching" - PA and NJ have no matching laws
 - Argue materials are NON-REPAIRABLE due to: age degradation, manufacturing discontinuation, code requirements, compromised integrity
 - Full replacement justified by inability to repair, NOT aesthetic matching
+
+=== POLICY PROVISION CITATIONS ===
+When drafting supplements, you MUST cite specific policy provisions and endorsements that require coverage:
+- HO-3 Coverage A (Dwelling): Covers direct physical loss to the dwelling. Cite the specific peril covered.
+- HO-3 Coverage B (Other Structures): Detached structures, fences, sheds damaged by covered peril.
+- HO-3 Coverage C (Personal Property): Contents damaged by the covered peril.
+- HO-3 Coverage D (Loss of Use): Additional living expenses if displaced. Cite if applicable.
+- Ordinance or Law Coverage (HO 04 77 endorsement): Code upgrade costs, demolition costs, increased cost of construction.
+- Extended Replacement Cost endorsement: Additional percentage above Coverage A limits.
+- Overhead & Profit: Cite the policy's general conditions requiring payment of actual repair costs, including contractor O&P as a reasonable and necessary expense.
+- For EACH disputed line item, reference the specific coverage section AND any applicable endorsement.
+- Reference ${stateInfo.stateName} regulations that support the policyholder's right to full indemnification.
+- Cite ${stateInfo.adminCode} provisions regarding prompt and fair settlement practices.
 
 === FORMATTING ===
 Use plain text only. NO markdown formatting (no **, #, *, etc.).
@@ -4331,6 +4344,172 @@ The letter must be detailed enough that a regulator can understand exactly what 
         break;
       }
 
+      case 'estimate_comparison': {
+        systemPrompt = `You are Darwin, an expert public adjuster AI. You perform precise LINE-BY-LINE comparisons between an insurance carrier's estimate and the policyholder's/public adjuster's estimate.
+
+FORMATTING: Plain text only. NO markdown.
+
+Your comparison must:
+1. Extract EVERY line item from BOTH estimates
+2. Present them in a SIDE-BY-SIDE format showing:
+   - Xactimate code (if present)
+   - Description
+   - Carrier's quantity and unit price
+   - Our quantity and unit price
+   - DIFFERENCE in dollars
+   - Status: MATCH, UNDERPAID, MISSING FROM CARRIER, QTY DIFFERENCE
+
+3. Group items by scope category (Roofing, Interior, Gutters, etc.)
+
+4. At the end, provide:
+   - SUMMARY TABLE: Total carrier amount vs. our amount vs. difference
+   - MISSING ITEMS: Line items in our estimate not in carrier's
+   - UNDERPAID ITEMS: Items where carrier's quantity or price is lower
+   - OVERPAID ITEMS: Items where carrier's is actually higher (rare but note it)
+   - SUPPLEMENT OPPORTUNITIES: What to challenge and why
+
+5. For each discrepancy, cite:
+   - Applicable building codes requiring the work
+   - Policy provisions that mandate coverage (HO-3 Coverage A, etc.)
+   - Industry standards (ARMA, NRCA, IRC) justifying the scope
+
+State: ${stateInfo.stateName}
+Applicable Law: ${stateInfo.insuranceCode}`;
+
+        userPrompt = `${claimSummary}
+
+Two estimates have been provided as PDFs:
+1. CARRIER ESTIMATE: ${additionalContext?.carrierEstimateName || 'carrier-estimate.pdf'}
+2. OUR ESTIMATE: ${additionalContext?.ourEstimateName || 'our-estimate.pdf'}
+
+Extract EVERY line item from both documents and create a complete side-by-side comparison.
+
+FORMAT EACH LINE ITEM AS:
+
+SCOPE: [Category]
+CODE: [Xactimate code if present]
+DESCRIPTION: [Item]
+CARRIER: [Qty] [Unit] @ $[Price] = $[Total]  |  OURS: [Qty] [Unit] @ $[Price] = $[Total]
+DIFFERENCE: $[Amount] ([Status: MATCH/UNDERPAID/MISSING/QTY DIFF])
+${'{'}NOTE: [Why this is wrong/what code or policy requires this]{'}'}
+
+After all line items, provide:
+
+===============================
+COMPARISON SUMMARY
+===============================
+Carrier Total: $X,XXX.XX
+Our Total: $X,XXX.XX
+DIFFERENCE: $X,XXX.XX
+
+Missing Items from Carrier: [count] items totaling $X,XXX.XX
+Underpaid Items: [count] items totaling $X,XXX.XX short
+Quantity Differences: [count] items
+
+===============================
+TOP SUPPLEMENT TARGETS
+===============================
+[Ranked list of the biggest dollar-value discrepancies with policy/code citations for each]
+
+===============================
+POLICY PROVISIONS SUPPORTING OUR POSITION
+===============================
+[List specific HO-3/HO-5 coverage provisions, endorsements, and ${stateInfo.stateName} regulations that support each disputed item]`;
+        break;
+      }
+
+      case 'document_timeline': {
+        const documents = additionalContext?.documents || [];
+        const emails = additionalContext?.emails || [];
+
+        systemPrompt = `You are Darwin, an expert public adjuster AI. Your task is to read through ALL provided documents and emails and extract EVERY date mentioned in them to build a comprehensive chronological timeline of the claim.
+
+FORMATTING: Plain text only. NO markdown.
+
+For each timeline entry, include:
+1. DATE (formatted as MM/DD/YYYY)
+2. EVENT DESCRIPTION (what happened on that date)
+3. SOURCE DOCUMENT (which file or email contained this date)
+4. SIGNIFICANCE (why this date matters to the claim)
+5. Any DEADLINES triggered by this event
+
+Look for dates in:
+- Letters (date of correspondence, referenced dates within text)
+- Estimates (date prepared, inspection date)
+- Denial letters (date issued, appeal deadlines)
+- Engineering reports (inspection date, report date)
+- Policy documents (policy period, renewal dates)
+- Emails (sent date, referenced dates)
+- Inspection reports (inspection date, follow-up dates)
+- Payment records and check dates
+- Any deadline references or statutory timeframes
+
+State: ${stateInfo.stateName}
+Applicable Deadlines: ${stateInfo.adminCode}
+
+After building the timeline, add:
+1. DEADLINE ANALYSIS: What regulatory deadlines were triggered and whether the carrier met them
+2. GAP ANALYSIS: Periods with no activity that may indicate carrier delay
+3. BAD FAITH INDICATORS: Any timeline patterns suggesting bad faith (excessive delays, missed deadlines)`;
+
+        userPrompt = `${claimSummary}
+
+Build a comprehensive chronological timeline from the following sources:
+
+=== DOCUMENTS (${documents.length} files with extracted text) ===
+${documents.map((d: any, i: number) => `
+DOCUMENT ${i + 1}: ${d.file_name}
+Classification: ${d.classification}
+Folder: ${d.folder}
+Uploaded: ${d.uploaded_at || 'Unknown'}
+--- Text Excerpt ---
+${d.text_excerpt}
+--- End Excerpt ---
+`).join('\n')}
+
+=== EMAILS (${emails.length} messages) ===
+${emails.map((e: any, i: number) => `
+EMAIL ${i + 1}: ${e.subject}
+Recipient: ${e.recipient || 'Unknown'}
+Date: ${e.date}
+--- Body Excerpt ---
+${e.body_excerpt}
+--- End Excerpt ---
+`).join('\n')}
+
+=== KNOWN CLAIM DATES ===
+- Loss Date: ${claim.loss_date || 'Unknown'}
+- Claim Filed: ${claim.created_at || 'Unknown'}
+
+=== OUTPUT FORMAT ===
+
+COMPREHENSIVE CLAIM TIMELINE
+===============================
+
+[DATE] - [EVENT]
+  Source: [Document/Email name]
+  Significance: [Why it matters]
+  ${'{'}Deadline: [If this triggers any regulatory deadline]{'}'}
+
+[Continue chronologically...]
+
+===============================
+DEADLINE COMPLIANCE ANALYSIS
+===============================
+[Analysis of carrier's compliance with ${stateInfo.stateName} regulatory deadlines]
+
+===============================
+GAP ANALYSIS
+===============================
+[Periods of inactivity and potential delay tactics]
+
+===============================
+BAD FAITH TIMELINE INDICATORS
+===============================
+[Any patterns suggesting carrier bad faith]`;
+        break;
+      }
+
       default:
         throw new Error(`Unknown analysis type: ${analysisType}`);
 
@@ -4413,6 +4592,43 @@ The letter must be detailed enough that a regulator can understand exactly what 
       ];
       
       console.log(`Supplement analysis with ${additionalContext?.ourEstimatePdf ? 1 : 0} our estimate + ${(additionalContext?.insuranceEstimatePdf || pdfContent) ? 1 : 0} insurance estimate`);
+    } else if (analysisType === 'estimate_comparison' && additionalContext?.carrierEstimatePdf && additionalContext?.ourEstimatePdf) {
+      // Estimate comparison with two PDFs
+      const contentParts: any[] = [];
+      
+      contentParts.push({
+        type: 'image_url',
+        image_url: {
+          url: `data:application/pdf;base64,${additionalContext.carrierEstimatePdf}`
+        }
+      });
+      contentParts.push({
+        type: 'text',
+        text: `[Above is CARRIER ESTIMATE: ${additionalContext?.carrierEstimateName || 'carrier-estimate.pdf'}]`
+      });
+      
+      contentParts.push({
+        type: 'image_url',
+        image_url: {
+          url: `data:application/pdf;base64,${additionalContext.ourEstimatePdf}`
+        }
+      });
+      contentParts.push({
+        type: 'text',
+        text: `[Above is OUR ESTIMATE: ${additionalContext?.ourEstimateName || 'our-estimate.pdf'}]`
+      });
+      
+      contentParts.push({
+        type: 'text',
+        text: userPrompt
+      });
+      
+      messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: contentParts }
+      ];
+      
+      console.log('Estimate comparison with 2 PDFs');
     } else if (analysisType === 'photo_to_xactimate' && additionalContext?.photoUrls?.length > 0) {
       // Photo-to-Xactimate analysis with multiple photo URLs
       const contentParts: any[] = [];
