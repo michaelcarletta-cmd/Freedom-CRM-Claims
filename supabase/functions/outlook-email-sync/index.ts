@@ -119,9 +119,10 @@ serve(async (req) => {
       if (!MS_CLIENT_ID) throw new Error('Microsoft OAuth not configured');
 
       const redirectUri = `${supabaseUrl}/functions/v1/outlook-oauth-callback`;
+      const origin = req.headers.get('origin') || req.headers.get('referer') || '';
       const state = btoa(JSON.stringify({
         userId: user.id,
-        redirectUrl: req.headers.get('origin') || req.headers.get('referer') || '',
+        redirectUrl: origin.replace(/\/$/, '') + '/settings',
       }));
 
       const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
