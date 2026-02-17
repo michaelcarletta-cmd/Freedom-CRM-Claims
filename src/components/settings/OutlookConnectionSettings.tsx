@@ -52,8 +52,8 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      // Open Microsoft OAuth URL directly in new tab to bypass auth-bridge
-      const popup = window.open(data.authUrl, '_blank', 'noopener');
+      // Open Microsoft OAuth URL directly — use named window without noopener so we can track it
+      const popup = window.open(data.authUrl, 'outlook-oauth', 'width=700,height=800,scrollbars=yes');
       if (!popup) {
         // Fallback: copy URL approach
         try {
