@@ -101,18 +101,40 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) throw new Error('Not authenticated');
-    const token = authHeader.replace('Bearer ', '');
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) throw new Error('Not authenticated');
-
     const { action, claim_id, connection_id } = await req.json();
+
+    // For cron-triggered sync_all_claims, validate via cron secret or anon key
+    let user: any = null;
+    if (action === 'sync_all_claims') {
+      const cronSecret = req.headers.get('x-cron-secret');
+      const expectedSecret = Deno.env.get('CRON_SECRET');
+      const authHeader = req.headers.get('Authorization');
+      const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+      const isCronCall = (cronSecret && cronSecret === expectedSecret) || 
+                         (authHeader && authHeader === `Bearer ${anonKey}`);
+      if (!isCronCall) {
+        // Allow authenticated users to trigger it manually too
+        if (authHeader) {
+          const token = authHeader.replace('Bearer ', '');
+          const { data: { user: authUser } } = await supabase.auth.getUser(token);
+          if (!authUser) throw new Error('Not authenticated');
+          user = authUser;
+        } else {
+          throw new Error('Not authorized');
+        }
+      }
+    } else {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) throw new Error('Not authenticated');
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !authUser) throw new Error('Not authenticated');
+      user = authUser;
+    }
 
     if (action === 'get_auth_url') {
       const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID');
@@ -284,6 +306,146 @@ serve(async (req) => {
       if (error) throw error;
 
       return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'sync_all_claims') {
+      // Get all active email connections
+      const { data: allConnections, error: connErr } = await supabase
+        .from('email_connections')
+        .select('*')
+        .eq('is_active', true);
+
+      if (connErr || !allConnections || allConnections.length === 0) {
+        return new Response(JSON.stringify({ success: true, message: 'No active connections', synced: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      let totalImported = 0;
+      let claimsSynced = 0;
+      const errors: string[] = [];
+
+      for (const conn of allConnections) {
+        let accessToken: string;
+        try {
+          accessToken = await getAccessToken(conn, supabase);
+        } catch (tokenErr: any) {
+          await supabase.from('email_connections').update({ last_sync_error: tokenErr.message }).eq('id', conn.id);
+          errors.push(`Connection ${conn.email_address}: ${tokenErr.message}`);
+          continue;
+        }
+
+        let emails: any[];
+        try {
+          emails = await fetchGraphEmails(accessToken);
+        } catch (graphErr: any) {
+          await supabase.from('email_connections').update({ last_sync_error: graphErr.message }).eq('id', conn.id);
+          errors.push(`Connection ${conn.email_address}: ${graphErr.message}`);
+          continue;
+        }
+
+        // Get all open claims
+        const { data: openClaims } = await supabase
+          .from('claims')
+          .select('id, claim_number, policyholder_email, policyholder_name, insurance_company, insurance_email')
+          .eq('is_closed', false);
+
+        if (!openClaims || openClaims.length === 0) continue;
+
+        for (const claim of openClaims) {
+          // Build match terms for this claim
+          const matchTerms = [
+            claim.claim_number,
+            claim.policyholder_email,
+            claim.policyholder_name,
+            claim.insurance_email,
+          ].filter(Boolean).map(t => t!.toLowerCase());
+
+          // Add claim number variations
+          if (claim.claim_number) {
+            const cn = claim.claim_number.replace(/[-\s]/g, '');
+            if (cn.length >= 6) {
+              matchTerms.push(`${cn.substring(0, 2)}-${cn.substring(2)}`.toLowerCase());
+              matchTerms.push(`${cn.substring(0, 4)}-${cn.substring(4)}`.toLowerCase());
+              if (cn.length >= 8) {
+                matchTerms.push(`${cn.substring(0, 2)}-${cn.substring(2, 6)}-${cn.substring(6)}`.toLowerCase());
+              }
+            }
+          }
+
+          const { data: adjusters } = await supabase
+            .from('claim_adjusters')
+            .select('adjuster_email, adjuster_name')
+            .eq('claim_id', claim.id);
+
+          if (adjusters) {
+            adjusters.forEach(adj => {
+              if (adj.adjuster_email) matchTerms.push(adj.adjuster_email.toLowerCase());
+              if (adj.adjuster_name) matchTerms.push(adj.adjuster_name.toLowerCase());
+            });
+          }
+
+          const matchingEmails = emails.filter(email => {
+            const searchText = `${email.from} ${email.from_name} ${email.to} ${email.to_name} ${email.subject} ${email.body_preview}`.toLowerCase();
+            return matchTerms.some(term => searchText.includes(term));
+          });
+
+          if (matchingEmails.length === 0) continue;
+
+          const { data: existingEmails } = await supabase
+            .from('emails')
+            .select('subject, sent_at')
+            .eq('claim_id', claim.id);
+
+          const existingKeys = new Set(
+            existingEmails?.map(e => `${e.subject}|${new Date(e.sent_at).toISOString().substring(0, 16)}`) || []
+          );
+
+          let claimImported = 0;
+          for (const email of matchingEmails) {
+            let sentAt: string;
+            try { sentAt = new Date(email.date).toISOString(); } catch { sentAt = new Date().toISOString(); }
+
+            const key = `${email.subject}|${sentAt.substring(0, 16)}`;
+            if (existingKeys.has(key)) continue;
+
+            const isInbound = email.to.toLowerCase() === conn.email_address.toLowerCase() ||
+                              email.from.toLowerCase() !== conn.email_address.toLowerCase();
+
+            const { error: insertError } = await supabase.from('emails').insert({
+              claim_id: claim.id,
+              subject: email.subject,
+              body: email.body_preview,
+              recipient_email: isInbound ? email.from : email.to,
+              recipient_name: isInbound ? email.from_name : email.to_name,
+              recipient_type: isInbound ? 'inbound' : 'outlook_sync',
+              sent_at: sentAt,
+            });
+
+            if (!insertError) {
+              claimImported++;
+              existingKeys.add(key);
+            }
+          }
+
+          if (claimImported > 0) {
+            totalImported += claimImported;
+            claimsSynced++;
+          }
+        }
+
+        await supabase.from('email_connections').update({ last_sync_at: new Date().toISOString(), last_sync_error: null }).eq('id', conn.id);
+      }
+
+      console.log(`Bulk sync complete: ${totalImported} emails imported across ${claimsSynced} claims`);
+      return new Response(JSON.stringify({
+        success: true,
+        total_imported: totalImported,
+        claims_synced: claimsSynced,
+        errors: errors.length > 0 ? errors : undefined,
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
