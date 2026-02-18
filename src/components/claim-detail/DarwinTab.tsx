@@ -627,7 +627,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
         </div>
 
         {/* Right drawer */}
-        <div className="hidden xl:block w-[380px] flex-shrink-0">
+        <div className="hidden xl:block w-96 flex-shrink-0">
           <Card className="h-full flex flex-col border-primary/20">
             <CardHeader className="py-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
               <div className="flex items-center justify-between gap-2">
@@ -655,7 +655,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                   No dismantler output yet. Run any Darwin analysis and it will be generated automatically.
                 </div>
               ) : (
-                <>
+                <div className="space-y-3">
                   {(parsedDismantler.estimatedConfidence < 0.5 || parsedDismantler.evidenceLines.length === 0) && (
                     <Alert className="border-warning/50 bg-warning/10">
                       <AlertCircle className="h-4 w-4 text-warning" />
@@ -741,7 +741,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                       <div className="text-xs text-muted-foreground">No requested resolution parsed.</div>
                     )}
                   </div>
-                </>
+                </div>
               )}
             </CardContent>
           </Card>
