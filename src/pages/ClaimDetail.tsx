@@ -6,7 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClaimStatusSelect } from "@/components/ClaimStatusSelect";
 
 import { ClaimOverview } from "@/components/claim-detail/ClaimOverview";
-import { ClaimCommunicationTab } from "@/components/claim-detail/ClaimCommunicationTab";
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
 import { ClaimFiles } from "@/components/claim-detail/ClaimFiles";
 import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
@@ -382,9 +381,6 @@ const ClaimDetail = () => {
                 Tasks
               </TabsTrigger>
             )}
-            <TabsTrigger value="communication" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-              Communication
-            </TabsTrigger>
             <TabsTrigger value="inspections" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
               Inspections
             </TabsTrigger>
@@ -426,7 +422,7 @@ const ClaimDetail = () => {
         )}
 
         <TabsContent value="activity" className="mt-6">
-          <ClaimActivity claimId={id || ""} isPortalUser={isPortalUser} />
+          <ClaimActivity claimId={id || ""} claim={claim} isPortalUser={isPortalUser} />
         </TabsContent>
 
         {isStaffOrAdmin && (
@@ -435,12 +431,6 @@ const ClaimDetail = () => {
           </TabsContent>
         )}
 
-        <TabsContent value="communication" className="mt-6">
-          <ClaimCommunicationTab 
-            claimId={id || ""} 
-            claim={claim}
-          />
-        </TabsContent>
 
         <TabsContent value="inspections" className="mt-6">
           <ClaimInspections claimId={id || ""} />
