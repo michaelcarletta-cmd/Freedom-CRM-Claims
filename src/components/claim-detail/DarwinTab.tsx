@@ -623,8 +623,6 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             <ClaimAutonomySettings claimId={claimId} />
             <ClaimAutomationSettings claimId={claimId} />
           </ToolCategory>
-        </div>
-
           </div>
         </div>
 
@@ -673,7 +671,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                         </div>
                         <Button variant="outline" size="sm" className="h-7 px-2 text-xs gap-1" onClick={handleCopyRequestDocsTemplate}>
                           <Send className="h-3 w-3" />
-                          Copy “request docs” template
+                          Copy request docs template
                         </Button>
                       </AlertDescription>
                     </Alert>
