@@ -25,7 +25,6 @@ const tabOptions: TabOption[] = [
   { value: "assigned", label: "Assigned", staffOnly: true },
   { value: "activity", label: "Notes & Activity" },
   { value: "tasks", label: "Tasks", staffOnly: true },
-  { value: "communication", label: "Communication" },
   { value: "inspections", label: "Inspections" },
   { value: "photos", label: "Photos" },
   { value: "files", label: "Files" },
