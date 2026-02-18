@@ -487,14 +487,14 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                               <Bell className="h-3 w-3" />
                             </Badge>
                           )}
-                          <span className="font-mono text-sm">{claim.claim_number || "—"}</span>
+                          <span className="text-sm">{claim.claim_number || "—"}</span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className="font-mono text-sm">{claim.policyholder_name || "—"}</span>
+                        <span className="text-sm">{claim.policyholder_name || "—"}</span>
                       </TableCell>
                       <TableCell className="max-w-[250px] min-w-[150px]">
-                        <span className="font-mono text-sm block truncate" title={claim.policyholder_address || "N/A"}>{claim.policyholder_address || "N/A"}</span>
+                        <span className="text-sm block truncate" title={claim.policyholder_address || "N/A"}>{claim.policyholder_address || "N/A"}</span>
                       </TableCell>
                       <TableCell className="min-w-[100px] whitespace-nowrap">{claim.loss_type || "N/A"}</TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
