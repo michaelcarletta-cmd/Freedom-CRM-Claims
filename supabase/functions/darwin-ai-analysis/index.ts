@@ -243,6 +243,11 @@ interface AnalysisRequest {
   darwinNotes?: string; // User-provided context notes for Darwin
 }
 
+interface CarrierDismantlerMiddlewareContext {
+  baseAnalysisType: string;
+  baseResult: any;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -3974,6 +3979,75 @@ Return ONLY the JSON object as specified. No additional text.`;
       }
 
       case 'systematic_dismantling': {
+        // Middleware mode: refactor an existing Darwin analysis into a structured carrier-facing brief
+        const dismantlerMiddleware = contextData as CarrierDismantlerMiddlewareContext | undefined;
+        if (dismantlerMiddleware?.baseResult) {
+          const baseType = dismantlerMiddleware.baseAnalysisType || 'unknown';
+          const baseResultPreview =
+            typeof dismantlerMiddleware.baseResult === 'string'
+              ? dismantlerMiddleware.baseResult.slice(0, 8000)
+              : JSON.stringify(dismantlerMiddleware.baseResult).slice(0, 8000);
+
+          systemPrompt = `
+You are Darwin, acting as a UNIVERSAL CARRIER DISMANTLER POST-PROCESSOR.
+
+You receive prior Darwin analysis output and must:
+- Refine it into a concise, escalation-ready, carrier-facing brief.
+- Preserve underlying facts and reasoning while improving structure and clarity.
+- Maintain a professional, firm, non-emotional tone.
+- Avoid legal advice and unsupported statutory accusations.
+
+Your brief MUST always contain these EXACT top-level headings, in this order:
+1) Carrier Position Summary
+2) Key Weaknesses
+3) Evidence to Emphasize
+4) Risk and Overreach Checks
+5) Requested Resolution
+
+Hard rules:
+- Do NOT introduce new factual claims that are not reasonably inferable from the prior output.
+- Prefer "supports / indicates / is consistent with" when confidence is less than certain.
+- Never tell anyone to sue or file a lawsuit; at most, say the policyholder may wish to consult an attorney.
+`.trim();
+
+          userPrompt = `
+You are operating in middleware mode.
+
+Input:
+- baseAnalysisType: ${baseType}
+- baseResult (truncated for display; treat as full for reasoning):
+
+<BASE_RESULT_START>
+${baseResultPreview}
+<BASE_RESULT_END>
+
+Task:
+Transform this prior Darwin analysis into a clean, carrier-facing brief with the following EXACT headings and structure:
+
+## Carrier Position Summary
+- 2–4 bullets summarizing the carrier's apparent position.
+
+## Key Weaknesses
+- 3–10 bullets, each stating a weakness and tying it to the prior analysis or claim facts.
+
+## Evidence to Emphasize
+- Bullets mapping specific documents/photos/reports to the weaknesses above (e.g., denial letter dated …, carrier estimate dated …, engineer report, photos IDs).
+
+## Risk and Overreach Checks
+- 3–8 bullets flagging weak or marginal arguments, thin facts, or areas where overstatement would be risky.
+
+## Requested Resolution
+- Numbered list of 3–8 concise asks to the carrier.
+- Each item must state a specific action (e.g., reinspection, revised estimate, payment of a category) and reference at least one weakness/evidence above.
+
+Output:
+- Plain text with exactly those headings in that order.
+- No markdown code fences.
+`.trim();
+
+          break;
+        }
+
         // Comprehensive systematic dismantling of carrier positions using burden-of-proof enforcement
         const [denialKb, tacticsKb, regulationsKb] = await Promise.all([
           searchKnowledgeBase(supabase, 'denial rebuttal burden of proof carrier obligation policy language evidence requirements'),
@@ -5128,16 +5202,81 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       // Don't fail the request if save fails
     }
 
+    // ═══ UNIVERSAL CARRIER DISMANTLER POST-PROCESSOR (DEFAULT ON) ═══
+    let carrierDismantlerResult: any = null;
+    try {
+      const shouldRunDismantler =
+        analysisType !== 'systematic_dismantling' &&
+        additionalContext?.disableCarrierDismantler !== true;
+
+      if (shouldRunDismantler && analysisResult) {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+        if (supabaseUrl && supabaseServiceKey) {
+          const audienceHint =
+            additionalContext?.audience ||
+            (carrierFacingTypes.includes(analysisType) ? 'carrier' : 'internal');
+
+          const middlewareBody: AnalysisRequest = {
+            claimId,
+            analysisType: 'systematic_dismantling',
+            contextData: {
+              baseAnalysisType: analysisType,
+              baseResult: analysisResult,
+            },
+            additionalContext: {
+              ...additionalContext,
+              audience: audienceHint,
+              _middleware: true,
+            },
+          };
+
+          const dismantlerResp = await fetch(
+            `${supabaseUrl}/functions/v1/darwin-ai-analysis`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${supabaseServiceKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(middlewareBody),
+            },
+          );
+
+          if (dismantlerResp.ok) {
+            const dismantlerJson = await dismantlerResp.json();
+            carrierDismantlerResult =
+              dismantlerJson.result ||
+              dismantlerJson.analysis ||
+              dismantlerJson.carrierDismantler ||
+              null;
+          } else {
+            console.error(
+              'Carrier Dismantler middleware call failed:',
+              dismantlerResp.status,
+            );
+          }
+        }
+      }
+    } catch (middlewareErr) {
+      console.error(
+        'Carrier Dismantler middleware error (non-fatal):',
+        middlewareErr,
+      );
+    }
+
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         success: true,
         analysisType,
         result: analysisResult,
         analysis: analysisResult,
         suggestedActions,
-        claimId
+        carrierDismantler: carrierDismantlerResult,
+        claimId,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
 
   } catch (error: any) {

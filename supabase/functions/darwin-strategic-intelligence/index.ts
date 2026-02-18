@@ -47,6 +47,308 @@ function getStateInfo(stateCode: string) {
   return stateRegulations[stateCode?.toUpperCase()] || stateRegulations['PA'];
 }
 
+type DiscreteConfidence = 0 | 0.25 | 0.5 | 0.75 | 1;
+type CoverageConfidence = 0 | 0.5 | 1;
+
+type CoverageTriggerResult = {
+  coverageTrigger: {
+    decision: "triggered" | "not_triggered" | "unknown";
+    confidence: DiscreteConfidence;
+    rationale: string;
+    missingDocs: string[];
+  };
+  extractedPolicy: {
+    policyType: "auto" | "home" | "commercial" | "unknown";
+    state: string | null;
+    policyNumber: string | null;
+    namedInsured: string | null;
+    effectiveDate: string | null;
+    expirationDate: string | null;
+    coverages: Array<{
+      name: string;
+      limit: string | null;
+      deductible: string | null;
+      evidence: Array<{
+        docId?: string;
+        docName: string;
+        page?: number;
+        sectionHint?: string;
+        quote?: string;
+      }>;
+      confidence: CoverageConfidence;
+    }>;
+    exclusionsOrConditions: Array<{
+      label: string;
+      appliesTo?: string | null;
+      evidence: Array<{
+        docName: string;
+        page?: number;
+        sectionHint?: string;
+        quote?: string;
+      }>;
+    }>;
+  };
+  notesForUser: string[];
+};
+
+function toDiscreteConfidence(raw: number): DiscreteConfidence {
+  if (raw >= 0.875) return 1;
+  if (raw >= 0.625) return 0.75;
+  if (raw >= 0.375) return 0.5;
+  if (raw >= 0.125) return 0.25;
+  return 0;
+}
+
+function clampQuoteWords(text: string, maxWords = 25): string {
+  const words = (text || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return words.join(" ");
+  return words.slice(0, maxWords).join(" ");
+}
+
+function normalizeDateToISO(dateStr: string): string | null {
+  const s = (dateStr || "").trim();
+  if (!s) return null;
+
+  // MM/DD/YYYY or MM-DD-YYYY
+  const mdy = s.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/);
+  if (mdy) {
+    const mm = Number(mdy[1]);
+    const dd = Number(mdy[2]);
+    let yy = Number(mdy[3]);
+    if (yy < 100) yy = 2000 + yy;
+    const iso = new Date(Date.UTC(yy, mm - 1, dd)).toISOString();
+    return iso;
+  }
+
+  // Try native parse (fallback)
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) return parsed.toISOString();
+  return null;
+}
+
+function extractPolicyFromClaimFiles(files: any[], stateCode: string): { extractedPolicy: CoverageTriggerResult["extractedPolicy"]; missingDocs: string[] } {
+  const missingDocs: string[] = [];
+
+  const policyDocs = (files || []).filter((f) => {
+    const name = (f.file_name || "").toLowerCase();
+    const cls = (f.document_classification || "").toLowerCase();
+    return cls === "policy" || name.includes("policy") || name.includes("declaration") || name.includes("dec");
+  });
+
+  const hasPolicyText = policyDocs.some((d) => typeof d.extracted_text === "string" && d.extracted_text.trim().length > 200);
+  const hasDecHint = policyDocs.some((d) => {
+    const n = (d.file_name || "").toLowerCase();
+    return n.includes("dec") || n.includes("declaration");
+  });
+
+  if (!policyDocs.length || !hasPolicyText) {
+    missingDocs.push("Declarations page");
+  } else if (!hasDecHint) {
+    missingDocs.push("Declarations page");
+  }
+
+  // Deterministic extraction from extracted_text only (no assumptions)
+  let policyNumber: string | null = null;
+  let namedInsured: string | null = null;
+  let effectiveDate: string | null = null;
+  let expirationDate: string | null = null;
+
+  const coverages: CoverageTriggerResult["extractedPolicy"]["coverages"] = [];
+  const exclusionsOrConditions: CoverageTriggerResult["extractedPolicy"]["exclusionsOrConditions"] = [];
+
+  const autoCoverageLabels = [
+    "Collision",
+    "Comprehensive",
+    "PIP",
+    "Personal Injury Protection",
+    "Rental",
+    "Rental Reimbursement",
+    "Towing",
+    "Roadside",
+    "UM",
+    "UIM",
+    "Uninsured Motorist",
+    "Underinsured Motorist",
+    "MedPay",
+    "Medical Payments",
+    "Liability",
+  ];
+  const homeCoverageLabels = [
+    "Coverage A",
+    "Dwelling",
+    "Coverage B",
+    "Other Structures",
+    "Coverage C",
+    "Personal Property",
+    "Coverage D",
+    "Loss of Use",
+    "Ordinance",
+    "Ordinance or Law",
+  ];
+
+  function addCoverageFromLine(args: { doc: any; line: string; label: string; sectionHint?: string }) {
+    const { doc, line, label, sectionHint } = args;
+    const limitMatch = line.match(/\$[\s]*[\d,]+/);
+    const dedMatch = line.match(/deductible[^$]*\$[\s]*[\d,]+/i) || line.match(/\$[\s]*[\d,]+\s*(?:deductible)?/i);
+
+    const evidence = [{
+      docId: doc.id,
+      docName: doc.file_name,
+      sectionHint,
+      quote: clampQuoteWords(line, 25),
+    }];
+
+    coverages.push({
+      name: label,
+      limit: limitMatch ? limitMatch[0].replace(/\s+/g, " ").trim() : null,
+      deductible: dedMatch ? dedMatch[0].replace(/\s+/g, " ").trim() : null,
+      evidence,
+      confidence: limitMatch || /deductible/i.test(line) ? 1 : 0.5,
+    });
+  }
+
+  for (const doc of policyDocs) {
+    const text = (doc.extracted_text || "").toString();
+    if (!text.trim()) continue;
+
+    const sectionHint = ((doc.file_name || "").toLowerCase().includes("dec") || (doc.file_name || "").toLowerCase().includes("declaration"))
+      ? "Declarations"
+      : "Policy";
+
+    // Policy number
+    if (!policyNumber) {
+      const m = text.match(/\bpolicy\s*(?:no\.|number|#)?\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-]{4,})\b/i);
+      if (m?.[1]) policyNumber = m[1];
+    }
+
+    // Named insured
+    if (!namedInsured) {
+      const m = text.match(/\bnamed\s+insured\s*[:\-]?\s*([^\n\r]{3,80})/i);
+      if (m?.[1]) namedInsured = m[1].trim();
+    }
+
+    // Effective / expiration
+    if (!effectiveDate || !expirationDate) {
+      const m = text.match(/\beffective\s*(?:date)?\s*[:\-]?\s*([^\n\r]{4,20})/i);
+      const n = text.match(/\bexpiration\s*(?:date)?\s*[:\-]?\s*([^\n\r]{4,20})/i);
+      if (!effectiveDate && m?.[1]) effectiveDate = normalizeDateToISO(m[1]);
+      if (!expirationDate && n?.[1]) expirationDate = normalizeDateToISO(n[1]);
+    }
+
+    const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+
+      for (const label of autoCoverageLabels) {
+        if (lower.includes(label.toLowerCase())) {
+          addCoverageFromLine({ doc, line, label, sectionHint });
+          break;
+        }
+      }
+
+      for (const label of homeCoverageLabels) {
+        if (lower.includes(label.toLowerCase())) {
+          addCoverageFromLine({ doc, line, label, sectionHint });
+          break;
+        }
+      }
+
+      if (lower.includes("wear") && lower.includes("tear")) {
+        exclusionsOrConditions.push({
+          label: "Wear and tear exclusion/condition (detected)",
+          appliesTo: null,
+          evidence: [{
+            docName: doc.file_name,
+            sectionHint,
+            quote: clampQuoteWords(line, 25),
+          }],
+        });
+      }
+    }
+  }
+
+  // Infer policy type from what we actually found (no assumptions)
+  const foundAuto = coverages.some((c) => autoCoverageLabels.some((l) => c.name.toLowerCase() === l.toLowerCase()));
+  const foundHome = coverages.some((c) => homeCoverageLabels.some((l) => c.name.toLowerCase() === l.toLowerCase()));
+
+  let policyType: CoverageTriggerResult["extractedPolicy"]["policyType"] = "unknown";
+  if (foundAuto && !foundHome) policyType = "auto";
+  else if (foundHome && !foundAuto) policyType = "home";
+  else if (foundAuto && foundHome) policyType = "unknown";
+
+  // De-duplicate coverages by name (keep highest confidence + merge evidence)
+  const byName = new Map<string, CoverageTriggerResult["extractedPolicy"]["coverages"][number]>();
+  for (const c of coverages) {
+    const key = c.name.toLowerCase();
+    const existing = byName.get(key);
+    if (!existing) {
+      byName.set(key, c);
+      continue;
+    }
+    const merged: typeof c = {
+      ...existing,
+      limit: existing.limit || c.limit,
+      deductible: existing.deductible || c.deductible,
+      confidence: (existing.confidence === 1 || c.confidence === 1) ? 1 : 0.5,
+      evidence: [...existing.evidence, ...c.evidence].slice(0, 3),
+    };
+    byName.set(key, merged);
+  }
+
+  const extractedPolicy: CoverageTriggerResult["extractedPolicy"] = {
+    policyType,
+    state: stateCode || null,
+    policyNumber,
+    namedInsured,
+    effectiveDate,
+    expirationDate,
+    coverages: Array.from(byName.values()),
+    exclusionsOrConditions,
+  };
+
+  return { extractedPolicy, missingDocs: Array.from(new Set(missingDocs)) };
+}
+
+async function callLovableChatWithFallback(args: {
+  lovableApiKey: string;
+  models: string[];
+  messages: Array<{ role: string; content: string }>;
+  temperature: number;
+  max_tokens: number;
+}) {
+  const { lovableApiKey, models, messages, temperature, max_tokens } = args;
+
+  let lastErr: any = null;
+  for (const model of models) {
+    const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature,
+        max_tokens,
+      }),
+    });
+
+    if (resp.ok) {
+      const aiData = await resp.json();
+      const content = aiData.choices?.[0]?.message?.content;
+      if (content) return { model, content };
+      lastErr = new Error(`No content returned by model ${model}`);
+      continue;
+    }
+
+    const errText = await resp.text().catch(() => '');
+    lastErr = new Error(`AI API error model=${model} status=${resp.status} body=${errText}`);
+  }
+
+  throw lastErr || new Error('AI call failed');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -574,82 +876,144 @@ Focus on actionable items. Don't generate warnings for things that are fine.`;
 
       responseFormat = 'warnings';
     } else if (analysisType === 'coverage_triggers') {
-      userPrompt = `Analyze this claim specifically for coverage trigger opportunities:
+      // Two-stage pipeline:
+      // 1) Deterministic extraction from existing claim_files.extracted_text (no assumptions)
+      // 2) LLM decision constrained to extracted clauses with strict schema + discrete confidence buckets
 
-${claimContext}
+      const { extractedPolicy, missingDocs: extractionMissingDocs } = extractPolicyFromClaimFiles(files, stateCode);
 
-Goal:
+      // If no declarations/coverage evidence is found, enforce unknown with missing docs (no LLM guessing)
+      const hasCoverageEvidence = extractedPolicy.coverages.length > 0;
+      if (!hasCoverageEvidence) {
+        const enforced: CoverageTriggerResult = {
+          coverageTrigger: {
+            decision: "unknown",
+            confidence: 0,
+            rationale: "No declarations/coverage evidence was found in the provided claim documents. Unable to determine coverage trigger without policy/declarations text.",
+            missingDocs: extractionMissingDocs.length > 0 ? extractionMissingDocs : ["Declarations page"],
+          },
+          extractedPolicy,
+          notesForUser: [
+            "Upload a Declarations page (and/or full policy) so Darwin can extract coverages, limits, and deductibles.",
+            "If this is an auto claim, include the declarations for the applicable vehicle and coverage selections.",
+            "If this is a property claim, include declarations and relevant coverage sections (Dwelling/Other Structures/Personal Property/Loss of Use).",
+          ],
+        };
 
-Identify IF/THEN coverage opportunities using an evidential, claim-handling-accurate sequence. Do NOT jump directly to Ordinance & Law (O&L) just because wind/hail damage is confirmed. Instead:
+        return new Response(JSON.stringify({
+          success: true,
+          analysisType,
+          result: enforced,
+          claimNumber: claim.claim_number,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
 
-1) Confirm covered peril and damage presence
-2) Evaluate repairability vs replacement based on age/condition/material availability/system integrity
-3) If replacement is supported, THEN evaluate code impacts and only then consider O&L
-4) If denial/partial denial, use confirmed peril and documented damage to challenge scope/cause conclusions
+      const claimSnapshot = {
+        claim_number: claim.claim_number,
+        loss_type: claim.loss_type || null,
+        loss_date: claim.loss_date || null,
+        status: claim.status || null,
+        insurance_company: claim.insurance_company || null,
+        deductible: settlement?.deductible ?? claim.deductible ?? null,
+        has_denial_letter: files.some((f: any) => (f.document_classification || '').toLowerCase() === 'denial' || (f.file_name || '').toLowerCase().includes('denial')),
+        has_estimate: files.some((f: any) => (f.document_classification || '').toLowerCase() === 'estimate' || (f.file_name || '').toLowerCase().includes('estimate')),
+        photo_count: photos.length,
+      };
 
-For each trigger you find, provide:
+      const system = `
+You are Darwin, evaluating whether a coverage trigger is supported by the provided policy evidence and claim facts.
 
-1. Trigger condition (what is present in the claim)
-2. Coverage opportunity (what it could unlock)
-3. Reasoning (specific evidence-based connection; avoid assumptions)
-4. Likelihood of success (high/medium/low)
-5. Recommended action (specific next step to strengthen coverage/scope)
+Hard rules:
+- NO assumed coverage. If the extracted policy evidence is incomplete, use decision "unknown" and list missingDocs needed to become confident.
+- You must use discrete confidence buckets ONLY: 0, 0.25, 0.5, 0.75, 1.
+- Evidence quotes (if referenced) must be short (<= 25 words) and never fabricate page numbers.
+- You are not a lawyer and do not provide legal advice.
+`.trim();
 
-Hard Rules (must follow):
+      const task = `
+You will be given:
+1) Deterministically extracted policy evidence (authoritative; do not add new coverages not present).
+2) A claim snapshot.
 
-- Ordinance & Law is NEVER a primary trigger. Only include O&L if replacement necessity is first supported by repairability analysis AND there is evidence/indication of code requirements.
-- If the carrier agrees there is wind/hail but limits scope to repairs, you must analyze whether repairs are feasible and durable, not just whether damage exists.
-- If the claim is denied or causation is disputed, identify re-open/rebuttal triggers tied to documented storm damage patterns, contemporaneous evidence, meteorological/event documentation if present in claimContext, and expert findings if available.
-- Prefer language like "supports," "indicates," "consistent with," and cite what in claimContext it's based on (photos, notes, age, brittleness, discontinued materials, mismatching, manufacturer requirements, test squares, etc.).
-- Do not claim "full replacement" unless you first establish why spot repair cannot reasonably restore pre-loss condition.
+ExtractedPolicy (do NOT modify; treat as fixed evidence):
+${JSON.stringify(extractedPolicy, null, 2)}
 
-Core Trigger Patterns to Check (in order):
+Claim snapshot:
+${JSON.stringify(claimSnapshot, null, 2)}
 
-A) Covered Peril Threshold
-- IF wind/hail/storm peril is documented/confirmed + physical damage is observed
-  THEN coverage applicability is triggered and scope evaluation is required
-
-B) Repairability / Replaceability (must come before replacement and O&L)
-- IF damage exists + roof is aged/brittle/poor condition OR matching materials unavailable/discontinued OR repair would compromise system integrity
-  THEN replacement may be required to restore pre-loss condition (scope leverage)
-
-C) Uniform Appearance / Matching (only if supported by jurisdiction/policy/claim facts)
-- IF partial replacement/repair would cause clear mismatch + policy/jurisdiction supports matching considerations
-  THEN expand scope toward full replacement or larger section replacement
-
-D) Ordinance & Law (only after B supports replacement)
-- IF replacement is supported + code/permit requirements are implicated (e.g., decking, underlayment, ventilation, attachment standards)
-  THEN O&L may apply for incremental code compliance costs
-
-E) ALE / Loss of Use
-- IF structural/safety conditions or active repairs make home uninhabitable/unsafe OR required relocation is documented
-  THEN ALE / Additional Living Expense coverage opportunity
-
-F) Supplement / Scope Corrections
-- IF carrier estimate omits line items required for proper repair/replacement (code-related items only when supported) OR unit pricing/quantities appear inconsistent with required work
-  THEN supplement opportunity and re-inspection request
-
-G) Claim Handling / Statutory Leverage
-- IF carrier delay, missed statutory deadlines, inadequate investigation, or shifting denial rationale is documented
-  THEN prompt pay / bad faith / re-open leverage (state dependent; only if claimContext indicates)
-
-Return as JSON:
+Task:
+Return ONLY valid JSON (no markdown) matching exactly:
 {
-  "coverage_triggers": [
-    {
-      "trigger": "What condition exists (quote or reference facts from claimContext)",
-      "coverage_opportunity": "What coverage/scope/claim right this unlocks",
-      "reasoning": "Why this applies, tied to specific evidence; include repairability analysis before replacement/O&L",
-      "confidence": "high|medium|low",
-      "action_required": "Specific next step (e.g., test square, brittleness test, material availability letter, engineer/roofer report, re-inspection request, supplement docs)",
-      "potential_value": "Estimated impact if available"
-    }
-  ]
+  "coverageTrigger": {
+    "decision": "triggered" | "not_triggered" | "unknown",
+    "confidence": 0 | 0.25 | 0.5 | 0.75 | 1,
+    "rationale": "short plain English",
+    "missingDocs": ["..."]
+  },
+  "notesForUser": ["..."]
 }
 
-Important: Create multiple triggers when appropriate (e.g., one for covered peril threshold, one for repairability replacement, one for O&L after replacement is supported, one for denial rebuttal).`;
+Rules:
+- If extractedPolicy lacks a deductible OR limit for the most relevant coverage, confidence should not exceed 0.75.
+- If extractedPolicy shows coverage exists but the claim facts are insufficient to decide trigger applicability, use "unknown" and explain what fact/doc is missing.
+- missingDocs must include specific items that would move "unknown" → confident (e.g., "Declarations page", "Denial letter", "Carrier estimate", "Photos of damage", "Engineer report").
+`.trim();
 
-      responseFormat = 'coverage_triggers';
+      const { content } = await callLovableChatWithFallback({
+        lovableApiKey,
+        models: ['openai/gpt-5.2', 'openai/gpt-4.1'],
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: task },
+        ],
+        temperature: 0.2,
+        max_tokens: 1500,
+      });
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(content);
+      } catch (e) {
+        // Fail safe: unknown with extraction missing docs
+        parsed = {
+          coverageTrigger: {
+            decision: "unknown",
+            confidence: 0.25,
+            rationale: "Unable to parse a strict coverage trigger decision. Additional documentation is required to make a defensible determination.",
+            missingDocs: extractionMissingDocs.length ? extractionMissingDocs : ["Declarations page"],
+          },
+          notesForUser: [
+            "Provide the declarations page and relevant policy sections to enable a strict, evidence-based coverage trigger determination.",
+          ],
+        };
+      }
+
+      const mergedMissingDocs = Array.from(new Set([
+        ...(extractionMissingDocs || []),
+        ...((parsed?.coverageTrigger?.missingDocs as string[]) || []),
+      ]));
+
+      const finalResult: CoverageTriggerResult = {
+        coverageTrigger: {
+          decision: parsed?.coverageTrigger?.decision || "unknown",
+          confidence: parsed?.coverageTrigger?.confidence ?? 0.25,
+          rationale: parsed?.coverageTrigger?.rationale || "Coverage trigger analysis completed.",
+          missingDocs: mergedMissingDocs,
+        },
+        extractedPolicy,
+        notesForUser: Array.isArray(parsed?.notesForUser) ? parsed.notesForUser : [],
+      };
+
+      return new Response(JSON.stringify({
+        success: true,
+        analysisType,
+        result: finalResult,
+        claimNumber: claim.claim_number
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     } else {
       userPrompt = `Provide a brief strategic overview of this claim:
 

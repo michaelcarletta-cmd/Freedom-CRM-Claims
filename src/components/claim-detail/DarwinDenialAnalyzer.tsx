@@ -11,6 +11,7 @@ import { useClaimFiles } from "@/hooks/useClaimFiles";
 import { ClaimFileSelector } from "./ClaimFileSelector";
 import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 import { PositionGateBanner } from "./PositionGateBanner";
+import { publishCarrierDismantler } from "@/lib/darwinDismantlerBus";
 
 interface DarwinDenialAnalyzerProps {
   claimId: string;
@@ -145,6 +146,13 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
       }
 
       setAnalysis(data.result);
+      if (data?.carrierDismantler) {
+        publishCarrierDismantler({
+          claimId,
+          analysisType: "denial_rebuttal",
+          carrierDismantler: data.carrierDismantler,
+        });
+      }
       setLastAnalyzed(new Date());
       setLastFileName(fileName || null);
 

@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { HardHat, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen } from "lucide-react";
 import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 import { PositionGateBanner } from "./PositionGateBanner";
+import { publishCarrierDismantler } from "@/lib/darwinDismantlerBus";
 
 interface DarwinEngineerReportAnalyzerProps {
   claimId: string;
@@ -203,6 +204,13 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
       }
 
       setAnalysis(data.result);
+      if (data?.carrierDismantler) {
+        publishCarrierDismantler({
+          claimId,
+          analysisType: "engineer_report_rebuttal",
+          carrierDismantler: data.carrierDismantler,
+        });
+      }
       setLastAnalyzed(new Date());
       setLastFileName(fileName || null);
 

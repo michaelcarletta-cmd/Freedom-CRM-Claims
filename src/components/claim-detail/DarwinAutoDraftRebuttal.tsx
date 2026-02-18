@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 import { PositionGateBanner } from "./PositionGateBanner";
+import { publishCarrierDismantler } from "@/lib/darwinDismantlerBus";
 
 interface DarwinAutoDraftRebuttalProps {
   claimId: string;
@@ -270,6 +271,13 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
       if (data?.result) {
         setRebuttal(data.result);
         setEditableRebuttal(data.result);
+        if (data?.carrierDismantler) {
+          publishCarrierDismantler({
+            claimId,
+            analysisType: "auto_draft_rebuttal",
+            carrierDismantler: data.carrierDismantler,
+          });
+        }
         
         // Save to darwin_analysis_results
         const { data: userData } = await supabase.auth.getUser();
