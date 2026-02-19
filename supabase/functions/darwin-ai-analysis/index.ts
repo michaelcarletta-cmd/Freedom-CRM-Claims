@@ -4,15 +4,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import {
   buildKnowledgeContext,
   buildNotFoundKbMessage,
+  buildRetrievalDiagnosticHint,
+  expandKnowledgeQueries,
   mergeKnowledgeMatches,
   normalizeKnowledgeBasinSettings,
   rankKnowledgeChunks,
+  selectTopKnowledgeMatches,
   toKnowledgeSources,
   type KnowledgeBasinSettings,
   type KnowledgeChunkCandidate,
   type KnowledgeChunkMatch,
   type KnowledgeSource,
   type RetrievalDebug,
+  type RetrievalHealthStats,
 } from "./kb-first.ts";
 
 // Use dynamic import for pdf.js to avoid bundling issues
@@ -81,6 +85,14 @@ async function extractTextFromPDFNative(base64Content: string, fileName: string)
 type KbSearchTrace = {
   matches: KnowledgeChunkMatch[];
   queries: string[];
+  expandedQueries: string[];
+  primaryExpandedQueries: string[];
+  health?: RetrievalHealthStats;
+};
+
+type KbSearchOptions = {
+  collectHealth?: boolean;
+  capturePrimaryExpansions?: boolean;
 };
 
 function parseBooleanEnv(value: string | undefined | null): boolean {
@@ -189,6 +201,204 @@ async function loadKnowledgeBasinSettings(
   });
 }
 
+function applyDocFiltersToDocQuery(
+  query: any,
+  settings: KnowledgeBasinSettings,
+  category?: string,
+) {
+  if (settings.statuses.length <= 1) {
+    query = query.eq("status", settings.statuses[0] || "completed");
+  } else {
+    query = query.in("status", settings.statuses);
+  }
+
+  if (category) {
+    query = query.eq("category", category);
+  } else if (settings.categories && settings.categories.length > 0) {
+    query = query.in("category", settings.categories);
+  }
+
+  return query;
+}
+
+function applyDocFiltersToChunkQuery(
+  query: any,
+  settings: KnowledgeBasinSettings,
+  category?: string,
+) {
+  if (settings.statuses.length <= 1) {
+    query = query.eq("ai_knowledge_documents.status", settings.statuses[0] || "completed");
+  } else {
+    query = query.in("ai_knowledge_documents.status", settings.statuses);
+  }
+
+  if (category) {
+    query = query.eq("ai_knowledge_documents.category", category);
+  } else if (settings.categories && settings.categories.length > 0) {
+    query = query.in("ai_knowledge_documents.category", settings.categories);
+  }
+
+  return query;
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const batches: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    batches.push(items.slice(index, index + size));
+  }
+  return batches;
+}
+
+async function collectRetrievalHealthStats(args: {
+  supabase: any;
+  settings: KnowledgeBasinSettings;
+  category?: string;
+  chunksAvailable: number;
+  chunksMatchingDocFilters: number;
+  workspaceId?: string | null;
+  orgId?: string | null;
+}): Promise<RetrievalHealthStats> {
+  const {
+    supabase,
+    settings,
+    category,
+    chunksAvailable,
+    chunksMatchingDocFilters,
+    workspaceId,
+    orgId,
+  } = args;
+
+  let processedDocs = 0;
+  let docsMatchingFilters = 0;
+  let docsWithZeroChunks = 0;
+
+  const { count: processedCount } = await supabase
+    .from("ai_knowledge_documents")
+    .select("id", { count: "exact", head: true })
+    .in("status", settings.statuses);
+  processedDocs = processedCount || 0;
+
+  let docsFilterQuery = supabase
+    .from("ai_knowledge_documents")
+    .select("id", { count: "exact", head: true });
+  docsFilterQuery = applyDocFiltersToDocQuery(docsFilterQuery, settings, category);
+  const { count: filteredDocsCount } = await docsFilterQuery;
+  docsMatchingFilters = filteredDocsCount || 0;
+
+  if (docsMatchingFilters > 0) {
+    let idsQuery = supabase.from("ai_knowledge_documents").select("id");
+    idsQuery = applyDocFiltersToDocQuery(idsQuery, settings, category);
+    const { data: docRows } = await idsQuery;
+    const docIds = (docRows || []).map((row: any) => row.id as string).filter(Boolean);
+
+    if (docIds.length > 0) {
+      const docsWithChunks = new Set<string>();
+      for (const batch of chunkArray(docIds, 400)) {
+        const { data: chunkRows } = await supabase
+          .from("ai_knowledge_chunks")
+          .select("document_id")
+          .in("document_id", batch);
+
+        for (const row of chunkRows || []) {
+          if (row.document_id) docsWithChunks.add(row.document_id);
+        }
+      }
+      docsWithZeroChunks = Math.max(0, docIds.length - docsWithChunks.size);
+    }
+  }
+
+  return {
+    processedDocs,
+    docsMatchingFilters,
+    chunksAvailable,
+    chunksMatchingDocFilters,
+    docsWithZeroChunks,
+    poolCapped: chunksMatchingDocFilters > settings.pool,
+    appliedFilters: {
+      statuses: settings.statuses,
+      categories: category ? [category] : settings.categories || [],
+      tags: settings.tags || [],
+      workspaceId: workspaceId || null,
+      orgId: orgId || null,
+    },
+  };
+}
+
+function hasKbCitation(text: string): boolean {
+  return /\[KB-\d+\]/i.test(text || "");
+}
+
+async function addKbCitationsOnly(args: {
+  lovableApiKey: string;
+  model: string;
+  analysisType: string;
+  responseText: string;
+  sources: KnowledgeSource[];
+}): Promise<string | null> {
+  const { lovableApiKey, model, analysisType, responseText, sources } = args;
+  if (!responseText || sources.length === 0) return null;
+
+  const sourceMap = sources
+    .slice(0, 12)
+    .map(
+      (source, index) =>
+        `[KB-${index + 1}] docTitle="${source.docTitle}" docId=${source.docId} chunkId=${source.chunkId} score=${source.score}`,
+    )
+    .join("\n");
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${lovableApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0,
+      max_tokens: 8000,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a citation pass. Keep the response substance and structure unchanged. Add [KB-x] citations to factual assertions using only the provided source map. Do not invent citations.",
+        },
+        {
+          role: "user",
+          content: `Analysis type: ${analysisType}
+
+Source map:
+${sourceMap}
+
+Original response:
+${responseText}
+
+Return the same response text with [KB-x] citations inserted. Do not add markdown fences or commentary.`,
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    console.error("[KB-FIRST] Citation pass failed:", response.status, await response.text());
+    return null;
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (typeof content === "string" && content.trim()) {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    const stitched = content
+      .filter((part: any) => part.type === "text" && part.text)
+      .map((part: any) => part.text)
+      .join("\n")
+      .trim();
+    return stitched || null;
+  }
+  return null;
+}
+
 async function searchKnowledgeBase(args: {
   supabase: any;
   question: string;
@@ -197,8 +407,9 @@ async function searchKnowledgeBase(args: {
   category?: string;
   workspaceId?: string | null;
   orgId?: string | null;
+  options?: KbSearchOptions;
 }): Promise<string> {
-  const { supabase, question, settings, trace, category, workspaceId, orgId } = args;
+  const { supabase, question, settings, trace, category, workspaceId, orgId, options } = args;
   const safeQuestion = (question || "").trim();
   if (!safeQuestion) return "";
 
@@ -220,17 +431,7 @@ async function searchKnowledgeBase(args: {
         ai_knowledge_documents!inner(id, file_name, category, status, description)
       `);
 
-    if (settings.statuses.length <= 1) {
-      query = query.eq("ai_knowledge_documents.status", settings.statuses[0] || "completed");
-    } else {
-      query = query.in("ai_knowledge_documents.status", settings.statuses);
-    }
-
-    if (category) {
-      query = query.eq("ai_knowledge_documents.category", category);
-    } else if (settings.categories && settings.categories.length > 0) {
-      query = query.in("ai_knowledge_documents.category", settings.categories);
-    }
+    query = applyDocFiltersToChunkQuery(query, settings, category);
 
     const { data, error } = await query.limit(settings.pool);
     if (error) {
@@ -299,9 +500,45 @@ async function searchKnowledgeBase(args: {
       });
     }
 
-    const ranked = rankKnowledgeChunks(safeQuestion, candidates, settings);
-    trace.matches = mergeKnowledgeMatches(trace.matches, ranked);
+    let chunksCountQuery = supabase
+      .from("ai_knowledge_chunks")
+      .select("id, ai_knowledge_documents!inner(status, category)", { count: "exact", head: true });
+    chunksCountQuery = applyDocFiltersToChunkQuery(chunksCountQuery, settings, category);
+    const { count: chunksMatchingDocFilters } = await chunksCountQuery;
+
+    const expandedQueries = expandKnowledgeQueries(safeQuestion);
+    if (options?.capturePrimaryExpansions) {
+      trace.primaryExpandedQueries = expandedQueries;
+    }
+    trace.expandedQueries = Array.from(
+      new Set([...trace.expandedQueries, ...expandedQueries]),
+    );
     trace.queries.push(safeQuestion);
+
+    let queryMergedMatches: KnowledgeChunkMatch[] = [];
+    expandedQueries.forEach((expandedQuery, index) => {
+      const ranked = rankKnowledgeChunks(expandedQuery, candidates, settings).map((match) => ({
+        ...match,
+        // Slightly prefer the original query over expanded variants.
+        score: index === 0 ? match.score : Number((match.score * 0.97).toFixed(6)),
+      }));
+      queryMergedMatches = mergeKnowledgeMatches(queryMergedMatches, ranked);
+    });
+
+    const ranked = selectTopKnowledgeMatches(queryMergedMatches, settings);
+    trace.matches = mergeKnowledgeMatches(trace.matches, ranked);
+
+    if (options?.collectHealth) {
+      trace.health = await collectRetrievalHealthStats({
+        supabase,
+        settings,
+        category,
+        chunksAvailable: candidates.length,
+        chunksMatchingDocFilters: chunksMatchingDocFilters || 0,
+        workspaceId,
+        orgId,
+      });
+    }
 
     console.log(
       `[KB-FIRST] Query="${safeQuestion.substring(0, 100)}" pool=${settings.pool} candidates=${candidates.length} selected=${ranked.length} topScores=${ranked
@@ -309,6 +546,14 @@ async function searchKnowledgeBase(args: {
         .map((match) => match.score.toFixed(2))
         .join(", ")}`,
     );
+    console.log(
+      `[KB-FIRST] Query expansion count=${expandedQueries.length}: ${expandedQueries
+        .map((queryText) => queryText.substring(0, 80))
+        .join(" || ")}`,
+    );
+    if (trace.health) {
+      console.log("[KB-FIRST] health:", JSON.stringify(trace.health));
+    }
 
     if (ranked.length === 0) return "";
     return buildKnowledgeContext(ranked);
@@ -370,9 +615,19 @@ serve(async (req) => {
       topK: kbSettings.topK,
       perDocCap: kbSettings.perDocCap,
     };
-    const kbTrace: KbSearchTrace = { matches: [], queries: [] };
+    const kbTrace: KbSearchTrace = {
+      matches: [],
+      queries: [],
+      expandedQueries: [],
+      primaryExpandedQueries: [],
+    };
     let usedKb = false;
     let sources: KnowledgeSource[] = [];
+    const diagnosticsEnabled =
+      additionalContext?.debug === true ||
+      additionalContext?.adminDebug === true ||
+      additionalContext?.isAdmin === true ||
+      parseBooleanEnv(Deno.env.get("KB_DEBUG"));
 
     console.log(
       `[KB-FIRST] Settings loaded pool=${retrievalDebug.pool} topK=${retrievalDebug.topK} perDocCap=${retrievalDebug.perDocCap} strict=${kbSettings.strict}`,
@@ -381,7 +636,11 @@ serve(async (req) => {
       `[KB-FIRST] Retrieval environment verified host=${new URL(supabaseUrl).host} chunksTable=ai_knowledge_chunks documentsTable=ai_knowledge_documents`,
     );
 
-    const kbSearch = (question: string, category?: string) =>
+    const kbSearch = (
+      question: string,
+      category?: string,
+      options?: KbSearchOptions,
+    ) =>
       searchKnowledgeBase({
         supabase,
         question,
@@ -390,6 +649,7 @@ serve(async (req) => {
         category,
         workspaceId: additionalContext?.workspaceId || claim.workspace_id || null,
         orgId: additionalContext?.orgId || null,
+        options,
       });
 
     // Detect state from policyholder address (NJ and PA only)
@@ -4956,9 +5216,37 @@ If any are missing, append a "COMPLETENESS WARNING" section listing what's missi
       .filter((part) => typeof part === "string" && part.trim().length > 0)
       .join(" | ");
 
-    await kbSearch(primaryKbQuery);
+    // Gate on primary query retrieval only (do not rely on earlier auxiliary KB lookups).
+    kbTrace.matches = [];
+    kbTrace.primaryExpandedQueries = [];
+    await kbSearch(primaryKbQuery, undefined, {
+      collectHealth: true,
+      capturePrimaryExpansions: true,
+    });
     sources = toKnowledgeSources(kbTrace.matches);
     usedKb = kbTrace.matches.length > 0;
+    const healthWithHint = kbTrace.health
+      ? {
+          ...kbTrace.health,
+          diagnosticHint: buildRetrievalDiagnosticHint({
+            health: kbTrace.health,
+            settings: kbSettings,
+          }),
+        }
+      : undefined;
+
+    retrievalDebug.health = diagnosticsEnabled
+      ? healthWithHint
+      : healthWithHint
+          ? {
+              ...healthWithHint,
+              diagnosticHint: undefined,
+            }
+          : undefined;
+    retrievalDebug.queryExpansion = {
+      totalQueries: kbTrace.primaryExpandedQueries.length,
+      queries: kbTrace.primaryExpandedQueries.slice(0, 6),
+    };
 
     console.log(
       `[KB-FIRST] usedKb=${usedKb} strict=${kbSettings.strict} retrieval=${JSON.stringify(
@@ -4970,8 +5258,22 @@ If any are missing, append a "COMPLETENESS WARNING" section listing what's missi
     }
 
     if (!usedKb) {
-      const notFound = buildNotFoundKbMessage(analysisType);
-      const notFoundResult = `${notFound.result}\n\nClarifying question: ${notFound.clarifyingQuestion}`;
+      const notFound = buildNotFoundKbMessage(analysisType, {
+        expandedQueries: kbTrace.primaryExpandedQueries,
+        strictMode: kbSettings.strict,
+        diagnosticHint: diagnosticsEnabled ? healthWithHint?.diagnosticHint : undefined,
+      });
+      const suggestionsText = notFound.suggestedQueries.length
+        ? `\n\nSuggested rephrased queries:\n${notFound.suggestedQueries.map((queryText) => `- ${queryText}`).join("\n")}`
+        : "";
+      const nextStepsText = notFound.nextSteps.length
+        ? `\n\nNext steps:\n${notFound.nextSteps.map((step) => `- ${step}`).join("\n")}`
+        : "";
+      const diagnosticText =
+        diagnosticsEnabled && notFound.diagnosticHint
+          ? `\n\nDiagnostic hint (admin/debug): ${notFound.diagnosticHint}`
+          : "";
+      const notFoundResult = `${notFound.result}\n\nClarifying question: ${notFound.clarifyingQuestion}${suggestionsText}${nextStepsText}${diagnosticText}`;
 
       return new Response(
         JSON.stringify({
@@ -4986,6 +5288,9 @@ If any are missing, append a "COMPLETENESS WARNING" section listing what's missi
           retrieval: retrievalDebug,
           sources: [],
           clarifyingQuestion: notFound.clarifyingQuestion,
+          suggestedQueries: notFound.suggestedQueries,
+          nextSteps: notFound.nextSteps,
+          diagnosticHint: diagnosticsEnabled ? notFound.diagnosticHint : undefined,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
@@ -5366,6 +5671,40 @@ Always cite relevant source markers [KB-1], [KB-2], etc. for substantive claims.
     }
     
     console.log(`Darwin AI Analysis completed for ${analysisType}, result length: ${analysisResult.length}`);
+
+    if (usedKb && sources.length > 0 && !hasKbCitation(analysisResult)) {
+      console.log(
+        `[KB-FIRST] Missing [KB-x] citations detected. Running citation-only pass with model ${successfulModel || modelFallbackChain[0]}`,
+      );
+      try {
+        const citationPassResult = await addKbCitationsOnly({
+          lovableApiKey: LOVABLE_API_KEY,
+          model: successfulModel || modelFallbackChain[0],
+          analysisType,
+          responseText: analysisResult,
+          sources,
+        });
+
+        if (citationPassResult && hasKbCitation(citationPassResult)) {
+          analysisResult = citationPassResult;
+          console.log("[KB-FIRST] Citation-only pass succeeded.");
+        } else {
+          const fallbackCitationFooter = sources
+            .slice(0, Math.min(3, sources.length))
+            .map((_, index) => `[KB-${index + 1}]`)
+            .join(" ");
+          analysisResult = `${analysisResult}\n\nCitations: ${fallbackCitationFooter}`;
+          console.log("[KB-FIRST] Citation pass fallback footer applied.");
+        }
+      } catch (citationError) {
+        console.error("[KB-FIRST] Citation-only pass error:", citationError);
+        const fallbackCitationFooter = sources
+          .slice(0, Math.min(3, sources.length))
+          .map((_, index) => `[KB-${index + 1}]`)
+          .join(" ");
+        analysisResult = `${analysisResult}\n\nCitations: ${fallbackCitationFooter}`;
+      }
+    }
 
     // Save analysis result to database for future reference
     const inputSummary = pdfFileName 

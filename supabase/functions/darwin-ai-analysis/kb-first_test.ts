@@ -5,6 +5,9 @@ import {
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 
 import {
+  buildNotFoundKbMessage,
+  buildRetrievalDiagnosticHint,
+  expandKnowledgeQueries,
   executeKbFirstFlow,
   normalizeKnowledgeBasinSettings,
   rankKnowledgeChunks,
@@ -86,4 +89,47 @@ Deno.test("Test B: unique phrase in new doc is retrievable and appears in source
   assertEquals(result.usedKb, true);
   assert(result.sources.some((source) => source.docId === "doc-new"));
   assert(result.sources.some((source) => source.chunkId === "chunk-new-1"));
+});
+
+Deno.test("Test C: restrictive filters produce diagnostic hint", () => {
+  const settings = normalizeKnowledgeBasinSettings({
+    pool: 500,
+    topK: 10,
+    perDocCap: 3,
+    strict: true,
+    statuses: ["completed"],
+    categories: ["building-codes"],
+    tags: ["rare-tag"],
+  });
+
+  const health = {
+    processedDocs: 14,
+    docsMatchingFilters: 2,
+    chunksAvailable: 0,
+    chunksMatchingDocFilters: 4,
+    docsWithZeroChunks: 1,
+    poolCapped: false,
+    appliedFilters: {
+      statuses: ["completed"],
+      categories: ["building-codes"],
+      tags: ["rare-tag"],
+      workspaceId: "workspace-1",
+      orgId: "org-1",
+    },
+  };
+
+  const hint = buildRetrievalDiagnosticHint({ health, settings });
+  assert(hint);
+  assertStringIncludes(hint!, "zero");
+
+  const expanded = expandKnowledgeQueries("acv ordinance and law roof code upgrade");
+  const notFound = buildNotFoundKbMessage("next_steps", {
+    expandedQueries: expanded,
+    strictMode: true,
+    diagnosticHint: hint,
+  });
+
+  assert(notFound.suggestedQueries.length > 0);
+  assert(notFound.nextSteps.length > 0);
+  assertEquals(notFound.diagnosticHint, hint);
 });
