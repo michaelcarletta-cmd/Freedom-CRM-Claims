@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe, AlignLeft, RefreshCw } from "lucide-react";
+import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe, AlignLeft, RefreshCw, Save } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +38,40 @@ const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mov,.avi,.mkv,.mp3
 
 type UploadTab = "files" | "url" | "text";
 
+interface KnowledgeBasinSettingsForm {
+  pool_size: number;
+  top_k: number;
+  per_document_cap: number;
+  strict_mode: boolean;
+  status_filter_text: string;
+  category_filter_text: string;
+  tag_filter_text: string;
+}
+
+const DEFAULT_BASIN_SETTINGS: KnowledgeBasinSettingsForm = {
+  pool_size: 500,
+  top_k: 10,
+  per_document_cap: 3,
+  strict_mode: false,
+  status_filter_text: "completed, processed",
+  category_filter_text: "",
+  tag_filter_text: "",
+};
+
+const toCsv = (value: unknown): string => {
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((item) => String(item).trim())
+    .filter(Boolean)
+    .join(", ");
+};
+
+const fromCsv = (value: string): string[] =>
+  value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
 export const AIKnowledgeBaseSettings = () => {
   const queryClient = useQueryClient();
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -58,6 +93,73 @@ export const AIKnowledgeBaseSettings = () => {
   const [textUploading, setTextUploading] = useState(false);
   const [urlDescription, setUrlDescription] = useState("");
   const [urlUploading, setUrlUploading] = useState(false);
+  const [basinSettings, setBasinSettings] = useState<KnowledgeBasinSettingsForm>(DEFAULT_BASIN_SETTINGS);
+
+  const { data: savedBasinSettings } = useQuery({
+    queryKey: ["ai-knowledge-basin-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("global_automation_settings")
+        .select("setting_value")
+        .eq("setting_key", "ai_knowledge_basin_settings")
+        .maybeSingle();
+
+      if (error) throw error;
+      const value = (data?.setting_value || {}) as Record<string, unknown>;
+      return {
+        pool_size: Number(value.pool_size ?? value.poolSize ?? DEFAULT_BASIN_SETTINGS.pool_size),
+        top_k: Number(value.top_k ?? value.topK ?? DEFAULT_BASIN_SETTINGS.top_k),
+        per_document_cap: Number(value.per_document_cap ?? value.perDocCap ?? DEFAULT_BASIN_SETTINGS.per_document_cap),
+        strict_mode: Boolean(value.strict_mode ?? value.kb_strict ?? DEFAULT_BASIN_SETTINGS.strict_mode),
+        status_filter_text: toCsv(value.status_filter) || DEFAULT_BASIN_SETTINGS.status_filter_text,
+        category_filter_text: toCsv(value.category_filter),
+        tag_filter_text: toCsv(value.tag_filter),
+      } as KnowledgeBasinSettingsForm;
+    },
+  });
+
+  useEffect(() => {
+    if (savedBasinSettings) {
+      setBasinSettings(savedBasinSettings);
+    }
+  }, [savedBasinSettings]);
+
+  const saveBasinSettingsMutation = useMutation({
+    mutationFn: async (settings: KnowledgeBasinSettingsForm) => {
+      const payload = {
+        pool_size: Math.max(10, Number(settings.pool_size) || DEFAULT_BASIN_SETTINGS.pool_size),
+        top_k: Math.max(1, Number(settings.top_k) || DEFAULT_BASIN_SETTINGS.top_k),
+        per_document_cap: Math.max(1, Number(settings.per_document_cap) || DEFAULT_BASIN_SETTINGS.per_document_cap),
+        strict_mode: settings.strict_mode,
+        status_filter: fromCsv(settings.status_filter_text),
+        category_filter: fromCsv(settings.category_filter_text),
+        tag_filter: fromCsv(settings.tag_filter_text),
+      };
+
+      const { error } = await supabase
+        .from("global_automation_settings")
+        .upsert(
+          {
+            setting_key: "ai_knowledge_basin_settings",
+            setting_value: payload as any,
+            description: "AI knowledge basin retrieval settings (pool/top_k/per_doc_cap/filters/strict mode)",
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "setting_key",
+          },
+        );
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge-basin-settings"] });
+      toast.success("Knowledge basin settings saved");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to save knowledge basin settings");
+    },
+  });
 
   const { data: documents, isLoading } = useQuery({
     queryKey: ["ai-knowledge-documents"],
@@ -352,6 +454,145 @@ export const AIKnowledgeBaseSettings = () => {
 
   return (
     <div className="space-y-6">
+      <Card className="bg-card border-border">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <Brain className="h-5 w-5 text-primary" />
+              AI Knowledge Basin Settings
+            </span>
+          </CardTitle>
+          <CardDescription>
+            Retrieval controls used by Darwin KB-first responses (pool size, top_k, per-document cap, and strict mode).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Pool Size</Label>
+              <Input
+                type="number"
+                min={10}
+                value={basinSettings.pool_size}
+                onChange={(e) =>
+                  setBasinSettings((prev) => ({
+                    ...prev,
+                    pool_size: Number(e.target.value) || DEFAULT_BASIN_SETTINGS.pool_size,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Top K</Label>
+              <Input
+                type="number"
+                min={1}
+                value={basinSettings.top_k}
+                onChange={(e) =>
+                  setBasinSettings((prev) => ({
+                    ...prev,
+                    top_k: Number(e.target.value) || DEFAULT_BASIN_SETTINGS.top_k,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Per-document Cap</Label>
+              <Input
+                type="number"
+                min={1}
+                value={basinSettings.per_document_cap}
+                onChange={(e) =>
+                  setBasinSettings((prev) => ({
+                    ...prev,
+                    per_document_cap: Number(e.target.value) || DEFAULT_BASIN_SETTINGS.per_document_cap,
+                  }))
+                }
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Status Filter (comma-separated)</Label>
+              <Input
+                value={basinSettings.status_filter_text}
+                onChange={(e) =>
+                  setBasinSettings((prev) => ({
+                    ...prev,
+                    status_filter_text: e.target.value,
+                  }))
+                }
+                placeholder="completed, processed"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Category Filter (optional)</Label>
+              <Input
+                value={basinSettings.category_filter_text}
+                onChange={(e) =>
+                  setBasinSettings((prev) => ({
+                    ...prev,
+                    category_filter_text: e.target.value,
+                  }))
+                }
+                placeholder="building-codes, training-materials"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Tag Filter (optional)</Label>
+            <Input
+              value={basinSettings.tag_filter_text}
+              onChange={(e) =>
+                setBasinSettings((prev) => ({
+                  ...prev,
+                  tag_filter_text: e.target.value,
+                }))
+              }
+              placeholder="acv, ordinance, denial"
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+            <div>
+              <p className="font-medium">KB-only mode (KB_STRICT)</p>
+              <p className="text-xs text-muted-foreground">
+                When enabled, Darwin never answers without retrieved knowledge basin chunks.
+              </p>
+            </div>
+            <Switch
+              checked={basinSettings.strict_mode}
+              onCheckedChange={(checked) =>
+                setBasinSettings((prev) => ({
+                  ...prev,
+                  strict_mode: checked,
+                }))
+              }
+            />
+          </div>
+
+          <Button
+            onClick={() => saveBasinSettingsMutation.mutate(basinSettings)}
+            disabled={saveBasinSettingsMutation.isPending}
+            className="w-full md:w-auto"
+          >
+            {saveBasinSettingsMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Save Basin Settings
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card className="bg-card border-border">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

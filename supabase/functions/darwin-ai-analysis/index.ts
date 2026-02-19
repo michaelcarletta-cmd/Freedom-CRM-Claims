@@ -1,6 +1,19 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  buildKnowledgeContext,
+  buildNotFoundKbMessage,
+  mergeKnowledgeMatches,
+  normalizeKnowledgeBasinSettings,
+  rankKnowledgeChunks,
+  toKnowledgeSources,
+  type KnowledgeBasinSettings,
+  type KnowledgeChunkCandidate,
+  type KnowledgeChunkMatch,
+  type KnowledgeSource,
+  type RetrievalDebug,
+} from "./kb-first.ts";
 
 // Use dynamic import for pdf.js to avoid bundling issues
 let pdfjsLib: any = null;
@@ -65,167 +78,238 @@ async function extractTextFromPDFNative(base64Content: string, fileName: string)
   }
 }
 
-// Reuse the same knowledge base search logic as the main Claims AI Assistant
-// so Darwin can leverage uploaded training materials (including ACV audio).
-async function searchKnowledgeBase(supabase: any, question: string, category?: string): Promise<string> {
+type KbSearchTrace = {
+  matches: KnowledgeChunkMatch[];
+  queries: string[];
+};
+
+function parseBooleanEnv(value: string | undefined | null): boolean {
+  return /^(1|true|yes|on)$/i.test((value || "").trim());
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+}
+
+function firstNonEmptyList(...lists: string[][]): string[] | undefined {
+  for (const list of lists) {
+    if (list.length > 0) return list;
+  }
+  return undefined;
+}
+
+async function loadKnowledgeBasinSettings(
+  supabase: any,
+  additionalContext: any,
+): Promise<KnowledgeBasinSettings> {
+  const defaults = normalizeKnowledgeBasinSettings({
+    pool: Number(Deno.env.get("KB_POOL_SIZE") || 500),
+    topK: Number(Deno.env.get("KB_TOP_K") || 10),
+    perDocCap: Number(Deno.env.get("KB_PER_DOC_CAP") || 3),
+    strict: parseBooleanEnv(Deno.env.get("KB_STRICT")),
+    statuses: ["completed", "processed"],
+  });
+
+  let persisted: Record<string, unknown> = {};
   try {
+    const { data, error } = await supabase
+      .from("global_automation_settings")
+      .select("setting_value")
+      .eq("setting_key", "ai_knowledge_basin_settings")
+      .maybeSingle();
+    if (error) {
+      console.log("[KB-FIRST] No persisted basin settings found:", error.message);
+    } else if (data?.setting_value && typeof data.setting_value === "object") {
+      persisted = data.setting_value as Record<string, unknown>;
+    }
+  } catch (error) {
+    console.error("[KB-FIRST] Failed to load persisted basin settings:", error);
+  }
+
+  const requestSettings =
+    additionalContext?.knowledgeBasinSettings && typeof additionalContext.knowledgeBasinSettings === "object"
+      ? (additionalContext.knowledgeBasinSettings as Record<string, unknown>)
+      : {};
+
+  return normalizeKnowledgeBasinSettings({
+    pool:
+      requestSettings.pool ??
+      requestSettings.poolSize ??
+      persisted.pool ??
+      persisted.pool_size ??
+      defaults.pool,
+    topK:
+      requestSettings.topK ??
+      requestSettings.top_k ??
+      persisted.topK ??
+      persisted.top_k ??
+      defaults.topK,
+    perDocCap:
+      requestSettings.perDocCap ??
+      requestSettings.per_document_cap ??
+      persisted.perDocCap ??
+      persisted.per_document_cap ??
+      defaults.perDocCap,
+    strict:
+      Boolean(
+        requestSettings.strict ??
+          requestSettings.kbStrict ??
+          persisted.strict ??
+          persisted.kb_strict ??
+          persisted.strict_mode ??
+          defaults.strict,
+      ),
+    statuses: firstNonEmptyList(
+      normalizeStringList(requestSettings.statuses),
+      normalizeStringList(requestSettings.status_filter),
+      normalizeStringList(persisted.statuses),
+      normalizeStringList(persisted.status_filter),
+      defaults.statuses,
+    ),
+    categories: firstNonEmptyList(
+      normalizeStringList(requestSettings.categories),
+      normalizeStringList(requestSettings.category_filter),
+      normalizeStringList(persisted.categories),
+      normalizeStringList(persisted.category_filter),
+    ),
+    tags: firstNonEmptyList(
+      normalizeStringList(requestSettings.tags),
+      normalizeStringList(requestSettings.tag_filter),
+      normalizeStringList(persisted.tags),
+      normalizeStringList(persisted.tag_filter),
+    ),
+  });
+}
+
+async function searchKnowledgeBase(args: {
+  supabase: any;
+  question: string;
+  settings: KnowledgeBasinSettings;
+  trace: KbSearchTrace;
+  category?: string;
+  workspaceId?: string | null;
+  orgId?: string | null;
+}): Promise<string> {
+  const { supabase, question, settings, trace, category, workspaceId, orgId } = args;
+  const safeQuestion = (question || "").trim();
+  if (!safeQuestion) return "";
+
+  try {
+    if (workspaceId || orgId) {
+      console.log(
+        `[KB-FIRST] Applying tenant filters workspaceId=${workspaceId || "none"} orgId=${orgId || "none"}`,
+      );
+    }
+
     let query = supabase
-      .from('ai_knowledge_chunks')
+      .from("ai_knowledge_chunks")
       .select(`
+        id,
         content,
         metadata,
-        ai_knowledge_documents!inner(category, file_name, status)
-      `)
-      .eq('ai_knowledge_documents.status', 'completed');
+        document_id,
+        chunk_index,
+        ai_knowledge_documents!inner(id, file_name, category, status, description)
+      `);
+
+    if (settings.statuses.length <= 1) {
+      query = query.eq("ai_knowledge_documents.status", settings.statuses[0] || "completed");
+    } else {
+      query = query.in("ai_knowledge_documents.status", settings.statuses);
+    }
 
     if (category) {
-      query = query.eq('ai_knowledge_documents.category', category);
+      query = query.eq("ai_knowledge_documents.category", category);
+    } else if (settings.categories && settings.categories.length > 0) {
+      query = query.in("ai_knowledge_documents.category", settings.categories);
     }
 
-    const { data: chunks, error } = await query.limit(100);
-
-    if (error || !chunks || chunks.length === 0) {
-      console.log('Darwin KB: no chunks found');
-      return '';
+    const { data, error } = await query.limit(settings.pool);
+    if (error) {
+      console.error("[KB-FIRST] Failed to query ai_knowledge_chunks:", error.message);
+      return "";
     }
 
-    console.log(`Darwin KB: searching ${chunks.length} chunks`);
-
-    const questionLower = question.toLowerCase();
-    const questionWords = questionLower
-      .split(/\s+/)
-      .filter((w) => w.length >= 2)
-      .map((w) => w.replace(/[^a-z0-9]/g, ''))
-      .filter((w) => w.length >= 2);
-
-    const importantTerms = [
-      'depreciation',
-      'acv',
-      'rcv',
-      'actual cash value',
-      'replacement cost',
-      'ordinance',
-      'law',
-      'code',
-      'compliance',
-      'deductible',
-      'coverage',
-      'policy',
-      'claim',
-      'adjuster',
-      'supplement',
-      'denial',
-      'settlement',
-      'recoverable',
-      'non-recoverable',
-      'dwelling',
-      'roofing',
-      'damage',
-      'wind',
-      'hail',
-      'storm',
-      'inspection',
-      'estimate',
-      'xactimate',
-    ];
-
-    const matchedTerms = importantTerms.filter((term) => questionLower.includes(term));
-    const isAcvQuestion = /\bacv\b|actual cash value|code upgrade|ordinance and law|ordinance & law/i.test(questionLower);
-
-    const scoredChunks = chunks
-      .map((chunk: any) => {
-        const contentLower = chunk.content.toLowerCase();
-        const sourceName = (chunk.ai_knowledge_documents?.file_name || '').toLowerCase();
-        const category = (chunk.ai_knowledge_documents?.category || '').toLowerCase();
-        const isFromAcvAudio = sourceName.includes('acv and code upgrade');
-        const isFromAudioRecording = isFromAcvAudio || (category === 'building-codes' && sourceName.includes('acv'));
-
-        let score = 0;
-
-        questionWords.forEach((word) => {
-          if (contentLower.includes(word)) {
-            score += 1;
-            if (importantTerms.includes(word)) {
-              score += 2;
-            }
-          }
-        });
-
-        matchedTerms.forEach((term) => {
-          if (contentLower.includes(term)) {
-            score += 3;
-          }
-        });
-
-        const phrases = questionLower.match(/["']([^"']+)["']/g);
-        if (phrases) {
-          phrases.forEach((phrase) => {
-            const cleanPhrase = phrase.replace(/["']/g, '');
-            if (contentLower.includes(cleanPhrase)) {
-              score += 5;
-            }
-          });
-        }
-
-        if (isAcvQuestion && isFromAudioRecording) {
-          score += 30;
-        }
-
-        return { ...chunk, score, sourceName, category, isFromAudioRecording };
-      })
-      .filter((c: any) => c.score > 0);
-
-    let finalChunks: any[] = scoredChunks;
-    if (isAcvQuestion) {
-      const audioChunks = scoredChunks.filter((c: any) => c.isFromAudioRecording);
-      if (audioChunks.length > 0) {
-        finalChunks = audioChunks;
-      }
-    }
-
-    finalChunks = finalChunks.sort((a: any, b: any) => b.score - a.score).slice(0, 8);
-
-    console.log(
-      `Darwin KB: using ${finalChunks.length} chunks with scores: ${finalChunks
-        .map((c: any) => c.score)
-        .join(', ')}`,
-    );
-    if (isAcvQuestion) {
-      console.log('Darwin KB ACV sources:', finalChunks.map((c: any) => c.sourceName));
-    }
-
-    if (finalChunks.length === 0) {
-      return '';
-    }
-
-    let knowledgeContext = '\n\n=== INTERNAL KNOWLEDGE BASE (USE BUT DO NOT CITE) ===\n';
-    knowledgeContext +=
-      'CRITICAL: Use the following knowledge to INFORM your analysis, arguments, and recommendations.\n';
-    knowledgeContext +=
-      'However, DO NOT cite or reference "training materials", "knowledge base", or these source documents in your output.\n';
-    knowledgeContext +=
-      'Instead, present the information as your own expert knowledge and cite ONLY authoritative external sources like:\n';
-    knowledgeContext +=
-      '- Building codes (IRC, IBC, state-specific codes)\n';
-    knowledgeContext +=
-      '- Manufacturer specifications and technical bulletins\n';
-    knowledgeContext +=
-      '- Industry standards (ASTM, ARMA, NRCA)\n';
-    knowledgeContext +=
-      '- State insurance regulations and statutes\n';
-    knowledgeContext +=
-      'The knowledge below is for YOUR reference only—never expose these sources to the end user.\n\n';
-
-    finalChunks.forEach((chunk: any, i: number) => {
-      knowledgeContext += `--- Reference ${i + 1} ---\n${chunk.content}\n\n`;
+    let candidates: KnowledgeChunkCandidate[] = (data || []).map((row: any) => {
+      const doc = Array.isArray(row.ai_knowledge_documents)
+        ? row.ai_knowledge_documents[0]
+        : row.ai_knowledge_documents;
+      const metadata =
+        row.metadata && typeof row.metadata === "object"
+          ? (row.metadata as Record<string, unknown>)
+          : null;
+      return {
+        chunkId: row.id,
+        docId: row.document_id,
+        docTitle: doc?.file_name || metadata?.file_name?.toString() || "Untitled Knowledge Document",
+        content: row.content || "",
+        category: doc?.category || metadata?.category?.toString() || null,
+        metadata,
+      };
     });
 
-    knowledgeContext += '=== END INTERNAL KNOWLEDGE ===\n';
+    if (settings.tags && settings.tags.length > 0) {
+      const lowerTags = settings.tags.map((tag) => tag.toLowerCase());
+      candidates = candidates.filter((candidate) => {
+        const metadataTags = Array.isArray(candidate.metadata?.tags)
+          ? (candidate.metadata?.tags as unknown[]).map((tag) => String(tag).toLowerCase())
+          : [];
+        return (
+          lowerTags.some((tag) => metadataTags.includes(tag)) ||
+          lowerTags.some((tag) => candidate.content.toLowerCase().includes(tag))
+        );
+      });
+    }
 
-    return knowledgeContext;
+    const hasWorkspaceMetadata = candidates.some((candidate) => {
+      const metadata = candidate.metadata || {};
+      return (
+        typeof metadata.workspace_id === "string" ||
+        typeof metadata.workspaceId === "string"
+      );
+    });
+
+    if (workspaceId && hasWorkspaceMetadata) {
+      candidates = candidates.filter((candidate) => {
+        const metadata = candidate.metadata || {};
+        return (
+          metadata.workspace_id === workspaceId ||
+          metadata.workspaceId === workspaceId
+        );
+      });
+    }
+
+    const hasOrgMetadata = candidates.some((candidate) => {
+      const metadata = candidate.metadata || {};
+      return typeof metadata.org_id === "string" || typeof metadata.orgId === "string";
+    });
+
+    if (orgId && hasOrgMetadata) {
+      candidates = candidates.filter((candidate) => {
+        const metadata = candidate.metadata || {};
+        return metadata.org_id === orgId || metadata.orgId === orgId;
+      });
+    }
+
+    const ranked = rankKnowledgeChunks(safeQuestion, candidates, settings);
+    trace.matches = mergeKnowledgeMatches(trace.matches, ranked);
+    trace.queries.push(safeQuestion);
+
+    console.log(
+      `[KB-FIRST] Query="${safeQuestion.substring(0, 100)}" pool=${settings.pool} candidates=${candidates.length} selected=${ranked.length} topScores=${ranked
+        .slice(0, 5)
+        .map((match) => match.score.toFixed(2))
+        .join(", ")}`,
+    );
+
+    if (ranked.length === 0) return "";
+    return buildKnowledgeContext(ranked);
   } catch (error) {
-    console.error('Darwin KB error:', error);
-    return '';
+    console.error("[KB-FIRST] Darwin KB search error:", error);
+    return "";
   }
 }
 
@@ -274,6 +358,34 @@ serve(async (req) => {
       .single();
 
     if (claimError) throw claimError;
+
+    const kbSettings = await loadKnowledgeBasinSettings(supabase, additionalContext);
+    const retrievalDebug: RetrievalDebug = {
+      pool: kbSettings.pool,
+      topK: kbSettings.topK,
+      perDocCap: kbSettings.perDocCap,
+    };
+    const kbTrace: KbSearchTrace = { matches: [], queries: [] };
+    let usedKb = false;
+    let sources: KnowledgeSource[] = [];
+
+    console.log(
+      `[KB-FIRST] Settings loaded pool=${retrievalDebug.pool} topK=${retrievalDebug.topK} perDocCap=${retrievalDebug.perDocCap} strict=${kbSettings.strict}`,
+    );
+    console.log(
+      `[KB-FIRST] Retrieval environment verified host=${new URL(supabaseUrl).host} chunksTable=ai_knowledge_chunks documentsTable=ai_knowledge_documents`,
+    );
+
+    const kbSearch = (question: string, category?: string) =>
+      searchKnowledgeBase({
+        supabase,
+        question,
+        settings: kbSettings,
+        trace: kbTrace,
+        category,
+        workspaceId: additionalContext?.workspaceId || claim.workspace_id || null,
+        orgId: additionalContext?.orgId || null,
+      });
 
     // Detect state from policyholder address (NJ and PA only)
     const detectState = (address: string | null): { state: string; stateName: string; insuranceCode: string; promptPayAct: string; adminCode: string } => {
@@ -435,17 +547,14 @@ ${darwinNotes}` : ''}
       case 'denial_rebuttal': {
         // Search multiple knowledge base categories for comprehensive coverage
         const [acvKbDenial, denialTacticsKb, buildingCodesKb] = await Promise.all([
-          searchKnowledgeBase(
-            supabase,
+          kbSearch(
             'ACV policy, actual cash value vs replacement cost, depreciation, code upgrade coverage, ordinance and law, building code upgrade coverage',
             'building-codes',
           ),
-          searchKnowledgeBase(
-            supabase,
+          kbSearch(
             'denial rebuttal carrier tactics wear and tear pre-existing maintenance exclusion coverage dispute',
           ),
-          searchKnowledgeBase(
-            supabase,
+          kbSearch(
             `${claim.loss_type || 'roof hail wind'} damage building code requirements IRC IBC manufacturer specifications ASTM standards`,
           ),
         ]);
@@ -770,8 +879,7 @@ Make this rebuttal so comprehensive and well-documented that the carrier has no 
       }
 
       case 'next_steps': {
-        const acvKbNext = await searchKnowledgeBase(
-          supabase,
+        const acvKbNext = await kbSearch(
           'ACV policy, actual cash value vs replacement cost, depreciation, code upgrade coverage, ordinance and law, building code upgrade coverage',
           'building-codes',
         );
@@ -1863,8 +1971,7 @@ Create a professional, complete document ready for carrier submission.`;
         const dpContext = additionalContext || {};
         
         // Fetch knowledge base for demand packages
-        const kbContent = await searchKnowledgeBase(
-          supabase,
+        const kbContent = await kbSearch(
           'insurance claim demand settlement depreciation coverage policy ACV RCV building code',
           'building-codes'
         );
@@ -3112,17 +3219,14 @@ Return ONLY valid JSON with the classification.`;
         
         // Fetch multiple knowledge base categories for comprehensive coverage
         const [kbRebuttal, kbBuildingCodes, kbDenialTactics] = await Promise.all([
-          searchKnowledgeBase(
-            supabase,
+          kbSearch(
             'rebuttal strategy insurance claim denial depreciation coverage policy building codes manufacturer specifications',
           ),
-          searchKnowledgeBase(
-            supabase,
+          kbSearch(
             `${claim.loss_type || 'roof hail wind'} damage IRC IBC building code requirements ASTM ARMA standards`,
             'building-codes',
           ),
-          searchKnowledgeBase(
-            supabase,
+          kbSearch(
             'carrier denial tactics wear tear pre-existing maintenance exclusion bad faith unfair claims practices',
           ),
         ]);
@@ -3495,8 +3599,7 @@ Make this document READY FOR IMMEDIATE SUBMISSION to the carrier. Be thorough, s
 
       case 'estimate_gap_analysis': {
         // Gap analysis for incoming carrier estimates
-        const kbContent = await searchKnowledgeBase(
-          supabase,
+        const kbContent = await kbSearch(
           'estimate line items xactimate supplement missing items O&P overhead profit code upgrade',
         );
 
@@ -3602,8 +3705,7 @@ VIII. RECOMMENDED ACTIONS
         const measurementReportData = additionalContext?.measurementReportData || null; // Parsed EagleView/Hover data
         const pricingRegion = additionalContext?.pricingRegion || stateInfo.state; // Regional pricing modifier
         
-        const kbContent = await searchKnowledgeBase(
-          supabase,
+        const kbContent = await kbSearch(
           'Xactimate line items codes roofing siding interior water damage mitigation repair replacement O&P overhead profit detach reset ITEL IRC IBC building code',
           undefined
         );
@@ -4050,9 +4152,9 @@ Output:
 
         // Comprehensive systematic dismantling of carrier positions using burden-of-proof enforcement
         const [denialKb, tacticsKb, regulationsKb] = await Promise.all([
-          searchKnowledgeBase(supabase, 'denial rebuttal burden of proof carrier obligation policy language evidence requirements'),
-          searchKnowledgeBase(supabase, 'carrier denial tactics wear and tear pre-existing maintenance exclusion coverage dispute adjuster opinion'),
-          searchKnowledgeBase(supabase, `${stateInfo.stateName} insurance regulations unfair claims settlement practices bad faith`)
+          kbSearch('denial rebuttal burden of proof carrier obligation policy language evidence requirements'),
+          kbSearch('carrier denial tactics wear and tear pre-existing maintenance exclusion coverage dispute adjuster opinion'),
+          kbSearch(`${stateInfo.stateName} insurance regulations unfair claims settlement practices bad faith`)
         ]);
 
         // Fetch previous analysis results for this claim to detect moving goalposts
@@ -4837,6 +4939,53 @@ If any are missing, append a "COMPLETENESS WARNING" section listing what's missi
       }
     }
 
+    // ═══ KB-FIRST ENFORCEMENT GATE ═══
+    const primaryKbQuery = [
+      analysisType.replace(/_/g, " "),
+      content,
+      claim.loss_type,
+      claim.loss_description,
+      additionalContext?.focusQuestion,
+      darwinNotes,
+    ]
+      .filter((part) => typeof part === "string" && part.trim().length > 0)
+      .join(" | ");
+
+    await kbSearch(primaryKbQuery);
+    sources = toKnowledgeSources(kbTrace.matches);
+    usedKb = kbTrace.matches.length > 0;
+
+    console.log(
+      `[KB-FIRST] usedKb=${usedKb} strict=${kbSettings.strict} retrieval=${JSON.stringify(
+        retrievalDebug,
+      )} sourceCount=${sources.length}`,
+    );
+    if (sources.length > 0) {
+      console.log("[KB-FIRST] sources:", JSON.stringify(sources));
+    }
+
+    if (!usedKb) {
+      const notFound = buildNotFoundKbMessage(analysisType);
+      const notFoundResult = `${notFound.result}\n\nClarifying question: ${notFound.clarifyingQuestion}`;
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          analysisType,
+          result: notFoundResult,
+          analysis: notFoundResult,
+          suggestedActions: [],
+          carrierDismantler: null,
+          claimId,
+          usedKb: false,
+          retrieval: retrievalDebug,
+          sources: [],
+          clarifyingQuestion: notFound.clarifyingQuestion,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // ═══ STRATEGIC PIPELINE ENFORCEMENT ═══
     // For strategic output types, run the 4-step pipeline (Load Memory → Web Search → Build Thesis → Output)
     const STRATEGIC_PIPELINE_TYPES = [
@@ -4917,6 +5066,33 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       }
     }
     // ═══ END STRATEGIC PIPELINE ═══
+
+    const consolidatedKbContext = buildKnowledgeContext(kbTrace.matches);
+    if (consolidatedKbContext) {
+      if (messages[0]?.role === "system") {
+        messages[0].content += `
+
+=== KNOWLEDGE BASIN ENFORCEMENT ===
+You MUST answer ONLY from:
+1) CLAIM DATA provided in this request, and
+2) KNOWLEDGE BASIN CONTEXT provided by the system/user message.
+DO NOT use external or general knowledge.
+If an item is missing from the Knowledge Basin context, say "Not found in Knowledge Base."
+Always cite relevant source markers [KB-1], [KB-2], etc. for substantive claims.
+`;
+      }
+
+      if (typeof messages[1]?.content === "string") {
+        messages[1].content = `${consolidatedKbContext}\n\n${messages[1].content}`;
+      } else if (Array.isArray(messages[1]?.content)) {
+        const textPart = messages[1].content.find((part: any) => part.type === "text");
+        if (textPart) {
+          textPart.text = `${consolidatedKbContext}\n\n${textPart.text}`;
+        } else {
+          messages[1].content.unshift({ type: "text", text: consolidatedKbContext });
+        }
+      }
+    }
 
     // Call Lovable AI with model fallback chain for reliability
     const hasPdfContent = pdfContent || (pdfContents && pdfContents.length > 0) || additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf;
@@ -5028,13 +5204,23 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
             // Don't retry on client errors (4xx) except 429
             if (response.status === 429) {
               return new Response(
-                JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
+                JSON.stringify({
+                  error: 'Rate limit exceeded. Please try again in a moment.',
+                  usedKb,
+                  retrieval: retrievalDebug,
+                  sources,
+                }),
                 { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
               );
             }
             if (response.status === 402) {
               return new Response(
-                JSON.stringify({ error: 'AI usage limit reached. Please add credits to continue.' }),
+                JSON.stringify({
+                  error: 'AI usage limit reached. Please add credits to continue.',
+                  usedKb,
+                  retrieval: retrievalDebug,
+                  sources,
+                }),
                 { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
               );
             }
@@ -5266,6 +5452,12 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       );
     }
 
+    console.log(
+      `[KB-FIRST] response_metadata usedKb=${usedKb} retrieval=${JSON.stringify(
+        retrievalDebug,
+      )} sources=${JSON.stringify(sources)}`,
+    );
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -5275,6 +5467,9 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         suggestedActions,
         carrierDismantler: carrierDismantlerResult,
         claimId,
+        usedKb,
+        retrieval: retrievalDebug,
+        sources,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
@@ -5282,7 +5477,16 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
   } catch (error: any) {
     console.error('Darwin AI Analysis error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({
+        error: error.message,
+        usedKb: false,
+        retrieval: {
+          pool: Number(Deno.env.get("KB_POOL_SIZE") || 500),
+          topK: Number(Deno.env.get("KB_TOP_K") || 10),
+          perDocCap: Number(Deno.env.get("KB_PER_DOC_CAP") || 3),
+        },
+        sources: [],
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
