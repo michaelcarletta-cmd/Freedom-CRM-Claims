@@ -91,9 +91,11 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       const { data, error } = await supabase.functions.invoke("outlook-email-sync", {
         body: { action: "cleanup_and_resync" },
       });
-      const errMsg = error?.message ?? data?.error;
-      if (error) throw new Error(errMsg || "Function call failed");
-      if (data?.error) throw new Error(data.error);
+      // Function returns 200 with { success: false, error: "..." } for failures
+      const bodyError = data && typeof data === "object" && "error" in data ? (data as { error?: string }).error : undefined;
+      const failed = data && typeof data === "object" && "success" in data ? (data as { success?: boolean }).success === false : false;
+      const errMsg = bodyError ?? error?.message ?? (error ? String(error) : undefined);
+      if (error || bodyError || failed) throw new Error(errMsg || "Function call failed");
       const deleted = data?.deleted ?? 0;
       const imported = data?.total_imported ?? 0;
       const claims = data?.claims_synced ?? 0;
@@ -106,7 +108,15 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
     } catch (e: any) {
       const message = e?.message || String(e);
       console.error("Cleanup and resync error:", e);
-      toast({ title: "Cleanup and resync failed", description: message, variant: "destructive" });
+      const hint = message.includes("Unknown action") || message.includes("cleanup_and_resync")
+        ? " Deploy the outlook-email-sync function (e.g. supabase functions deploy outlook-email-sync) and try again."
+        : "";
+      toast({
+        title: "Cleanup and resync failed",
+        description: message + hint,
+        variant: "destructive",
+        duration: 10000,
+      });
     } finally {
       setCleanupSyncing(false);
     }

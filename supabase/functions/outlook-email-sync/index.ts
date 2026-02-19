@@ -228,8 +228,8 @@ serve(async (req) => {
     try {
       body = await req.json();
     } catch {
-      return new Response(JSON.stringify({ error: 'Invalid or missing JSON body' }), {
-        status: 400,
+      return new Response(JSON.stringify({ success: false, error: 'Invalid or missing JSON body' }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -424,8 +424,8 @@ serve(async (req) => {
         .eq('recipient_type', 'outlook_sync');
 
       if (listErr) {
-        return new Response(JSON.stringify({ error: listErr.message }), {
-          status: 400,
+        return new Response(JSON.stringify({ success: false, error: listErr.message }), {
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -452,65 +452,74 @@ serve(async (req) => {
     }
 
     if (action === 'cleanup_and_resync') {
-      const { data: outlookEmails, error: listErr } = await supabase
-        .from('emails')
-        .select('id, claim_id, subject')
-        .eq('recipient_type', 'outlook_sync');
+      try {
+        const { data: outlookEmails, error: listErr } = await supabase
+          .from('emails')
+          .select('id, claim_id, subject')
+          .eq('recipient_type', 'outlook_sync');
 
-      if (listErr) {
-        return new Response(JSON.stringify({ error: `Failed to list emails: ${listErr.message}` }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      let deleted = 0;
-      for (const row of outlookEmails || []) {
-        try {
-          const { data: claim } = await supabase
-            .from('claims')
-            .select('claim_number, policyholder_name')
-            .eq('id', row.claim_id)
-            .single();
-
-          const matchTerms = buildClaimMatchTerms(claim?.claim_number, claim?.policyholder_name);
-          if (!subjectMatchesClaim(row?.subject ?? '', matchTerms)) {
-            const { error: delErr } = await supabase.from('emails').delete().eq('id', row.id);
-            if (!delErr) deleted++;
-          }
-        } catch (e) {
-          console.warn('Cleanup row error:', row?.id, e);
+        if (listErr) {
+          return new Response(JSON.stringify({ success: false, error: `Failed to list emails: ${listErr.message}` }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
-      }
 
-      const { data: allConnections, error: connErr } = await supabase
-        .from('email_connections')
-        .select('*')
-        .eq('is_active', true);
+        let deleted = 0;
+        for (const row of outlookEmails || []) {
+          try {
+            const { data: claim } = await supabase
+              .from('claims')
+              .select('claim_number, policyholder_name')
+              .eq('id', row.claim_id)
+              .single();
 
-      if (connErr || !allConnections || allConnections.length === 0) {
+            const matchTerms = buildClaimMatchTerms(claim?.claim_number, claim?.policyholder_name);
+            if (!subjectMatchesClaim(row?.subject ?? '', matchTerms)) {
+              const { error: delErr } = await supabase.from('emails').delete().eq('id', row.id);
+              if (!delErr) deleted++;
+            }
+          } catch (e) {
+            console.warn('Cleanup row error:', row?.id, e);
+          }
+        }
+
+        const { data: allConnections, error: connErr } = await supabase
+          .from('email_connections')
+          .select('*')
+          .eq('is_active', true);
+
+        if (connErr || !allConnections || allConnections.length === 0) {
+          return new Response(JSON.stringify({
+            success: true,
+            deleted,
+            message: 'No active connections; cleanup done, no resync.',
+            total_imported: 0,
+            claims_synced: 0,
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const { totalImported, claimsSynced, errors } = await runBulkSync(supabase, allConnections);
+        console.log(`Cleanup and resync: removed ${deleted} wrong emails; imported ${totalImported} across ${claimsSynced} claims`);
         return new Response(JSON.stringify({
           success: true,
           deleted,
-          message: 'No active connections; cleanup done, no resync.',
-          total_imported: 0,
-          claims_synced: 0,
+          total_imported: totalImported,
+          claims_synced: claimsSynced,
+          errors: errors.length > 0 ? errors : undefined,
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      } catch (cleanupErr: any) {
+        const msg = cleanupErr?.message ?? String(cleanupErr);
+        console.error('cleanup_and_resync error:', msg, cleanupErr);
+        return new Response(JSON.stringify({ success: false, error: msg }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
-
-      const { totalImported, claimsSynced, errors } = await runBulkSync(supabase, allConnections);
-      console.log(`Cleanup and resync: removed ${deleted} wrong emails; imported ${totalImported} across ${claimsSynced} claims`);
-      return new Response(JSON.stringify({
-        success: true,
-        deleted,
-        total_imported: totalImported,
-        claims_synced: claimsSynced,
-        errors: errors.length > 0 ? errors : undefined,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
     }
 
     if (action === 'sync_all_claims') {
@@ -541,8 +550,8 @@ serve(async (req) => {
   } catch (error: any) {
     const message = error?.message || String(error);
     console.error('Outlook sync error:', message, error);
-    return new Response(JSON.stringify({ error: message }), {
-      status: 400,
+    return new Response(JSON.stringify({ success: false, error: message }), {
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
