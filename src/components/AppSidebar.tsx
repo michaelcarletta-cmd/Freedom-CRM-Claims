@@ -90,7 +90,7 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+    <Sidebar className="border-r border-sidebar-border text-sidebar-foreground">
       <SidebarContent>
         <div className="px-4 py-4 flex items-center">
           <img src={logo} alt="Freedom Claims" className="h-10 w-auto" />

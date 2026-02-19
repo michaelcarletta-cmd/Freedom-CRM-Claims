@@ -18,6 +18,8 @@ const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
+const SIDEBAR_BRAND_GRADIENT =
+  "bg-[linear-gradient(135deg,#1d4ed8_0%,#2563eb_55%,#ffffff_130%)]";
 
 type SidebarContext = {
   state: "expanded" | "collapsed";
@@ -141,7 +143,11 @@ const Sidebar = React.forwardRef<
   if (collapsible === "none") {
     return (
       <div
-        className={cn("flex h-full w-[--sidebar-width] flex-col bg-sidebar text-sidebar-foreground", className)}
+        className={cn(
+          "flex h-full w-[--sidebar-width] flex-col text-sidebar-foreground",
+          SIDEBAR_BRAND_GRADIENT,
+          className,
+        )}
         ref={ref}
         {...props}
       >
@@ -156,7 +162,10 @@ const Sidebar = React.forwardRef<
         <SheetContent
           data-sidebar="sidebar"
           data-mobile="true"
-          className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          className={cn(
+            "w-[--sidebar-width] p-0 text-sidebar-foreground [&>button]:hidden",
+            SIDEBAR_BRAND_GRADIENT,
+          )}
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -206,7 +215,10 @@ const Sidebar = React.forwardRef<
       >
         <div
           data-sidebar="sidebar"
-          className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow"
+          className={cn(
+            "flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow",
+            SIDEBAR_BRAND_GRADIENT,
+          )}
         >
           {children}
         </div>
