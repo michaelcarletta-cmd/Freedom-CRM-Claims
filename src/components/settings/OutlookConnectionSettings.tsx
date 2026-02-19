@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) {
   const [connecting, setConnecting] = useState(false);
+  const [cleanupSyncing, setCleanupSyncing] = useState(false);
   const [authUrl, setAuthUrl] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -84,6 +85,30 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
     },
   });
 
+  const handleCleanupAndResync = async () => {
+    setCleanupSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("outlook-email-sync", {
+        body: { action: "cleanup_and_resync" },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const deleted = data?.deleted ?? 0;
+      const imported = data?.total_imported ?? 0;
+      const claims = data?.claims_synced ?? 0;
+      toast({
+        title: "Cleanup and resync complete",
+        description: `Removed ${deleted} wrongly-attached email(s). Synced ${imported} email(s) to ${claims} claim(s).`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["email-connections"] });
+      queryClient.invalidateQueries({ queryKey: ["emails"] });
+    } catch (e: any) {
+      toast({ title: "Cleanup and resync failed", description: e.message, variant: "destructive" });
+    } finally {
+      setCleanupSyncing(false);
+    }
+  };
+
   const Wrapper = embedded ? "div" : Card;
 
   return (
@@ -140,6 +165,23 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
                   </div>
                 </div>
               ))}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full mt-2"
+                onClick={handleCleanupAndResync}
+                disabled={cleanupSyncing}
+              >
+                {cleanupSyncing ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                {cleanupSyncing ? "Cleaning up and resyncing…" : "Cleanup and resync emails"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Removes emails attached to the wrong claim (e.g. by adjuster) and resyncs by claim number / policyholder name in subject.
+              </p>
             </div>
           )}
 

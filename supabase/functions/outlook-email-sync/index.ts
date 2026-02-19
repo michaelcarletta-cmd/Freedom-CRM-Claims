@@ -95,6 +95,125 @@ async function fetchGraphEmails(accessToken: string): Promise<any[]> {
   }));
 }
 
+// Build match terms from claim number (and common variations) + policyholder last name. Subject must contain at least one.
+function buildClaimMatchTerms(claimNumber: string | null | undefined, policyholderName: string | null | undefined): string[] {
+  const terms: string[] = [];
+  if (claimNumber?.trim()) {
+    const normalized = claimNumber.trim().toLowerCase();
+    terms.push(normalized);
+    const cn = normalized.replace(/[-\s]/g, '');
+    if (cn.length >= 6) {
+      terms.push(cn);
+      terms.push(`${cn.substring(0, 2)}-${cn.substring(2)}`);
+      terms.push(`${cn.substring(0, 4)}-${cn.substring(4)}`);
+      if (cn.length >= 8) terms.push(`${cn.substring(0, 2)}-${cn.substring(2, 6)}-${cn.substring(6)}`);
+    }
+  }
+  const lastName = getPolicyholderLastName(policyholderName);
+  if (lastName) terms.push(lastName);
+  return [...new Set(terms)];
+}
+
+function getPolicyholderLastName(name: string | null | undefined): string | null {
+  if (!name || !name.trim()) return null;
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const last = parts[parts.length - 1];
+  return last && last.length >= 2 ? last.toLowerCase() : null;
+}
+
+// Email is related to this claim only if SUBJECT contains claim number or policyholder last name
+function subjectMatchesClaim(subject: string, matchTerms: string[]): boolean {
+  if (matchTerms.length === 0) return false;
+  const subjectLower = (subject || '').toLowerCase();
+  return matchTerms.some(term => subjectLower.includes(term));
+}
+
+// Run full Outlook sync for all connections (used by sync_all_claims and cleanup_and_resync)
+async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ totalImported: number; claimsSynced: number; errors: string[] }> {
+  let totalImported = 0;
+  let claimsSynced = 0;
+  const errors: string[] = [];
+
+  for (const conn of allConnections) {
+    let accessToken: string;
+    try {
+      accessToken = await getAccessToken(conn, supabase);
+    } catch (tokenErr: any) {
+      await supabase.from('email_connections').update({ last_sync_error: tokenErr.message }).eq('id', conn.id);
+      errors.push(`Connection ${conn.email_address}: ${tokenErr.message}`);
+      continue;
+    }
+
+    let emails: any[];
+    try {
+      emails = await fetchGraphEmails(accessToken);
+    } catch (graphErr: any) {
+      await supabase.from('email_connections').update({ last_sync_error: graphErr.message }).eq('id', conn.id);
+      errors.push(`Connection ${conn.email_address}: ${graphErr.message}`);
+      continue;
+    }
+
+    const { data: openClaims } = await supabase
+      .from('claims')
+      .select('id, claim_number, policyholder_email, policyholder_name, insurance_company, insurance_email')
+      .eq('is_closed', false);
+
+    if (!openClaims || openClaims.length === 0) continue;
+
+    for (const claim of openClaims) {
+      const matchTerms = buildClaimMatchTerms(claim.claim_number, claim.policyholder_name);
+      const matchingEmails = emails.filter((email: any) => subjectMatchesClaim(email.subject, matchTerms));
+
+      if (matchingEmails.length === 0) continue;
+
+      const { data: existingEmails } = await supabase
+        .from('emails')
+        .select('subject, sent_at')
+        .eq('claim_id', claim.id);
+
+      const existingKeys = new Set(
+        existingEmails?.map((e: any) => `${e.subject}|${new Date(e.sent_at).toISOString().substring(0, 16)}`) || []
+      );
+
+      let claimImported = 0;
+      for (const email of matchingEmails) {
+        let sentAt: string;
+        try { sentAt = new Date(email.date).toISOString(); } catch { sentAt = new Date().toISOString(); }
+
+        const key = `${email.subject}|${sentAt.substring(0, 16)}`;
+        if (existingKeys.has(key)) continue;
+
+        const isInbound = email.to.toLowerCase() === conn.email_address.toLowerCase() ||
+                          email.from.toLowerCase() !== conn.email_address.toLowerCase();
+
+        const { error: insertError } = await supabase.from('emails').insert({
+          claim_id: claim.id,
+          subject: email.subject,
+          body: email.body_preview,
+          recipient_email: isInbound ? email.from : email.to,
+          recipient_name: isInbound ? email.from_name : email.to_name,
+          recipient_type: isInbound ? 'inbound' : 'outlook_sync',
+          sent_at: sentAt,
+        });
+
+        if (!insertError) {
+          claimImported++;
+          existingKeys.add(key);
+        }
+      }
+
+      if (claimImported > 0) {
+        totalImported += claimImported;
+        claimsSynced++;
+      }
+    }
+
+    await supabase.from('email_connections').update({ last_sync_at: new Date().toISOString(), last_sync_error: null }).eq('id', conn.id);
+  }
+
+  return { totalImported, claimsSynced, errors };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -107,9 +226,9 @@ serve(async (req) => {
 
     const { action, claim_id, connection_id } = await req.json();
 
-    // For cron-triggered sync_all_claims, validate via cron secret or anon key
+    // For cron-triggered bulk actions, validate via cron secret or anon key
     let user: any = null;
-    if (action === 'sync_all_claims') {
+    if (action === 'sync_all_claims' || action === 'cleanup_wrong_emails' || action === 'cleanup_and_resync') {
       const cronSecret = req.headers.get('x-cron-secret');
       const expectedSecret = Deno.env.get('CRON_SECRET');
       const authHeader = req.headers.get('Authorization');
@@ -210,31 +329,10 @@ serve(async (req) => {
         throw new Error(`Email fetch failed: ${graphErr.message}`);
       }
 
-      // Build matching keywords
-      const matchTerms = [
-        claim.claim_number,
-        claim.policyholder_email,
-        claim.policyholder_name,
-        claim.insurance_email,
-      ].filter(Boolean).map(t => t!.toLowerCase());
+      // Only sync when subject contains something related to this claim (claim number or policyholder last name)
+      const matchTerms = buildClaimMatchTerms(claim.claim_number, claim.policyholder_name);
 
-      const { data: adjusters } = await supabase
-        .from('claim_adjusters')
-        .select('adjuster_email, adjuster_name')
-        .eq('claim_id', claim_id);
-
-      if (adjusters) {
-        adjusters.forEach(adj => {
-          if (adj.adjuster_email) matchTerms.push(adj.adjuster_email.toLowerCase());
-          if (adj.adjuster_name) matchTerms.push(adj.adjuster_name.toLowerCase());
-        });
-      }
-
-      // Filter matching emails
-      const matchingEmails = emails.filter(email => {
-        const searchText = `${email.from} ${email.from_name} ${email.to} ${email.to_name} ${email.subject} ${email.body_preview}`.toLowerCase();
-        return matchTerms.some(term => searchText.includes(term));
-      });
+      const matchingEmails = emails.filter(email => subjectMatchesClaim(email.subject, matchTerms));
 
       // Get existing emails to avoid duplicates
       const { data: existingEmails } = await supabase
@@ -310,8 +408,92 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'cleanup_wrong_emails') {
+      const { data: outlookEmails, error: listErr } = await supabase
+        .from('emails')
+        .select('id, claim_id, subject')
+        .eq('recipient_type', 'outlook_sync');
+
+      if (listErr) {
+        return new Response(JSON.stringify({ error: listErr.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      let deleted = 0;
+      for (const row of outlookEmails || []) {
+        const { data: claim } = await supabase
+          .from('claims')
+          .select('claim_number, policyholder_name')
+          .eq('id', row.claim_id)
+          .single();
+
+        const matchTerms = buildClaimMatchTerms(claim?.claim_number, claim?.policyholder_name);
+        if (!subjectMatchesClaim(row.subject, matchTerms)) {
+          const { error: delErr } = await supabase.from('emails').delete().eq('id', row.id);
+          if (!delErr) deleted++;
+        }
+      }
+
+      console.log(`Cleanup: removed ${deleted} wrongly-attached outlook_sync emails`);
+      return new Response(JSON.stringify({ success: true, deleted }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'cleanup_and_resync') {
+      const { data: outlookEmails } = await supabase
+        .from('emails')
+        .select('id, claim_id, subject')
+        .eq('recipient_type', 'outlook_sync');
+
+      let deleted = 0;
+      for (const row of outlookEmails || []) {
+        const { data: claim } = await supabase
+          .from('claims')
+          .select('claim_number, policyholder_name')
+          .eq('id', row.claim_id)
+          .single();
+
+        const matchTerms = buildClaimMatchTerms(claim?.claim_number, claim?.policyholder_name);
+        if (!subjectMatchesClaim(row.subject, matchTerms)) {
+          const { error: delErr } = await supabase.from('emails').delete().eq('id', row.id);
+          if (!delErr) deleted++;
+        }
+      }
+
+      const { data: allConnections, error: connErr } = await supabase
+        .from('email_connections')
+        .select('*')
+        .eq('is_active', true);
+
+      if (connErr || !allConnections || allConnections.length === 0) {
+        return new Response(JSON.stringify({
+          success: true,
+          deleted,
+          message: 'No active connections; cleanup done, no resync.',
+          total_imported: 0,
+          claims_synced: 0,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { totalImported, claimsSynced, errors } = await runBulkSync(supabase, allConnections);
+      console.log(`Cleanup and resync: removed ${deleted} wrong emails; imported ${totalImported} across ${claimsSynced} claims`);
+      return new Response(JSON.stringify({
+        success: true,
+        deleted,
+        total_imported: totalImported,
+        claims_synced: claimsSynced,
+        errors: errors.length > 0 ? errors : undefined,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'sync_all_claims') {
-      // Get all active email connections
       const { data: allConnections, error: connErr } = await supabase
         .from('email_connections')
         .select('*')
@@ -323,122 +505,7 @@ serve(async (req) => {
         });
       }
 
-      let totalImported = 0;
-      let claimsSynced = 0;
-      const errors: string[] = [];
-
-      for (const conn of allConnections) {
-        let accessToken: string;
-        try {
-          accessToken = await getAccessToken(conn, supabase);
-        } catch (tokenErr: any) {
-          await supabase.from('email_connections').update({ last_sync_error: tokenErr.message }).eq('id', conn.id);
-          errors.push(`Connection ${conn.email_address}: ${tokenErr.message}`);
-          continue;
-        }
-
-        let emails: any[];
-        try {
-          emails = await fetchGraphEmails(accessToken);
-        } catch (graphErr: any) {
-          await supabase.from('email_connections').update({ last_sync_error: graphErr.message }).eq('id', conn.id);
-          errors.push(`Connection ${conn.email_address}: ${graphErr.message}`);
-          continue;
-        }
-
-        // Get all open claims
-        const { data: openClaims } = await supabase
-          .from('claims')
-          .select('id, claim_number, policyholder_email, policyholder_name, insurance_company, insurance_email')
-          .eq('is_closed', false);
-
-        if (!openClaims || openClaims.length === 0) continue;
-
-        for (const claim of openClaims) {
-          // Build match terms for this claim
-          const matchTerms = [
-            claim.claim_number,
-            claim.policyholder_email,
-            claim.policyholder_name,
-            claim.insurance_email,
-          ].filter(Boolean).map(t => t!.toLowerCase());
-
-          // Add claim number variations
-          if (claim.claim_number) {
-            const cn = claim.claim_number.replace(/[-\s]/g, '');
-            if (cn.length >= 6) {
-              matchTerms.push(`${cn.substring(0, 2)}-${cn.substring(2)}`.toLowerCase());
-              matchTerms.push(`${cn.substring(0, 4)}-${cn.substring(4)}`.toLowerCase());
-              if (cn.length >= 8) {
-                matchTerms.push(`${cn.substring(0, 2)}-${cn.substring(2, 6)}-${cn.substring(6)}`.toLowerCase());
-              }
-            }
-          }
-
-          const { data: adjusters } = await supabase
-            .from('claim_adjusters')
-            .select('adjuster_email, adjuster_name')
-            .eq('claim_id', claim.id);
-
-          if (adjusters) {
-            adjusters.forEach(adj => {
-              if (adj.adjuster_email) matchTerms.push(adj.adjuster_email.toLowerCase());
-              if (adj.adjuster_name) matchTerms.push(adj.adjuster_name.toLowerCase());
-            });
-          }
-
-          const matchingEmails = emails.filter(email => {
-            const searchText = `${email.from} ${email.from_name} ${email.to} ${email.to_name} ${email.subject} ${email.body_preview}`.toLowerCase();
-            return matchTerms.some(term => searchText.includes(term));
-          });
-
-          if (matchingEmails.length === 0) continue;
-
-          const { data: existingEmails } = await supabase
-            .from('emails')
-            .select('subject, sent_at')
-            .eq('claim_id', claim.id);
-
-          const existingKeys = new Set(
-            existingEmails?.map(e => `${e.subject}|${new Date(e.sent_at).toISOString().substring(0, 16)}`) || []
-          );
-
-          let claimImported = 0;
-          for (const email of matchingEmails) {
-            let sentAt: string;
-            try { sentAt = new Date(email.date).toISOString(); } catch { sentAt = new Date().toISOString(); }
-
-            const key = `${email.subject}|${sentAt.substring(0, 16)}`;
-            if (existingKeys.has(key)) continue;
-
-            const isInbound = email.to.toLowerCase() === conn.email_address.toLowerCase() ||
-                              email.from.toLowerCase() !== conn.email_address.toLowerCase();
-
-            const { error: insertError } = await supabase.from('emails').insert({
-              claim_id: claim.id,
-              subject: email.subject,
-              body: email.body_preview,
-              recipient_email: isInbound ? email.from : email.to,
-              recipient_name: isInbound ? email.from_name : email.to_name,
-              recipient_type: isInbound ? 'inbound' : 'outlook_sync',
-              sent_at: sentAt,
-            });
-
-            if (!insertError) {
-              claimImported++;
-              existingKeys.add(key);
-            }
-          }
-
-          if (claimImported > 0) {
-            totalImported += claimImported;
-            claimsSynced++;
-          }
-        }
-
-        await supabase.from('email_connections').update({ last_sync_at: new Date().toISOString(), last_sync_error: null }).eq('id', conn.id);
-      }
-
+      const { totalImported, claimsSynced, errors } = await runBulkSync(supabase, allConnections);
       console.log(`Bulk sync complete: ${totalImported} emails imported across ${claimsSynced} claims`);
       return new Response(JSON.stringify({
         success: true,
