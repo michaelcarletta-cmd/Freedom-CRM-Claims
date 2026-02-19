@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { subscribeCarrierDismantler } from "@/lib/darwinDismantlerBus";
+import { subscribeDarwinKbDebug, type DarwinKbDebugEventDetail } from "@/lib/darwinKbDebugBus";
 
 // Lazy load all Darwin components
 const DarwinInsightsPanel = lazy(() => import("@/components/claim-detail/DarwinInsightsPanel").then(m => ({ default: m.DarwinInsightsPanel })));
@@ -140,6 +141,8 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
     created_at: string;
     result: string | null;
   } | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [latestKbDebug, setLatestKbDebug] = useState<DarwinKbDebugEventDetail | null>(null);
 
   // Fetch recent auto-triggered analyses
   useEffect(() => {
@@ -220,6 +223,38 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
       supabase.removeChannel(channel);
       unsubscribe();
     };
+  }, [claimId]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadRole = async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      if (!userId || !mounted) return;
+
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId);
+
+      if (!mounted) return;
+      const admin = (roles || []).some((row) => row.role === "admin");
+      setIsAdmin(admin);
+    };
+
+    loadRole();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeDarwinKbDebug((detail) => {
+      if (detail.claimId !== claimId) return;
+      setLatestKbDebug(detail);
+    });
+    return () => unsubscribe();
   }, [claimId]);
 
   const handleDismissAnalysis = (id: string) => {
@@ -415,6 +450,91 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             })}
           </AlertDescription>
         </Alert>
+      )}
+
+      {isAdmin && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Search className="h-4 w-4 text-primary" />
+              Darwin KB Retrieval Debug (Admin)
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Live retrieval health from latest darwin-ai-analysis response for this claim.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-xs space-y-2">
+            {!latestKbDebug ? (
+              <p className="text-muted-foreground">
+                No KB debug events captured yet. Run any Darwin analysis tool to populate this panel.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-3">
+                  <span>
+                    <strong>Analysis:</strong> {latestKbDebug.analysisType}
+                  </span>
+                  <span>
+                    <strong>usedKb:</strong> {String(latestKbDebug.usedKb)}
+                  </span>
+                  <span>
+                    <strong>At:</strong> {new Date(latestKbDebug.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+
+                {latestKbDebug.retrieval && (
+                  <div className="space-y-1">
+                    <div>
+                      <strong>Retrieval:</strong>{" "}
+                      pool={latestKbDebug.retrieval.pool}, topK={latestKbDebug.retrieval.topK}, perDocCap={latestKbDebug.retrieval.perDocCap}
+                    </div>
+                    {latestKbDebug.retrieval.queryExpansion && (
+                      <div className="text-muted-foreground">
+                        queryExpansion={latestKbDebug.retrieval.queryExpansion.totalQueries} queries
+                        {latestKbDebug.retrieval.queryExpansion.queries?.length
+                          ? ` (${latestKbDebug.retrieval.queryExpansion.queries.slice(0, 2).join(" | ")})`
+                          : ""}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {latestKbDebug.retrieval?.health && (
+                  <div className="rounded-md border border-border p-2 space-y-1">
+                    <div>
+                      <strong>Health:</strong>{" "}
+                      processedDocs={latestKbDebug.retrieval.health.processedDocs}, docsMatchingFilters={latestKbDebug.retrieval.health.docsMatchingFilters}, chunksAvailable={latestKbDebug.retrieval.health.chunksAvailable}
+                    </div>
+                    <div className="text-muted-foreground">
+                      chunksMatchingDocFilters={latestKbDebug.retrieval.health.chunksMatchingDocFilters}, docsWithZeroChunks={latestKbDebug.retrieval.health.docsWithZeroChunks}, poolCapped={String(latestKbDebug.retrieval.health.poolCapped)}
+                    </div>
+                  </div>
+                )}
+
+                {latestKbDebug.diagnosticHint && (
+                  <Alert className="border-warning/50 bg-warning/10">
+                    <AlertCircle className="h-4 w-4 text-warning" />
+                    <AlertTitle className="text-xs">Diagnostic hint</AlertTitle>
+                    <AlertDescription className="text-xs">{latestKbDebug.diagnosticHint}</AlertDescription>
+                  </Alert>
+                )}
+
+                {latestKbDebug.sources?.length > 0 && (
+                  <div className="space-y-1">
+                    <div><strong>Sources ({latestKbDebug.sources.length}):</strong></div>
+                    <ul className="list-disc ml-4 text-muted-foreground">
+                      {latestKbDebug.sources.slice(0, 3).map((source) => (
+                        <li key={source.chunkId}>
+                          {source.docTitle} (chunk: {source.chunkId}, score: {source.score})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Main Layout: Left rail + center tools + right drawer */}
