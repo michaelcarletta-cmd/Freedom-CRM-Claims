@@ -224,7 +224,16 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, claim_id, connection_id } = await req.json();
+    let body: { action?: string; claim_id?: string; connection_id?: string } = {};
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: 'Invalid or missing JSON body' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const { action, claim_id, connection_id } = body;
 
     // For cron-triggered bulk actions, validate via cron secret or anon key
     let user: any = null;
@@ -443,23 +452,34 @@ serve(async (req) => {
     }
 
     if (action === 'cleanup_and_resync') {
-      const { data: outlookEmails } = await supabase
+      const { data: outlookEmails, error: listErr } = await supabase
         .from('emails')
         .select('id, claim_id, subject')
         .eq('recipient_type', 'outlook_sync');
 
+      if (listErr) {
+        return new Response(JSON.stringify({ error: `Failed to list emails: ${listErr.message}` }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       let deleted = 0;
       for (const row of outlookEmails || []) {
-        const { data: claim } = await supabase
-          .from('claims')
-          .select('claim_number, policyholder_name')
-          .eq('id', row.claim_id)
-          .single();
+        try {
+          const { data: claim } = await supabase
+            .from('claims')
+            .select('claim_number, policyholder_name')
+            .eq('id', row.claim_id)
+            .single();
 
-        const matchTerms = buildClaimMatchTerms(claim?.claim_number, claim?.policyholder_name);
-        if (!subjectMatchesClaim(row.subject, matchTerms)) {
-          const { error: delErr } = await supabase.from('emails').delete().eq('id', row.id);
-          if (!delErr) deleted++;
+          const matchTerms = buildClaimMatchTerms(claim?.claim_number, claim?.policyholder_name);
+          if (!subjectMatchesClaim(row?.subject ?? '', matchTerms)) {
+            const { error: delErr } = await supabase.from('emails').delete().eq('id', row.id);
+            if (!delErr) deleted++;
+          }
+        } catch (e) {
+          console.warn('Cleanup row error:', row?.id, e);
         }
       }
 
@@ -519,8 +539,9 @@ serve(async (req) => {
 
     throw new Error(`Unknown action: ${action}`);
   } catch (error: any) {
-    console.error('Outlook sync error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    const message = error?.message || String(error);
+    console.error('Outlook sync error:', message, error);
+    return new Response(JSON.stringify({ error: message }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

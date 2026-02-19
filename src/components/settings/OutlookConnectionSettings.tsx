@@ -91,7 +91,8 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       const { data, error } = await supabase.functions.invoke("outlook-email-sync", {
         body: { action: "cleanup_and_resync" },
       });
-      if (error) throw error;
+      const errMsg = error?.message ?? data?.error;
+      if (error) throw new Error(errMsg || "Function call failed");
       if (data?.error) throw new Error(data.error);
       const deleted = data?.deleted ?? 0;
       const imported = data?.total_imported ?? 0;
@@ -103,7 +104,9 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       queryClient.invalidateQueries({ queryKey: ["email-connections"] });
       queryClient.invalidateQueries({ queryKey: ["emails"] });
     } catch (e: any) {
-      toast({ title: "Cleanup and resync failed", description: e.message, variant: "destructive" });
+      const message = e?.message || String(e);
+      console.error("Cleanup and resync error:", e);
+      toast({ title: "Cleanup and resync failed", description: message, variant: "destructive" });
     } finally {
       setCleanupSyncing(false);
     }
