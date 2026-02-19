@@ -276,6 +276,7 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
             claimId,
             analysisType: "auto_draft_rebuttal",
             carrierDismantler: data.carrierDismantler,
+            claimFactsPack: data.claimFactsPack ?? null,
           });
         }
         

@@ -151,6 +151,7 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
           claimId,
           analysisType: "denial_rebuttal",
           carrierDismantler: data.carrierDismantler,
+          claimFactsPack: data.claimFactsPack ?? null,
         });
       }
       setLastAnalyzed(new Date());

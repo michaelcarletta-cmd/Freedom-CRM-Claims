@@ -230,22 +230,177 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 }
 
 
+// ClaimFactsPack from EvidenceIndex - small, structured, citation-friendly (references only)
+// FolderKey: import shared definition to avoid drift (sync with src/lib/darwinContracts.ts)
+import type { FolderKey } from '../_shared/darwin-contracts.ts';
+import { logDismantlerTelemetry } from '../_shared/darwin-telemetry.ts';
+interface ClaimFactsPack {
+  meta: {
+    claimId: string;
+    state?: string | null;
+    carrier?: string | null;
+    audience?: 'carrier' | 'regulator' | 'internal';
+    regulatoryComplaint?: boolean;
+    drp?: boolean;
+    lossType?: string | null;
+    createdAt: string;
+    servicesPerformed?: string[];
+  };
+  documents: Array<{
+    docId: string;
+    docName: string;
+    category?: string;
+    categoryHint?: string;
+    folderKey: FolderKey;
+    pageCount?: number;
+  }>;
+  policy?: {
+    policyNumber?: string | null;
+    effectiveDate?: string | null;
+    expirationDate?: string | null;
+    coverages: Array<{
+      name: string;
+      limit?: string | null;
+      deductible?: string | null;
+      evidence: Array<{ docId: string; docName: string; page?: number; sectionHint?: string }>;
+      confidence: 0 | 0.5 | 1;
+    }>;
+    missingDocs: string[];
+  };
+  estimate?: {
+    source?: 'carrier' | 'shop' | 'unknown';
+    totals?: { labor?: number; parts?: number; paintMaterials?: number; tax?: number; grandTotal?: number };
+    laborRates?: Record<string, number>;
+    lineItemHighlights: Array<{
+      label: string;
+      amount?: number;
+      evidence: Array<{ docId: string; docName: string; page?: number; lineHint?: string }>;
+    }>;
+    missingDocs: string[];
+  };
+  objections?: Array<{
+    verbatim: string;
+    source: { docId: string; docName: string; page?: number; lineHint?: string };
+    inferredType?: string;
+    confidence: 0 | 0.5 | 1;
+  }>;
+  evidenceGaps: string[];
+}
+
+type DismantlerConfidence = 0 | 0.25 | 0.5 | 0.75 | 1;
+type EvidenceMethod = 'quote' | 'table' | 'inference';
+type EvidenceStrength = 'weak' | 'ok' | 'strong';
+interface DismantlerEvidenceChip {
+  docId?: string;
+  docName: string;
+  page?: number;
+  sectionHint?: string;
+  quote?: string;
+  evidenceMethod?: EvidenceMethod;
+  spanHint?: { startLine?: number; endLine?: number };
+  basis?: string;
+}
+interface DismantlerObjection {
+  verbatim: string;
+  type: string;
+  whyItFails: string;
+  evidence: DismantlerEvidenceChip[];
+  requestedResolution: string;
+  evidenceStrength?: EvidenceStrength;
+}
+interface MissingDocRequest {
+  key: string;
+  title: string;
+  whyNeeded: string;
+  whereToFind?: string;
+  priority: 'high' | 'med' | 'low';
+}
+interface DecisionCard {
+  key: string;
+  decision: string;
+  requiredFacts: string[];
+  requiredDocs: string[];
+  ifTrue: string;
+  ifFalse: string;
+}
+
+const PRIORITY_ORDER = { high: 3, med: 2, low: 1 } as const;
+const PRIORITY_FROM_LEVEL: Record<number, 'high' | 'med' | 'low'> = { 3: 'high', 2: 'med', 1: 'low' };
+function priorityLevel(p: 'high' | 'med' | 'low'): number {
+  return PRIORITY_ORDER[p] ?? 0;
+}
+function priorityFromLevel(n: number): 'high' | 'med' | 'low' {
+  return PRIORITY_FROM_LEVEL[Math.max(1, Math.min(3, Math.round(n)))] ?? 'med';
+}
+/** Merge pack (baseline) + dismantler; dedupe by key. Priority is provably monotonic: merged.priority = max(pack, dismantler). Title/why/where from dismantler only if non-empty and (priority upgraded or pack field empty). */
+function mergeMissingDocRequests(
+  packRequests: MissingDocRequest[] | undefined,
+  dismantlerRequests: MissingDocRequest[] | undefined
+): MissingDocRequest[] {
+  const byKey = new Map<string, MissingDocRequest>();
+  for (const r of packRequests ?? []) {
+    if (r?.key) byKey.set(r.key, { ...r });
+  }
+  for (const r of dismantlerRequests ?? []) {
+    if (!r?.key) continue;
+    const existing = byKey.get(r.key);
+    if (!existing) {
+      byKey.set(r.key, { key: r.key, title: r.title ?? r.key, whyNeeded: r.whyNeeded ?? '', whereToFind: r.whereToFind, priority: r.priority ?? 'med' });
+      continue;
+    }
+    const plExisting = priorityLevel(existing.priority);
+    const plNew = priorityLevel(r.priority ?? 'med');
+    const mergedLevel = Math.max(plExisting, plNew);
+    existing.priority = priorityFromLevel(mergedLevel);
+    const priorityUpgraded = plNew > plExisting;
+    const packTitleEmpty = !existing.title?.trim();
+    const packWhyEmpty = !existing.whyNeeded?.trim();
+    const packWhereEmpty = existing.whereToFind === undefined || existing.whereToFind === null || !String(existing.whereToFind).trim();
+    if (r.title?.trim() && (priorityUpgraded || packTitleEmpty)) existing.title = r.title;
+    if (r.whyNeeded?.trim() && (priorityUpgraded || packWhyEmpty)) existing.whyNeeded = r.whyNeeded;
+    if (r.whereToFind != null && String(r.whereToFind).trim() && (priorityUpgraded || packWhereEmpty)) existing.whereToFind = r.whereToFind;
+  }
+  return Array.from(byKey.values());
+}
+
+/** Treat doc as policy for guardrail: allowlist (folderKey/category) beats regex; avoid false positives e.g. "Privacy Policy" in carrier. */
+function isPolicyDoc(doc: { folderKey?: string; category?: string; docName?: string; categoryHint?: string }): boolean {
+  if (doc.folderKey === 'policy' || doc.category === 'policy') return true;
+  const name = (doc.docName ?? '').toLowerCase();
+  if (doc.folderKey === 'carrier' && /privacy\s+policy/.test(name)) return false;
+  const text = [doc.docName, doc.categoryHint].filter(Boolean).join(' ').toLowerCase();
+  return /\b(dec(?:larations?)?|policy\s+form|policy|ho-?3|endorsement|declarations?)\b/.test(text);
+}
+interface DismantlerResult {
+  confidence: DismantlerConfidence;
+  missingDocs: string[];
+  missingDocRequests?: MissingDocRequest[];
+  objections: DismantlerObjection[];
+  requestedResolutionOverall: string;
+  notesForUser: string[];
+  decisionCards?: DecisionCard[];
+}
+
 interface AnalysisRequest {
   claimId: string;
   analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling' | 'position_detection' | 'dobi_letter' | 'estimate_comparison' | 'document_timeline';
-  content?: string; // For denial letters, correspondence, or engineer reports
-  pdfContent?: string; // Base64 encoded PDF content
+  content?: string;
+  pdfContent?: string;
   pdfFileName?: string;
-  pdfContents?: Array<{ name: string; content: string; folder?: string }>; // Multiple PDFs for demand package
+  pdfContents?: Array<{ name: string; content: string; folder?: string }>;
   additionalContext?: any;
-  claim?: any; // Full claim object for briefing
-  contextData?: any; // Additional context data
-  darwinNotes?: string; // User-provided context notes for Darwin
+  claim?: any;
+  contextData?: any;
+  darwinNotes?: string;
+  claimFactsPack?: ClaimFactsPack;
+  enableEvidenceIndex?: boolean; // default true for strategic types - build or use ClaimFactsPack
+  enableDismantler?: boolean; // default true - run carrierDismantler post-step
 }
 
 interface CarrierDismantlerMiddlewareContext {
   baseAnalysisType: string;
   baseResult: any;
+  claimFactsPack?: ClaimFactsPack;
 }
 
 serve(async (req) => {
@@ -263,8 +418,10 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { claimId, analysisType, content, pdfContent, pdfFileName, pdfContents, additionalContext, claim: providedClaim, contextData, darwinNotes: providedNotes }: AnalysisRequest = await req.json();
-    console.log(`Darwin AI Analysis - Type: ${analysisType}, Claim: ${claimId}, Has PDF: ${!!pdfContent}`);
+    const { claimId, analysisType, content, pdfContent, pdfFileName, pdfContents, additionalContext, claim: providedClaim, contextData, darwinNotes: providedNotes, claimFactsPack: providedClaimFactsPack, enableEvidenceIndex: enableEvidenceIndexParam, enableDismantler: enableDismantlerParam }: AnalysisRequest = await req.json();
+    const enableEvidenceIndex = enableEvidenceIndexParam !== false;
+    const enableDismantler = enableDismantlerParam !== false;
+    console.log(`Darwin AI Analysis - Type: ${analysisType}, Claim: ${claimId}, Has PDF: ${!!pdfContent}, ClaimFactsPack: ${!!providedClaimFactsPack}, enableEvidenceIndex: ${enableEvidenceIndex}, enableDismantler: ${enableDismantler}`);
 
     // Fetch claim data
     const { data: claim, error: claimError } = await supabase
@@ -380,6 +537,58 @@ serve(async (req) => {
       darwinNotes = notesResult?.result || '';
     }
 
+    // Resolve ClaimFactsPack: prefer provided; else build when enableEvidenceIndex is true (strategic types)
+    let claimFactsPack: ClaimFactsPack | null = providedClaimFactsPack || null;
+    const typesThatUseEvidenceIndex = [
+      'denial_rebuttal', 'engineer_report_rebuttal', 'systematic_dismantling', 'auto_draft_rebuttal',
+      'estimate_gap_analysis', 'demand_package', 'correspondence', 'one_click_package', 'supplement',
+    ];
+    if (enableEvidenceIndex && !claimFactsPack && typesThatUseEvidenceIndex.includes(analysisType)) {
+      try {
+        const evidenceIndexResp = await fetch(
+          `${supabaseUrl}/functions/v1/darwin-evidence-index`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ claimId }),
+          }
+        );
+        if (evidenceIndexResp.ok) {
+          const evidenceData = await evidenceIndexResp.json();
+          claimFactsPack = evidenceData.claimFactsPack || null;
+          if (claimFactsPack) console.log('ClaimFactsPack loaded from EvidenceIndex');
+        }
+      } catch (e) {
+        console.warn('EvidenceIndex fetch failed (non-fatal):', e);
+      }
+    }
+
+    // Build ClaimFactsPack context block: small, structured, citation-friendly (references only)
+    let claimFactsPackContext = '';
+    if (claimFactsPack) {
+      const lines: string[] = ['=== CLAIM FACTS PACK (EvidenceIndex - cite by docId/docName) ==='];
+      const m = claimFactsPack.meta;
+      lines.push(`meta: claimId=${m.claimId} state=${m.state ?? 'n/a'} carrier=${m.carrier ?? 'n/a'} audience=${m.audience ?? 'carrier'} lossType=${m.lossType ?? 'n/a'}`);
+      lines.push('documents: ' + (claimFactsPack.documents?.slice(0, 30).map((d) => `${d.docId}:${d.docName}(${d.category ?? '?'}/${d.folderKey})`).join('; ') || 'none'));
+      if (claimFactsPack.policy) {
+        lines.push('policy: ' + (claimFactsPack.policy.policyNumber ?? 'n/a') + (claimFactsPack.policy.coverages?.length ? ` coverages=${claimFactsPack.policy.coverages.map((c) => c.name + (c.evidence?.length ? `@${c.evidence.map((e) => e.docName).join(',')}` : '')).join('; ') : ''));
+        if (claimFactsPack.policy.missingDocs?.length) lines.push('policy.missingDocs: ' + claimFactsPack.policy.missingDocs.join(', '));
+      }
+      if (claimFactsPack.estimate) {
+        lines.push('estimate: source=' + (claimFactsPack.estimate.source ?? 'unknown') + (claimFactsPack.estimate.totals?.grandTotal != null ? ` grandTotal=${claimFactsPack.estimate.totals.grandTotal}` : ''));
+        claimFactsPack.estimate.lineItemHighlights?.slice(0, 10).forEach((h) => lines.push(`  - ${h.label}${h.amount != null ? ` $${h.amount}` : ''} refs=${(h.evidence || []).map((e) => e.docName).join(',')}`));
+        if (claimFactsPack.estimate.missingDocs?.length) lines.push('estimate.missingDocs: ' + claimFactsPack.estimate.missingDocs.join(', '));
+      }
+      if (claimFactsPack.objections?.length) {
+        claimFactsPack.objections.slice(0, 12).forEach((o) => lines.push(`objection: "${o.verbatim.substring(0, 80)}..." source=${o.source.docName} conf=${o.confidence}`));
+      }
+      if (claimFactsPack.evidenceGaps?.length) lines.push('evidenceGaps: ' + claimFactsPack.evidenceGaps.join(', '));
+      claimFactsPackContext = lines.join('\n') + '\n\n';
+    }
+
     // Build system prompt based on analysis type
     let systemPrompt = '';
     let userPrompt = '';
@@ -391,7 +600,7 @@ serve(async (req) => {
       p.ai_condition_rating === 'Poor' || p.ai_condition_rating === 'Failed'
     )?.length || 0;
 
-    const claimSummary = `
+    const claimSummary = claimFactsPackContext + `
 CLAIM DETAILS:
 - Claim Number: ${claim.claim_number || 'N/A'}
 - Policy Number: ${claim.policy_number || 'N/A'}
@@ -3979,7 +4188,7 @@ Return ONLY the JSON object as specified. No additional text.`;
       }
 
       case 'systematic_dismantling': {
-        // Middleware mode: refactor an existing Darwin analysis into a structured carrier-facing brief
+        // Middleware mode: output structured DismantlerResult JSON only
         const dismantlerMiddleware = contextData as CarrierDismantlerMiddlewareContext | undefined;
         if (dismantlerMiddleware?.baseResult) {
           const baseType = dismantlerMiddleware.baseAnalysisType || 'unknown';
@@ -3987,62 +4196,56 @@ Return ONLY the JSON object as specified. No additional text.`;
             typeof dismantlerMiddleware.baseResult === 'string'
               ? dismantlerMiddleware.baseResult.slice(0, 8000)
               : JSON.stringify(dismantlerMiddleware.baseResult).slice(0, 8000);
+          const claimFactsPackRef = dismantlerMiddleware.claimFactsPack ? '\nClaimFactsPack (cite by docId/docName): ' + JSON.stringify({
+            documents: dismantlerMiddleware.claimFactsPack.documents?.slice(0, 20),
+            evidenceGaps: dismantlerMiddleware.claimFactsPack.evidenceGaps,
+            servicesPerformed: dismantlerMiddleware.claimFactsPack.meta?.servicesPerformed,
+          }) : '';
 
           systemPrompt = `
 You are Darwin, acting as a UNIVERSAL CARRIER DISMANTLER POST-PROCESSOR.
 
-You receive prior Darwin analysis output and must:
-- Refine it into a concise, escalation-ready, carrier-facing brief.
-- Preserve underlying facts and reasoning while improving structure and clarity.
-- Maintain a professional, firm, non-emotional tone.
-- Avoid legal advice and unsupported statutory accusations.
+You receive prior Darwin analysis output. You MUST return a single JSON object only (no markdown, no other text). The object must match this shape exactly:
 
-Your brief MUST always contain these EXACT top-level headings, in this order:
-1) Carrier Position Summary
-2) Key Weaknesses
-3) Evidence to Emphasize
-4) Risk and Overreach Checks
-5) Requested Resolution
+{
+  "confidence": <0 | 0.25 | 0.5 | 0.75 | 1>,
+  "missingDocs": ["string", ...],
+  "missingDocRequests": [{"key":"...","title":"...","whyNeeded":"...","whereToFind":"optional","priority":"high|med|low"}],
+  "objections": [
+    {
+      "verbatim": "carrier quote",
+      "type": "normalized type e.g. no_oem, labor_rate, scope_denial, Coverage interpretation, Exclusion, Limit/Deductible",
+      "whyItFails": "short logical reason",
+      "evidence": [
+        { "docId": "optional", "docName": "required", "page": optional, "sectionHint": optional, "quote": "max 25 words", "evidenceMethod": "quote|table|inference", "spanHint": {"startLine": optional, "endLine": optional}, "basis": "when evidenceMethod=inference, 1-2 sentence reason" }
+      ],
+      "requestedResolution": "what we want for this objection",
+      "evidenceStrength": "weak|ok|strong"
+    }
+  ],
+  "requestedResolutionOverall": "summary demand to carrier",
+  "notesForUser": ["actionable 1", "doc request 2", ...],
+  "decisionCards": [{"key":"stable_slug_e.g.debris_vs_documentation","decision":"...","requiredFacts":[],"requiredDocs":[],"ifTrue":"...","ifFalse":"..."}]
+}
 
-Hard rules:
-- Do NOT introduce new factual claims that are not reasonably inferable from the prior output.
-- Prefer "supports / indicates / is consistent with" when confidence is less than certain.
-- Never tell anyone to sue or file a lawsuit; at most, say the policyholder may wish to consult an attorney.
+HARD RULES:
+- If evidence.length === 0 for a given objection: use LOWER confidence (0 or 0.25), add needed docs to missingDocs, and do NOT make definitive claims for that objection.
+- Every evidence.quote must be at most 25 words.
+- For objection type "Coverage interpretation", "Exclusion", or "Limit/Deductible": MUST cite at least one policy document in evidence, or use conditional language and add the needed doc to missingDocs/missingDocRequests.
+- Preserve facts from the prior output; do not invent new facts.
 `.trim();
 
           userPrompt = `
-You are operating in middleware mode.
-
-Input:
+Middleware input:
 - baseAnalysisType: ${baseType}
-- baseResult (truncated for display; treat as full for reasoning):
+- baseResult (excerpt):
 
 <BASE_RESULT_START>
 ${baseResultPreview}
 <BASE_RESULT_END>
+${claimFactsPackRef}
 
-Task:
-Transform this prior Darwin analysis into a clean, carrier-facing brief with the following EXACT headings and structure:
-
-## Carrier Position Summary
-- 2–4 bullets summarizing the carrier's apparent position.
-
-## Key Weaknesses
-- 3–10 bullets, each stating a weakness and tying it to the prior analysis or claim facts.
-
-## Evidence to Emphasize
-- Bullets mapping specific documents/photos/reports to the weaknesses above (e.g., denial letter dated …, carrier estimate dated …, engineer report, photos IDs).
-
-## Risk and Overreach Checks
-- 3–8 bullets flagging weak or marginal arguments, thin facts, or areas where overstatement would be risky.
-
-## Requested Resolution
-- Numbered list of 3–8 concise asks to the carrier.
-- Each item must state a specific action (e.g., reinspection, revised estimate, payment of a category) and reference at least one weakness/evidence above.
-
-Output:
-- Plain text with exactly those headings in that order.
-- No markdown code fences.
+Return ONLY the single JSON object (DismantlerResult). No other text.
 `.trim();
 
           break;
@@ -4300,7 +4503,11 @@ This output must be suitable for:
 - Supervisor escalation
 - DOI complaint filing
 - Appraisal preparation
-- Litigation support`;
+- Litigation support
+
+At the very end, append exactly one line that is valid JSON (no other text on that line): {"confidence":<0-1 number>, "missingDocs":["doc1","doc2"]}
+- confidence: your assessed confidence in the strength of this rebuttal (0 = no evidence, 1 = fully supported).
+- missingDocs: list of documents or items that would strengthen the position if obtained.`;
         break;
       }
 
@@ -5202,12 +5409,12 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       // Don't fail the request if save fails
     }
 
-    // ═══ UNIVERSAL CARRIER DISMANTLER POST-PROCESSOR (DEFAULT ON) ═══
-    let carrierDismantlerResult: any = null;
+    // ═══ UNIVERSAL CARRIER DISMANTLER POST-PROCESSOR (unless enableDismantler=false) ═══
+    let carrierDismantlerResult: DismantlerResult | null = null;
     try {
       const shouldRunDismantler =
-        analysisType !== 'systematic_dismantling' &&
-        additionalContext?.disableCarrierDismantler !== true;
+        enableDismantler &&
+        analysisType !== 'systematic_dismantling';
 
       if (shouldRunDismantler && analysisResult) {
         const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -5224,6 +5431,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
             contextData: {
               baseAnalysisType: analysisType,
               baseResult: analysisResult,
+              claimFactsPack: claimFactsPack || undefined,
             },
             additionalContext: {
               ...additionalContext,
@@ -5246,11 +5454,222 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
 
           if (dismantlerResp.ok) {
             const dismantlerJson = await dismantlerResp.json();
-            carrierDismantlerResult =
+            const rawResult =
               dismantlerJson.result ||
               dismantlerJson.analysis ||
               dismantlerJson.carrierDismantler ||
               null;
+            const rawText = typeof rawResult === 'string' ? rawResult : (rawResult && typeof rawResult === 'object' ? null : JSON.stringify(rawResult));
+            let parsed: any = null;
+            if (typeof rawResult === 'object' && rawResult !== null && typeof rawResult.confidence !== 'undefined') {
+              parsed = rawResult;
+            } else if (rawText) {
+              let toParse = rawText.trim();
+              const codeFence = toParse.match(/^```(?:json)?\s*([\s\S]*?)```\s*$/m);
+              if (codeFence) toParse = codeFence[1].trim();
+              try {
+                parsed = JSON.parse(toParse);
+              } catch (_) {
+                const jsonStart = rawText.lastIndexOf('{"confidence"');
+                const altStart = rawText.lastIndexOf('{"missingDocs"');
+                const idx = jsonStart >= 0 ? jsonStart : (altStart >= 0 ? altStart : -1);
+                if (idx >= 0) {
+                  try {
+                    parsed = JSON.parse(rawText.substring(idx).trim());
+                  } catch (_2) {}
+                }
+              }
+            }
+            const roundConf = (n: number): DismantlerConfidence => {
+              if (n <= 0) return 0;
+              if (n <= 0.25) return 0.25;
+              if (n <= 0.5) return 0.5;
+              if (n <= 0.75) return 0.75;
+              return 1;
+            };
+            if (parsed && typeof parsed.confidence !== 'undefined' && Array.isArray(parsed.missingDocs)) {
+              const notesForUser = Array.isArray(parsed.notesForUser) ? [...parsed.notesForUser] : [];
+              let missingDocs = [...parsed.missingDocs];
+              const policyDocNames = new Set<string>();
+              if (claimFactsPack?.documents?.length) {
+                for (const d of claimFactsPack.documents) {
+                  if (d.docName && isPolicyDoc(d)) policyDocNames.add(d.docName);
+                }
+              }
+
+              // 1) Build result with raw evidence (evidenceMethod, spanHint included)
+              const objections: DismantlerObjection[] = Array.isArray(parsed.objections) ? parsed.objections.map((o: any) => {
+                const evidence: DismantlerEvidenceChip[] = Array.isArray(o.evidence) ? o.evidence.map((e: any) => ({
+                  docId: e.docId,
+                  docName: e.docName || '',
+                  page: e.page,
+                  sectionHint: e.sectionHint,
+                  quote: e.quote,
+                  evidenceMethod: ['quote', 'table', 'inference'].includes(e.evidenceMethod) ? e.evidenceMethod : undefined,
+                  spanHint: e.spanHint && (e.spanHint.startLine != null || e.spanHint.endLine != null) ? { startLine: e.spanHint.startLine, endLine: e.spanHint.endLine } : undefined,
+                  basis: typeof e.basis === 'string' ? e.basis.trim().slice(0, 300) : undefined,
+                })) : [];
+                const chipCount = evidence.length;
+                const hasQuote = evidence.some((e) => e.quote && e.quote.trim().length > 0);
+                const atLeastOneQuote = evidence.some((e) => e.evidenceMethod === 'quote' || (e.quote && e.quote.trim().length > 0));
+                const atLeastOneTable = evidence.some((e) => e.evidenceMethod === 'table');
+                const atLeastOneQuoteOrTable = atLeastOneQuote || atLeastOneTable;
+                const hasQuoteOrTable = evidence.some((e) => e.evidenceMethod === 'quote' || e.evidenceMethod === 'table' || (e.quote && e.quote.trim().length > 0));
+                const atLeastOneDocId = evidence.some((e) => !!e.docId);
+                const inferenceOnly = chipCount > 0 && evidence.every((e) => e.evidenceMethod === 'inference' || !e.evidenceMethod);
+                const policyTypes = ['Coverage interpretation', 'Exclusion', 'Limit/Deductible'];
+                const isPolicyTypeObjection = policyTypes.some((t) => o.type && o.type.includes(t));
+                const hasPolicyChip = !isPolicyTypeObjection || evidence.some((e) => e.docName && policyDocNames.has(e.docName));
+                // Deterministic rubric: strong = ≥2 chips AND (≥1 quote OR ≥1 table) AND docId AND policy-chip when required; ok = ≥1 quote/table; else weak.
+                let evidenceStrength: EvidenceStrength = (o.evidenceStrength && ['weak', 'ok', 'strong'].includes(o.evidenceStrength)) ? o.evidenceStrength : undefined as any;
+                if (evidenceStrength == null) {
+                  if (chipCount === 0 || inferenceOnly || !atLeastOneDocId || !hasPolicyChip) evidenceStrength = 'weak';
+                  else if (chipCount >= 2 && atLeastOneQuoteOrTable && atLeastOneDocId && hasPolicyChip) evidenceStrength = 'strong';
+                  else if (hasQuoteOrTable) evidenceStrength = 'ok';
+                  else evidenceStrength = 'weak';
+                }
+                return {
+                  verbatim: o.verbatim || '',
+                  type: o.type || 'unknown',
+                  whyItFails: o.whyItFails || '',
+                  evidence,
+                  requestedResolution: o.requestedResolution || '',
+                  evidenceStrength,
+                };
+              }) : [];
+
+              // 2) No-policy-language guardrail: types that must cite policy
+              let policyGuardrailTriggeredCount = 0;
+              const policyTypesGuardrail = ['Coverage interpretation', 'Exclusion', 'Limit/Deductible'];
+              for (const obj of objections) {
+                const needsPolicy = policyTypesGuardrail.some((t) => obj.type && obj.type.includes(t));
+                if (!needsPolicy) continue;
+                const hasPolicyEvidence = obj.evidence.some((e) => e.docName && policyDocNames.has(e.docName));
+                if (!hasPolicyEvidence && policyDocNames.size > 0) {
+                  missingDocs = [...missingDocs, 'Policy page or endorsement citing the provision at issue'];
+                  notesForUser.push(`Objection "${obj.type}" should cite policy language; add policy doc or state conditionally.`);
+                  policyGuardrailTriggeredCount++;
+                }
+              }
+
+              // 4) Resolve docName → docId only when unique (duplicate docNames => do not assign; add note)
+              let duplicateDocNameCount = 0;
+              if (claimFactsPack?.documents?.length) {
+                const nameToIds = new Map<string, string[]>();
+                for (const d of claimFactsPack.documents) {
+                  if (!d.docName) continue;
+                  const list = nameToIds.get(d.docName) ?? [];
+                  list.push(d.docId);
+                  nameToIds.set(d.docName, list);
+                }
+                const duplicateNames = new Set<string>();
+                for (const obj of objections) {
+                  for (const e of obj.evidence) {
+                    if (e.docId || !e.docName) continue;
+                    const ids = nameToIds.get(e.docName);
+                    if (ids?.length === 1) (e as any).docId = ids[0];
+                    else if (ids && ids.length > 1) duplicateNames.add(e.docName);
+                  }
+                }
+                duplicateDocNameCount = duplicateNames.size;
+                for (const name of duplicateNames) {
+                  notesForUser.push(`Multiple docs named "${name}"; cannot resolve docId.`);
+                }
+              }
+
+              // 5) Trim quotes to ≤25 words (after docId fill)
+              for (const obj of objections) {
+                for (const e of obj.evidence) {
+                  if (e.quote && e.quote.split(/\s+/).length > 25) {
+                    (e as any).quote = e.quote.split(/\s+/).slice(0, 25).join(' ');
+                  }
+                }
+              }
+
+              // 6) Clamp confidence
+              let confidence = roundConf(Number(parsed.confidence));
+
+              // 7) Enforce: no evidence => lower confidence only when 1 objection or ≥2 with no evidence
+              const noEvidenceCount = objections.filter((o) => o.evidence.length === 0 && (o.verbatim || o.whyItFails)).length;
+              const shouldClamp = objections.length === 1 ? noEvidenceCount >= 1 : noEvidenceCount >= 2;
+              if (shouldClamp && noEvidenceCount > 0) {
+                if (confidence > 0.25) confidence = 0.25;
+                notesForUser.push(`Objection(s) without evidence cited; add docs to strengthen.`);
+              }
+
+              const dismantlerMissingDocRequests: MissingDocRequest[] = Array.isArray(parsed.missingDocRequests)
+                ? parsed.missingDocRequests.filter((r: any) => r && typeof r.key === 'string' && typeof r.title === 'string' && typeof r.whyNeeded === 'string')
+                  .map((r: any) => ({
+                    key: r.key,
+                    title: r.title,
+                    whyNeeded: r.whyNeeded,
+                    whereToFind: r.whereToFind,
+                    priority: ['high', 'med', 'low'].includes(r.priority) ? r.priority : 'med',
+                  }))
+                : [];
+              const slug = (s: string) => s.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 48) || 'card';
+              const decisionCards: DecisionCard[] = Array.isArray(parsed.decisionCards)
+                ? parsed.decisionCards.filter((c: any) => c && typeof c.decision === 'string' && Array.isArray(c.requiredFacts) && Array.isArray(c.requiredDocs) && typeof c.ifTrue === 'string' && typeof c.ifFalse === 'string')
+                  .map((c: any) => ({
+                    key: (c.key && typeof c.key === 'string' && c.key.trim()) ? slug(c.key.trim()) : slug(c.decision),
+                    decision: c.decision,
+                    requiredFacts: c.requiredFacts || [],
+                    requiredDocs: c.requiredDocs || [],
+                    ifTrue: c.ifTrue,
+                    ifFalse: c.ifFalse,
+                  }))
+                : [];
+
+              const mergedMissingDocRequests = mergeMissingDocRequests(claimFactsPack?.missingDocRequests, dismantlerMissingDocRequests.length ? dismantlerMissingDocRequests : undefined);
+
+              carrierDismantlerResult = {
+                confidence,
+                missingDocs,
+                missingDocRequests: mergedMissingDocRequests.length ? mergedMissingDocRequests : undefined,
+                objections,
+                requestedResolutionOverall: parsed.requestedResolutionOverall || '',
+                notesForUser,
+                decisionCards: decisionCards.length ? decisionCards : undefined,
+              };
+              const noEvidenceObjectionCount = objections.filter((o) => o.evidence.length === 0).length;
+              const inferenceChipCount = objections.reduce((s, o) => s + o.evidence.filter((e) => e.evidenceMethod === 'inference').length, 0);
+              logDismantlerTelemetry({
+                objectionsWithEvidencePct: objections.length ? objections.filter((o) => o.evidence.length > 0).length / objections.length : 0,
+                avgEvidencePerObjection: objections.length ? objections.reduce((s, o) => s + o.evidence.length, 0) / objections.length : 0,
+                topMissingDocRequestKeys: mergedMissingDocRequests.map((r) => r.key),
+                parseSuccess: true,
+                confidence,
+                objectionCount: objections.length,
+                decisionCardCount: (decisionCards ?? []).length,
+                policyGuardrailTriggeredCount,
+                noEvidenceObjectionCount,
+                duplicateDocNameCount,
+                inferenceChipCount,
+              });
+            } else {
+              const conf = parsed && typeof parsed.confidence === 'number' ? roundConf(parsed.confidence) : 0.5;
+              const missing = (parsed && Array.isArray(parsed.missingDocs) ? parsed.missingDocs : []) as string[];
+              carrierDismantlerResult = {
+                confidence: conf,
+                missingDocs: missing,
+                objections: [],
+                requestedResolutionOverall: rawText?.replace(/\n?\{[^{}]*"confidence"[^{}]*\}\s*$/m, '').trim() || '',
+                notesForUser: missing.map((d: string) => `Request: ${d}`),
+              };
+              logDismantlerTelemetry({
+                objectionsWithEvidencePct: 0,
+                avgEvidencePerObjection: 0,
+                topMissingDocRequestKeys: [],
+                parseSuccess: false,
+                confidence: conf,
+                objectionCount: 0,
+                decisionCardCount: 0,
+                policyGuardrailTriggeredCount: 0,
+                noEvidenceObjectionCount: 0,
+                duplicateDocNameCount: 0,
+                inferenceChipCount: 0,
+              });
+            }
           } else {
             console.error(
               'Carrier Dismantler middleware call failed:',
@@ -5266,16 +5685,18 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       );
     }
 
+    const responsePayload: any = {
+      success: true,
+      analysisType,
+      result: analysisResult,
+      analysis: analysisResult,
+      suggestedActions,
+      carrierDismantler: carrierDismantlerResult,
+      claimId,
+    };
+    if (claimFactsPack) responsePayload.claimFactsPack = claimFactsPack;
     return new Response(
-      JSON.stringify({
-        success: true,
-        analysisType,
-        result: analysisResult,
-        analysis: analysisResult,
-        suggestedActions,
-        carrierDismantler: carrierDismantlerResult,
-        claimId,
-      }),
+      JSON.stringify(responsePayload),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
 

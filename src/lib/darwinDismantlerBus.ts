@@ -1,9 +1,13 @@
+import type { ClaimFactsPack } from "@/lib/darwinContracts";
+
 export type CarrierDismantlerPayload = unknown;
 
 export type DarwinDismantlerEventDetail = {
   claimId: string;
   analysisType: string;
   carrierDismantler: CarrierDismantlerPayload;
+  /** Optional; when present, UI can show evidence ledger and structured missing-doc checklist. */
+  claimFactsPack?: ClaimFactsPack | null;
 };
 
 const EVENT_NAME = "darwin:carrierDismantler";

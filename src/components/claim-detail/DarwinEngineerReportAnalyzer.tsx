@@ -209,6 +209,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
           claimId,
           analysisType: "engineer_report_rebuttal",
           carrierDismantler: data.carrierDismantler,
+          claimFactsPack: data.claimFactsPack ?? null,
         });
       }
       setLastAnalyzed(new Date());

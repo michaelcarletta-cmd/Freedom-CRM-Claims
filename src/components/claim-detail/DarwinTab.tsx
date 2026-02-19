@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { subscribeCarrierDismantler } from "@/lib/darwinDismantlerBus";
+import type { DismantlerResult, ClaimFactsPack, DecisionCard, MissingDocRequest } from "@/lib/darwinContracts";
 
 // Lazy load all Darwin components
 const DarwinInsightsPanel = lazy(() => import("@/components/claim-detail/DarwinInsightsPanel").then(m => ({ default: m.DarwinInsightsPanel })));
@@ -134,6 +135,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
     analysisType: string;
     receivedAt: string;
     payload: any;
+    claimFactsPack?: ClaimFactsPack | null;
   } | null>(null);
   const [fallbackDismantler, setFallbackDismantler] = useState<{
     id: string;
@@ -186,6 +188,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
         analysisType: detail.analysisType,
         receivedAt: new Date().toISOString(),
         payload: detail.carrierDismantler,
+        claimFactsPack: detail.claimFactsPack ?? undefined,
       });
     });
 
@@ -240,7 +243,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
     const live = liveCarrierDismantler?.payload;
     if (typeof live === "string") return live;
     if (live && typeof live === "object") {
-      // if backend ever returns structured object, prefer a .text field
+      // backend returns structured { text, confidence, missingDocs }
       if (typeof (live as any).text === "string") return (live as any).text;
       // fallback: stringify for display
       return JSON.stringify(live, null, 2);
@@ -248,7 +251,48 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
     return fallbackDismantler?.result ?? null;
   }, [liveCarrierDismantler, fallbackDismantler]);
 
+  const dismantlerStructured = useMemo(() => {
+    const live = liveCarrierDismantler?.payload;
+    if (live && typeof live === "object" && (live as any).confidence !== undefined) {
+      return {
+        confidence: Number((live as any).confidence) as number,
+        missingDocs: Array.isArray((live as any).missingDocs) ? (live as any).missingDocs as string[] : [] as string[],
+      };
+    }
+    return null;
+  }, [liveCarrierDismantler?.payload]);
+
+  const dismantlerFull = useMemo((): DismantlerResult | null => {
+    const live = liveCarrierDismantler?.payload;
+    if (live && typeof live === "object" && Array.isArray((live as any).objections) && typeof (live as any).requestedResolutionOverall === "string") {
+      return live as DismantlerResult;
+    }
+    return null;
+  }, [liveCarrierDismantler?.payload]);
+
   const parsedDismantler = useMemo(() => {
+    if (dismantlerFull) {
+      const evidenceLines = dismantlerFull.objections.flatMap((o) =>
+        o.evidence.map((e) => (e.quote ? `${e.docName}: "${e.quote}"` : e.docName))
+      );
+      const resolution = [
+        dismantlerFull.requestedResolutionOverall,
+        ...dismantlerFull.objections.map((o) => o.requestedResolution).filter(Boolean),
+      ].filter(Boolean);
+      return {
+        estimatedConfidence: dismantlerFull.confidence,
+        evidenceLines,
+        weaknesses: dismantlerFull.objections.map((o) => o.whyItFails || o.verbatim),
+        resolution,
+        missingDocs: dismantlerFull.missingDocs,
+        missingDocRequests: dismantlerFull.missingDocRequests ?? [],
+        notesForUser: dismantlerFull.notesForUser ?? [],
+        objections: dismantlerFull.objections,
+        decisionCards: dismantlerFull.decisionCards ?? [],
+        isStructured: true as const,
+      };
+    }
+
     const text = dismantlerText || "";
     const headings = [
       "Carrier Position Summary",
@@ -298,10 +342,14 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
     const weaknesses = bulletsFromSection(section("Key Weaknesses"));
     const resolution = numberedFromSection(section("Requested Resolution"));
 
-    const estimatedConfidence =
+    const defaultConfidence =
       evidenceLines.length === 0 ? 0.25 : evidenceLines.length < 2 ? 0.5 : 0.75;
+    const estimatedConfidence =
+      dismantlerStructured?.confidence !== undefined
+        ? Math.max(0, Math.min(1, dismantlerStructured.confidence))
+        : defaultConfidence;
 
-    const missingDocs =
+    const defaultMissingDocs =
       evidenceLines.length === 0
         ? [
             "Declarations page",
@@ -311,6 +359,10 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             "Engineer/contractor report (if causation disputed)",
           ]
         : [];
+    const missingDocs =
+      dismantlerStructured?.missingDocs?.length
+        ? dismantlerStructured.missingDocs
+        : defaultMissingDocs;
 
     return {
       estimatedConfidence,
@@ -318,8 +370,13 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
       weaknesses,
       resolution,
       missingDocs,
+      missingDocRequests: [] as MissingDocRequest[],
+      notesForUser: [] as string[],
+      objections: [] as DismantlerResult["objections"],
+      decisionCards: [] as DecisionCard[],
+      isStructured: false as const,
     };
-  }, [dismantlerText]);
+  }, [dismantlerText, dismantlerStructured, dismantlerFull]);
 
   const handleCopyFullDismantler = async () => {
     if (!dismantlerText) return;
@@ -335,11 +392,22 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
   };
 
   const handleCopyRequestDocsTemplate = async () => {
-    const missing = parsedDismantler.missingDocs;
-    const template = `Subject: Request for missing claim documentation\n\nHello,\n\nTo complete a defensible review and respond appropriately, please provide the following documents/information:\n${missing.map((d) => `- ${d}`).join("\n")}\n\nThank you,\n`;
+    const reqs = parsedDismantler.missingDocRequests ?? [];
+    const lines = reqs.length > 0
+      ? reqs.map((r) => `- ${r.title}${r.whyNeeded ? ` (${r.whyNeeded})` : ""}`)
+      : parsedDismantler.missingDocs.map((d) => `- ${d}`);
+    const template = `Subject: Request for missing claim documentation\n\nHello,\n\nTo complete a defensible review and respond appropriately, please provide the following documents/information:\n${lines.join("\n")}\n\nThank you,\n`;
     await navigator.clipboard.writeText(template);
     toast.success("Request docs template copied");
   };
+
+  if (!claimId || !claim) {
+    return (
+      <div className="flex items-center justify-center p-8 text-muted-foreground">
+        Loading claim…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -656,11 +724,29 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {liveCarrierDismantler?.claimFactsPack?.evidenceIndexSummary?.byFolderKey && Object.keys(liveCarrierDismantler.claimFactsPack.evidenceIndexSummary.byFolderKey).length > 0 && (
+                    <div className="text-[10px] text-muted-foreground flex flex-wrap gap-x-2 gap-y-0.5">
+                      <span className="font-medium">Evidence ledger:</span>
+                      {Object.entries(liveCarrierDismantler.claimFactsPack.evidenceIndexSummary.byFolderKey).map(([k, v]) => (
+                        <span key={k}>{k.replace(/_/g, " ")} {v}</span>
+                      ))}
+                      {(liveCarrierDismantler.claimFactsPack.evidenceIndexSummary.totalPagesKnownAcrossDocs ?? liveCarrierDismantler.claimFactsPack.evidenceIndexSummary.totalPagesKnown) != null && (
+                        <span>· {liveCarrierDismantler.claimFactsPack.evidenceIndexSummary.totalPagesKnownAcrossDocs ?? liveCarrierDismantler.claimFactsPack.evidenceIndexSummary.totalPagesKnown} pages</span>
+                      )}
+                    </div>
+                  )}
                   {(parsedDismantler.estimatedConfidence < 0.5 || parsedDismantler.evidenceLines.length === 0) && (
                     <Alert className="border-warning/50 bg-warning/10">
                       <AlertCircle className="h-4 w-4 text-warning" />
                       <AlertTitle>Needs more documentation to be fully defensible</AlertTitle>
                       <AlertDescription className="text-xs mt-1 space-y-2">
+                        {parsedDismantler.estimatedConfidence < 0.5 && (
+                          <p className="text-muted-foreground">
+                            Low confidence: {parsedDismantler.missingDocRequests?.length
+                              ? parsedDismantler.missingDocRequests.slice(0, 3).map((r) => r.title).join("; ")
+                              : parsedDismantler.missingDocs.slice(0, 3).join("; ")}.
+                          </p>
+                        )}
                         <div>
                           Missing docs to strengthen defensibility:
                           <ul className="list-disc ml-4 mt-1">
@@ -677,10 +763,84 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                     </Alert>
                   )}
 
-                  {/* Objections (Key Weaknesses) */}
+                  {parsedDismantler.missingDocRequests && parsedDismantler.missingDocRequests.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-xs font-semibold text-muted-foreground">Upload checklist</div>
+                      <ul className="space-y-0.5 text-[11px]">
+                        {(["high", "med", "low"] as const).map((priority) => {
+                          const items = parsedDismantler.missingDocRequests!.filter((r) => r.priority === priority);
+                          if (items.length === 0) return null;
+                          return (
+                            <li key={priority} className="text-muted-foreground">
+                              <span className="capitalize font-medium">{priority}:</span> {items.map((r) => r.title).join("; ")}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+
+                  {parsedDismantler.notesForUser.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-xs font-semibold text-muted-foreground">Notes for you</div>
+                      <ul className="list-disc ml-4 text-xs text-muted-foreground space-y-0.5">
+                        {parsedDismantler.notesForUser.map((n, i) => (
+                          <li key={i}>{n}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Objections */}
                   <div className="space-y-2">
                     <div className="text-xs font-semibold text-muted-foreground">Objections</div>
-                    {parsedDismantler.weaknesses.length > 0 ? (
+                    {parsedDismantler.isStructured && parsedDismantler.objections.length > 0 ? (
+                      <div className="space-y-2">
+                        {parsedDismantler.objections.map((obj, idx) => (
+                          <Card key={idx} className="border-border/50">
+                            <CardContent className="p-2 text-xs space-y-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {obj.type && (
+                                  <span className="text-[10px] uppercase tracking-wide text-primary">{obj.type}</span>
+                                )}
+                                {"evidenceStrength" in obj && obj.evidenceStrength && (
+                                  <span className={cn(
+                                    "text-[10px] px-1 rounded",
+                                    obj.evidenceStrength === "strong" && "bg-green-500/20 text-green-700 dark:text-green-400",
+                                    obj.evidenceStrength === "ok" && "bg-muted text-muted-foreground",
+                                    obj.evidenceStrength === "weak" && "bg-amber-500/20 text-amber-700 dark:text-amber-400"
+                                  )}>
+                                    {obj.evidenceStrength}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="font-medium line-clamp-2">{obj.verbatim}</div>
+                              <div className="text-muted-foreground">{obj.whyItFails}</div>
+                              {obj.evidence.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {obj.evidence.map((e, i) => (
+                                    <span
+                                      key={i}
+                                      className="px-1.5 py-0.5 rounded bg-muted text-[10px]"
+                                      title={[e.quote || e.docName, e.evidenceMethod ? `Method: ${e.evidenceMethod}` : null, e.spanHint ? `Lines: ${e.spanHint.startLine ?? "?"}-${e.spanHint.endLine ?? "?"}` : null, e.evidenceMethod === "inference" && e.basis ? `Basis: ${e.basis}` : null].filter(Boolean).join(" · ")}
+                                    >
+                                      {e.docName}{e.quote ? `: "${e.quote.slice(0, 20)}…"` : ""}
+                                      {e.evidenceMethod && <span className="opacity-70"> ({e.evidenceMethod})</span>}
+                                      {e.evidenceMethod === "inference" && e.basis && <span className="block mt-0.5 text-[9px] opacity-80">— {e.basis.slice(0, 60)}{e.basis.length > 60 ? "…" : ""}</span>}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {obj.requestedResolution && (
+                                <div className="pt-1 border-t border-border/50 text-muted-foreground">
+                                  Request: {obj.requestedResolution}
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : parsedDismantler.weaknesses.length > 0 ? (
                       <div className="space-y-2">
                         {parsedDismantler.weaknesses.map((w, idx) => (
                           <Card key={idx} className="border-border/50">
@@ -695,6 +855,31 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                       <div className="text-xs text-muted-foreground">No objections parsed.</div>
                     )}
                   </div>
+
+                  {parsedDismantler.decisionCards?.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-xs font-semibold text-muted-foreground">Decision cards</div>
+                      <div className="space-y-2">
+                        {parsedDismantler.decisionCards.map((card, idx) => (
+                          <Card key={"key" in card && card.key ? card.key : idx} className="border-border/50">
+                            <CardContent className="p-2 text-xs space-y-1">
+                              <div className="font-medium">{card.decision}</div>
+                              {card.requiredFacts?.length > 0 && (
+                                <div>Facts: {card.requiredFacts.join("; ")}</div>
+                              )}
+                              {card.requiredDocs?.length > 0 && (
+                                <div>Docs: {card.requiredDocs.join("; ")}</div>
+                              )}
+                              <div className="pt-1 border-t border-border/50 grid grid-cols-2 gap-1 text-[10px]">
+                                <div><span className="text-muted-foreground">If true:</span> {card.ifTrue}</div>
+                                <div><span className="text-muted-foreground">If false:</span> {card.ifFalse}</div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Evidence chips */}
                   <div className="space-y-2">
