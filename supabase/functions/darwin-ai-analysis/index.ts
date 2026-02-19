@@ -101,6 +101,11 @@ function firstNonEmptyList(...lists: string[][]): string[] | undefined {
   return undefined;
 }
 
+function toFiniteNumber(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 async function loadKnowledgeBasinSettings(
   supabase: any,
   additionalContext: any,
@@ -136,22 +141,22 @@ async function loadKnowledgeBasinSettings(
 
   return normalizeKnowledgeBasinSettings({
     pool:
-      requestSettings.pool ??
-      requestSettings.poolSize ??
-      persisted.pool ??
-      persisted.pool_size ??
+      toFiniteNumber(requestSettings.pool) ??
+      toFiniteNumber(requestSettings.poolSize) ??
+      toFiniteNumber(persisted.pool) ??
+      toFiniteNumber(persisted.pool_size) ??
       defaults.pool,
     topK:
-      requestSettings.topK ??
-      requestSettings.top_k ??
-      persisted.topK ??
-      persisted.top_k ??
+      toFiniteNumber(requestSettings.topK) ??
+      toFiniteNumber(requestSettings.top_k) ??
+      toFiniteNumber(persisted.topK) ??
+      toFiniteNumber(persisted.top_k) ??
       defaults.topK,
     perDocCap:
-      requestSettings.perDocCap ??
-      requestSettings.per_document_cap ??
-      persisted.perDocCap ??
-      persisted.per_document_cap ??
+      toFiniteNumber(requestSettings.perDocCap) ??
+      toFiniteNumber(requestSettings.per_document_cap) ??
+      toFiniteNumber(persisted.perDocCap) ??
+      toFiniteNumber(persisted.per_document_cap) ??
       defaults.perDocCap,
     strict:
       Boolean(
