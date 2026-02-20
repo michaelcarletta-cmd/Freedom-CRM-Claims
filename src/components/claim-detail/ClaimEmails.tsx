@@ -292,7 +292,7 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
       ) : decodedEmails && decodedEmails.length > 0 ? (
         <div className="space-y-3">
           {decodedEmails.map((email) => {
-            const isInbound = email.recipient_type === 'inbound';
+            const isInbound = email.recipient_type === 'inbound' || email.recipient_type === 'outlook_inbound';
             return (
               <div key={email.id} className={`p-4 rounded-lg border transition-colors ${isInbound ? 'border-green-500/30 bg-green-500/5 hover:bg-green-500/10' : 'border-border hover:bg-muted/30'}`}>
                 <div className="flex items-start justify-between mb-3">

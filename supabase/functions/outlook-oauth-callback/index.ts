@@ -68,6 +68,24 @@ function toOriginUrl(input: string | null | undefined): string | null {
   }
 }
 
+function isMissingColumnError(message: string | null | undefined): boolean {
+  const text = (message || "").toLowerCase();
+  return text.includes("column") && text.includes("does not exist");
+}
+
+async function supportsModernConnectionColumns(
+  supabase: any,
+): Promise<boolean> {
+  const probe = await supabase
+    .from("email_connections")
+    .select("oauth_access_token,oauth_refresh_token,oauth_expires_at,sync_window_start")
+    .limit(1);
+
+  if (!probe.error) return true;
+  if (isMissingColumnError(probe.error.message)) return false;
+  throw probe.error;
+}
+
 function redirectWithError(redirectUrl: string, message: string): Response {
   const separator = redirectUrl.includes("?") ? "&" : "?";
   const location = `${redirectUrl}${separator}outlook_error=${encodeURIComponent(message)}`;
@@ -174,27 +192,47 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const { error: upsertError } = await supabase.from("email_connections").upsert({
-      user_id: state.userId,
-      provider: "outlook_oauth",
-      email_address: emailAddress,
-      imap_host: "graph.microsoft.com",
-      imap_port: 443,
-      encrypted_password: legacyBundle,
-      oauth_access_token: accessToken,
-      oauth_refresh_token: refreshToken,
-      oauth_expires_at: expiresAt,
-      oauth_scope: scope,
-      graph_user_id: graphUserId || null,
-      sync_mode: "outlook_graph",
-      is_active: true,
-      disconnected_at: null,
-      last_sync_error: null,
-      sync_window_start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-      metadata: {
-        oauth_callback_at: new Date().toISOString(),
-      },
-    } as never, { onConflict: "user_id,email_address" });
+    const supportsModernColumns = await supportsModernConnectionColumns(supabase);
+    let upsertError: { message?: string } | null = null;
+
+    if (supportsModernColumns) {
+      const modernResult = await supabase.from("email_connections").upsert({
+        user_id: state.userId,
+        provider: "outlook_oauth",
+        email_address: emailAddress,
+        imap_host: "graph.microsoft.com",
+        imap_port: 443,
+        encrypted_password: legacyBundle,
+        oauth_access_token: accessToken,
+        oauth_refresh_token: refreshToken,
+        oauth_expires_at: expiresAt,
+        oauth_scope: scope,
+        graph_user_id: graphUserId || null,
+        sync_mode: "outlook_graph",
+        is_active: true,
+        disconnected_at: null,
+        last_sync_error: null,
+        sync_window_start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        metadata: {
+          oauth_callback_at: new Date().toISOString(),
+        },
+      } as never, { onConflict: "user_id,email_address" });
+      upsertError = modernResult.error;
+    }
+
+    if (!supportsModernColumns || (upsertError && isMissingColumnError(upsertError.message))) {
+      const legacyResult = await supabase.from("email_connections").upsert({
+        user_id: state.userId,
+        provider: "outlook_oauth",
+        email_address: emailAddress,
+        imap_host: "graph.microsoft.com",
+        imap_port: 443,
+        encrypted_password: legacyBundle,
+        is_active: true,
+        last_sync_error: null,
+      } as never, { onConflict: "user_id,email_address" });
+      upsertError = legacyResult.error;
+    }
 
     if (upsertError) {
       console.error("Outlook connection upsert failed:", upsertError);

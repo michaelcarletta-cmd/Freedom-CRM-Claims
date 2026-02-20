@@ -265,7 +265,7 @@ const Inbox = () => {
           ) : (
           <div className="space-y-2">
               {emails.map((email) => {
-                const isInbound = email.recipient_type === 'inbound';
+                const isInbound = email.recipient_type === 'inbound' || email.recipient_type === 'outlook_inbound';
                 return (
                   <Card
                     key={email.id}

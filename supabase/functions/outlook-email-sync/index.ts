@@ -35,6 +35,12 @@ interface OutlookConnection {
   last_sync_at: string | null;
 }
 
+interface SchemaCapabilities {
+  modernConnectionColumns: boolean;
+  modernEmailColumns: boolean;
+  modernClaimFilesEmailId: boolean;
+}
+
 interface ClaimRow {
   id: string;
   claim_number: string | null;
@@ -91,6 +97,8 @@ interface OutlookEmailRow {
   body: string;
   recipient_email: string;
   recipient_name: string | null;
+  recipient_type?: string | null;
+  sent_by?: string | null;
   source_connection_id: string | null;
   source_provider: string | null;
   metadata: JsonRecord | null;
@@ -186,6 +194,48 @@ function toOriginUrl(input: string | null | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+function isMissingColumnError(message: string | undefined | null): boolean {
+  const text = (message || "").toLowerCase();
+  return text.includes("column") && text.includes("does not exist");
+}
+
+async function detectSchemaCapabilities(
+  supabase: ReturnType<typeof getServiceClient>,
+): Promise<SchemaCapabilities> {
+  let modernConnectionColumns = true;
+  const connectionProbe = await supabase
+    .from("email_connections")
+    .select("oauth_access_token,oauth_refresh_token,oauth_expires_at,sync_window_start,last_sync_stats")
+    .limit(1);
+  if (connectionProbe.error && isMissingColumnError(connectionProbe.error.message)) {
+    modernConnectionColumns = false;
+  }
+
+  let modernEmailColumns = true;
+  const emailProbe = await supabase
+    .from("emails")
+    .select("source_provider,source_connection_id,external_message_id,metadata,direction")
+    .limit(1);
+  if (emailProbe.error && isMissingColumnError(emailProbe.error.message)) {
+    modernEmailColumns = false;
+  }
+
+  let modernClaimFilesEmailId = true;
+  const claimFilesProbe = await supabase
+    .from("claim_files")
+    .select("email_id")
+    .limit(1);
+  if (claimFilesProbe.error && isMissingColumnError(claimFilesProbe.error.message)) {
+    modernClaimFilesEmailId = false;
+  }
+
+  return {
+    modernConnectionColumns,
+    modernEmailColumns,
+    modernClaimFilesEmailId,
+  };
 }
 
 function claimNumberVariants(claimNumber: string | null | undefined): string[] {
@@ -373,6 +423,7 @@ function parseLegacyTokenBundle(connection: OutlookConnection): JsonRecord | nul
 async function refreshAccessToken(
   supabase: ReturnType<typeof getServiceClient>,
   connection: OutlookConnection,
+  capabilities: SchemaCapabilities,
 ): Promise<string> {
   let accessToken = connection.oauth_access_token;
   let refreshToken = connection.oauth_refresh_token;
@@ -432,15 +483,22 @@ async function refreshAccessToken(
     expires_at: nextExpiresAt,
   });
 
-  const { error } = await supabase
-    .from("email_connections")
-    .update({
+  const updatePayload = capabilities.modernConnectionColumns
+    ? {
       oauth_access_token: nextAccessToken,
       oauth_refresh_token: nextRefreshToken,
       oauth_expires_at: nextExpiresAt,
       encrypted_password: legacyPayload,
       last_sync_error: null,
-    })
+    }
+    : {
+      encrypted_password: legacyPayload,
+      last_sync_error: null,
+    };
+
+  const { error } = await supabase
+    .from("email_connections")
+    .update(updatePayload as never)
     .eq("id", connection.id);
 
   if (error) {
@@ -491,15 +549,19 @@ async function fetchGraphMessages(accessToken: string, sinceIso: string): Promis
 async function getConnectionForUser(
   supabase: ReturnType<typeof getServiceClient>,
   userId: string,
+  capabilities: SchemaCapabilities,
   connectionId?: string,
 ): Promise<OutlookConnection> {
   let query = supabase
     .from("email_connections")
     .select("*")
     .eq("user_id", userId)
-    .eq("provider", "outlook_oauth")
-    .eq("is_active", true)
-    .is("disconnected_at", null);
+    .in("provider", ["outlook_oauth", "outlook"])
+    .eq("is_active", true);
+
+  if (capabilities.modernConnectionColumns) {
+    query = query.is("disconnected_at", null);
+  }
 
   if (connectionId) query = query.eq("id", connectionId);
 
@@ -539,8 +601,9 @@ async function importMessagesForClaims(params: {
   connection: OutlookConnection;
   messages: GraphMessage[];
   matchers: ClaimMatcher[];
+  capabilities: SchemaCapabilities;
 }): Promise<{ imported: number; matched: number }> {
-  const { supabase, connection, messages, matchers } = params;
+  const { supabase, connection, messages, matchers, capabilities } = params;
 
   let matched = 0;
   let imported = 0;
@@ -559,18 +622,30 @@ async function importMessagesForClaims(params: {
     const externalMessageId = message.internetMessageId || message.id;
     if (!externalMessageId) continue;
 
-    const { data: existingRow } = await supabase
-      .from("emails")
-      .select("id")
-      .eq("source_provider", "outlook_graph")
-      .eq("external_message_id", externalMessageId)
-      .limit(1)
-      .maybeSingle();
-    if (existingRow) continue;
-
     const direction = resolveDirection(message, connection.email_address);
     const recipient = resolveRecipient(message, direction);
     const sentAt = message.receivedDateTime || message.sentDateTime || new Date().toISOString();
+
+    if (capabilities.modernEmailColumns) {
+      const { data: existingRow } = await supabase
+        .from("emails")
+        .select("id")
+        .eq("source_provider", "outlook_graph")
+        .eq("external_message_id", externalMessageId)
+        .limit(1)
+        .maybeSingle();
+      if (existingRow) continue;
+    } else {
+      const { data: existingRow } = await supabase
+        .from("emails")
+        .select("id")
+        .eq("claim_id", selected.claim.id)
+        .eq("subject", message.subject || "(No Subject)")
+        .eq("sent_at", sentAt)
+        .limit(1)
+        .maybeSingle();
+      if (existingRow) continue;
+    }
 
     const fromAddress = message.from?.emailAddress?.address || null;
     const fromName = message.from?.emailAddress?.name || null;
@@ -579,34 +654,47 @@ async function importMessagesForClaims(params: {
     const ccAddresses = (message.ccRecipients || []).map((recipientItem) => recipientItem.emailAddress?.address || "").filter(Boolean);
     const ccNames = (message.ccRecipients || []).map((recipientItem) => recipientItem.emailAddress?.name || "").filter(Boolean);
 
-    const { error: insertError } = await supabase.from("emails").insert({
-      claim_id: selected.claim.id,
-      sent_by: null,
-      recipient_email: recipient.email,
-      recipient_name: recipient.name,
-      recipient_type: direction === "inbound" ? "inbound" : "outlook_sync",
-      subject: message.subject || "(No Subject)",
-      body: message.bodyPreview || "",
-      sent_at: sentAt,
-      external_message_id: externalMessageId,
-      external_thread_id: message.conversationId || null,
-      source_provider: "outlook_graph",
-      source_connection_id: connection.id,
-      direction,
-      metadata: {
-        graph_message_id: message.id,
-        has_attachments: !!message.hasAttachments,
-        web_link: message.webLink || null,
-        from_address: fromAddress,
-        from_name: fromName,
-        to_addresses: toAddresses,
-        to_names: toNames,
-        cc_addresses: ccAddresses,
-        cc_names: ccNames,
-        matching_score: selected.score,
-        matching_margin: selected.margin,
-      },
-    } as never);
+    const insertPayload = capabilities.modernEmailColumns
+      ? {
+        claim_id: selected.claim.id,
+        sent_by: null,
+        recipient_email: recipient.email,
+        recipient_name: recipient.name,
+        recipient_type: direction === "inbound" ? "outlook_inbound" : "outlook_sync",
+        subject: message.subject || "(No Subject)",
+        body: message.bodyPreview || "",
+        sent_at: sentAt,
+        external_message_id: externalMessageId,
+        external_thread_id: message.conversationId || null,
+        source_provider: "outlook_graph",
+        source_connection_id: connection.id,
+        direction,
+        metadata: {
+          graph_message_id: message.id,
+          has_attachments: !!message.hasAttachments,
+          web_link: message.webLink || null,
+          from_address: fromAddress,
+          from_name: fromName,
+          to_addresses: toAddresses,
+          to_names: toNames,
+          cc_addresses: ccAddresses,
+          cc_names: ccNames,
+          matching_score: selected.score,
+          matching_margin: selected.margin,
+        },
+      }
+      : {
+        claim_id: selected.claim.id,
+        sent_by: null,
+        recipient_email: recipient.email,
+        recipient_name: recipient.name,
+        recipient_type: direction === "inbound" ? "outlook_inbound" : "outlook_sync",
+        subject: message.subject || "(No Subject)",
+        body: message.bodyPreview || "",
+        sent_at: sentAt,
+      };
+
+    const { error: insertError } = await supabase.from("emails").insert(insertPayload as never);
 
     if (insertError) {
       const msg = (insertError.message || "").toLowerCase();
@@ -627,8 +715,9 @@ async function reconcileOutlookClaimAssignments(params: {
   claims: ClaimRow[];
   connectionIds?: string[];
   limitRows: number;
+  capabilities: SchemaCapabilities;
 }): Promise<ReconciliationResult> {
-  const { supabase, claims, connectionIds, limitRows } = params;
+  const { supabase, claims, connectionIds, limitRows, capabilities } = params;
   if (claims.length === 0) {
     return { scanned: 0, reassigned: 0, unchanged: 0, insufficient_match: 0 };
   }
@@ -636,23 +725,37 @@ async function reconcileOutlookClaimAssignments(params: {
   const adjustersByClaim = await fetchAdjustersByClaim(supabase, claims.map((claim) => claim.id));
   const matchers = buildClaimMatchers(claims, adjustersByClaim);
 
-  let query = supabase
-    .from("emails")
-    .select("id, claim_id, subject, body, recipient_email, recipient_name, source_connection_id, source_provider, metadata")
-    .eq("source_provider", "outlook_graph")
-    .order("sent_at", { ascending: false })
-    .limit(limitRows);
+  let emailRows: OutlookEmailRow[] | null = null;
+  if (capabilities.modernEmailColumns) {
+    let modernQuery = supabase
+      .from("emails")
+      .select("id, claim_id, subject, body, recipient_email, recipient_name, recipient_type, sent_by, source_connection_id, source_provider, metadata")
+      .eq("source_provider", "outlook_graph")
+      .order("sent_at", { ascending: false })
+      .limit(limitRows);
 
-  if (connectionIds && connectionIds.length > 0) {
-    if (connectionIds.length === 1) {
-      query = query.eq("source_connection_id", connectionIds[0]);
-    } else {
-      query = query.in("source_connection_id", connectionIds);
+    if (connectionIds && connectionIds.length > 0) {
+      if (connectionIds.length === 1) {
+        modernQuery = modernQuery.eq("source_connection_id", connectionIds[0]);
+      } else {
+        modernQuery = modernQuery.in("source_connection_id", connectionIds);
+      }
     }
-  }
 
-  const { data: emailRows, error: emailError } = await query;
-  if (emailError) throw emailError;
+    const { data, error } = await modernQuery;
+    if (error) throw error;
+    emailRows = (data || []) as OutlookEmailRow[];
+  } else {
+    const { data, error } = await supabase
+      .from("emails")
+      .select("id, claim_id, subject, body, recipient_email, recipient_name, recipient_type, sent_by")
+      .in("recipient_type", ["outlook_sync", "outlook_inbound", "outlook_outbound"])
+      .is("sent_by", null)
+      .order("sent_at", { ascending: false })
+      .limit(limitRows);
+    if (error) throw error;
+    emailRows = (data || []) as OutlookEmailRow[];
+  }
 
   let scanned = 0;
   let reassigned = 0;
@@ -680,41 +783,65 @@ async function reconcileOutlookClaimAssignments(params: {
       continue;
     }
 
-    const updatedMetadata: JsonRecord = {
-      ...(row.metadata || {}),
-      reconciliation: {
-        reassigned_at: new Date().toISOString(),
-        from_claim_id: row.claim_id,
-        to_claim_id: selected.claim.id,
-        score: selected.score,
-        margin: selected.margin,
-      },
-    };
+    let updateRows: Array<{ id: string }> | null = null;
 
-    const { data: updateRows, error: updateError } = await supabase
-      .from("emails")
-      .update({
-        claim_id: selected.claim.id,
-        metadata: updatedMetadata,
-      })
-      .eq("id", row.id)
-      .eq("claim_id", row.claim_id)
-      .select("id");
+    if (capabilities.modernEmailColumns) {
+      const updatedMetadata: JsonRecord = {
+        ...(row.metadata || {}),
+        reconciliation: {
+          reassigned_at: new Date().toISOString(),
+          from_claim_id: row.claim_id,
+          to_claim_id: selected.claim.id,
+          score: selected.score,
+          margin: selected.margin,
+        },
+      };
 
-    if (updateError) {
-      console.error("Failed to reassign email", row.id, updateError);
-      continue;
+      const { data: modernRows, error: modernError } = await supabase
+        .from("emails")
+        .update({
+          claim_id: selected.claim.id,
+          metadata: updatedMetadata,
+        })
+        .eq("id", row.id)
+        .eq("claim_id", row.claim_id)
+        .select("id");
+
+      if (modernError) {
+        console.error("Failed to reassign email", row.id, modernError);
+        continue;
+      }
+
+      updateRows = modernRows as Array<{ id: string }> | null;
+    } else {
+      const { data: legacyRows, error: legacyError } = await supabase
+        .from("emails")
+        .update({
+          claim_id: selected.claim.id,
+        })
+        .eq("id", row.id)
+        .eq("claim_id", row.claim_id)
+        .select("id");
+
+      if (legacyError) {
+        console.error("Failed to reassign email", row.id, legacyError);
+        continue;
+      }
+
+      updateRows = legacyRows as Array<{ id: string }> | null;
     }
 
     if (!updateRows || updateRows.length !== 1) {
       continue;
     }
 
-    await supabase
-      .from("claim_files")
-      .update({ claim_id: selected.claim.id })
-      .eq("email_id", row.id)
-      .eq("claim_id", row.claim_id);
+    if (capabilities.modernClaimFilesEmailId) {
+      await supabase
+        .from("claim_files")
+        .update({ claim_id: selected.claim.id })
+        .eq("email_id", row.id)
+        .eq("claim_id", row.claim_id);
+    }
 
     await supabase.from("claim_updates").insert([
       {
@@ -744,26 +871,28 @@ async function runSyncForClaims(params: {
   supabase: ReturnType<typeof getServiceClient>;
   connection: OutlookConnection;
   claims: ClaimRow[];
+  capabilities: SchemaCapabilities;
 }): Promise<{ fetched: number; imported: number; matched: number; since: string }> {
-  const { supabase, connection, claims } = params;
+  const { supabase, connection, claims, capabilities } = params;
   const adjustersByClaim = await fetchAdjustersByClaim(supabase, claims.map((claim) => claim.id));
   const matchers = buildClaimMatchers(claims, adjustersByClaim);
 
   const lastSync = connection.last_sync_at ? new Date(connection.last_sync_at).getTime() : 0;
-  const baseWindow = connection.sync_window_start
+  const baseWindow = capabilities.modernConnectionColumns && connection.sync_window_start
     ? new Date(connection.sync_window_start).getTime()
     : Date.now() - 30 * 24 * 60 * 60 * 1000;
   const overlap = 2 * 60 * 60 * 1000;
   const sinceMillis = Math.max(baseWindow, lastSync > 0 ? lastSync - overlap : baseWindow);
   const sinceIso = new Date(sinceMillis).toISOString();
 
-  const accessToken = await refreshAccessToken(supabase, connection);
+  const accessToken = await refreshAccessToken(supabase, connection, capabilities);
   const graphMessages = await fetchGraphMessages(accessToken, sinceIso);
   const importResult = await importMessagesForClaims({
     supabase,
     connection,
     messages: graphMessages,
     matchers,
+    capabilities,
   });
 
   return {
@@ -777,6 +906,7 @@ async function runSyncForClaims(params: {
 async function updateConnectionSyncState(
   supabase: ReturnType<typeof getServiceClient>,
   connectionId: string,
+  capabilities: SchemaCapabilities,
   payload: {
     fetched: number;
     imported: number;
@@ -790,9 +920,8 @@ async function updateConnectionSyncState(
   },
 ) {
   const nowIso = new Date().toISOString();
-  const { error } = await supabase
-    .from("email_connections")
-    .update({
+  const updatePayload = capabilities.modernConnectionColumns
+    ? {
       last_sync_at: nowIso,
       last_sync_error: payload.error || null,
       last_sync_stats: {
@@ -807,7 +936,15 @@ async function updateConnectionSyncState(
         synced_at: nowIso,
       },
       sync_window_start: payload.since,
-    })
+    }
+    : {
+      last_sync_at: nowIso,
+      last_sync_error: payload.error || null,
+    };
+
+  const { error } = await supabase
+    .from("email_connections")
+    .update(updatePayload as never)
     .eq("id", connectionId);
 
   if (error) {
@@ -845,6 +982,7 @@ serve(async (req) => {
     }
 
     const supabase = getServiceClient();
+    const capabilities = await detectSchemaCapabilities(supabase);
 
     if (action === "get_auth_url") {
       const user = await getAuthenticatedUser(req, supabase);
@@ -883,16 +1021,23 @@ serve(async (req) => {
         return jsonResponse({ error: "connection_id is required" }, 400);
       }
 
-      const { error } = await supabase
-        .from("email_connections")
-        .update({
+      const deletePayload = capabilities.modernConnectionColumns
+        ? {
           is_active: false,
           disconnected_at: new Date().toISOString(),
           oauth_access_token: null,
           oauth_refresh_token: null,
           oauth_expires_at: null,
           encrypted_password: "{}",
-        })
+        }
+        : {
+          is_active: false,
+          encrypted_password: "{}",
+        };
+
+      const { error } = await supabase
+        .from("email_connections")
+        .update(deletePayload as never)
         .eq("id", connectionId)
         .eq("user_id", user.id);
 
@@ -917,16 +1062,17 @@ serve(async (req) => {
         return jsonResponse({ error: "Claim not found" }, 404);
       }
 
-      const connection = await getConnectionForUser(supabase, user.id, connectionId);
+      const connection = await getConnectionForUser(supabase, user.id, capabilities, connectionId);
 
       try {
         const result = await runSyncForClaims({
           supabase,
           connection,
           claims: [claim as ClaimRow],
+          capabilities,
         });
 
-        await updateConnectionSyncState(supabase, connection.id, {
+        await updateConnectionSyncState(supabase, connection.id, capabilities, {
           ...result,
           mode: "sync_claim",
           claimId,
@@ -943,7 +1089,7 @@ serve(async (req) => {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Sync failed";
-        await updateConnectionSyncState(supabase, connection.id, {
+        await updateConnectionSyncState(supabase, connection.id, capabilities, {
           fetched: 0,
           matched: 0,
           imported: 0,
@@ -966,15 +1112,18 @@ serve(async (req) => {
       let connectionIds: string[] = [];
       if (user) {
         const connectionId = typeof body?.connection_id === "string" ? body.connection_id : undefined;
-        const connection = await getConnectionForUser(supabase, user.id, connectionId);
+        const connection = await getConnectionForUser(supabase, user.id, capabilities, connectionId);
         connectionIds = [connection.id];
       } else {
-        const { data: activeConnections } = await supabase
+        let activeConnectionsQuery = supabase
           .from("email_connections")
           .select("id")
           .eq("is_active", true)
-          .eq("provider", "outlook_oauth")
-          .is("disconnected_at", null);
+          .in("provider", ["outlook_oauth", "outlook"]);
+        if (capabilities.modernConnectionColumns) {
+          activeConnectionsQuery = activeConnectionsQuery.is("disconnected_at", null);
+        }
+        const { data: activeConnections } = await activeConnectionsQuery;
         connectionIds = (activeConnections || []).map((row: { id: string }) => row.id);
       }
 
@@ -993,6 +1142,7 @@ serve(async (req) => {
         claims,
         connectionIds,
         limitRows: maxRows,
+        capabilities,
       });
 
       return jsonResponse({
@@ -1009,12 +1159,15 @@ serve(async (req) => {
         await getAuthenticatedUser(req, supabase);
       }
 
-      const { data: connections, error: connectionsError } = await supabase
+      let connectionsQuery = supabase
         .from("email_connections")
         .select("*")
         .eq("is_active", true)
-        .eq("provider", "outlook_oauth")
-        .is("disconnected_at", null);
+        .in("provider", ["outlook_oauth", "outlook"]);
+      if (capabilities.modernConnectionColumns) {
+        connectionsQuery = connectionsQuery.is("disconnected_at", null);
+      }
+      const { data: connections, error: connectionsError } = await connectionsQuery;
 
       if (connectionsError) throw connectionsError;
       if (!connections || connections.length === 0) {
@@ -1053,6 +1206,7 @@ serve(async (req) => {
             supabase,
             connection: rawConnection,
             claims: claimsForSync,
+            capabilities,
           });
 
           totalImported += result.imported;
@@ -1061,7 +1215,7 @@ serve(async (req) => {
           connectionsSynced += 1;
           syncedConnectionIds.push(rawConnection.id);
 
-          await updateConnectionSyncState(supabase, rawConnection.id, {
+          await updateConnectionSyncState(supabase, rawConnection.id, capabilities, {
             ...result,
             mode: "sync_all_claims",
             claimsCount: claimsForSync.length,
@@ -1069,7 +1223,7 @@ serve(async (req) => {
         } catch (error) {
           const message = error instanceof Error ? error.message : "Sync failed";
           errors.push(`${rawConnection.email_address}: ${message}`);
-          await updateConnectionSyncState(supabase, rawConnection.id, {
+          await updateConnectionSyncState(supabase, rawConnection.id, capabilities, {
             fetched: 0,
             matched: 0,
             imported: 0,
@@ -1103,6 +1257,7 @@ serve(async (req) => {
           claims: claimsForReconcile,
           connectionIds: syncedConnectionIds,
           limitRows,
+          capabilities,
         });
       }
 
