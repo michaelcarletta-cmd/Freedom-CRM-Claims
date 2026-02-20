@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) {
   const [connecting, setConnecting] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
   const [authUrl, setAuthUrl] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -87,6 +88,31 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
     },
   });
 
+  const handleRunCleanup = async () => {
+    setReconciling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("outlook-email-sync", {
+        body: { action: "reconcile_claim_assignments" },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "Outlook cleanup complete",
+        description: `Scanned ${data?.scanned || 0} email(s), reassigned ${data?.reassigned || 0}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["email-connections"] });
+    } catch (e: any) {
+      toast({
+        title: "Cleanup failed",
+        description: e.message || "Unable to reconcile claim assignments",
+        variant: "destructive",
+      });
+    } finally {
+      setReconciling(false);
+    }
+  };
+
   const Wrapper = embedded ? "div" : Card;
 
   return (
@@ -122,6 +148,9 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
                         {conn.last_sync_stats?.imported !== undefined && (
                           <span>• Imported: {conn.last_sync_stats.imported}</span>
                         )}
+                        {conn.last_sync_stats?.reassigned !== undefined && (
+                          <span>• Reassigned: {conn.last_sync_stats.reassigned}</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -151,6 +180,21 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
 
           {/* Sign in with Microsoft */}
           <div className="space-y-4">
+            {connections && connections.length > 0 && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleRunCleanup}
+                disabled={reconciling}
+              >
+                {reconciling ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                {reconciling ? "Running cleanup..." : "Run Outlook Claim Cleanup"}
+              </Button>
+            )}
             {!authUrl ? (
               <>
                 <Button

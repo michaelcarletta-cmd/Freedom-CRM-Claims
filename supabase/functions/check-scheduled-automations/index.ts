@@ -112,6 +112,31 @@ serve(async (req) => {
       console.log('RD check tracking result:', rdCheckResult);
     }
 
+    // Outlook auto-sync + reconciliation (keeps email/claim assignment healthy)
+    const outlookAutoSyncEnabled = (Deno.env.get('OUTLOOK_AUTO_SYNC_ENABLED') || 'true').toLowerCase() !== 'false';
+    let outlookSyncResult: unknown = null;
+    let outlookSyncError: unknown = null;
+    if (outlookAutoSyncEnabled) {
+      console.log('Triggering Outlook email sync + reconciliation...');
+      const syncResponse = await supabase.functions.invoke('outlook-email-sync', {
+        body: {
+          action: 'sync_all_claims',
+          reconcile_existing: true,
+        },
+        headers: { 'x-cron-secret': cronSecret || '' },
+      });
+      outlookSyncResult = syncResponse.data;
+      outlookSyncError = syncResponse.error;
+
+      if (syncResponse.error) {
+        console.error('Error processing Outlook sync:', syncResponse.error);
+      } else {
+        console.log('Outlook sync result:', syncResponse.data);
+      }
+    } else {
+      console.log('OUTLOOK_AUTO_SYNC_ENABLED=false, skipping Outlook auto-sync');
+    }
+
     return new Response(
       JSON.stringify({ 
         checked: results.length, 
@@ -119,6 +144,8 @@ serve(async (req) => {
         executed: executeResult,
         rdFollowUps: rdFollowUpResult,
         rdCheckTracking: rdCheckResult,
+        outlookSync: outlookSyncResult,
+        outlookSyncError: outlookSyncError || undefined,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -23,12 +23,22 @@
 - `CRON_SECRET`  
   Used by `sync_all_claims` via `x-cron-secret` header.
 
+- `OUTLOOK_AUTO_SYNC_ENABLED` *(default `true`)*  
+  Used by `check-scheduled-automations` to decide whether to trigger Outlook auto-sync.
+
+- `OUTLOOK_AUTO_RECONCILE_ENABLED` *(default `true`)*  
+  Used by `sync_all_claims` to run claim reassignment reconciliation after import.
+
+- `OUTLOOK_RECONCILE_LIMIT` *(default `2500`)*  
+  Max Outlook-imported emails scanned per reconciliation run.
+
 ## Function behaviors
 
 - `outlook-email-sync` actions:
   - `get_auth_url`
   - `sync_claim`
   - `sync_all_claims`
+  - `reconcile_claim_assignments`
   - `delete_connection`
 
 - `outlook-oauth-callback`:

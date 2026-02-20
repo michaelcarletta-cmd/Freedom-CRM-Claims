@@ -11,6 +11,11 @@ const GRAPH_SCOPE = "https://graph.microsoft.com/Mail.Read offline_access User.R
 const GRAPH_MESSAGES_PAGE_SIZE = 50;
 const GRAPH_MAX_MESSAGES_PER_SYNC = 300;
 
+const MATCH_MIN_SCORE_IMPORT = 8;
+const MATCH_MIN_MARGIN_IMPORT = 2;
+const MATCH_MIN_SCORE_RECONCILE = 10;
+const MATCH_MIN_MARGIN_RECONCILE = 4;
+
 type JsonRecord = Record<string, unknown>;
 
 interface AuthUser {
@@ -28,7 +33,6 @@ interface OutlookConnection {
   encrypted_password: string;
   sync_window_start: string | null;
   last_sync_at: string | null;
-  metadata: JsonRecord | null;
 }
 
 interface ClaimRow {
@@ -70,7 +74,33 @@ interface GraphMessage {
 
 interface ClaimMatcher {
   claim: ClaimRow;
-  terms: string[];
+  weightedTerms: Array<{ term: string; weight: number }>;
+}
+
+interface ClaimMatchSelection {
+  claim: ClaimRow;
+  score: number;
+  secondScore: number;
+  margin: number;
+}
+
+interface OutlookEmailRow {
+  id: string;
+  claim_id: string;
+  subject: string;
+  body: string;
+  recipient_email: string;
+  recipient_name: string | null;
+  source_connection_id: string | null;
+  source_provider: string | null;
+  metadata: JsonRecord | null;
+}
+
+interface ReconciliationResult {
+  scanned: number;
+  reassigned: number;
+  unchanged: number;
+  insufficient_match: number;
 }
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -91,18 +121,28 @@ function getServiceClient() {
   });
 }
 
+function toBool(value: unknown, defaultValue: boolean): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) return true;
+    if (["0", "false", "no", "off"].includes(normalized)) return false;
+  }
+  return defaultValue;
+}
+
+function toInteger(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.floor(parsed));
+}
+
 function getOauthStateSecret(): string {
   return Deno.env.get("OUTLOOK_OAUTH_STATE_SECRET") || Deno.env.get("CRON_SECRET") || "outlook-state-secret";
 }
 
 function encodeBase64Url(value: string): string {
   return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function decodeBase64Url(value: string): string {
-  let base = value.replace(/-/g, "+").replace(/_/g, "/");
-  while (base.length % 4 !== 0) base += "=";
-  return atob(base);
 }
 
 async function sha256Hex(input: string): Promise<string> {
@@ -153,6 +193,97 @@ function claimNumberVariants(claimNumber: string | null | undefined): string[] {
   return Array.from(variants).filter((term) => term.length >= 4);
 }
 
+function addWeightedTerm(collector: Map<string, number>, value: string | null | undefined, weight: number, minLen = 3) {
+  const normalized = normalizeText(value);
+  if (!normalized || normalized.length < minLen) return;
+  const existing = collector.get(normalized) ?? 0;
+  if (weight > existing) {
+    collector.set(normalized, weight);
+  }
+}
+
+function buildClaimMatchers(
+  claims: ClaimRow[],
+  adjustersByClaim: Map<string, Array<{ adjuster_email: string | null; adjuster_name: string | null }>>,
+): ClaimMatcher[] {
+  return claims.map((claim) => {
+    const weighted = new Map<string, number>();
+
+    for (const variant of claimNumberVariants(claim.claim_number)) {
+      addWeightedTerm(weighted, variant, 12, 4);
+    }
+
+    addWeightedTerm(weighted, claim.policy_number, 8, 4);
+    addWeightedTerm(weighted, claim.policyholder_email, 10, 5);
+    addWeightedTerm(weighted, claim.insurance_email, 10, 5);
+    addWeightedTerm(weighted, claim.adjuster_email, 10, 5);
+
+    addWeightedTerm(weighted, claim.policyholder_name, 4, 4);
+    addWeightedTerm(weighted, claim.insurance_company, 3, 4);
+    addWeightedTerm(weighted, claim.adjuster_name, 4, 4);
+
+    for (const adjuster of adjustersByClaim.get(claim.id) || []) {
+      addWeightedTerm(weighted, adjuster.adjuster_email, 10, 5);
+      addWeightedTerm(weighted, adjuster.adjuster_name, 4, 4);
+    }
+
+    return {
+      claim,
+      weightedTerms: Array.from(weighted.entries()).map(([term, weight]) => ({ term, weight })),
+    };
+  });
+}
+
+function scoreClaimMatch(haystack: string, matcher: ClaimMatcher, currentClaimId?: string): number {
+  let score = 0;
+  for (const weightedTerm of matcher.weightedTerms) {
+    if (haystack.includes(weightedTerm.term)) {
+      score += weightedTerm.weight;
+    }
+  }
+  if (currentClaimId && matcher.claim.id === currentClaimId) {
+    score += 1;
+  }
+  return score;
+}
+
+function pickBestClaimMatch(params: {
+  haystack: string;
+  matchers: ClaimMatcher[];
+  minScore: number;
+  minMargin: number;
+  currentClaimId?: string;
+}): ClaimMatchSelection | null {
+  let best: ClaimMatchSelection | null = null;
+  let secondScore = 0;
+
+  for (const matcher of params.matchers) {
+    const score = scoreClaimMatch(params.haystack, matcher, params.currentClaimId);
+    if (!best || score > best.score) {
+      secondScore = best?.score ?? secondScore;
+      best = {
+        claim: matcher.claim,
+        score,
+        secondScore: secondScore,
+        margin: 0,
+      };
+      continue;
+    }
+
+    if (score > secondScore) {
+      secondScore = score;
+    }
+  }
+
+  if (!best) return null;
+  best.secondScore = secondScore;
+  best.margin = best.score - secondScore;
+
+  if (best.score < params.minScore) return null;
+  if (best.margin < params.minMargin) return null;
+  return best;
+}
+
 function extractMessageHaystack(message: GraphMessage): string {
   const from = message.from?.emailAddress;
   const toRecipients = (message.toRecipients || [])
@@ -175,40 +306,30 @@ function extractMessageHaystack(message: GraphMessage): string {
     .toLowerCase();
 }
 
-function buildClaimMatchers(claims: ClaimRow[], adjustersByClaim: Map<string, Array<{ adjuster_email: string | null; adjuster_name: string | null }>>): ClaimMatcher[] {
-  return claims.map((claim) => {
-    const terms = new Set<string>();
-    const push = (value: string | null | undefined) => {
-      const normalized = normalizeText(value);
-      if (normalized && normalized.length >= 3) terms.add(normalized);
-    };
+function extractStoredEmailHaystack(email: OutlookEmailRow): string {
+  const metadata = email.metadata || {};
+  const fromAddress = typeof metadata.from_address === "string" ? metadata.from_address : "";
+  const fromName = typeof metadata.from_name === "string" ? metadata.from_name : "";
 
-    claimNumberVariants(claim.claim_number).forEach((variant) => terms.add(variant));
-    push(claim.policy_number);
-    push(claim.policyholder_email);
-    push(claim.policyholder_name);
-    push(claim.insurance_company);
-    push(claim.insurance_email);
-    push(claim.adjuster_name);
-    push(claim.adjuster_email);
+  const toAddresses = Array.isArray(metadata.to_addresses) ? metadata.to_addresses.join(" ") : "";
+  const toNames = Array.isArray(metadata.to_names) ? metadata.to_names.join(" ") : "";
+  const ccAddresses = Array.isArray(metadata.cc_addresses) ? metadata.cc_addresses.join(" ") : "";
+  const ccNames = Array.isArray(metadata.cc_names) ? metadata.cc_names.join(" ") : "";
 
-    for (const adjuster of adjustersByClaim.get(claim.id) || []) {
-      push(adjuster.adjuster_email);
-      push(adjuster.adjuster_name);
-    }
-
-    return { claim, terms: Array.from(terms) };
-  });
-}
-
-function selectClaimMatch(message: GraphMessage, matchers: ClaimMatcher[]): ClaimRow | null {
-  const haystack = extractMessageHaystack(message);
-  for (const matcher of matchers) {
-    if (matcher.terms.some((term) => haystack.includes(term))) {
-      return matcher.claim;
-    }
-  }
-  return null;
+  return [
+    email.subject || "",
+    email.body || "",
+    email.recipient_email || "",
+    email.recipient_name || "",
+    fromAddress,
+    fromName,
+    toAddresses,
+    toNames,
+    ccAddresses,
+    ccNames,
+  ]
+    .join(" ")
+    .toLowerCase();
 }
 
 function resolveDirection(message: GraphMessage, mailboxAddress: string): "inbound" | "outbound" {
@@ -259,8 +380,7 @@ async function refreshAccessToken(
   }
 
   const expiresAtMillis = expiresAt ? new Date(expiresAt).getTime() : 0;
-  const now = Date.now();
-  if (accessToken && expiresAtMillis > now + 2 * 60 * 1000) {
+  if (accessToken && expiresAtMillis > Date.now() + 2 * 60 * 1000) {
     return accessToken;
   }
 
@@ -287,7 +407,7 @@ async function refreshAccessToken(
     throw new Error(`Token refresh failed: ${body}`);
   }
 
-  const tokenJson = await tokenResponse.json();
+  const tokenJson = await tokenResponse.json() as Record<string, unknown>;
   const nextAccessToken = String(tokenJson.access_token || "");
   const nextRefreshToken = String(tokenJson.refresh_token || refreshToken);
   const nextExpiresAt = new Date(Date.now() + Number(tokenJson.expires_in || 3600) * 1000).toISOString();
@@ -322,7 +442,10 @@ async function refreshAccessToken(
 
 function buildMessagesUrl(sinceIso: string): string {
   const base = new URL("https://graph.microsoft.com/v1.0/me/messages");
-  base.searchParams.set("$select", "id,internetMessageId,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,webLink,hasAttachments");
+  base.searchParams.set(
+    "$select",
+    "id,internetMessageId,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,webLink,hasAttachments",
+  );
   base.searchParams.set("$orderby", "receivedDateTime desc");
   base.searchParams.set("$top", String(GRAPH_MESSAGES_PAGE_SIZE));
   base.searchParams.set("$filter", `receivedDateTime ge ${sinceIso}`);
@@ -347,7 +470,7 @@ async function fetchGraphMessages(accessToken: string, sinceIso: string): Promis
     }
 
     const payload = await response.json() as { value?: GraphMessage[]; "@odata.nextLink"?: string };
-    const pageMessages: GraphMessage[] = Array.isArray(payload.value) ? payload.value : [];
+    const pageMessages = Array.isArray(payload.value) ? payload.value : [];
     messages.push(...pageMessages);
     nextUrl = payload["@odata.nextLink"] || null;
   }
@@ -368,17 +491,37 @@ async function getConnectionForUser(
     .eq("is_active", true)
     .is("disconnected_at", null);
 
-  if (connectionId) {
-    query = query.eq("id", connectionId);
-  }
+  if (connectionId) query = query.eq("id", connectionId);
 
   const { data, error } = await query.order("updated_at", { ascending: false }).limit(1).maybeSingle();
   if (error) throw error;
-  if (!data) {
-    throw new Error("No active Outlook connection found. Connect Outlook in Settings first.");
-  }
+  if (!data) throw new Error("No active Outlook connection found. Connect Outlook in Settings first.");
 
   return data as OutlookConnection;
+}
+
+async function fetchAdjustersByClaim(
+  supabase: ReturnType<typeof getServiceClient>,
+  claimIds: string[],
+): Promise<Map<string, Array<{ adjuster_email: string | null; adjuster_name: string | null }>>> {
+  const map = new Map<string, Array<{ adjuster_email: string | null; adjuster_name: string | null }>>();
+  if (claimIds.length === 0) return map;
+
+  const { data } = await supabase
+    .from("claim_adjusters")
+    .select("claim_id, adjuster_email, adjuster_name")
+    .in("claim_id", claimIds);
+
+  for (const row of data || []) {
+    const list = map.get(row.claim_id) || [];
+    list.push({
+      adjuster_email: row.adjuster_email,
+      adjuster_name: row.adjuster_name,
+    });
+    map.set(row.claim_id, list);
+  }
+
+  return map;
 }
 
 async function importMessagesForClaims(params: {
@@ -393,8 +536,14 @@ async function importMessagesForClaims(params: {
   let imported = 0;
 
   for (const message of messages) {
-    const claim = selectClaimMatch(message, matchers);
-    if (!claim) continue;
+    const haystack = extractMessageHaystack(message);
+    const selected = pickBestClaimMatch({
+      haystack,
+      matchers,
+      minScore: MATCH_MIN_SCORE_IMPORT,
+      minMargin: MATCH_MIN_MARGIN_IMPORT,
+    });
+    if (!selected) continue;
     matched += 1;
 
     const externalMessageId = message.internetMessageId || message.id;
@@ -403,20 +552,25 @@ async function importMessagesForClaims(params: {
     const { data: existingRow } = await supabase
       .from("emails")
       .select("id")
-      .eq("claim_id", claim.id)
       .eq("source_provider", "outlook_graph")
       .eq("external_message_id", externalMessageId)
       .limit(1)
       .maybeSingle();
-
     if (existingRow) continue;
 
     const direction = resolveDirection(message, connection.email_address);
     const recipient = resolveRecipient(message, direction);
     const sentAt = message.receivedDateTime || message.sentDateTime || new Date().toISOString();
 
+    const fromAddress = message.from?.emailAddress?.address || null;
+    const fromName = message.from?.emailAddress?.name || null;
+    const toAddresses = (message.toRecipients || []).map((recipientItem) => recipientItem.emailAddress?.address || "").filter(Boolean);
+    const toNames = (message.toRecipients || []).map((recipientItem) => recipientItem.emailAddress?.name || "").filter(Boolean);
+    const ccAddresses = (message.ccRecipients || []).map((recipientItem) => recipientItem.emailAddress?.address || "").filter(Boolean);
+    const ccNames = (message.ccRecipients || []).map((recipientItem) => recipientItem.emailAddress?.name || "").filter(Boolean);
+
     const { error: insertError } = await supabase.from("emails").insert({
-      claim_id: claim.id,
+      claim_id: selected.claim.id,
       sent_by: null,
       recipient_email: recipient.email,
       recipient_name: recipient.name,
@@ -433,13 +587,20 @@ async function importMessagesForClaims(params: {
         graph_message_id: message.id,
         has_attachments: !!message.hasAttachments,
         web_link: message.webLink || null,
+        from_address: fromAddress,
+        from_name: fromName,
+        to_addresses: toAddresses,
+        to_names: toNames,
+        cc_addresses: ccAddresses,
+        cc_names: ccNames,
+        matching_score: selected.score,
+        matching_margin: selected.margin,
       },
     } as never);
 
     if (insertError) {
-      // Ignore rare race duplicates while keeping sync resilient.
-      const msg = insertError.message || "";
-      if (!msg.toLowerCase().includes("duplicate")) {
+      const msg = (insertError.message || "").toLowerCase();
+      if (!msg.includes("duplicate")) {
         console.error("Email import failed:", insertError);
       }
       continue;
@@ -451,27 +612,131 @@ async function importMessagesForClaims(params: {
   return { imported, matched };
 }
 
+async function reconcileOutlookClaimAssignments(params: {
+  supabase: ReturnType<typeof getServiceClient>;
+  claims: ClaimRow[];
+  connectionIds?: string[];
+  limitRows: number;
+}): Promise<ReconciliationResult> {
+  const { supabase, claims, connectionIds, limitRows } = params;
+  if (claims.length === 0) {
+    return { scanned: 0, reassigned: 0, unchanged: 0, insufficient_match: 0 };
+  }
+
+  const adjustersByClaim = await fetchAdjustersByClaim(supabase, claims.map((claim) => claim.id));
+  const matchers = buildClaimMatchers(claims, adjustersByClaim);
+
+  let query = supabase
+    .from("emails")
+    .select("id, claim_id, subject, body, recipient_email, recipient_name, source_connection_id, source_provider, metadata")
+    .eq("source_provider", "outlook_graph")
+    .order("sent_at", { ascending: false })
+    .limit(limitRows);
+
+  if (connectionIds && connectionIds.length > 0) {
+    if (connectionIds.length === 1) {
+      query = query.eq("source_connection_id", connectionIds[0]);
+    } else {
+      query = query.in("source_connection_id", connectionIds);
+    }
+  }
+
+  const { data: emailRows, error: emailError } = await query;
+  if (emailError) throw emailError;
+
+  let scanned = 0;
+  let reassigned = 0;
+  let unchanged = 0;
+  let insufficientMatch = 0;
+
+  for (const row of (emailRows || []) as OutlookEmailRow[]) {
+    scanned += 1;
+    const haystack = extractStoredEmailHaystack(row);
+    const selected = pickBestClaimMatch({
+      haystack,
+      matchers,
+      currentClaimId: row.claim_id,
+      minScore: MATCH_MIN_SCORE_RECONCILE,
+      minMargin: MATCH_MIN_MARGIN_RECONCILE,
+    });
+
+    if (!selected) {
+      insufficientMatch += 1;
+      continue;
+    }
+
+    if (selected.claim.id === row.claim_id) {
+      unchanged += 1;
+      continue;
+    }
+
+    const updatedMetadata: JsonRecord = {
+      ...(row.metadata || {}),
+      reconciliation: {
+        reassigned_at: new Date().toISOString(),
+        from_claim_id: row.claim_id,
+        to_claim_id: selected.claim.id,
+        score: selected.score,
+        margin: selected.margin,
+      },
+    };
+
+    const { data: updateRows, error: updateError } = await supabase
+      .from("emails")
+      .update({
+        claim_id: selected.claim.id,
+        metadata: updatedMetadata,
+      })
+      .eq("id", row.id)
+      .eq("claim_id", row.claim_id)
+      .select("id");
+
+    if (updateError) {
+      console.error("Failed to reassign email", row.id, updateError);
+      continue;
+    }
+
+    if (!updateRows || updateRows.length !== 1) {
+      continue;
+    }
+
+    await supabase
+      .from("claim_files")
+      .update({ claim_id: selected.claim.id })
+      .eq("email_id", row.id)
+      .eq("claim_id", row.claim_id);
+
+    await supabase.from("claim_updates").insert([
+      {
+        claim_id: row.claim_id,
+        content: `Outlook reconciliation moved email "${row.subject}" to claim ${selected.claim.claim_number || selected.claim.id}.`,
+        update_type: "email",
+      },
+      {
+        claim_id: selected.claim.id,
+        content: `Outlook reconciliation moved email "${row.subject}" here from another claim.`,
+        update_type: "email",
+      },
+    ] as never);
+
+    reassigned += 1;
+  }
+
+  return {
+    scanned,
+    reassigned,
+    unchanged,
+    insufficient_match: insufficientMatch,
+  };
+}
+
 async function runSyncForClaims(params: {
   supabase: ReturnType<typeof getServiceClient>;
   connection: OutlookConnection;
   claims: ClaimRow[];
 }): Promise<{ fetched: number; imported: number; matched: number; since: string }> {
   const { supabase, connection, claims } = params;
-  const { data: adjustersRows } = await supabase
-    .from("claim_adjusters")
-    .select("claim_id, adjuster_email, adjuster_name")
-    .in("claim_id", claims.map((claim) => claim.id));
-
-  const adjustersByClaim = new Map<string, Array<{ adjuster_email: string | null; adjuster_name: string | null }>>();
-  for (const row of adjustersRows || []) {
-    const list = adjustersByClaim.get(row.claim_id) || [];
-    list.push({
-      adjuster_email: row.adjuster_email,
-      adjuster_name: row.adjuster_name,
-    });
-    adjustersByClaim.set(row.claim_id, list);
-  }
-
+  const adjustersByClaim = await fetchAdjustersByClaim(supabase, claims.map((claim) => claim.id));
   const matchers = buildClaimMatchers(claims, adjustersByClaim);
 
   const lastSync = connection.last_sync_at ? new Date(connection.last_sync_at).getTime() : 0;
@@ -484,7 +749,7 @@ async function runSyncForClaims(params: {
 
   const accessToken = await refreshAccessToken(supabase, connection);
   const graphMessages = await fetchGraphMessages(accessToken, sinceIso);
-  const result = await importMessagesForClaims({
+  const importResult = await importMessagesForClaims({
     supabase,
     connection,
     messages: graphMessages,
@@ -493,8 +758,8 @@ async function runSyncForClaims(params: {
 
   return {
     fetched: graphMessages.length,
-    imported: result.imported,
-    matched: result.matched,
+    imported: importResult.imported,
+    matched: importResult.matched,
     since: sinceIso,
   };
 }
@@ -510,6 +775,7 @@ async function updateConnectionSyncState(
     mode: string;
     claimId?: string;
     claimsCount?: number;
+    reassigned?: number;
     error?: string;
   },
 ) {
@@ -523,6 +789,7 @@ async function updateConnectionSyncState(
         fetched: payload.fetched,
         imported: payload.imported,
         matched: payload.matched,
+        reassigned: payload.reassigned ?? 0,
         since: payload.since,
         mode: payload.mode,
         claim_id: payload.claimId || null,
@@ -536,6 +803,23 @@ async function updateConnectionSyncState(
   if (error) {
     console.error("Failed to update connection sync state:", error);
   }
+}
+
+async function loadClaimsForSync(supabase: ReturnType<typeof getServiceClient>): Promise<ClaimRow[]> {
+  const { data, error } = await supabase
+    .from("claims")
+    .select("id, claim_number, policy_number, policyholder_name, policyholder_email, insurance_company, insurance_email, adjuster_name, adjuster_email, is_closed")
+    .eq("is_closed", false);
+  if (error) throw error;
+  return (data || []) as ClaimRow[];
+}
+
+async function loadClaimsForReconciliation(supabase: ReturnType<typeof getServiceClient>): Promise<ClaimRow[]> {
+  const { data, error } = await supabase
+    .from("claims")
+    .select("id, claim_number, policy_number, policyholder_name, policyholder_email, insurance_company, insurance_email, adjuster_name, adjuster_email, is_closed");
+  if (error) throw error;
+  return (data || []) as ClaimRow[];
 }
 
 serve(async (req) => {
@@ -619,7 +903,6 @@ serve(async (req) => {
         .select("id, claim_number, policy_number, policyholder_name, policyholder_email, insurance_company, insurance_email, adjuster_name, adjuster_email, is_closed")
         .eq("id", claimId)
         .single();
-
       if (claimError || !claim) {
         return jsonResponse({ error: "Claim not found" }, 404);
       }
@@ -664,6 +947,50 @@ serve(async (req) => {
       }
     }
 
+    if (action === "reconcile_claim_assignments") {
+      const cronSecret = req.headers.get("x-cron-secret");
+      const expectedCronSecret = Deno.env.get("CRON_SECRET");
+      const isCronAuthorized = !!cronSecret && !!expectedCronSecret && cronSecret === expectedCronSecret;
+      const user = isCronAuthorized ? null : await getAuthenticatedUser(req, supabase);
+
+      let connectionIds: string[] = [];
+      if (user) {
+        const connectionId = typeof body?.connection_id === "string" ? body.connection_id : undefined;
+        const connection = await getConnectionForUser(supabase, user.id, connectionId);
+        connectionIds = [connection.id];
+      } else {
+        const { data: activeConnections } = await supabase
+          .from("email_connections")
+          .select("id")
+          .eq("is_active", true)
+          .eq("provider", "outlook_oauth")
+          .is("disconnected_at", null);
+        connectionIds = (activeConnections || []).map((row: { id: string }) => row.id);
+      }
+
+      if (connectionIds.length === 0) {
+        return jsonResponse({ success: true, scanned: 0, reassigned: 0 });
+      }
+
+      const claims = await loadClaimsForReconciliation(supabase);
+      const maxRows = toInteger(
+        body?.limit_rows ?? body?.max_rows ?? Deno.env.get("OUTLOOK_RECONCILE_LIMIT") ?? 2500,
+        2500,
+      );
+
+      const reconcileResult = await reconcileOutlookClaimAssignments({
+        supabase,
+        claims,
+        connectionIds,
+        limitRows: maxRows,
+      });
+
+      return jsonResponse({
+        success: true,
+        ...reconcileResult,
+      });
+    }
+
     if (action === "sync_all_claims") {
       const cronSecret = req.headers.get("x-cron-secret");
       const expectedCronSecret = Deno.env.get("CRON_SECRET");
@@ -681,17 +1008,26 @@ serve(async (req) => {
 
       if (connectionsError) throw connectionsError;
       if (!connections || connections.length === 0) {
-        return jsonResponse({ success: true, total_imported: 0, claims_synced: 0, connections_synced: 0 });
+        return jsonResponse({
+          success: true,
+          total_imported: 0,
+          total_matching: 0,
+          total_fetched: 0,
+          total_reassigned: 0,
+          connections_synced: 0,
+        });
       }
 
-      const { data: claims, error: claimsError } = await supabase
-        .from("claims")
-        .select("id, claim_number, policy_number, policyholder_name, policyholder_email, insurance_company, insurance_email, adjuster_name, adjuster_email, is_closed")
-        .eq("is_closed", false);
-
-      if (claimsError) throw claimsError;
-      if (!claims || claims.length === 0) {
-        return jsonResponse({ success: true, total_imported: 0, claims_synced: 0, connections_synced: 0 });
+      const claimsForSync = await loadClaimsForSync(supabase);
+      if (claimsForSync.length === 0) {
+        return jsonResponse({
+          success: true,
+          total_imported: 0,
+          total_matching: 0,
+          total_fetched: 0,
+          total_reassigned: 0,
+          connections_synced: 0,
+        });
       }
 
       let totalImported = 0;
@@ -699,24 +1035,26 @@ serve(async (req) => {
       let totalFetched = 0;
       let connectionsSynced = 0;
       const errors: string[] = [];
+      const syncedConnectionIds: string[] = [];
 
       for (const rawConnection of connections as OutlookConnection[]) {
         try {
           const result = await runSyncForClaims({
             supabase,
             connection: rawConnection,
-            claims: claims as ClaimRow[],
+            claims: claimsForSync,
           });
 
           totalImported += result.imported;
           totalMatched += result.matched;
           totalFetched += result.fetched;
           connectionsSynced += 1;
+          syncedConnectionIds.push(rawConnection.id);
 
           await updateConnectionSyncState(supabase, rawConnection.id, {
             ...result,
             mode: "sync_all_claims",
-            claimsCount: claims.length,
+            claimsCount: claimsForSync.length,
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Sync failed";
@@ -727,10 +1065,35 @@ serve(async (req) => {
             imported: 0,
             since: new Date().toISOString(),
             mode: "sync_all_claims",
-            claimsCount: claims.length,
+            claimsCount: claimsForSync.length,
             error: message,
           });
         }
+      }
+
+      const reconcileEnabled = toBool(
+        body?.reconcile_existing ?? Deno.env.get("OUTLOOK_AUTO_RECONCILE_ENABLED"),
+        true,
+      );
+      let reconciliation: ReconciliationResult = {
+        scanned: 0,
+        reassigned: 0,
+        unchanged: 0,
+        insufficient_match: 0,
+      };
+
+      if (reconcileEnabled && syncedConnectionIds.length > 0) {
+        const claimsForReconcile = await loadClaimsForReconciliation(supabase);
+        const limitRows = toInteger(
+          body?.reconcile_limit ?? Deno.env.get("OUTLOOK_RECONCILE_LIMIT") ?? 2500,
+          2500,
+        );
+        reconciliation = await reconcileOutlookClaimAssignments({
+          supabase,
+          claims: claimsForReconcile,
+          connectionIds: syncedConnectionIds,
+          limitRows,
+        });
       }
 
       return jsonResponse({
@@ -738,7 +1101,8 @@ serve(async (req) => {
         total_fetched: totalFetched,
         total_matching: totalMatched,
         total_imported: totalImported,
-        claims_synced: totalImported > 0 ? undefined : 0,
+        total_reassigned: reconciliation.reassigned,
+        reconciliation,
         connections_synced: connectionsSynced,
         errors: errors.length > 0 ? errors : undefined,
       });
