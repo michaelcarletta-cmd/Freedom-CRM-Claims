@@ -334,7 +334,7 @@ async function fetchGraphMessages(accessToken: string, sinceIso: string): Promis
   let nextUrl: string | null = buildMessagesUrl(sinceIso);
 
   while (nextUrl && messages.length < GRAPH_MAX_MESSAGES_PER_SYNC) {
-    const response = await fetch(nextUrl, {
+    const response: Response = await fetch(nextUrl, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Prefer: 'outlook.body-content-type="text"',
@@ -346,7 +346,7 @@ async function fetchGraphMessages(accessToken: string, sinceIso: string): Promis
       throw new Error(`Graph API error (${response.status}): ${body}`);
     }
 
-    const payload = await response.json();
+    const payload = await response.json() as { value?: GraphMessage[]; "@odata.nextLink"?: string };
     const pageMessages: GraphMessage[] = Array.isArray(payload.value) ? payload.value : [];
     messages.push(...pageMessages);
     nextUrl = payload["@odata.nextLink"] || null;
