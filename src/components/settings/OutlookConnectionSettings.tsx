@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) {
   const [connecting, setConnecting] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  const [previewingCleanup, setPreviewingCleanup] = useState(false);
   const [authUrl, setAuthUrl] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -113,6 +114,40 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
     }
   };
 
+  const handlePreviewCleanup = async () => {
+    setPreviewingCleanup(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("outlook-email-sync", {
+        body: { action: "reconcile_claim_assignments", dry_run: true, preview_limit: 25 },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const proposed = Number(data?.proposed_reassignments || 0);
+      const scanned = Number(data?.scanned || 0);
+      const examples = Array.isArray(data?.proposals) ? data.proposals.slice(0, 3) : [];
+
+      const previewText = examples.length > 0
+        ? ` Examples: ${examples.map((row: any) => `${row.from_claim_number || row.from_claim_id} → ${row.to_claim_number || row.to_claim_id}`).join(", ")}.`
+        : "";
+
+      toast({
+        title: "Cleanup preview ready",
+        description: proposed > 0
+          ? `Would reassign ${proposed} email(s) out of ${scanned} scanned.${previewText}`
+          : `No reassignments suggested across ${scanned} scanned email(s).`,
+      });
+    } catch (e: any) {
+      toast({
+        title: "Preview failed",
+        description: e.message || "Unable to preview claim reassignment suggestions",
+        variant: "destructive",
+      });
+    } finally {
+      setPreviewingCleanup(false);
+    }
+  };
+
   const Wrapper = embedded ? "div" : Card;
 
   return (
@@ -181,19 +216,34 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
           {/* Sign in with Microsoft */}
           <div className="space-y-4">
             {connections && connections.length > 0 && (
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={handleRunCleanup}
-                disabled={reconciling}
-              >
-                {reconciling ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                {reconciling ? "Running cleanup..." : "Run Outlook Claim Cleanup"}
-              </Button>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handlePreviewCleanup}
+                  disabled={reconciling || previewingCleanup}
+                >
+                  {previewingCleanup ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  {previewingCleanup ? "Previewing..." : "Preview Claim Cleanup"}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleRunCleanup}
+                  disabled={reconciling || previewingCleanup}
+                >
+                  {reconciling ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  {reconciling ? "Running cleanup..." : "Run Outlook Claim Cleanup"}
+                </Button>
+              </div>
             )}
             {!authUrl ? (
               <>

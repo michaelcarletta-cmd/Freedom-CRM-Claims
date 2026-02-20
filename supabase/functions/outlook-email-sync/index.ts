@@ -109,6 +109,20 @@ interface ReconciliationResult {
   reassigned: number;
   unchanged: number;
   insufficient_match: number;
+  proposed_reassignments?: number;
+  dry_run?: boolean;
+  proposals?: ReconciliationProposal[];
+}
+
+interface ReconciliationProposal {
+  email_id: string;
+  subject: string;
+  from_claim_id: string;
+  from_claim_number: string | null;
+  to_claim_id: string;
+  to_claim_number: string | null;
+  score: number;
+  margin: number;
 }
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -716,8 +730,10 @@ async function reconcileOutlookClaimAssignments(params: {
   connectionIds?: string[];
   limitRows: number;
   capabilities: SchemaCapabilities;
+  dryRun?: boolean;
+  previewLimit?: number;
 }): Promise<ReconciliationResult> {
-  const { supabase, claims, connectionIds, limitRows, capabilities } = params;
+  const { supabase, claims, connectionIds, limitRows, capabilities, dryRun = false, previewLimit = 50 } = params;
   if (claims.length === 0) {
     return { scanned: 0, reassigned: 0, unchanged: 0, insufficient_match: 0 };
   }
@@ -761,6 +777,8 @@ async function reconcileOutlookClaimAssignments(params: {
   let reassigned = 0;
   let unchanged = 0;
   let insufficientMatch = 0;
+  let proposedReassignments = 0;
+  const proposals: ReconciliationProposal[] = [];
 
   for (const row of (emailRows || []) as OutlookEmailRow[]) {
     scanned += 1;
@@ -780,6 +798,24 @@ async function reconcileOutlookClaimAssignments(params: {
 
     if (selected.claim.id === row.claim_id) {
       unchanged += 1;
+      continue;
+    }
+
+    if (dryRun) {
+      proposedReassignments += 1;
+      if (proposals.length < previewLimit) {
+        const fromClaim = claims.find((claim) => claim.id === row.claim_id);
+        proposals.push({
+          email_id: row.id,
+          subject: row.subject,
+          from_claim_id: row.claim_id,
+          from_claim_number: fromClaim?.claim_number || null,
+          to_claim_id: selected.claim.id,
+          to_claim_number: selected.claim.claim_number || null,
+          score: selected.score,
+          margin: selected.margin,
+        });
+      }
       continue;
     }
 
@@ -864,6 +900,9 @@ async function reconcileOutlookClaimAssignments(params: {
     reassigned,
     unchanged,
     insufficient_match: insufficientMatch,
+    dry_run: dryRun,
+    proposed_reassignments: proposedReassignments,
+    proposals: dryRun ? proposals : undefined,
   };
 }
 
@@ -1128,7 +1167,7 @@ serve(async (req) => {
       }
 
       if (connectionIds.length === 0) {
-        return jsonResponse({ success: true, scanned: 0, reassigned: 0 });
+        return jsonResponse({ success: true, scanned: 0, reassigned: 0, dry_run: toBool(body?.dry_run, false) });
       }
 
       const claims = await loadClaimsForReconciliation(supabase);
@@ -1136,6 +1175,8 @@ serve(async (req) => {
         body?.limit_rows ?? body?.max_rows ?? Deno.env.get("OUTLOOK_RECONCILE_LIMIT") ?? 2500,
         2500,
       );
+      const dryRun = toBool(body?.dry_run ?? body?.preview_only, false);
+      const previewLimit = toInteger(body?.preview_limit ?? 50, 50);
 
       const reconcileResult = await reconcileOutlookClaimAssignments({
         supabase,
@@ -1143,10 +1184,13 @@ serve(async (req) => {
         connectionIds,
         limitRows: maxRows,
         capabilities,
+        dryRun,
+        previewLimit,
       });
 
       return jsonResponse({
         success: true,
+        schema_mode: capabilities.modernEmailColumns ? "modern" : "legacy",
         ...reconcileResult,
       });
     }
