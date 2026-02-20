@@ -1,0 +1,14 @@
+{
+  "name": "pdf-renderer-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "express": "^4.21.2",
+    "multer": "^2.0.0"
+  }
+}

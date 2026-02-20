@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
@@ -29,15 +29,25 @@ interface Field {
   required: boolean;
   signerIndex?: number;
   page?: number;
+  pageWidth?: number;
+  pageHeight?: number;
 }
 
 interface FieldPlacementEditorProps {
   documentUrl: string;
   onFieldsChange: (fields: Field[]) => void;
   signerCount: number;
+  initialFields?: Field[];
+  initialFieldsVersion?: string;
 }
 
-export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount }: FieldPlacementEditorProps) {
+export function FieldPlacementEditor({
+  documentUrl,
+  onFieldsChange,
+  signerCount,
+  initialFields,
+  initialFieldsVersion,
+}: FieldPlacementEditorProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const [fields, setFields] = useState<Field[]>([]);
   const [activeTool, setActiveTool] = useState<"signature" | "date" | "text" | "checkbox" | null>(null);
@@ -84,6 +94,19 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
       return data;
     },
   });
+
+  useEffect(() => {
+    if (!initialFields) return;
+    const normalized = initialFields.map((field) => ({
+      ...field,
+      width: Number(field.width) || Number((field as any).w) || 120,
+      height: Number(field.height) || Number((field as any).h) || 25,
+      pageWidth: Number(field.pageWidth) || 600,
+      pageHeight: Number(field.pageHeight) || 800,
+    }));
+    setFields(normalized);
+    onFieldsChange(normalized);
+  }, [initialFields, initialFieldsVersion, onFieldsChange]);
 
   // Save template mutation
   const saveTemplateMutation = useMutation({
@@ -167,6 +190,8 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
       required: true,
       signerIndex: currentSignerIndex,
       page: currentPage,
+      pageWidth,
+      pageHeight,
     };
 
     const updatedFields = [...fields, newField];
@@ -264,7 +289,15 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
     if (!template) return;
 
     clearAllFields();
-    const templateFields = (Array.isArray(template.field_data) ? template.field_data : []) as unknown as Field[];
+    const templateFields = ((Array.isArray(template.field_data) ? template.field_data : []) as unknown as Field[]).map(
+      (field) => ({
+        ...field,
+        width: Number(field.width) || Number((field as any).w) || 120,
+        height: Number(field.height) || Number((field as any).h) || 25,
+        pageWidth: Number(field.pageWidth) || 600,
+        pageHeight: Number(field.pageHeight) || 800,
+      }),
+    );
     setFields(templateFields);
     onFieldsChange(templateFields);
     toast({ title: `Template "${template.name}" loaded` });

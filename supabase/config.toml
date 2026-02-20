@@ -27,6 +27,15 @@ verify_jwt = false
 [functions.submit-signature]
 verify_jwt = false
 
+[functions.signature_send]
+verify_jwt = true
+
+[functions.signature_get_packet]
+verify_jwt = false
+
+[functions.signature_submit]
+verify_jwt = false
+
 [functions.create-portal-user]
 verify_jwt = true
 

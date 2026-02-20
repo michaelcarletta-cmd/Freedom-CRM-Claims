@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
 import { Loader2, Mail, FileSignature, ArrowRight, Clock, Bot, MessageSquare } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
@@ -13,7 +12,6 @@ import { InboxSMSQuickReply } from "@/components/inbox/InboxSMSQuickReply";
 
 const Inbox = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Fetch all emails with claim information
@@ -51,8 +49,8 @@ const Inbox = () => {
           ),
           signature_signers (
             id,
-            signer_name,
-            signer_email,
+            name,
+            email,
             status
           )
         `)
@@ -382,28 +380,11 @@ const Inbox = () => {
                         {request.signature_signers.map((signer: any) => (
                           <div key={signer.id} className="flex items-center justify-between text-sm">
                             <div className="flex-1">
-                              <span className="text-foreground">{signer.signer_name}</span>
-                              <span className="text-muted-foreground"> ({signer.signer_email})</span>
+                              <span className="text-foreground">{signer.name}</span>
+                              <span className="text-muted-foreground"> ({signer.email})</span>
                             </div>
                             <div className="flex items-center gap-2">
                               {getStatusBadge(signer.status)}
-                              {signer.status === "pending" && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const signUrl = `${window.location.origin}/sign?token=${signer.access_token}`;
-                                    navigator.clipboard.writeText(signUrl);
-                                    toast({
-                                      title: "Link copied",
-                                      description: "Signing link copied to clipboard",
-                                    });
-                                  }}
-                                >
-                                  Copy Link
-                                </Button>
-                              )}
                             </div>
                           </div>
                         ))}
