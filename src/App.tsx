@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AppLayout } from "./components/AppLayout";
 import { useAuth } from "./hooks/useAuth";
 import { useToast } from "./hooks/use-toast";
@@ -60,6 +60,8 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
 function AppRoutes() {
   const { user, userRole, loading, sessionExpiredReason, clearSessionExpiredReason } = useAuth();
   const { toast } = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Show session expired toast
   useEffect(() => {
@@ -72,6 +74,17 @@ function AppRoutes() {
       clearSessionExpiredReason();
     }
   }, [sessionExpiredReason, clearSessionExpiredReason, toast]);
+
+  // OAuth callback can land on "/" with query params to avoid host deep-link 404s.
+  // Route users to settings inside the SPA so OutlookConnectionSettings can process the result.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const hasOutlookResult = params.has("outlook_connected") || params.has("outlook_error");
+    const isStaffRouteUser = !!user && ["admin", "staff", "read_only"].includes(userRole || "");
+    if (!hasOutlookResult || !isStaffRouteUser) return;
+    if (location.pathname === "/settings") return;
+    navigate(`/settings${location.search}`, { replace: true });
+  }, [location.pathname, location.search, navigate, user, userRole]);
 
   if (loading) {
     return <PageLoader />;

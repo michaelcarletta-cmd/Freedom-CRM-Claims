@@ -58,6 +58,16 @@ async function verifyStateToken(state: string): Promise<{ userId: string; redire
   };
 }
 
+function toOriginUrl(input: string | null | undefined): string | null {
+  if (!input) return null;
+  try {
+    const parsed = new URL(input);
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
 function redirectWithError(redirectUrl: string, message: string): Response {
   const separator = redirectUrl.includes("?") ? "&" : "?";
   const location = `${redirectUrl}${separator}outlook_error=${encodeURIComponent(message)}`;
@@ -82,9 +92,9 @@ serve(async (req) => {
     const oauthError = url.searchParams.get("error");
     const oauthErrorDescription = url.searchParams.get("error_description");
 
-    let fallbackRedirect = Deno.env.get("SIGN_APP_BASE_URL") || Deno.env.get("APP_BASE_URL") || "/settings";
-    if (fallbackRedirect.endsWith("/")) fallbackRedirect = fallbackRedirect.slice(0, -1);
-    if (!fallbackRedirect.includes("/settings")) fallbackRedirect = `${fallbackRedirect}/settings`;
+    const fallbackRedirect = toOriginUrl(Deno.env.get("SIGN_APP_BASE_URL")) ||
+      toOriginUrl(Deno.env.get("APP_BASE_URL")) ||
+      "/";
 
     if (oauthError) {
       return redirectWithError(
@@ -98,7 +108,7 @@ serve(async (req) => {
     }
 
     const state = await verifyStateToken(stateParam);
-    const redirectUrl = state.redirectUrl || fallbackRedirect;
+    const redirectUrl = toOriginUrl(state.redirectUrl) || fallbackRedirect;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -195,8 +205,7 @@ serve(async (req) => {
   } catch (error) {
     console.error("Outlook OAuth callback error:", error);
     const message = error instanceof Error ? error.message : "OAuth callback failed";
-    const fallback = (Deno.env.get("APP_BASE_URL") || "/settings").replace(/\/+$/, "");
-    const redirect = fallback.includes("/settings") ? fallback : `${fallback}/settings`;
+    const redirect = toOriginUrl(Deno.env.get("APP_BASE_URL")) || "/";
     return redirectWithError(redirect, message);
   }
 });

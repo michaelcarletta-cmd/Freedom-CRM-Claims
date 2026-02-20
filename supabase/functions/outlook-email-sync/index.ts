@@ -178,6 +178,16 @@ function normalizeText(input: string | null | undefined): string | null {
   return value.length > 0 ? value : null;
 }
 
+function toOriginUrl(input: string | null | undefined): string | null {
+  if (!input) return null;
+  try {
+    const parsed = new URL(input);
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
 function claimNumberVariants(claimNumber: string | null | undefined): string[] {
   const normalized = normalizeText(claimNumber);
   if (!normalized) return [];
@@ -846,7 +856,7 @@ serve(async (req) => {
 
       const origin = req.headers.get("origin") || "";
       const requestedRedirect = typeof body?.redirect_url === "string" ? body.redirect_url : "";
-      const redirectUrl = requestedRedirect || (origin ? `${origin.replace(/\/+$/, "")}/settings` : "/settings");
+      const redirectUrl = toOriginUrl(requestedRedirect) || toOriginUrl(origin) || toOriginUrl(Deno.env.get("APP_BASE_URL")) || "/";
 
       const state = await signStatePayload({
         userId: user.id,

@@ -51,7 +51,7 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       const { data, error } = await supabase.functions.invoke("outlook-email-sync", {
         body: {
           action: "get_auth_url",
-          redirect_url: `${window.location.origin}/settings`,
+          redirect_url: `${window.location.origin}`,
         },
       });
       if (error) throw error;
