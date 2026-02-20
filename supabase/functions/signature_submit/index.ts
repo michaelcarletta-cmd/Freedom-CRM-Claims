@@ -183,7 +183,7 @@ async function uploadSignatureAsset(
     .from("signature-assets")
     .upload(
       assetPath,
-      new Blob([bytes], { type: "image/png" }),
+      bytes,
       { upsert: true, contentType: "image/png" },
     );
 
@@ -617,7 +617,7 @@ Deno.serve(async (req) => {
         .from("claim-files")
         .upload(
           finalPdfPath,
-          new Blob([finalPdfBytes], { type: "application/pdf" }),
+          finalPdfBytes,
           { upsert: true, contentType: "application/pdf" },
         );
 

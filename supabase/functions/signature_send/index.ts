@@ -156,7 +156,7 @@ async function ensureDraftPdfPath(
     .from("claim-files")
     .upload(
       draftPath,
-      new Blob([pdfBytes], { type: "application/pdf" }),
+      pdfBytes,
       { upsert: true, contentType: "application/pdf" },
     );
 
