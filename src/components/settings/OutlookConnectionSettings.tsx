@@ -48,7 +48,10 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
     setConnecting(true);
     try {
       const { data, error } = await supabase.functions.invoke("outlook-email-sync", {
-        body: { action: "get_auth_url" },
+        body: {
+          action: "get_auth_url",
+          redirect_url: `${window.location.origin}/settings`,
+        },
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
@@ -112,9 +115,12 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
                     <div>
                       <p className="text-sm font-medium">{conn.email_address}</p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{conn.provider === 'outlook_oauth' ? 'Microsoft OAuth' : conn.imap_host}</span>
+                        <span>{conn.provider === 'outlook_oauth' ? 'Outlook Graph OAuth' : conn.imap_host}</span>
                         {conn.last_sync_at && (
                           <span>• Last synced: {new Date(conn.last_sync_at).toLocaleDateString()}</span>
+                        )}
+                        {conn.last_sync_stats?.imported !== undefined && (
+                          <span>• Imported: {conn.last_sync_stats.imported}</span>
                         )}
                       </div>
                     </div>

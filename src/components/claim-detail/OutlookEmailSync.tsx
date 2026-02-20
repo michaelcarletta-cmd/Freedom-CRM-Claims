@@ -12,7 +12,7 @@ interface OutlookEmailSyncProps {
 
 export function OutlookEmailSync({ claimId }: OutlookEmailSyncProps) {
   const [syncing, setSyncing] = useState(false);
-  const [lastResult, setLastResult] = useState<{ imported: number; matching: number } | null>(null);
+  const [lastResult, setLastResult] = useState<{ imported: number; matching: number; fetched: number } | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -36,29 +36,29 @@ export function OutlookEmailSync({ claimId }: OutlookEmailSyncProps) {
     setSyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke("outlook-email-sync", {
-        body: { action: "sync_emails", claim_id: claimId },
+        body: { action: "sync_claim", claim_id: claimId },
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      setLastResult({ imported: data.imported, matching: data.matching });
+      setLastResult({ imported: data.imported, matching: data.matching, fetched: data.fetched || 0 });
       
       if (data.imported > 0) {
         toast({
           title: "Emails synced!",
-          description: `Imported ${data.imported} new email${data.imported > 1 ? 's' : ''} from Outlook.`,
+          description: `Imported ${data.imported} new email${data.imported > 1 ? 's' : ''} from Outlook (scanned ${data.fetched} messages).`,
         });
         // Refresh the emails list
         queryClient.invalidateQueries({ queryKey: ["emails", claimId] });
       } else if (data.matching > 0) {
         toast({
           title: "Already up to date",
-          description: `Found ${data.matching} matching emails, but all were already imported.`,
+          description: `Found ${data.matching} matching emails, but all were already imported (scanned ${data.fetched} messages).`,
         });
       } else {
         toast({
           title: "No matching emails",
-          description: "No emails in your Outlook matched this claim's details.",
+          description: `No emails matched this claim's details (scanned ${data.fetched} recent messages).`,
         });
       }
     } catch (e: any) {
